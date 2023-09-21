@@ -50,13 +50,11 @@ import pickle
 import itertools
 import numpy as np
 import scipy.sparse
-
+import scipy.stats
+import sklearn.mixture
 class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     OUTPUT_CLASSES_NAME = 'classes'
     OUTPUT_VOLUMES_NAME = 'volumes'
-    OUTPUT_EXTRA_LABELS = [
-        emlib.MDL_SCORE_BY_PCA_RESIDUAL,
-    ]
     
     _label = 'aligned solid angles'
     _conda_env = 'xmipp_swiftalign'
@@ -127,6 +125,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('projectMaskStep')
         self._insertFunctionStep('angularNeighborhoodStep')
         self._insertFunctionStep('classifyStep')
+        self._insertFunctionStep('expectationMaximizationStep')
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('graphOptimizationStep')
         self._insertFunctionStep('classificationStep')
@@ -300,7 +299,54 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             directionRow.addToMd(directionalMd)
 
         directionalMd.write(self._getDirectionalMdFilename())
+                  
+    def expectationMaximizationStep(self):
+        # Compute the class expectation values for each direction
+        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        directionalClassificationMd = emlib.MetaData()
+        for directionId in directionMd:
+            # Read the classification metadata
+            directionalClassificationMdFilename = directionMd.getValue(
+                emlib.MDL_SELFILE, directionId
+            )
+            directionalClassificationMd.read(directionalClassificationMdFilename)
             
+            # Obtain PCA projection values
+            projections = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL))
+            projections = projections[:,None]
+            
+            # Fit a GMM to the projection values
+            gmm1 = sklearn.mixture.GaussianMixture(n_components=1)
+            gmm2 = sklearn.mixture.GaussianMixture(n_components=2, n_init=16)
+            gmm1.fit(projections)
+            gmm2.fit(projections)
+            
+            if gmm1.bic(projections) <= gmm2.bic(projections):
+                # Only one gaussian component. Leave weights to one
+                model = gmm1
+                ratio = np.ones(len(projections))
+                print(directionId)
+                
+            else:
+                # 2 gaussian components
+                model = gmm2
+                weights = model.weights_
+                means = model.means_[:,0]
+                variances = model.covariances_[:,0,0]
+                
+                # Compute the ratio of probabilities
+                logLikelihood = scipy.stats.norm.logpdf(projections, means, np.sqrt(variances))
+                probability = logLikelihood + np.log(weights)
+                ratio = probability[:,1] - probability[:,0]
+            
+            # Store the log likelihoods
+            directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(ratio))
+            directionalClassificationMd.write(directionalClassificationMdFilename)
+
+            # Store the gaussian model
+            with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'wb') as f:
+                pickle.dump(model, f)  
+                
     def buildGraphStep(self):
         # Build graph intersecting direction pairs and calculate the similarity
         # between projection values
@@ -336,13 +382,13 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                 md0.intersection(md1, emlib.MDL_ITEM_ID)
                 md1.intersection(md0, emlib.MDL_ITEM_ID)
                 
-                # Get their PCA projection values
-                projection0 = md0.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
-                projection1 = md1.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+                # Get their likelihood values
+                logLikelihood0 = md0.getColumnValues(emlib.MDL_LL)
+                logLikelihood1 = md1.getColumnValues(emlib.MDL_LL)
                 
                 # Compute the similarity as the dot product of their
-                # PCA projections
-                similarity = np.dot(projection0, projection1)
+                # likelihood values
+                similarity = np.dot(logLikelihood0, logLikelihood1)
                 
                 if similarity:
                     # Write the negative similarity in symmetric positions of 
@@ -366,6 +412,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         # Store the graph
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
+
         
     def graphOptimizationStep(self):
         # Perform a max cut of the graph
@@ -388,55 +435,46 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         # directions
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
-        eigenImage = emlib.Image()
         for i in invert_list:
             objId = int(directionMd.firstObject() + i)
             directionalClassificationMdFilename = directionMd.getValue(
                 emlib.MDL_SELFILE, objId
             )
-            directionalClassificationImageFilename = directionMd.getValue(
-                emlib.MDL_IMAGE_RESIDUAL, objId
-            )
             
             # Invert the projection values
             directionalClassificationMd.read(directionalClassificationMdFilename)
-            directionalClassificationMd.operate('scoreByPcaResidual=-scoreByPcaResidual')
+            directionalClassificationMd.operate('logLikelihood=-logLikelihood')
             directionalClassificationMd.write(directionalClassificationMdFilename)
-            
-            # Invert the eigenimage
-            eigenImage.read(directionalClassificationImageFilename)
-            eigenImage.inplaceMultiply(-1.0)
-            eigenImage.write(directionalClassificationImageFilename)
     
     def classificationStep(self):
-        # Accumulate all the projection values for a given particle
+        # Accumulate all the likelihood values for a given particle
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
-        projections = {}
+        logLikelihoods = {}
         for objId in directionMd:
             # Read the classification of this direction
             directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, objId))
             
-            # Increment the result PCA projection value
+            # Increment the result likelihood value
             for objId2 in directionalClassificationMd:
                 itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId2)
-                projection = directionalClassificationMd.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, objId2)
+                logLikelihood = directionalClassificationMd.getValue(emlib.MDL_LL, objId2)
                 
-                if itemId in projections:
-                    projections[itemId] += projection
+                if itemId in logLikelihoods:
+                    logLikelihoods[itemId] += logLikelihood
                 else:
-                    projections[itemId] = projection
+                    logLikelihoods[itemId] = logLikelihood
         
-        # Write projections to the output metadata
+        # Write likelihoods to the output metadata
         result = emlib.MetaData(self._getInputParticleMdFilename())
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-            projection = projections.get(itemId, 0.0)
-            result.setValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, projection, objId)
+            logLikelihood = logLikelihoods.get(itemId, 0.0)
+            result.setValue(emlib.MDL_LL, logLikelihood, objId)
         
         # Classify items according to their projection sign
         result.addLabel(emlib.MDL_REF3D)
-        result.operate('ref3d=(scoreByPcaResidual>0)+1')
+        result.operate('ref3d=(logLikelihood>0)+1')
         
         # Store
         result.write(self._getOutputMetadataFilename())
@@ -518,8 +556,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         def updateItem(item: Particle, row: emlib.metadata.Row):
             assert(item.getObjId() == row.getValue(emlib.MDL_ITEM_ID))
             item.setClassId(row.getValue(emlib.MDL_REF3D))
-            setXmippAttribute(item, emlib.MDL_SCORE_BY_PCA_RESIDUAL, row.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL))
-
+            # TODO add classification data
+            
         def updateClass(cls: Class3D):
             clsId = cls.getObjId()
             representative = volumes[clsId].clone()
@@ -602,6 +640,9 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     def _getDirectionalClassificationMdFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'classification.xmd')
+
+    def _getDirectionalGaussianMixtureModelFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'gmm.pkl')
     
     def _getDirectionalMdFilename(self):
         return self._getExtraPath('directional.xmd')

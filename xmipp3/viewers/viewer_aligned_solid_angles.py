@@ -35,8 +35,11 @@ from xmipp3.protocols.protocol_aligned_solid_angles import XmippProtAlignedSolid
 
 import math
 import collections
+import pickle
 import numpy as np
 import scipy.sparse
+import scipy.stats
+import sklearn.mixture
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d as mpl3d
@@ -85,15 +88,27 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         projections = emlib.MetaData(directionRow.getValue(emlib.MDL_SELFILE)).getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
         average = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE)).getData()
         basis = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE_RESIDUAL)).getData()
+        gmm = self._readDirectionalGaussianMixtureModel(directionId)
+        
+        # Obtain GMM model parameters
+        weights = gmm.weights_
+        means = gmm.means_[:,0]
+        variances = gmm.covariances_[:,0,0]
+        stddevs = np.sqrt(variances)
         
         # Create the figure
         fig, (ax1, ax2) = plt.subplots(2)
         
-        # Show histogram
-        ax1.hist(projections, bins=64, picker=True)
-        line = ax1.axvline(x=0, color='y')
+        # Show histogram and gaussian mixture
+        _, bins, _ = ax1.hist(projections, bins=64, density=True, color='black', picker=True)
+        x = (bins[1:] + bins[:-1]) / 2
+        ys = weights*scipy.stats.norm.pdf(x[:,None], means, stddevs)
+        for i in range(ys.shape[-1]):
+            ax1.plot(x, ys[:,i], linestyle='dashed')
+        ax1.plot(x, ys.sum(axis=-1))
         
         # Show image
+        line = ax1.axvline(x=0, color='yellow')
         ax2.imshow(average)
         
         # Setup interactive picking
@@ -130,7 +145,7 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         ax.add_collection(lines)
         
         #  Show colorbar
-        #fig.colorbar(mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), label='Edge weights')
+        fig.colorbar(mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), label='Edge weights')
         
         return [fig]
         
@@ -146,6 +161,9 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
     def _getGraphFilename(self):
         return self.protocol._getGraphFilename()
     
+    def _getDirectionalGaussianMixtureModelFilename(self, direction_id: int):
+        return self.protocol._getDirectionalGaussianMixtureModelFilename(direction_id)
+
     def _getDirectionalMdFilename(self):
         return self.protocol._getDirectionalMdFilename()
     
@@ -164,3 +182,7 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         md = emlib.MetaData(self._getDirectionalMdFilename())
         result.readFromMd(md, directionId)
         return result
+    
+    def _readDirectionalGaussianMixtureModel(self, directionId) -> sklearn.mixture.GaussianMixture:
+        with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'rb') as f:
+            return pickle.load(f)
