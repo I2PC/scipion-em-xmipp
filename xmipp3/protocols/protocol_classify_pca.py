@@ -113,9 +113,9 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     
         form.addSection(label='Pca training')
     
-        form.addParam('resolution',FloatParam, label="max resolution", default=10,
+        form.addParam('resolution',FloatParam, label="max resolution", default=8,
                       help='Maximum resolution to be consider for alignment')
-        form.addParam('coef' ,FloatParam, label="% variance", default=0.4, expertLevel=LEVEL_ADVANCED,
+        form.addParam('coef' ,FloatParam, label="% variance", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
         form.addParam('training',IntParam, default=40000,
@@ -141,6 +141,8 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         self.acquisition = self.inputParticles.get().getAcquisition()
         mask = self.mask.get()
         sigma = self.sigma.get()
+        if sigma == -1:
+            sigma = self.inputParticles.get().getDimensions()[0]/3
         self.numTrain = min(self.training.get(), self.inputParticles.get().getSize())
 
     
