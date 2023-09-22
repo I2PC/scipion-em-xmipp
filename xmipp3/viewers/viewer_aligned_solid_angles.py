@@ -98,6 +98,7 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         
         # Create the figure
         fig, (ax1, ax2) = plt.subplots(2)
+        fig.suptitle('PCA projection histogram for direction %d' % directionId)
         
         # Show histogram and gaussian mixture
         _, bins, _ = ax1.hist(projections, bins=64, density=True, color='black', picker=True)
@@ -139,7 +140,10 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         ax = plt.axes(projection='3d')
         
         # Display de direction vectors
-        ax.scatter(points[:,0], points[:,1], points[:,2], c='b')
+        ax.scatter(points[:,0], points[:,1], points[:,2], c='black')
+        for i, point in enumerate(points):
+            ax.text(point[0], point[1], point[2], str(i+1))
+            
         
         # Display the graph edges
         normalize = mpl.colors.Normalize()
