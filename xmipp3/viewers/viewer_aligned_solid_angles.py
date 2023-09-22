@@ -81,9 +81,9 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         dv = DataView(self._getDirectionalMdFilename())
         return [dv]
     
-    def _displayDirectionClassification(self, e):
+    def _displayDirectionClassification(self, e, directionId = None):
         # Read data from disk
-        directionId = self.displayDirectionClassification.get()
+        directionId = directionId or self.displayDirectionClassification.get()
         directionRow = self._readDirectionRow(directionId)
         projections = emlib.MetaData(directionRow.getValue(emlib.MDL_SELFILE)).getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
         average = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE)).getData()
@@ -140,26 +140,35 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         ax = plt.axes(projection='3d')
         
         # Display de direction vectors
-        ax.scatter(points[:,0], points[:,1], points[:,2], c='black')
-        for i, point in enumerate(points):
-            ax.text(point[0], point[1], point[2], str(i+1))
+        ax.scatter(points[:,0], points[:,1], points[:,2], c='black', picker=True)
+        for directionId, point in enumerate(points, 1):
+            ax.text(point[0], point[1], point[2], str(directionId))
             
         
         # Display the graph edges
-        normalize = mpl.colors.Normalize()
+        absmax = abs(weights).max()
+        normalize = mpl.colors.Normalize(-absmax, +absmax)
         lines = mpl3d.art3d.Line3DCollection(segments, linewidths=0.5, colors=colormap(normalize(weights)))
         ax.add_collection(lines)
         
         #  Show colorbar
         fig.colorbar(mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), label='Edge weights')
         
+        # Setup interactive picking
+        def on_pick(event):
+            directionId = int(event.ind[0] + 1)
+            figs = self._displayDirectionClassification(None, directionId)
+            figs[0].show()
+            
+        fig.canvas.mpl_connect('pick_event', on_pick)
+
         return [fig]
         
 
 
     # --------------------------- UTILS functions -----------------------------
     def _getScalarColorMap(self):
-        return mpl.cm.plasma
+        return mpl.cm.bwr
     
     def _getMaskGalleryAnglesMdFilename(self):
         return self.protocol._getMaskGalleryAnglesMdFilename()
