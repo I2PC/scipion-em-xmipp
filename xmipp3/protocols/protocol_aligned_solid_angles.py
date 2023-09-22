@@ -301,10 +301,11 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         directionalMd.write(self._getDirectionalMdFilename())
                   
     def expectationMaximizationStep(self):
-        # Compute the class expectation values for each direction
+        # Compute the class likelihood values for each classification
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
-        model = sklearn.mixture.GaussianMixture(n_components=2, n_init=16, tol=1e-6, max_iter=1000)
+        model = sklearn.mixture.GaussianMixture(n_components=2, weights_init=np.array([0.95, 0.05]))
+        #models = [sklearn.mixture.GaussianMixture(n_components=i+1) for i in range(2)]
         for directionId in directionMd:
             # Read the classification metadata
             directionalClassificationMdFilename = directionMd.getValue(
@@ -316,19 +317,33 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             projections = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL))
             projections = projections[:,None]
             
-            # Fit the GMM to the projection values
+            # Fit the GMMs to the projection values
+            #for model in models:
+            #    model.fit(projections)
             model.fit(projections)
+            
+            # Select the model that best fits the projection data
+            #model = min(models, key=lambda model : model.bic(projections))
             weights = model.weights_
             means = model.means_[:,0]
             variances = model.covariances_[:,0,0]
+            stddevs = np.sqrt(variances)
             
-            # Compute the ratio of probabilities
-            logLikelihood = scipy.stats.norm.logpdf(projections, means, np.sqrt(variances))
-            probability = logLikelihood + np.log(weights)
-            hypothesis = probability[:,1] - probability[:,0]
+            # Compute The likelihoods for each component           
+            logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
+            nComponents = logLikelihoods.shape[-1]
+            if nComponents == 1:
+                logLikelihoodRatio = -logLikelihoods[:,0]
             
+            elif nComponents == 2:
+                logLikelihoodRatio = logLikelihoods[:,1] - logLikelihoods[:,0]
+
+            else:
+                raise RuntimeError('Unexpected component count')
+
             # Store the log likelihoods
-            directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(hypothesis))
+            logLikelihoodRatio /= abs(logLikelihoodRatio).max()
+            directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatio))
             directionalClassificationMd.write(directionalClassificationMdFilename)
 
             # Store the gaussian model
@@ -386,7 +401,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Convert the adjacency matrix to sparse form
         graph = scipy.sparse.csr_matrix(adjacency)
-        graph /= abs(graph).max() # Normalize to avoid numerical inestability
+        #graph /= abs(graph).max() # Normalize to avoid numerical inestability
 
         # Check if there is a single component
         nComponents = scipy.sparse.csgraph.connected_components(
@@ -395,8 +410,9 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             return_labels=False
         )
         if nComponents != 1:
-            raise RuntimeError('The ensenbled graph has multiple components. '
-                               'Try incrementing the maximum distance parameter')
+            pass
+            #raise RuntimeError('The ensenbled graph has multiple components. '
+            #                   'Try incrementing the maximum distance parameter')
 
         # Store the graph
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
@@ -418,6 +434,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Invert the least amount of directions
         invert_list = min(v0, v1, key=len)
+        print(invert_list)
         
         # Invert the projection values of the chosen
         # directions
