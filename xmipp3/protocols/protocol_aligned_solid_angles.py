@@ -261,20 +261,24 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
             directionId = int(block.split("_")[1])
             
-            # Read information from the metadata
+            # Read the particles
+            particles.readBlock(self._getNeighborsMdFilename(), block)
+            if particles.size() == 0:
+                print('Direction %d has no particles. Skipping' % directionId)
+                continue
+            
+            # Create a working directory for the direction and copy
+            # particles to it
+            makePath(self._getDirectionPath(directionId))
+            particles.write(self._getDirectionParticlesMdFilename(directionId))
+            
+            # Read information from the mask metadata
             maskRow.readFromMd(maskGalleryMd, directionId)
             maskFilename = maskRow.getValue(emlib.MDL_IMAGE)
             rot = maskRow.getValue(emlib.MDL_ANGLE_ROT)
             tilt = maskRow.getValue(emlib.MDL_ANGLE_TILT)
             psi = maskRow.getValue(emlib.MDL_ANGLE_PSI)
                 
-            # Create the working directory for the direction            
-            makePath(self._getDirectionPath(directionId))
-            
-            # Copy the particles
-            particles.readBlock(self._getNeighborsMdFilename(), block)
-            particles.write(self._getDirectionParticlesMdFilename(directionId))
-            
             # Perform the classification
             args = []
             args += ['-i', self._getDirectionParticlesMdFilename(directionId)]
@@ -305,7 +309,6 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
         model = sklearn.mixture.GaussianMixture(n_components=2, weights_init=np.array([0.95, 0.05]))
-        #models = [sklearn.mixture.GaussianMixture(n_components=i+1) for i in range(2)]
         for directionId in directionMd:
             # Read the classification metadata
             directionalClassificationMdFilename = directionMd.getValue(
@@ -317,32 +320,21 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             projections = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL))
             projections = projections[:,None]
             
-            # Fit the GMMs to the projection values
-            #for model in models:
-            #    model.fit(projections)
+            # Fit the GMM to the projection values
             model.fit(projections)
             
             # Select the model that best fits the projection data
-            #model = min(models, key=lambda model : model.bic(projections))
             weights = model.weights_
             means = model.means_[:,0]
             variances = model.covariances_[:,0,0]
             stddevs = np.sqrt(variances)
             
-            # Compute The likelihoods for each component           
+            # Compute The likelihood ratio between classes
             logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
-            nComponents = logLikelihoods.shape[-1]
-            if nComponents == 1:
-                logLikelihoodRatio = -logLikelihoods[:,0]
-            
-            elif nComponents == 2:
-                logLikelihoodRatio = logLikelihoods[:,1] - logLikelihoods[:,0]
-
-            else:
-                raise RuntimeError('Unexpected component count')
-
-            # Store the log likelihoods
+            logLikelihoodRatio = logLikelihoods[:,1] - logLikelihoods[:,0]
             logLikelihoodRatio /= abs(logLikelihoodRatio).max()
+
+            # Store the log likelihood ratio
             directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatio))
             directionalClassificationMd.write(directionalClassificationMdFilename)
 
@@ -401,7 +393,6 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Convert the adjacency matrix to sparse form
         graph = scipy.sparse.csr_matrix(adjacency)
-        #graph /= abs(graph).max() # Normalize to avoid numerical inestability
 
         # Check if there is a single component
         nComponents = scipy.sparse.csgraph.connected_components(
@@ -410,9 +401,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             return_labels=False
         )
         if nComponents != 1:
-            pass
-            #raise RuntimeError('The ensenbled graph has multiple components. '
-            #                   'Try incrementing the maximum distance parameter')
+            raise RuntimeError('The ensenbled graph has multiple components. '
+                               'Try incrementing the maximum distance parameter')
 
         # Store the graph
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
