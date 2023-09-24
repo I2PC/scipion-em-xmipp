@@ -81,7 +81,7 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         dv = DataView(self._getDirectionalMdFilename())
         return [dv]
     
-    def _displayDirectionClassification(self, e, directionId = None):
+    def _displayDirectionClassification(self, e, directionId: int = None):
         # Read data from disk
         directionId = directionId or self.displayDirectionClassification.get()
         directionRow = self._readDirectionRow(directionId)
