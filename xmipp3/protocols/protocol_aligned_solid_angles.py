@@ -308,7 +308,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         # Compute the class likelihood values for each classification
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
-        model = sklearn.mixture.GaussianMixture(n_components=2, weights_init=np.array([0.95, 0.05]))
+        model = sklearn.mixture.GaussianMixture(n_components=2)
         for directionId in directionMd:
             # Read the classification metadata
             directionalClassificationMdFilename = directionMd.getValue(
