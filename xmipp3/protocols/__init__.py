@@ -107,7 +107,7 @@ from .protocol_shift_particles import XmippProtShiftParticles
 from .protocol_shift_volume import XmippProtShiftVolume
 from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
-from .protocol_aligned_solid_angles import XmippProtAlignedSolidAngles
+from .protocol_aligned_3d_classification import XmippProtAligned3dClassification
 from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_subtract_projection import XmippProtBoostParticles

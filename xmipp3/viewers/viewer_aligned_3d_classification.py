@@ -31,7 +31,7 @@ from pyworkflow.protocol.params import LT, LE, GE, GT, Range
 from pwem.viewers import DataView, ObjectView
 from pwem import emlib
 
-from xmipp3.protocols.protocol_aligned_solid_angles import XmippProtAlignedSolidAngles
+from xmipp3.protocols.protocol_aligned_3d_classification import XmippProtAligned3dClassification
 
 import math
 import collections
@@ -44,9 +44,9 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d as mpl3d
 
-class XmippViewerAlignedSolidAngles(ProtocolViewer):
-    _label = 'viewer aligned solid angles'
-    _targets = [XmippProtAlignedSolidAngles]
+class XmippViewerAligned3dClassification(ProtocolViewer):
+    _label = 'viewer aligned 3d classification'
+    _targets = [XmippProtAligned3dClassification]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     
     def __init__(self, **kwargs):

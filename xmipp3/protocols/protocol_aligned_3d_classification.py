@@ -26,7 +26,7 @@
 
 
 from pwem import emlib
-from pwem.protocols import ProtAnalysis3D
+from pwem.protocols import ProtClassify3D
 from pwem.objects import (VolumeMask, Class3D, 
                           SetOfParticles, SetOfClasses3D, Particle,
                           Volume, SetOfVolumes )
@@ -52,11 +52,11 @@ import numpy as np
 import scipy.sparse
 import scipy.stats
 import sklearn.mixture
-class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
+class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_CLASSES_NAME = 'classes'
     OUTPUT_VOLUMES_NAME = 'volumes'
     
-    _label = 'aligned solid angles'
+    _label = 'aligned 3d classification'
     _conda_env = 'xmipp_swiftalign'
     _devStatus = BETA
     _possibleOutputs = {
@@ -65,7 +65,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     }
 
     def __init__(self, *args, **kwargs):
-        ProtAnalysis3D.__init__(self, *args, **kwargs)
+        ProtClassify3D.__init__(self, *args, **kwargs)
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form: Form):
