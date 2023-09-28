@@ -168,7 +168,7 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
 
     # --------------------------- UTILS functions -----------------------------
     def _getScalarColorMap(self):
-        return mpl.cm.bwr
+        return mpl.cm.coolwarm
     
     def _getMaskGalleryAnglesMdFilename(self):
         return self.protocol._getMaskGalleryAnglesMdFilename()

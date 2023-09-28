@@ -424,7 +424,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         
         # Invert the least amount of directions
         invert_list = min(v0, v1, key=len)
-        print(invert_list)
+        print('Inverting the following directions:', invert_list)
         
         # Invert the projection values of the chosen
         # directions
