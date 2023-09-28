@@ -100,10 +100,10 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                       default=5.0, validators=[Range(0,180)],
                       help='Angular sampling interval in degrees')
         form.addParam('angularDistance', FloatParam, label='Angular distance',
-                      default=10.0, validators=[Range(0,180)],
+                      default=5.0, validators=[Range(0,180)],
                       help='Maximum angular distance in degrees')
         form.addParam('checkMirrors', BooleanParam, label='Check mirrors',
-                      default=False)
+                      default=True)
         
         form.addParallelSection(threads=0, mpi=8)
 
