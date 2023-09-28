@@ -83,8 +83,8 @@ class TestDeepCenter(BaseTest):
         #                           patience=5)
         #self.launchProtocol(deepCenter)
 #
-        #fnModel0 = deepCenter._getExtraPath("modelCenter0.h5")
-        #fnModel2 = deepCenter._getExtraPath("modelCenter2.h5")
+        #fnModel0 = deepCenter._getExtraPath("model0.h5")
+        #fnModel2 = deepCenter._getExtraPath("model2.h5")
 #
         #if not exists(fnModel0):
         #    self.assertTrue(False, fnModel0 + " does not exist")
@@ -104,6 +104,6 @@ class TestDeepCenter(BaseTest):
         #                              patience=5)
         #self.launchProtocol(deepCenter2)
 #
-        #fnModel0 = deepCenter2._getExtraPath("modelCenter0.h5")
+        #fnModel0 = deepCenter2._getExtraPath("model0.h5")
         #if not exists(fnModel0):
         #    self.assertTrue(False, fnModel0 + " does not exist")

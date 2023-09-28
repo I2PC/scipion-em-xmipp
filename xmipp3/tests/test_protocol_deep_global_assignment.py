@@ -24,14 +24,10 @@
 # *
 # **************************************************************************
 
+from pwem.protocols import ProtImportParticles, ProtSubSet
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 
-from pwem.protocols import (ProtImportParticles, ProtSubSet,
-                            exists)
-
-from pwem import emlib
-#from xmipp3.protocols import XmippProtDeepGlobalAssignment
-
+from xmipp3.protocols import XmippProtDeepGlobalAssignment
 
 class TestDeepGlobalAssignment(BaseTest):
     @classmethod
@@ -47,8 +43,6 @@ class TestDeepGlobalAssignment(BaseTest):
                 'haveDataBeenPhaseFlipped': True
                 }
 
-        # Id's should be set increasing from 1 if ### is not in the
-        # pattern
         protImport = cls.newProtocol(ProtImportParticles, **args)
         protImport.setObjLabel('import particles')
         cls.launchProtocol(protImport)
@@ -61,7 +55,6 @@ class TestDeepGlobalAssignment(BaseTest):
         # Data
         cls.dataset = DataSet.getDataSet('10010')
         cls.particles = cls.dataset.getFile('particles')
-
         cls.protImportParts = cls.runImportParticles()
 
     def test(self):
@@ -71,39 +64,16 @@ class TestDeepGlobalAssignment(BaseTest):
                                   nElements=400)
         self.launchProtocol(subset)
 
-        #deepGA = self.newProtocol(XmippProtDeepGlobalAssignment,
-        #                           inputTrainSet=subset.outputParticles,
-        #                           Xdim=128,
-        #                           modelPretrain=False,
-        #                           numAngModels=5,
-        #                           numEpochs_ang=1,
-        #                           batchSize=32,
-        #                           learningRate=0.001,
-        #                           sigma=8,
-        #                           patience=5)
-        #self.launchProtocol(deepGA)
-#
-        #fnModel0 = deepGA._getExtraPath("modelAngular0.h5")
-        #fnModel2 = deepGA._getExtraPath("modelAngular2.h5")
-#
-        #if not exists(fnModel0):
-        #    self.assertTrue(False, fnModel0 + " does not exist")
-        #if not exists(fnModel2):
-        #    self.assertTrue(False, fnModel2 + " does not exist")
-#
-        #deepGA2 = self.newProtocol(XmippProtDeepGlobalAssignment,
-        #                              inputTrainSet=subset.outputParticles,
-        #                              Xdim=128,
-        #                              modelPretrain=True,
-        #                              pretrainedModels=deepGA,
-        #                              numAngModels=5,
-        #                              numEpochs_ang=10,
-        #                              batchSize=32,
-        #                              learningRate=0.001,
-        #                              sigma=8,
-        #                              patience=5)
-        #self.launchProtocol(deepGA2)
-#
-        #fnModel0 = deepGA2._getExtraPath("modelAngular0.h5")
-        #if not exists(fnModel0):
-        #    self.assertTrue(False, fnModel0 + " does not exist")
+        deepGA = self.newProtocol(XmippProtDeepGlobalAssignment,
+                                  inputImageSet=subset.outputParticles,
+                                  inputTrainSet=subset.outputParticles,
+                                  Xdim=128,
+                                  numModels=5,
+                                  numEpochs=1,
+                                  batchSize=32,
+                                  learningRate=0.001,
+                                  sigma=8,
+                                  patience=5)
+        self.launchProtocol(deepGA)
+        self.assertIsNotNone(deepGA.outputParticles,
+                             "There was a problem with Deep Center Predict")
