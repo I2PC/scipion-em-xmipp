@@ -33,7 +33,6 @@ from pyworkflow.utils.path import moveFile, cleanPattern
 from pyworkflow.utils import Message
 from pwem.protocols import ProtAlign2D
 from pwem.emlib.metadata import iterRows, getFirstRow
-from copy import deepcopy
 from pwem.objects import String
 import pwem.emlib.metadata as md
 from xmipp3.convert import createItemMatrix, setXmippAttributes, readSetOfParticles, writeSetOfParticles
@@ -76,17 +75,50 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
                       help='The set of particles to predict shift')
 
         form.addParam('trainModels', BooleanParam, label="Train models",
-                      pointerClass='SetOfParticles', default=False, #condition='False',
+                      pointerClass='SetOfParticles', default=False,
                       help='Choose if you want to train a model using a centered set of particles')
+        
+        trainingGroup = form.addGroup('Training parameters', condition='trainModels==True')
 
-        form.addParam('numModels', IntParam,
+        trainingGroup.addParam('numModels', IntParam,
                       label="Number of models", default=5,
                       help="The maximum number of model available in xmipp is 5.")
 
-        form.addParam('inputTrainSet', PointerParam, label="Input Image set",
+        trainingGroup.addParam('inputTrainSet', PointerParam, label="Input Image set",
                       pointerClass='SetOfParticles',
                       pointerCondition='hasAlignment2D or hasAlignmentProj',
                       help='The set of particles to predict shift')
+
+        trainingGroup.addParam('numEpochsCen', IntParam,
+                      label="Number of epochs",
+                      default=25,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Number of epochs for training.")
+
+        trainingGroup.addParam('batchSize', IntParam,
+                      label="Batch size for training",
+                      default=32,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Batch size for training.")
+
+        trainingGroup.addParam('learningRate', FloatParam,
+                      label="Learning rate",
+                      default=0.001,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Learning rate for training.")
+
+        trainingGroup.addParam('sigma', FloatParam,
+                      label="Image shifting",
+                      default=10,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="A measure of the number of pixels that particles can be shifted in each direction from the center.")
+
+        trainingGroup.addParam('patience', IntParam,
+                      label="Patience",
+                      default=5,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Training will be stopped if the number of epochs without improvement is greater than "
+                           "patience.")
 
         form.addSection(label='Consensus')
 
@@ -97,34 +129,6 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
         form.addParam('maxModels', IntParam,
                       label="Maximum number of models dropped per particle", default=0,
                       help="If more models are dropped, the particle is discarded.")
-
-        form.addSection(label='Training parameters')
-
-        form.addParam('numEpochs_cen', IntParam,
-                      label="Number of epochs",
-                      default=25, expertLevel=LEVEL_ADVANCED,
-                      help="Number of epochs for training.")
-
-        form.addParam('batchSize', IntParam,
-                      label="Batch size for training",
-                      default=32, expertLevel=LEVEL_ADVANCED,
-                      help="Batch size for training.")
-
-        form.addParam('learningRate', FloatParam,
-                      label="Learning rate",
-                      default=0.001, expertLevel=LEVEL_ADVANCED,
-                      help="Learning rate for training.")
-
-        form.addParam('sigma', FloatParam,
-                      label="Image shifting",
-                      default=10, expertLevel=LEVEL_ADVANCED,
-                      help="A measure of the number of pixels that particles can be shifted in each direction from the center.")
-
-        form.addParam('patience', IntParam,
-                      label="Patience",
-                      default=5, expertLevel=LEVEL_ADVANCED,
-                      help="Training will be stopped if the number of epochs without improvement is greater than "
-                           "patience.")
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -184,45 +188,9 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
                            % (self.inputSet.get().getSize(), self.getObjectTag('inputSet')))
         return methods
 
-class XmippProtDeepCenterPredict(XmippProtDeepCenterAssignmentPredictBase):
+class XmippProtDeepCenter(XmippProtDeepCenterAssignmentPredictBase):
     """Predict the center particles using deep learning.""" 
-    _label = 'deep center predict'
-
-    # --------------------------- DEFINE param functions --------------------------------------------
-    def _defineParams(self, form):
-        _cond_trainModelsTrue = String('trainModels==True')
-        # Calling specific parent form
-        super()._defineParams(form)
-        # Adding extra conditions
-
-        trainModels = form.getParam('trainModels')
-        trainModels.condition = String('True')
-
-        numModels = form.getParam('numModels')
-        numModels.condition = _cond_trainModelsTrue
-
-        inputTrainSet = form.getParam('inputTrainSet')
-        inputTrainSet.condition = _cond_trainModelsTrue
-
-        numEpochs_cen = form.getParam('numEpochs_cen')
-        numEpochs_cen.condition = _cond_trainModelsTrue
-
-        batchSize = form.getParam('batchSize')
-        batchSize.condition = _cond_trainModelsTrue
-
-        learningRate = form.getParam('learningRate')
-        learningRate.condition = _cond_trainModelsTrue
-
-        sigma = form.getParam('sigma')
-        sigma.condition = _cond_trainModelsTrue
-
-        patience = form.getParam('patience')
-        patience.condition = _cond_trainModelsTrue
-
-
-
-
-
+    _label = 'deep center'
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def predict(self, predictImgsFn, gpuId, mode="center", inputModel="", trainedModel=True):
@@ -244,7 +212,7 @@ class XmippProtDeepCenterPredict(XmippProtDeepCenterAssignmentPredictBase):
             self._insertFunctionStep("convertTrainStep")
             self._insertFunctionStep("train", numGPU[0])
 
-        XmippProtDeepCenterAssignmentPredictBase()._insertAllSteps()
+        super()._insertAllSteps()
 
     def convertTrainStep(self):
         self.Xdim = 128
@@ -260,7 +228,7 @@ class XmippProtDeepCenterPredict(XmippProtDeepCenterAssignmentPredictBase):
 
         args = "%s %s %f %d %d %s %d %f %d" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelCenter"), self.sigma.get(),
-            self.numEpochs_cen, self.batchSize.get(), gpuId, self.numModels.get(), self.learningRate.get(),
+            self.numEpochsCen, self.batchSize.get(), gpuId, self.numModels.get(), self.learningRate.get(),
             self.patience.get())
         print(args)
         self.runJob("xmipp_deep_center", args, numberOfMpi=1, env=self.getCondaEnv())
@@ -268,42 +236,21 @@ class XmippProtDeepCenterPredict(XmippProtDeepCenterAssignmentPredictBase):
         remove(self._getExtraPath("trainingResized.xmd"))
         remove(self._getExtraPath("trainingResized.stk"))
 
-class XmippProtDeepGlobalAssignmentPredict(XmippProtDeepCenterAssignmentPredictBase):
+class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
     """Predict the center particles using deep learning."""
-    _label = 'deep global assignment predict'
+    _label = 'deep global assignment'
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        _cond_trainModelsTrue = String('trainModels==True')
-        # Calling specific parent form
-        XmippProtDeepCenterAssignmentPredictBase._defineParams(self, form)
+        # Calling parent form
+        super()._defineParams(form)
+
         # Adding extra conditions
+        trainModels = form.getParam('trainModels')
+        trainModels.condition = String('False')
 
-        #trainModels = form.getParam('trainModels')
-        #trainModels.condition = String('True')
-#
-        #numModels = form.getParam('numModels')
-        #numModels.condition = _cond_trainModelsTrue
-#
-        #inputTrainSet = form.getParam('inputTrainSet')
-        #inputTrainSet.condition = _cond_trainModelsTrue
-#
-        #numEpochs_cen = form.getParam('numEpochs_cen')
-        #numEpochs_cen.condition = _cond_trainModelsTrue
-#
-        #batchSize = form.getParam('batchSize')
-        #batchSize.condition = _cond_trainModelsTrue
-#
-        #learningRate = form.getParam('learningRate')
-        #learningRate.condition = _cond_trainModelsTrue
-#
-        #sigma = form.getParam('sigma')
-        #sigma.condition = _cond_trainModelsTrue
-#
-        #patience = form.getParam('patience')
-        #patience.condition = _cond_trainModelsTrue
-
-
+        trainingGroup = form.getParam('Training_parameters')
+        trainingGroup.condition = String('True')
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def predict(self, predictImgsFn, gpuId, mode="global_assignment", inputModel="", trainedModel=True):
