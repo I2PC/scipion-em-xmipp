@@ -61,7 +61,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
 
         form.addParam('inputImageSet', PointerParam, label="Input Image set",
                       pointerClass='SetOfParticles',
-                      help='The set of particles to predict shift')
+                      help='The set of particles to predict')
 
         form.addParam('trainModels', BooleanParam, label="Train models",
                       pointerClass='SetOfParticles', default=False,
@@ -73,10 +73,10 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
                       label="Number of models", default=5,
                       help="The maximum number of model available in xmipp is 5.")
 
-        trainingGroup.addParam('inputTrainSet', PointerParam, label="Input Image set",
+        trainingGroup.addParam('inputTrainSet', PointerParam, label="Input train set",
                       pointerClass='SetOfParticles',
                       pointerCondition='hasAlignment2D or hasAlignmentProj',
-                      help='The set of particles to predict')
+                      help='The set of particles to train the models')
 
         trainingGroup.addParam('numEpochs', IntParam,
                       label="Number of epochs",
