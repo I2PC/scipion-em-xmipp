@@ -74,7 +74,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
                       help="The maximum number of model available in xmipp is 5.")
 
         trainingGroup.addParam('inputTrainSet', PointerParam, label="Input train set",
-                      pointerClass='SetOfParticles',
+                      pointerClass='SetOfParticles', allowsNull=True,
                       pointerCondition='hasAlignment2D or hasAlignmentProj',
                       help='The set of particles to train the models')
 
