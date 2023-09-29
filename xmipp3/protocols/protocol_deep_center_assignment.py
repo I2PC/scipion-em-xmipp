@@ -38,7 +38,7 @@ import xmipp3
 from xmipp_base import XmippScript
 
 class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol):
-    """Predict the center particles using deep learning."""
+    """Super protocol of Deep Center and Deep Global Assignment."""
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
     _trainingResizedFileName = 'trainingResized'
@@ -76,7 +76,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
         trainingGroup.addParam('inputTrainSet', PointerParam, label="Input Image set",
                       pointerClass='SetOfParticles',
                       pointerCondition='hasAlignment2D or hasAlignmentProj',
-                      help='The set of particles to predict shift')
+                      help='The set of particles to predict')
 
         trainingGroup.addParam('numEpochs', IntParam,
                       label="Number of epochs",
@@ -98,7 +98,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
 
         trainingGroup.addParam('sigma', FloatParam,
                       label="Image shifting",
-                      default=10,
+                      default=5,
                       expertLevel=LEVEL_ADVANCED,
                       help="A measure of the number of pixels that particles can be shifted in each direction from the center.")
 
@@ -158,23 +158,26 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
     def convertTrainStep(self):
         self.convertStep(self.inputTrainSet.get())
     
-    def train(self, gpuId, mode=""):
+    def train(self, gpuId, mode="", orderSymmetry=None):
         args = "%s %s %f %d %d %s %d %f %d" % (
             self._getExtraPath(f"{self._trainingResizedFileName}.xmd"), self._getExtraPath("model"), self.sigma.get(),
             self.numEpochs, self.batchSize.get(), gpuId, self.numModels.get(), self.learningRate.get(),
             self.patience.get())
+        if orderSymmetry:
+            args += " " + str(orderSymmetry)
         self.runJob(f"xmipp_deep_{mode}", args, numberOfMpi=1, env=self.getCondaEnv())
 
         remove(self._getExtraPath(f"{self._trainingResizedFileName}.xmd"))
         remove(self._getExtraPath(f"{self._trainingResizedFileName}.stk"))
 
-    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True):
+    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, orderSymmetry=None):
         if mode != "center" or trainedModel:
-            self.model = inputModel
             args = "%s %s %s %s %s %d %d %d" % (
                 self._getExtraPath(f"{self._trainingResizedFileName}.xmd"), gpuId, self._getPath(), predictImgsFn,
-                self.model._getExtraPath(), self.numModels.get(), self.tolerance.get(),
+                inputModel, self.numModels.get(), self.tolerance.get(),
                 self.maxModels.get())
+            if orderSymmetry:
+                args += " " + str(orderSymmetry)
         else:
             args = "%s %s %s %s %s %d %d %d" % (
                 self._getExtraPath(f"{self._trainingResizedFileName}.xmd"), gpuId, self._getPath(), predictImgsFn,
@@ -213,17 +216,16 @@ class XmippProtDeepCenter(XmippProtDeepCenterAssignmentPredictBase):
         super()._insertAllSteps()
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def train(self, gpuId, mode=""):
+    def train(self, gpuId, mode="", orderSymmetry=None):
         super().train(gpuId, mode="center")
 
-    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True):
-        boolUseTrainedModel = not self.trainModels.get()
+    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, orderSymmetry=None):
         super().predict(gpuId, predictImgsFn, mode="center",
                                                            inputModel=self._getExtraPath("model"),
-                                                           trainedModel=boolUseTrainedModel)
+                                                           trainedModel=self.trainModels.get())
 
 class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
-    """Predict the center particles using deep learning."""
+    """Predict Euler Angles using deep learning."""
     _label = 'deep global assignment'
 
     # --------------------------- DEFINE param functions --------------------------------------------
@@ -238,6 +240,11 @@ class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
         # Always show training parameters group in this protocol
         trainingGroup = form.getParam('Training_parameters')
         trainingGroup.condition = String('True')
+
+        section = form.getSection(label=Message.LABEL_INPUT)
+        section.addParam('orderSymmetry', IntParam,
+                      label="Order of symmetry", default=1,
+                      help="Order of the group of the molecule.")
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -245,8 +252,8 @@ class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
         super()._insertAllSteps()
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def train(self, gpuId, mode=""):
-        super().train(gpuId, mode="global_assignment")
+    def train(self, gpuId, mode="", orderSymmetry=None):
+        super().train(gpuId, mode="global_assignment", orderSymmetry=self.orderSymmetry.get())
 
-    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True):
-        super().predict(self, predictImgsFn, gpuId, mode="global_assignment", inputModel=self._getExtraPath("model"))
+    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, orderSymmetry=None):
+        super().predict(gpuId, predictImgsFn, mode="global_assignment", inputModel=self._getExtraPath("model"), orderSymmetry=self.orderSymmetry.get())

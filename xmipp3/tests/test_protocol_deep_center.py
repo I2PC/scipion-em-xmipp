@@ -30,7 +30,7 @@ from pwem.protocols import (ProtImportParticles, ProtSubSet,
                             exists)
 
 from pwem import emlib
-#from xmipp3.protocols import XmippProtDeepCenter
+from xmipp3.protocols import XmippProtDeepCenter
 
 
 class TestDeepCenter(BaseTest):
@@ -71,39 +71,33 @@ class TestDeepCenter(BaseTest):
                                   nElements=400)
         self.launchProtocol(subset)
 
-        #deepCenter = self.newProtocol(XmippProtDeepCenter,
-        #                           inputTrainSet=subset.outputParticles,
-        #                           Xdim=128,
-        #                           modelPretrain=False,
-        #                           numCenModels=5,
-        #                           numEpochs_cen=1,
-        #                           batchSize=32,
-        #                           learningRate=0.001,
-        #                           sigma=8,
-        #                           patience=5)
-        #self.launchProtocol(deepCenter)
-#
-        #fnModel0 = deepCenter._getExtraPath("model0.h5")
-        #fnModel2 = deepCenter._getExtraPath("model2.h5")
-#
-        #if not exists(fnModel0):
-        #    self.assertTrue(False, fnModel0 + " does not exist")
-        #if not exists(fnModel2):
-        #    self.assertTrue(False, fnModel2 + " does not exist")
-#
-        #deepCenter2 = self.newProtocol(XmippProtDeepCenter,
-        #                              inputTrainSet=subset.outputParticles,
-        #                              Xdim=128,
-        #                              modelPretrain=True,
-        #                              pretrainedModels=deepCenter,
-        #                              numCenModels=5,
-        #                              numEpochs_cen=10,
-        #                              batchSize=32,
-        #                              learningRate=0.001,
-        #                              sigma=8,
-        #                              patience=5)
-        #self.launchProtocol(deepCenter2)
-#
-        #fnModel0 = deepCenter2._getExtraPath("model0.h5")
-        #if not exists(fnModel0):
-        #    self.assertTrue(False, fnModel0 + " does not exist")
+        deepCenter = self.newProtocol(XmippProtDeepCenter,
+                                   inputImageSet=subset.outputParticles,
+                                   trainModels=True,
+                                   inputTrainSet=subset.outputParticles,
+                                   numModels=5,
+                                   numEpochs=1,
+                                   batchSize=32,
+                                   learningRate=0.001,
+                                   sigma=8,
+                                   patience=5)
+        self.launchProtocol(deepCenter)
+
+        fnModel0 = deepCenter._getExtraPath("model0.h5")
+        fnModel2 = deepCenter._getExtraPath("model2.h5")
+
+        if not exists(fnModel0):
+            self.assertTrue(False, fnModel0 + " does not exist")
+        if not exists(fnModel2):
+            self.assertTrue(False, fnModel2 + " does not exist")
+
+        self.assertIsNotNone(deepCenter.outputParticles,
+                                                  "There was a problem with Deep Center Predict")
+
+        deepCenter2 = self.newProtocol(XmippProtDeepCenter,
+                                       inputImageSet=subset.outputParticles,
+                                       trainModels=False)
+        self.launchProtocol(deepCenter2)
+
+        self.assertIsNotNone(deepCenter2.outputParticles,
+                             "There was a problem with Deep Center Predict")
