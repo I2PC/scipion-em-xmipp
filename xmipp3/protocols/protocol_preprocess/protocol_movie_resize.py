@@ -195,13 +195,11 @@ class XmippProtMovieResize(ProtProcessMovies):
             outputSet.loadAllProperties()
             outputSet.enableAppend()
         else:
+            inputMovies = self.inputMovies.get()
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
-
-        inputMovies = self.inputMovies.get()
-        outputSet.copyInfo(inputMovies)
-
-        outputSet.setSamplingRate(self.newSamplingRate)
+            outputSet.copyInfo(inputMovies)
+            outputSet.setSamplingRate(self.newSamplingRate)
 
         return outputSet
 
