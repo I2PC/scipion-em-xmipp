@@ -239,7 +239,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         
     def angularNeighborhoodStep(self):
         args = []
-        args += ['--i1', self._getInputParticleMdFilename()]
+        args += ['--i1', self._getWienerParticleMdFilename()]
         args += ['--i2', self._getMaskGalleryMdFilename()]
         args += ['-o', self._getNeighborsMdFilename()]
         args += ['--dist', self._getAngularDistance()]
@@ -461,7 +461,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                     logLikelihoods[itemId] = logLikelihood
         
         # Write likelihoods to the output metadata
-        result = emlib.MetaData(self._getInputParticleMdFilename())
+        result = emlib.MetaData(self._getWienerParticleMdFilename())
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
             logLikelihood = logLikelihoods.get(itemId, 0.0)
@@ -601,7 +601,10 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         return self._getTmpPath('input_particles.mrcs')
 
     def _getWienerParticleMdFilename(self):
-        return self._getExtraPath('particles_wiener.xmd')
+        if self.considerInputCtf:
+            return self._getExtraPath('particles_wiener.xmd')
+        else:
+            return self._getInputParticleMdFilename()
 
     def _getWienerParticleStackFilename(self):
         return self._getExtraPath('particles_wiener.mrcs')
