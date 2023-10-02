@@ -32,7 +32,7 @@ import math
 from datetime import datetime
 from collections import OrderedDict
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol import STEPS_PARALLEL, Protocol
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED, FloatParam, GE, GT, Range)
 import pyworkflow.utils as pwutils
@@ -47,7 +47,7 @@ from xmipp3.convert import getScipionObj
 from matplotlib import pyplot as plt
 
 
-class XmippProtTiltAnalysis(ProtMicrographs):
+class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
     """
     _label = 'tilt analysis'
@@ -345,7 +345,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         window_image = ImageHandler().createImage()
         rotatedWind_psd = ImageHandler().createImage()
         output_image = ImageHandler().createImage()
-        output_array = np.zeros((subWindStep * 2, subWindStep * 2))
+        output_array = np.zeros(((subWindStep * 2)-1, (subWindStep * 2)-1))
         ih = ImageHandler()
 
         for i in range(0, 3, 2):
@@ -439,22 +439,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         outputSet.copyInfo(inputMicrographs)
 
         return outputSet
-
-    def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
-        outputSet.setStreamState(state)
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protocol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            # Here the defineOutputs function will call the write() method
-            self._defineOutputs(**{outputName: outputSet})
-            self._store(outputSet)
-        # Close set databaset to avoid locking it
-        outputSet.close()
 
     # ------------------------- UTILS functions --------------------------------
     def _correctFormat(self, micName, micFn, micFolderTmp):
