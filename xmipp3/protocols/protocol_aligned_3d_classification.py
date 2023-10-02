@@ -125,7 +125,6 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('projectMaskStep')
         self._insertFunctionStep('angularNeighborhoodStep')
         self._insertFunctionStep('classifyStep')
-        self._insertFunctionStep('expectationMaximizationStep')
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('graphOptimizationStep')
         self._insertFunctionStep('classificationStep')
@@ -255,8 +254,10 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         maskGalleryMd = emlib.MetaData(self._getMaskGalleryMdFilename())
         particles = emlib.MetaData()
         directionalMd = emlib.MetaData()
+        directionalClassificationMd = emlib.MetaData()
         maskRow = emlib.metadata.Row()
         directionRow = emlib.metadata.Row()
+        model = sklearn.mixture.GaussianMixture(n_components=2)
         
         for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
             directionId = int(block.split("_")[1])
@@ -293,27 +294,8 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             env['LD_LIBRARY_PATH'] = '' # Torch does not like it
             self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
             
-            # Ensemble the output row
-            directionRow.copyFromRow(maskRow)
-            directionRow.setValue(emlib.MDL_MASK, maskFilename)
-            directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
-            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImageFilename(directionId))
-            directionRow.setValue(emlib.MDL_SELFILE, self._getDirectionalClassificationMdFilename(directionId))
-            directionRow.setValue(emlib.MDL_CLASS_COUNT, particles.size())
-            directionRow.addToMd(directionalMd)
-
-        directionalMd.write(self._getDirectionalMdFilename())
-                  
-    def expectationMaximizationStep(self):
-        # Compute the class likelihood values for each classification
-        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
-        directionalClassificationMd = emlib.MetaData()
-        model = sklearn.mixture.GaussianMixture(n_components=2)
-        for directionId in directionMd:
-            # Read the classification metadata
-            directionalClassificationMdFilename = directionMd.getValue(
-                emlib.MDL_SELFILE, directionId
-            )
+            # Read the resulting classification
+            directionalClassificationMdFilename = self._getDirectionalClassificationMdFilename(directionId)
             directionalClassificationMd.read(directionalClassificationMdFilename)
             
             # Obtain PCA projection values
@@ -341,6 +323,16 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             # Store the gaussian model
             with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'wb') as f:
                 pickle.dump(model, f)  
+            # Ensemble the output row
+            directionRow.copyFromRow(maskRow)
+            directionRow.setValue(emlib.MDL_MASK, maskFilename)
+            directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
+            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImageFilename(directionId))
+            directionRow.setValue(emlib.MDL_SELFILE, directionalClassificationMdFilename)
+            directionRow.setValue(emlib.MDL_CLASS_COUNT, particles.size())
+            directionRow.addToMd(directionalMd)
+
+        directionalMd.write(self._getDirectionalMdFilename())
                 
     def buildGraphStep(self):
         # Build graph intersecting direction pairs and calculate the similarity
