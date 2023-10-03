@@ -320,9 +320,6 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatio))
             directionalClassificationMd.write(directionalClassificationMdFilename)
 
-            # Store the gaussian model
-            with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'wb') as f:
-                pickle.dump(model, f)  
             # Ensemble the output row
             directionRow.copyFromRow(maskRow)
             directionRow.setValue(emlib.MDL_MASK, maskFilename)
@@ -331,6 +328,11 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             directionRow.setValue(emlib.MDL_SELFILE, directionalClassificationMdFilename)
             directionRow.setValue(emlib.MDL_CLASS_COUNT, particles.size())
             directionRow.addToMd(directionalMd)
+
+            # Store the gaussian model
+            with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'wb') as f:
+                pickle.dump(model, f)  
+                
 
         directionalMd.write(self._getDirectionalMdFilename())
                 
