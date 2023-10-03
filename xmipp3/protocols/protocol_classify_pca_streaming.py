@@ -36,7 +36,7 @@ from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set, Float, String
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, EnumParam, IntParam, GPU_LIST)
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.protocol.constants import LEVEL_ADVANCED, STATUS_NEW
 from pyworkflow.utils.path import cleanPath, makePath
 from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
 
@@ -52,8 +52,8 @@ from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
 from threading import Event
 
 OUTPUT = "outputClasses"
-BATCH_CLASSIFICATION = 2000
-BATCH_UPDATE = 500
+BATCH_CLASSIFICATION = 5000
+BATCH_UPDATE = 1000
 
 
 def updateEnviron(gpuNum):
@@ -141,86 +141,50 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         It should check its input and when ready conditions are met
         call the self._insertFunctionStep method.
         """
-        self.readingOutput()
-        newParticles = []
         newParticlesSet = self._loadEmptyParticleSet()
         self._initFnStep()
+        self._insertFunctionStep('closeOutputStep', wait=True)
+        self.newDeps = []
 
         while not self.finish:
             if not self._newParticlesToProcess():
                 self.info('No new particles')
             else:
+                closeStep = self._getFirstJoinStep()
                 particlesSet = self._loadInputParticleSet()
                 self.isStreamClosed = particlesSet.getStreamState()
-                # todo: En lugar de iterar intentar sacarlo todo de golpe
+
                 for particle in particlesSet.iterItems(where="id > %s" % self.lastParticleId):
-                    newParticles.append(particle.clone())
                     newParticlesSet.append(particle.clone())
 
-                self.info(f'%d new particles' % len(newParticles))
+                self.info(f'%d new particles' % len(newParticlesSet))
                 # ------------------------------------ PCA TRAINING ----------------------------------------------
-                if len(newParticles) >= self.training.get() and not self.flagPcaDone:
-                    print('Pasa todo lo del convert y PCA training')
-                    # Process data
-                    convertStep = self._insertFunctionStep('convertInputStep',
-                                                           # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
-                                                           newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn,
-                                                           prerequisites=[])  # convert
-                    #numTrain = len(newParticles) something to do here
-                    numTrain = self.training.get()
-                    pcaStep = self._insertFunctionStep("pcaTraining", self.imgsPcaFn, self.resolution.get(),
-                                                       numTrain, prerequisites=convertStep)
-
-                    self.flagPcaDone = True  # Activate flag so this step is only done once
-                # ------------------------------------ PCA TRAINING ------------------------------------------------
+                if self.doPcaTraining(newParticlesSet):
+                    self._insertPCASteps(newParticlesSet)
                 # ------------------------------------ CLASSIFICATION ----------------------------------------------
-                if (len(newParticles) >= BATCH_CLASSIFICATION and self.flagPcaDone and not self.classificationDone) \
-                        or (len(newParticles) >= BATCH_UPDATE and self.classificationDone):
-                    # Only happens once
-                    print('Convert o enviar a clasificacion')  # TODO: va a haber un tamaño minimo para la primera clasificacion?
-                    # Process data
-                    self.updateFnClassification()
-                    convertStep2 = self._insertFunctionStep('convertInputStep',
-                                                            # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
-                                                            newParticlesSet, self.imgsOrigXmd, self.imgsFn,
-                                                            prerequisites=pcaStep)
-                    mask = self.mask.get()
-                    sigma = self.sigma.get()
-
-                    classStep = self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(),
-                                             self.imgsOrigXmd, mask, sigma, prerequisites=convertStep2)
-
-                    # CREATE CLASSES
-                    self._insertFunctionStep('_updateOutputSetOfClasses', newParticlesSet,
-                                             #self.isStreamClosed
-                                             Set.STREAM_OPEN, prerequisites=classStep)
-                    print('Creating classes')
-                    # Empty new particles
-                    newParticles = []
+                if self.doClassification(newParticlesSet):
+                    # TODO: va a haber un tamaño minimo para la primera clasificacion en el form?
+                    self._insertClassificationSteps(newParticlesSet)
                     newParticlesSet = self._loadEmptyParticleSet()
-                # ------------------------------------ CLASSIFICATION ----------------------------------------------
+                # ------------------------------------ Update ----------------------------------------------
                 self.lastParticleId = max(particlesSet.getIdSet())
                 print('Last particle input id', self.lastParticleId)
-                # TODO: ver como quitar esto
-                self.particlesProcessedOld = []
-                self.particlesProcessedOld.append(1)
+                closeStep.addPrerequisites(*self.newDeps)
 
             if self.isStreamClosed == Set.STREAM_CLOSED:
                 print('Stream closed')
                 # Finish everything and close output sets
-                if len(newParticles):
-                    print(f'Finish processing with last batch %d' % len(newParticles))
+                if len(newParticlesSet):
+                    print(f'Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
                 else:
-                    self.finish = True
-                    print('salir')
+                    outputStep = self._getFirstJoinStep()
+                    if outputStep and outputStep.isWaiting():
+                        outputStep.setStatus(STATUS_NEW)
+                        self.finish = True
 
             sys.stdout.flush()
             time.sleep(10)
-
-        self._closeOutputSet()
-        # self.outputClasses.setStreamState(Set.STREAM_CLOSED)
-        # print('BYE BYE')
 
     # --------------------------- STEPS functions -------------------------------
     def _initialStep(self):
@@ -239,15 +203,37 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
             self.classificationDone = False
 
     def _initFnStep(self):
-        # PCA
         self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
         self.imgsPcaFn = self._getTmpPath('images_pca.mrc')
-        # CLASSIFICATION
-        self.imgsOrigXmd = self._getExtraPath('images_input.xmd')
-        self.imgsXmd = self._getTmpPath('images.xmd')
-        self.imgsFn = self._getTmpPath('images.mrc')
+        self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
+        self.imgsXmd = self._getTmpPath('images_.xmd')
+        self.imgsFn = self._getTmpPath('images_.mrc')
         self.refXmd = self._getTmpPath('references.xmd')
         self.ref = self._getTmpPath('references.mrcs')
+
+    def _insertPCASteps(self, newParticlesSet):
+        # Process data
+        self.convertStep = self._insertFunctionStep('convertInputStep',
+                                                    # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
+                                                    newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn,
+                                                    prerequisites=[])
+        numTrain = min(len(newParticlesSet), self.training.get())
+        self.pcaStep = self._insertFunctionStep("pcaTraining", self.imgsPcaFn, self.resolution.get(),
+                                                numTrain, prerequisites=self.convertStep)
+        self.flagPcaDone = True  # Activate flag so this step is only done once
+
+    def _insertClassificationSteps(self, newParticlesSet):
+        self.updateFnClassification()
+        self.convertStep2 = self._insertFunctionStep('convertInputStep',
+                                                     # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
+                                                     newParticlesSet, self.imgsOrigXmd, self.imgsFn,
+                                                     prerequisites=self.pcaStep)
+        self.classStep = self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(),
+                                                  self.imgsOrigXmd, self.mask.get(), self.sigma.get(),
+                                                  prerequisites=self.convertStep2)
+        self.updateStep = self._insertFunctionStep('_updateOutputSetOfClasses', newParticlesSet,
+                                                   Set.STREAM_OPEN, prerequisites=self.classStep)
+        self.newDeps.append(self.updateStep)
 
     def convertInputStep(self, input, outputOrig, outputMRC):
         writeSetOfParticles(input, outputOrig)
@@ -279,7 +265,6 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         env['LD_LIBRARY_PATH'] = ''
         self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
 
-
     def classification(self, inputIm, numClass, stfile, mask, sigma):
         args = ' -i %s -s %s -c %s -n 18 -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
                (inputIm, self.sampling, numClass, self._getExtraPath(), self._getExtraPath(), self._getExtraPath(),
@@ -298,23 +283,11 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
 
     def _updateOutputSetOfClasses(self, particles, streamMode):
         outputName = 'outputClasses'
-        outputClasses = getattr(self, outputName, None)
-        firstTime = True
-        update = False
-
-        if outputClasses is None:
-            outputClasses = self._createSetOfClasses2D(self.getInputPointer())
-        else:
-            firstTime = False
-            outputClasses = SetOfClasses2D(filename=outputClasses.getFileName())
-            outputClasses.setStreamState(streamMode)
-            outputClasses.setImages(particles)
-            update = True
-
+        outputClasses, update = self._loadOutputSet(outputName)
         self._fillClassesFromLevel(outputClasses, update)
         self._updateOutputSet(outputName, outputClasses, streamMode)
 
-        if firstTime:
+        if not update: # First time
             self._defineSourceRelation(self.getInputPointer(), outputClasses)
             # For further updating
             writeSetOfClasses2D(outputClasses,
@@ -326,26 +299,22 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         self.particlesProcessed.extend(particles.getIdSet())
         self.lastParticleProcessedId = max(particles.getIdSet())
 
-    def _updateOutputSetOfClasses_new(self, particles, streamMode):
-        outputName = 'outputClasses'
-        outputClasses, update = self._loadOutputSet(SetOfClasses2D, "classes2D.sqlite")
-        self._fillClassesFromLevel(outputClasses, update)
-        self._updateOutputSet(outputName, outputClasses, streamMode)
-
-        if not update:
-            # For further updating
-            writeSetOfClasses2D(outputClasses,
-                                self.refXmd, writeParticles=False)
-
-            args = ' -i  %s -o %s  ' % (self.refXmd, self.ref)
-            self.runJob("xmipp_image_convert", args, numberOfMpi=1)
-
-        self.particlesProcessed.extend(particles.getIdSet())
-        self.lastParticleProcessedId = max(particles.getIdSet())
+    def closeOutputStep(self):
+        self._closeOutputSet()
 
     # --------------------------- UTILS functions -----------------------------
-    def getOutputClasses(self):
-        return self.outputClasses.get()
+    def _getFirstJoinStepName(self):
+        # This function will be used for streaming, to check which is
+        # the first function that need to wait for all micrographs
+        # to have completed, this can be overriden in subclasses
+        # (e.g., in Xmipp 'sortPSDStep')
+        return 'closeOutputStep'
+
+    def _getFirstJoinStep(self):
+        for s in self._steps:
+            if s.funcName == self._getFirstJoinStepName():
+                return s
+        return None
 
     def _loadInputParticleSet(self):
         """ Returns te input set of particles"""
@@ -372,13 +341,9 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
 
     def updateFnClassification(self):
         """Update input based on the iteration it is"""
-        newFileName = self.imgsOrigXmd.replace(".", "%s." % str(self.classificationRound))
-        self.imgsOrigXmd = newFileName
-        newFileName = self.imgsXmd.replace(".", "%s." % str(self.classificationRound))
-        self.imgsXmd = newFileName
-        newFileName = self.imgsFn.replace(".", "%s." % str(self.classificationRound))
-        self.imgsFn = newFileName
-
+        self.imgsOrigXmd = updateFileName(self.imgsOrigXmd, self.classificationRound)
+        self.imgsXmd = updateFileName(self.imgsXmd, self.classificationRound)
+        self.imgsFn = updateFileName(self.imgsFn, self.classificationRound)
         self.classificationRound += 1
 
     def _newParticlesToProcess(self):
@@ -391,7 +356,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                       prettyTime(mTime)))
         # If the input have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck > mTime and hasattr(self, 'particlesProcessedOld'):
+        if (self.lastCheck > mTime and self.lastParticleId>0) and not self.lastRound:
             newParticlesBool = False
         else:
             newParticlesBool = True
@@ -405,7 +370,6 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
 
     def _updateClass(self, item):
         classId = item.getObjId()
-
         if classId in self._classesInfo:
             index, fn, _ = self._classesInfo[classId]
             item.setAlignment2D()
@@ -427,7 +391,6 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
             # the same reference is used for iteration
             self._classesInfo[classNumber + 1] = (index, fn, row.clone())
 
-
     def _fillClassesFromLevel(self, clsSet, update = False):
         """ Create the SetOfClasses2D from a given iteration. """
         self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
@@ -437,42 +400,38 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
                                     updateItemCallback=self._updateParticle,
                                     skipDisabled=True)
-
         params = {}
         if update:
             print(r'Last particle processed id is %s' %self.lastParticleProcessedId)
             params = {"where":"id > %s" %self.lastParticleProcessedId}
 
-        clsSet.classifyItems(updateItemCallback=iterator.updateItem,
+        with self._lock:
+            clsSet.classifyItems(updateItemCallback=iterator.updateItem,
                              updateClassCallback=self._updateClass, iterParams=params)
 
-    def readingOutput(self):
-        pass
-
-    def _loadOutputSet(self, SetClass, baseName):
+    def _loadOutputSet(self, outputName):
         """
         Load the output set if it exists or create a new one.
-        fixSampling: correct the output sampling rate if binning was used,
-        except for the case when the original movies are kept and shifts
-        refers to that one.
         """
-        setFile = self._getPath(baseName)
+        outputSet = getattr(self, outputName, None)
         update = False
-        if os.path.exists(setFile) and os.path.getsize(setFile) > 0:
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-            outputSet.setImages(self.getInputPointer())
-            update = True
+        if outputSet is None:
+            outputSet = self._createSetOfClasses2D(self.getInputPointer())
+            outputSet.setStreamState(Set.STREAM_OPEN)
         else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setImages(self.getInputPointer())
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-            self._store(outputSet)
-            self._defineSourceRelation(self.getInputPointer(), outputSet)
-            # if fixSampling:
-            #     newSampling = inputMovies.getSamplingRate() * self._getBinFactor()
-            #     outputSet.setSamplingRate(newSampling)
-
+            update = True
 
         return outputSet, update
+
+    def doPcaTraining(self, newParticlesSet):
+        return (len(newParticlesSet) >= self.training.get() and not self.flagPcaDone) or \
+                (self.lastRound and not self.flagPcaDone)
+
+    def doClassification(self, newParticlesSet):
+        return (len(newParticlesSet) >= BATCH_CLASSIFICATION and self.flagPcaDone and not self.classificationDone) \
+                        or (len(newParticlesSet) >= BATCH_UPDATE and self.classificationDone) or self.lastRound
+
+def updateFileName(filepath, round):
+    filename = os.path.basename(filepath)
+    new_filename = f"{filename[:filename.find('_')]}_{round}{filename[filename.rfind('.'):]}"
+    return os.path.join(os.path.dirname(filepath), new_filename)
