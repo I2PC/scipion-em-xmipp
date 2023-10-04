@@ -143,7 +143,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         """
         newParticlesSet = self._loadEmptyParticleSet()
         self._initFnStep()
-        self._insertFunctionStep('closeOutputStep', wait=True)
+        self._insertFunctionStep(self.closeOutputStep, wait=True)
         self.newDeps = []
 
         while not self.finish:
@@ -213,25 +213,25 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
 
     def _insertPCASteps(self, newParticlesSet):
         # Process data
-        self.convertStep = self._insertFunctionStep('convertInputStep',
+        self.convertStep = self._insertFunctionStep(self.convertInputStep,
                                                     # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
                                                     newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn,
                                                     prerequisites=[])
         numTrain = min(len(newParticlesSet), self.training.get())
-        self.pcaStep = self._insertFunctionStep("pcaTraining", self.imgsPcaFn, self.resolution.get(),
+        self.pcaStep = self._insertFunctionStep(self.pcaTraining, self.imgsPcaFn, self.resolution.get(),
                                                 numTrain, prerequisites=self.convertStep)
         self.flagPcaDone = True  # Activate flag so this step is only done once
 
     def _insertClassificationSteps(self, newParticlesSet):
         self.updateFnClassification()
-        self.convertStep2 = self._insertFunctionStep('convertInputStep',
+        self.convertStep2 = self._insertFunctionStep(self.convertInputStep,
                                                      # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
                                                      newParticlesSet, self.imgsOrigXmd, self.imgsFn,
                                                      prerequisites=self.pcaStep)
-        self.classStep = self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(),
+        self.classStep = self._insertFunctionStep(self.classification, self.imgsFn, self.numberOfClasses.get(),
                                                   self.imgsOrigXmd, self.mask.get(), self.sigma.get(),
                                                   prerequisites=self.convertStep2)
-        self.updateStep = self._insertFunctionStep('_updateOutputSetOfClasses', newParticlesSet,
+        self.updateStep = self._insertFunctionStep(self._updateOutputSetOfClasses, newParticlesSet,
                                                    Set.STREAM_OPEN, prerequisites=self.classStep)
         self.newDeps.append(self.updateStep)
 
@@ -248,7 +248,6 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
 
             args = ' -i  %s -o %s  ' % (self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
-
         # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
         #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
         # env = self.getCondaEnv()
