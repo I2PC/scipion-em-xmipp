@@ -203,7 +203,7 @@ class XmippViewer(DataViewer):
                                               viewParams={ORDER: labels,
                                                           VISIBLE: labels,
                                                           RENDER: labelRender,
-                                                          ZOOM: 25,
+                                                          ZOOM: 5,
                                                           MODE: MODE_MD}))
 
             if obj.hasAttribute('outputMicrographs'):
@@ -216,7 +216,7 @@ class XmippViewer(DataViewer):
                                                    viewParams={ORDER: labels,
                                                    VISIBLE: labels,
                                                    RENDER: labelRender,
-                                                   ZOOM: 25,
+                                                   ZOOM: 5,
                                                    MODE: MODE_MD}))
 
             if not(obj.hasAttribute('discardedMicrographs')) and not(obj.hasAttribute('outputMicrographs')):

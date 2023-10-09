@@ -32,7 +32,7 @@ import sys
 from pyworkflow import VERSION_1_1
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
-from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol import STEPS_PARALLEL, Protocol
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
@@ -51,7 +51,7 @@ OUTPUT_ORIENTED_GAINS = 'orientedGain'
 OUTPUT_RESIDUAL_GAINS = 'residualGains'
 OUTPUT_MOVIES = 'outputMovies'
 
-class XmippProtMovieGain(ProtProcessMovies):
+class XmippProtMovieGain(ProtProcessMovies, Protocol):
     """ Estimate the gain image of a camera, directly analyzing one of its movies.
     It can correct the orientation of an external gain image (by comparing it with the estimated).
     Finally, it estimates the residual gain (the gain of the movie after correcting with a gain).
@@ -350,24 +350,6 @@ class XmippProtMovieGain(ProtProcessMovies):
         imgSet.setSamplingRate(movie.getSamplingRate())
         imgSet.append(imgOut)
         return imgSet
-
-    def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
-        outputSet.setStreamState(state)
-
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protcol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            # Here the defineOutputs function will call the write() method
-            self._defineOutputs(**{outputName: outputSet})
-            self._store(outputSet)
-
-        # Close set databaset to avoid locking it
-        outputSet.close()
 
     def match_orientation(self, exp_gain, est_gain):
         ''' Calculates the correct orientation of the experimental gain image
