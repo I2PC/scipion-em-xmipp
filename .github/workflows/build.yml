@@ -74,8 +74,9 @@ jobs:
       env:
         BUILD_TESTS: True
       run: |
-        ../scipion/scipion3 run ./xmipp
+        ../scipion/scipion3 run ./xmipp || (cat compileLOG.txt && false)
         cat compileLOG.txt
+    #TODO: Remove last "cat compileLOG.txt" once there is a new Scipion release 
     
     # Check out the repository in the pull request
     - name: Checkout repository

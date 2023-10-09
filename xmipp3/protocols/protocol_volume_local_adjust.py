@@ -33,7 +33,7 @@ from pwem.objects import Volume, Transform
 from pwem.protocols import EMProtocol
 
 class XmippProtLocalVolAdj(EMProtocol):
-    """Protocol to adjust locally volume intensity to a reference volume."""
+    """Protocol to adjust locally volume intensity to a reference volume. Occupancy volume is saved in protocol folder"""
     _label = 'volume local adjustment'
     _possibleOutputs = Volume
 
@@ -66,9 +66,9 @@ class XmippProtLocalVolAdj(EMProtocol):
         if vol2.endswith('.mrc'):
             vol2 += ':mrc'
         program = "xmipp_local_volume_adjust"
-        args = '--i1 %s --i2 %s -o %s --mask %s --neighborhood %d --sampling %s' % \
+        args = '--i1 %s --i2 %s -o %s --mask %s --neighborhood %d --sampling %s --save %s' % \
                (fnVol1, vol2, self._getExtraPath("output_volume.mrc"), self.mask.get().getFileName(),
-                self.neighborhood.get(), vol1.getSamplingRate())
+                self.neighborhood.get(), vol1.getSamplingRate(), self._getExtraPath())
         if self.subtract.get():
             args += ' --sub'
         self.runJob(program, args)
