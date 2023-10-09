@@ -24,14 +24,20 @@
 # *
 # **************************************************************************
 
+################## QUALITY DISCLAIMER ##################
+# This tests only proves that this protocol can successfully run without errors!
+# It does not guarantee at all that the results will be any good.
+# The input train set is the same as the set to predict, which causes artificially great results,
+# that will get worse once real use cases are introduced. However, changing that makes no sense 
+# either, since the quality of the results cannot be checked, due to the non-deterministic nature
+# of Neural Networks, specially regarding their training.
+
+# Scipion em imports
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
+from pwem.protocols import ProtImportParticles, ProtSubSet, exists
 
-from pwem.protocols import (ProtImportParticles, ProtSubSet,
-                            exists)
-
-from pwem import emlib
-from xmipp3.protocols import XmippProtDeepCenter
-
+# Plugin imports
+from ..protocols import XmippProtDeepCenter
 
 class TestDeepCenter(BaseTest):
     @classmethod
@@ -86,18 +92,14 @@ class TestDeepCenter(BaseTest):
         fnModel0 = deepCenter._getExtraPath("model0.h5")
         fnModel2 = deepCenter._getExtraPath("model2.h5")
 
-        if not exists(fnModel0):
-            self.assertTrue(False, fnModel0 + " does not exist")
-        if not exists(fnModel2):
-            self.assertTrue(False, fnModel2 + " does not exist")
+        self.assertTrue(exists(fnModel0), fnModel0 + " does not exist")
+        self.assertTrue(exists(fnModel2), fnModel2 + " does not exist")
 
-        self.assertIsNotNone(deepCenter.outputParticles,
-                                                  "There was a problem with Deep Center Predict")
+        self.assertIsNotNone(deepCenter.outputParticles, "There was a problem with Deep Center Predict")
 
         deepCenter2 = self.newProtocol(XmippProtDeepCenter,
                                        inputImageSet=subset.outputParticles,
                                        trainModels=False)
         self.launchProtocol(deepCenter2)
 
-        self.assertIsNotNone(deepCenter2.outputParticles,
-                             "There was a problem with Deep Center Predict")
+        self.assertIsNotNone(deepCenter2.outputParticles, "There was a problem with Deep Center Predict")

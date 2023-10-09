@@ -24,10 +24,20 @@
 # *
 # **************************************************************************
 
+################## QUALITY DISCLAIMER ##################
+# This tests only proves that this protocol can successfully run without errors!
+# It does not guarantee at all that the results will be any good.
+# The input train set is the same as the set to predict, which causes artificially great results,
+# that will get worse once real use cases are introduced. However, changing that makes no sense 
+# either, since the quality of the results cannot be checked, due to the non-deterministic nature
+# of Neural Networks, specially regarding their training.
+
+# Scipion em imports
 from pwem.protocols import ProtImportParticles, ProtSubSet
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 
-from xmipp3.protocols import XmippProtDeepGlobalAssignment
+# Plugin imports
+from ..protocols import XmippProtDeepGlobalAssignment
 
 class TestDeepGlobalAssignment(BaseTest):
     @classmethod
@@ -58,6 +68,7 @@ class TestDeepGlobalAssignment(BaseTest):
         cls.protImportParts = cls.runImportParticles()
 
     def test(self):
+        # Creating subset of particles (same for train and test)
         subset = self.newProtocol(ProtSubSet,
                                   inputFullSet=self.protImportParts.outputParticles,
                                   chooseAtRandom=True,
