@@ -139,7 +139,4 @@ from .protocol_volume_consensus import XmippProtVolConsensus
 from .protocol_volume_local_adjust import XmippProtLocalVolAdj
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
-from .protocol_deep_center import XmippProtDeepCenter
-from .protocol_deep_center_predict import XmippProtDeepCenterPredict
-from .protocol_deep_global_assignment import XmippProtDeepGlobalAssignment
-from .protocol_deep_global_assignment_predict import XmippProtDeepGlobalAssignmentPredict
+from .protocol_deep_center_assignment import XmippProtDeepCenter, XmippProtDeepGlobalAssignment
