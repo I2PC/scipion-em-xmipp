@@ -200,12 +200,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             self.ctfFn2 = self.inputCTF2.get().getFileName()
             self.allCtf2 = {}
 
-        ctfSteps = self._checkNewInput()
         self._insertFunctionStep('createOutputStep',
-                                 prerequisites=ctfSteps, wait=True)
+                                 prerequisites=[], wait=True)
 
     def createOutputStep(self):
-        pass
+        self._closeOutputSet()
 
     def initializeParams(self):
         self.finished = False
