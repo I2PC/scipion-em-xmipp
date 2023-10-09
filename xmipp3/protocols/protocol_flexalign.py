@@ -422,4 +422,4 @@ class XmippProtFlexAlign(ProtAlignMovies):
         return errors
 
     def _citations(self):
-        return ['strelak2020flexalign']
+        return ['strelak2020flexalign', 'Strelak2023performance']
