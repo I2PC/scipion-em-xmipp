@@ -24,22 +24,16 @@
 # *
 # **************************************************************************
 
-################## QUALITY DISCLAIMER ##################
-# This tests only proves that this protocol can successfully run without errors!
-# It does not guarantee at all that the results will be any good.
-# The input train set is the same as the set to predict, which causes artificially great results,
-# that will get worse once real use cases are introduced. However, changing that makes no sense 
-# either, since the quality of the results cannot be checked, due to the non-deterministic nature
-# of Neural Networks, specially regarding their training.
-
-# Scipion em imports
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from pwem.protocols import ProtImportParticles, ProtSubSet, exists
 
-# Plugin imports
-from ..protocols import XmippProtDeepCenter
+from pwem.protocols import (ProtImportParticles, ProtSubSet,
+                            exists)
 
-class TestDeepCenter(BaseTest):
+from pwem import emlib
+from xmipp3.protocols import XmippProtDeepCenterPredict, XmippProtDeepCenter
+
+
+class TestDeepCenterPredict(BaseTest):
     @classmethod
     def runImportParticles(cls):
         """ Import Particles.
@@ -53,8 +47,6 @@ class TestDeepCenter(BaseTest):
                 'haveDataBeenPhaseFlipped': True
                 }
 
-        # Id's should be set increasing from 1 if ### is not in the
-        # pattern
         protImport = cls.newProtocol(ProtImportParticles, **args)
         protImport.setObjLabel('import particles')
         cls.launchProtocol(protImport)
@@ -78,28 +70,26 @@ class TestDeepCenter(BaseTest):
         self.launchProtocol(subset)
 
         deepCenter = self.newProtocol(XmippProtDeepCenter,
-                                   inputImageSet=subset.outputParticles,
-                                   trainModels=True,
                                    inputTrainSet=subset.outputParticles,
-                                   numModels=5,
-                                   numEpochs=1,
+                                   Xdim=128,
+                                   modelPretrain=False,
+                                   numCenModels=5,
+                                   numEpochs_cen=1,
                                    batchSize=32,
                                    learningRate=0.001,
                                    sigma=8,
                                    patience=5)
         self.launchProtocol(deepCenter)
 
-        fnModel0 = deepCenter._getExtraPath("model0.h5")
-        fnModel2 = deepCenter._getExtraPath("model2.h5")
+        deepCenterPredict = self.newProtocol(XmippProtDeepCenterPredict,
+                                      inputImageSet=subset.outputParticles,
+                                      Xdim=128,
+                                      inputModel=deepCenter,
+                                      numModels=5,
+                                      tolerance=2,
+                                      maxModels=1)
+        self.launchProtocol(deepCenterPredict)
 
-        self.assertTrue(exists(fnModel0), fnModel0 + " does not exist")
-        self.assertTrue(exists(fnModel2), fnModel2 + " does not exist")
+        self.assertIsNotNone(deepCenterPredict.outputParticles,
+                             "There was a problem with Deep Center Predict")
 
-        self.assertIsNotNone(deepCenter.outputParticles, "There was a problem with Deep Center Predict")
-
-        deepCenter2 = self.newProtocol(XmippProtDeepCenter,
-                                       inputImageSet=subset.outputParticles,
-                                       trainModels=False)
-        self.launchProtocol(deepCenter2)
-
-        self.assertIsNotNone(deepCenter2.outputParticles, "There was a problem with Deep Center Predict")

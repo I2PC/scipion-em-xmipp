@@ -32,7 +32,7 @@ import sys
 from pyworkflow import VERSION_1_1
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
-from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol import STEPS_PARALLEL, Protocol
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
@@ -41,6 +41,7 @@ import pyworkflow.protocol.constants as cons
 
 from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem import emlib
 import xmipp3.utils as xmutils
@@ -50,7 +51,7 @@ OUTPUT_ORIENTED_GAINS = 'orientedGain'
 OUTPUT_RESIDUAL_GAINS = 'residualGains'
 OUTPUT_MOVIES = 'outputMovies'
 
-class XmippProtMovieGain(ProtProcessMovies):
+class XmippProtMovieGain(ProtProcessMovies, Protocol):
     """ Estimate the gain image of a camera, directly analyzing one of its movies.
     It can correct the orientation of an external gain image (by comparing it with the estimated).
     Finally, it estimates the residual gain (the gain of the movie after correcting with a gain).
@@ -59,6 +60,7 @@ class XmippProtMovieGain(ProtProcessMovies):
     The same criteria is used for assigning the gain to the output movies (external corrected > external > estimated)
     """
     _label = 'movie gain'
+    _devStatus = UPDATED
     _lastUpdateVersion = VERSION_1_1
     _stepsCheckSecs = 60
     estimatedDatabase = 'estGains.sqlite'
@@ -349,24 +351,6 @@ class XmippProtMovieGain(ProtProcessMovies):
         imgSet.append(imgOut)
         return imgSet
 
-    def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
-        outputSet.setStreamState(state)
-
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protcol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            # Here the defineOutputs function will call the write() method
-            self._defineOutputs(**{outputName: outputSet})
-            self._store(outputSet)
-
-        # Close set databaset to avoid locking it
-        outputSet.close()
-
     def match_orientation(self, exp_gain, est_gain):
         ''' Calculates the correct orientation of the experimental gain image
             with respect to the estimated
@@ -407,7 +391,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                     best_cor = minVal
                     best_transf = (angle,imir)
                     best_R = R
-                    # T = np.asarray([[1, 0, np.asscalar(corLoc[1])], [0, 1, np.asscalar(corLoc[0])], [0, 0, 1]])
                     T = np.asarray([[1, 0, corLoc[1].item()],
                                     [0, 1, corLoc[0].item()],
                                     [0, 0, 1]])
@@ -416,7 +399,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                     best_cor = maxVal
                     best_transf = (angle, imir)
                     best_R = R
-                    # T = np.asarray([[1, 0, np.asscalar(corLoc[1])], [0, 1, np.asscalar(corLoc[0])], [0, 0, 1]])
                     T = np.asarray([[1, 0, corLoc[1].item()], 
                                     [0, 1, corLoc[0].item()],
                                     [0, 0, 1]])

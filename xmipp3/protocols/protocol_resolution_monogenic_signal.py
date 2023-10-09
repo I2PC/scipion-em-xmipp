@@ -37,7 +37,7 @@ from pyworkflow.utils import getExt
 from pwem.objects import Volume
 import pwem.emlib.metadata as md
 
-MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
+MONORES_METHOD_URL = 'https://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
 OUTPUT_RESOLUTION_FILE = 'monoresResolutionMap.mrc'
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'monoresResolutionChimera.mrc'
 OUTPUT_MASK_FILE = 'refinedMask.mrc'

@@ -39,7 +39,7 @@ from pwem.emlib.metadata import (MDL_COST, MDL_ITER, MDL_SCALE)
 from ntpath import dirname
 from os.path import exists
 
-LOCALDEBLUR_METHOD_URL='http://github.com/I2PC/scipion/wiki/XmippProtLocSharp' 
+LOCALDEBLUR_METHOD_URL='https://github.com/I2PC/scipion/wiki/XmippProtLocSharp' 
 
 class XmippProtLocSharp(ProtAnalysis3D):
     """    
