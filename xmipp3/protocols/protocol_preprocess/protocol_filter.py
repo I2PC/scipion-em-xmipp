@@ -110,7 +110,7 @@ class XmippFilterHelper():
         realCondition    = 'filterSpace == %d and (%s)' % (FILTER_SPACE_REAL,
                                                            cls.getModesCondition('filterModeReal',
                                                                                   cls.FM_MEDIAN))
-        #String that identifies filter in Real Space
+        #String that identifies filter in Wavelet Space
         waveletCondition = 'filterSpace == %d and (%s)' % (FILTER_SPACE_WAVELET,
                                                            cls.getModesCondition('filterModeWavelets',
                                                                                   cls.FM_DAUB4,
@@ -473,7 +473,7 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
         realCondition    = 'filterSpace == %d and (%s)' % (FILTER_SPACE_REAL,
                                                            cls.getModesCondition('filterModeReal',
                                                                                   cls.FM_MEDIAN))
-        #String that identifies filter in Real Space
+        #String that identifies filter in Wavelet Space
         waveletCondition = 'filterSpace == %d and (%s)' % (FILTER_SPACE_WAVELET,
                                                            cls.getModesCondition('filterModeWavelets',
                                                                                   cls.FM_DAUB4,
