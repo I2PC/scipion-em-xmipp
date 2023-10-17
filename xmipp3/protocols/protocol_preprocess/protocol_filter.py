@@ -119,7 +119,7 @@ class XmippFilterHelper():
         #fourier
 
         form.addParam('freqInAngstrom', BooleanParam, default=True,
-                      condition='filterSpace == %d' % FILTER_SPACE_FOURIER,
+                      condition='filterSpace == %d and filterModeFourier != %d' % (FILTER_SPACE_FOURIER, cls.FM_CTF),
                       label='Provide resolution in Angstroms?',
                       help='If *Yes*, the resolution values for the filter\n'
                            'should be provided in Angstroms. If *No*, the\n'
