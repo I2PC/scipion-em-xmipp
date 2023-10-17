@@ -69,11 +69,11 @@ class XmippFilterHelper():
 
     #--------------------------- DEFINE param functions --------------------------------------------
     @classmethod
-    def _defineProcessParams(cls, form, fourier_choices=['low pass', 'high pass', 'band pass', 'ctf']):
+    def _defineProcessParams(cls, form, fourierChoices=['low pass', 'high pass', 'band pass', 'ctf']):
         form.addParam('filterSpace', EnumParam, choices=['fourier', 'real', 'wavelets'],
                       default=FILTER_SPACE_FOURIER,
                       label="Filter space")
-        form.addParam('filterModeFourier', EnumParam, choices=fourier_choices,
+        form.addParam('filterModeFourier', EnumParam, choices=fourierChoices,
                       default=cls.FM_BAND_PASS,
                       condition='filterSpace == %d' % FILTER_SPACE_FOURIER,
                       label="Filter mode",
@@ -433,7 +433,7 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
 
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineProcessParams(self, form):
-        XmippFilterHelper._defineProcessParams(form, fourier_choices=['low pass', 'high pass', 'band pass'])
+        XmippFilterHelper._defineProcessParams(form, fourierChoices=['low pass', 'high pass', 'band pass'])
         
     def _insertProcessStep(self):
         XmippFilterHelper._insertProcessStep(self)
