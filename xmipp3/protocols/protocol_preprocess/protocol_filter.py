@@ -422,6 +422,28 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
     """ Apply Fourier filters to a set of volumes """
     _label = 'filter volumes'
 
+    # Some Filter Modes constants to be used locally
+    # the special cases of low pass, high pass and band pass
+    # should preserve the em.constants values 0, 1 and 2 respectively
+    # for properly working of the wizards
+    #Fourier filters
+    FM_LOW_PASS  = FILTER_LOW_PASS   #0
+    FM_HIGH_PASS = FILTER_HIGH_PASS  #1
+    FM_BAND_PASS = FILTER_BAND_PASS  #2
+    FM_CTF       = 3
+    # Real Space Filters
+    FM_MEDIAN = 0
+    #Wavelets decomposition base
+    FM_DAUB4   = 0
+    FM_DAUB12  = 1
+    FM_DAUB20  = 2
+    #Wavelet filters
+    FM_REMOVE_SCALE      = 0
+    FM_BAYESIAN          = 1
+    FM_SOFT_THRESHOLDING = 2
+    FM_ADAPTIVE_SOFT     = 3
+    FM_CENTRAL           = 4
+
     #--------------------------- UTILS functions ---------------------------------------------------
 
     def __init__(self, **kwargs):
@@ -465,20 +487,20 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
 
         #String that identifies filter in Fourier Space
         fourierCondition = 'filterSpace == %d and (%s)' % (FILTER_SPACE_FOURIER,
-                                                           cls.getModesCondition('filterModeFourier',
-                                                                                  cls.FM_LOW_PASS,
-                                                                                  cls.FM_HIGH_PASS,
-                                                                                  cls.FM_BAND_PASS))
+                                                           XmippFilterHelper.getModesCondition('filterModeFourier',
+                                                                                                cls.FM_LOW_PASS,
+                                                                                                cls.FM_HIGH_PASS,
+                                                                                                cls.FM_BAND_PASS))
         #String that identifies filter in Real Space
         realCondition    = 'filterSpace == %d and (%s)' % (FILTER_SPACE_REAL,
-                                                           cls.getModesCondition('filterModeReal',
-                                                                                  cls.FM_MEDIAN))
+                                                           XmippFilterHelper.getModesCondition('filterModeReal',
+                                                                                               cls.FM_MEDIAN))
         #String that identifies filter in Wavelet Space
         waveletCondition = 'filterSpace == %d and (%s)' % (FILTER_SPACE_WAVELET,
-                                                           cls.getModesCondition('filterModeWavelets',
-                                                                                  cls.FM_DAUB4,
-                                                                                  cls.FM_DAUB12,
-                                                                                  cls.FM_DAUB20))
+                                                           XmippFilterHelper.getModesCondition('filterModeWavelets',
+                                                                                                cls.FM_DAUB4,
+                                                                                                cls.FM_DAUB12,
+                                                                                                cls.FM_DAUB20))
         #fourier
 
         form.addParam('freqInAngstrom', BooleanParam, default=True,
@@ -492,12 +514,14 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
                             condition=fourierCondition + ' and freqInAngstrom',
                             help='Range of resolutions to use in the filter')
         line.addParam('lowFreqA', FloatParam, default=60,
-                      condition='(' + cls.getModesCondition('filterModeFourier',
-                                                       cls.FM_BAND_PASS, cls.FM_HIGH_PASS) + ') and freqInAngstrom',
+                      condition='(' + XmippFilterHelper.getModesCondition('filterModeFourier',
+                                                                          cls.FM_BAND_PASS, 
+                                                                          cls.FM_HIGH_PASS) + ') and freqInAngstrom',
                       label='Lowest')
         line.addParam('highFreqA', FloatParam, default=10,
-                      condition='(' + cls.getModesCondition('filterModeFourier',
-                                                       cls.FM_BAND_PASS, cls.FM_LOW_PASS) + ') and freqInAngstrom',
+                      condition='(' + XmippFilterHelper.getModesCondition('filterModeFourier',
+                                                                           cls.FM_BAND_PASS, 
+                                                                           cls.FM_LOW_PASS) + ') and freqInAngstrom',
                       label='Highest')
 
         form.addParam('freqDecayA', FloatParam, default=100,
@@ -511,12 +535,14 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
                             condition=fourierCondition + ' and (not freqInAngstrom)',
                             help='Range of frequencies to use in the filter')
         line.addParam('lowFreqDig', DigFreqParam, default=0.02,
-                      condition='(' + cls.getModesCondition('filterModeFourier',
-                                                       cls.FM_BAND_PASS, cls.FM_HIGH_PASS) + ') and (not freqInAngstrom)',
+                      condition='(' + XmippFilterHelper.getModesCondition('filterModeFourier',
+                                                                           cls.FM_BAND_PASS, 
+                                                                           cls.FM_HIGH_PASS) + ') and (not freqInAngstrom)',
                       label='Lowest')
         line.addParam('highFreqDig', DigFreqParam, default=0.35,
-                      condition='(' + cls.getModesCondition('filterModeFourier',
-                                                       cls.FM_BAND_PASS, cls.FM_LOW_PASS) + ') and (not freqInAngstrom)',
+                      condition='(' + XmippFilterHelper.getModesCondition('filterModeFourier',
+                                                                           cls.FM_BAND_PASS, 
+                                                                           cls.FM_LOW_PASS) + ') and (not freqInAngstrom)',
                       label='Highest')
 
         form.addParam('freqDecayDig', FloatParam, default=0.02,
