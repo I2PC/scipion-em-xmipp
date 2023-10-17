@@ -266,6 +266,9 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
             """ When micrograph is very big, sometimes it's not ready to be read
             Then we will wait for it up to a minute in 6 time-growing tries. """
             try:
+                if outSet.isEmpty():
+                    outSet.setDim(micOut.getDim())
+                
                 outSet.append(micOut)
             except Exception as ex:
                 micFn = micOut.getFileName()  # Runs/..../extra/filename.mrc
@@ -307,14 +310,15 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
             outputSet.loadAllProperties()
             outputSet.enableAppend()
         else:
+            inputs = self.inputMicrographs.get()
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
+            outputSet.copyInfo(inputs)
 
-        inputs = self.inputMicrographs.get()
-        outputSet.copyInfo(inputs)
-        if self.doDownsample:
-            outputSet.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
-                                      * self.downFactor.get())
+            if self.doDownsample:
+                outputSet.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
+                                        * self.downFactor.get())
+
         return outputSet
 
 

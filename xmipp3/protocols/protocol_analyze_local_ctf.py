@@ -34,6 +34,8 @@ from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.metadata as md
 from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs
 
+CITE ='Fernandez-Gimenez2023b'
+
 
 class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     """Assigns to each micrograph a coefficient (R2) which evaluates the result of the
