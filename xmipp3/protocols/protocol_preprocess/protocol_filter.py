@@ -432,7 +432,6 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
         self.allowMpi = False
 
     #---------------------- DEFINE param functions (copied but for modified choices) ---------------
-    @classmethod
     def _defineProcessParams(cls, form):
         form.addParam('filterSpace', EnumParam, choices=['fourier', 'real', 'wavelets'],
                       default=FILTER_SPACE_FOURIER,
@@ -483,7 +482,7 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
         #fourier
 
         form.addParam('freqInAngstrom', BooleanParam, default=True,
-                      condition='filterSpace == %d and filterModeFourier != %d' % (FILTER_SPACE_FOURIER, cls.FM_CTF),
+                      condition='filterSpace == %d' % FILTER_SPACE_FOURIER,
                       label='Provide resolution in Angstroms?',
                       help='If *Yes*, the resolution values for the filter\n'
                            'should be provided in Angstroms. If *No*, the\n'
