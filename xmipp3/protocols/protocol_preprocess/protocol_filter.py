@@ -119,7 +119,7 @@ class XmippFilterHelper():
         #fourier
 
         form.addParam('freqInAngstrom', BooleanParam, default=True,
-                      condition='filterSpace == %d' % FILTER_SPACE_FOURIER,
+                      condition='filterSpace == %d and filterModeFourier != %d' % (FILTER_SPACE_FOURIER, cls.FM_CTF),
                       label='Provide resolution in Angstroms?',
                       help='If *Yes*, the resolution values for the filter\n'
                            'should be provided in Angstroms. If *No*, the\n'
@@ -431,9 +431,119 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
         self.allowThreads = False
         self.allowMpi = False
 
-    #--------------------------- DEFINE param functions --------------------------------------------
-    def _defineProcessParams(self, form):
-        XmippFilterHelper._defineProcessParams(form)
+    #---------------------- DEFINE param functions (copied but for modified choices) ---------------
+    @classmethod
+    def _defineProcessParams(cls, form):
+        form.addParam('filterSpace', EnumParam, choices=['fourier', 'real', 'wavelets'],
+                      default=FILTER_SPACE_FOURIER,
+                      label="Filter space")
+        form.addParam('filterModeFourier', EnumParam, choices=['low pass', 'high pass', 'band pass'],
+                      default=cls.FM_BAND_PASS,
+                      condition='filterSpace == %d' % FILTER_SPACE_FOURIER,
+                      label="Filter mode",
+                      help='Depending on the filter mode some frequency (freq.) components\n'
+                           'are kept and some are removed.\n '
+                           '_low pass_: components below *High freq.* are preserved.\n '
+                           '_high pass_: components above *Low freq.* are preserved.\n '
+                           '_band pass_: components between *Low freq.* and *High freq.* '
+                           'are preserved. \n'
+                           'ctf: apply first CTF in CTFset to all the particles. This is normally for simulated data.\n'
+                           '   : This is not a CTF correction.'
+        )
+
+        form.addParam('filterModeReal', EnumParam, choices=['median'],
+                      default=cls.FM_MEDIAN,
+                      condition='filterSpace == %d' % FILTER_SPACE_REAL,
+                      label="Filter mode",
+                      help='median: replace each pixel with the median of neighboring pixels.\n'
+        )
+        form.addParam('filterModeWavelets', EnumParam, choices=['daub4','daub12','daub20'],
+                      default=cls.FM_DAUB4,
+                      condition='filterSpace == %d' % FILTER_SPACE_WAVELET,
+                      label="Filter mode",
+                      help='DAUB4: filter using the DAUB4 wavelet transform.\n '
+        )
+
+        #String that identifies filter in Fourier Space
+        fourierCondition = 'filterSpace == %d and (%s)' % (FILTER_SPACE_FOURIER,
+                                                           cls.getModesCondition('filterModeFourier',
+                                                                                  cls.FM_LOW_PASS,
+                                                                                  cls.FM_HIGH_PASS,
+                                                                                  cls.FM_BAND_PASS))
+        #String that identifies filter in Real Space
+        realCondition    = 'filterSpace == %d and (%s)' % (FILTER_SPACE_REAL,
+                                                           cls.getModesCondition('filterModeReal',
+                                                                                  cls.FM_MEDIAN))
+        #String that identifies filter in Real Space
+        waveletCondition = 'filterSpace == %d and (%s)' % (FILTER_SPACE_WAVELET,
+                                                           cls.getModesCondition('filterModeWavelets',
+                                                                                  cls.FM_DAUB4,
+                                                                                  cls.FM_DAUB12,
+                                                                                  cls.FM_DAUB20))
+        #fourier
+
+        form.addParam('freqInAngstrom', BooleanParam, default=True,
+                      condition='filterSpace == %d and filterModeFourier != %d' % (FILTER_SPACE_FOURIER, cls.FM_CTF),
+                      label='Provide resolution in Angstroms?',
+                      help='If *Yes*, the resolution values for the filter\n'
+                           'should be provided in Angstroms. If *No*, the\n'
+                           'values should be in normalized frequencies (between 0 and 0.5).')
+        # Resolution in Angstroms (inverse of frequencies)
+        line = form.addLine('Resolution (A)',
+                            condition=fourierCondition + ' and freqInAngstrom',
+                            help='Range of resolutions to use in the filter')
+        line.addParam('lowFreqA', FloatParam, default=60,
+                      condition='(' + cls.getModesCondition('filterModeFourier',
+                                                       cls.FM_BAND_PASS, cls.FM_HIGH_PASS) + ') and freqInAngstrom',
+                      label='Lowest')
+        line.addParam('highFreqA', FloatParam, default=10,
+                      condition='(' + cls.getModesCondition('filterModeFourier',
+                                                       cls.FM_BAND_PASS, cls.FM_LOW_PASS) + ') and freqInAngstrom',
+                      label='Highest')
+
+        form.addParam('freqDecayA', FloatParam, default=100,
+                      condition=fourierCondition + ' and freqInAngstrom',
+                      label='Decay length',
+                      help=('Amplitude decay in a [[https://en.wikipedia.org/'
+                            'wiki/Raised-cosine_filter][raised cosine]]'))
+
+        # Normalized frequencies ("digital frequencies")
+        line = form.addLine('Frequency (normalized)',
+                            condition=fourierCondition + ' and (not freqInAngstrom)',
+                            help='Range of frequencies to use in the filter')
+        line.addParam('lowFreqDig', DigFreqParam, default=0.02,
+                      condition='(' + cls.getModesCondition('filterModeFourier',
+                                                       cls.FM_BAND_PASS, cls.FM_HIGH_PASS) + ') and (not freqInAngstrom)',
+                      label='Lowest')
+        line.addParam('highFreqDig', DigFreqParam, default=0.35,
+                      condition='(' + cls.getModesCondition('filterModeFourier',
+                                                       cls.FM_BAND_PASS, cls.FM_LOW_PASS) + ') and (not freqInAngstrom)',
+                      label='Highest')
+
+        form.addParam('freqDecayDig', FloatParam, default=0.02,
+                      condition=fourierCondition + ' and (not freqInAngstrom)',
+                      label='Frequency decay',
+                      help=('Amplitude decay in a [[https://en.wikipedia.org/'
+                            'wiki/Raised-cosine_filter][raised cosine]]'))
+
+        form.addParam('inputCTF', PointerParam, allowsNull=True,
+                      condition='filterModeFourier == %d' % cls.FM_CTF,
+                      label='CTF Object',
+                      pointerClass='CTFModel',
+                      help='Object with CTF information if empty it will take the CTF information related with the first particle.\n'
+                           'Note that this is normally used with simulated data.')
+
+        #wavelets
+        form.addParam('waveletMode',  EnumParam, choices=['remove_scale',
+                                                          'bayesian(not implemented)',
+                                                          'soft_thresholding',
+                                                          'adaptive_soft',
+                                                          'central'],
+                      default=cls.FM_REMOVE_SCALE,
+                      condition='filterSpace == %d' % FILTER_SPACE_WAVELET,
+                      label='mode',
+                      help='filter mode to be applied in wavelet space')
+
         
     def _insertProcessStep(self):
         XmippFilterHelper._insertProcessStep(self)
