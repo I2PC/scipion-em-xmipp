@@ -83,6 +83,10 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('inputParticles', PointerParam, label='Particles', important=True,
                       pointerClass=SetOfParticles, pointerCondition='hasAlignmentProj',
                       help='Input particle set')
+        form.addParam('inputVolumes', MultiPointerParam, label='Volumes', important=True,
+                      pointerClass=Volume, minNumObjects=0,
+                      help='Initial volumes used for classification. When empty, a graph based approach '
+                      'will be used to generate initial partiton')
         form.addParam('inputMask', PointerParam, label='Mask', important=True,
                       pointerClass=VolumeMask, allowsNull=True,
                       help='Volume mask used for focussing the classification')
@@ -95,7 +99,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                       default=True,
                       help='Consider the CTF of the particles')
 
-        form.addSection(label='Angular neighborhood')
+        form.addSection(label='Initial partition')
         form.addParam('angularSampling', FloatParam, label='Angular sampling',
                       default=5.0, validators=[Range(0,180)],
                       help='Angular sampling interval in degrees')
@@ -104,6 +108,10 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                       help='Maximum angular distance in degrees')
         form.addParam('checkMirrors', BooleanParam, label='Check mirrors',
                       default=True)
+        
+        form.addSection(label='Classification')
+        form.addParam('classificationIterations', IntParam, label='Iterations',
+                      default=2, validators=[GE(0)] )
         
         form.addParallelSection(threads=0, mpi=8)
 
@@ -122,17 +130,30 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         if self.considerInputCtf:
             self._insertFunctionStep('correctCtfStep')
 
+        if len(self.inputVolumes) == 0:
+            self._insertInitialPartitionSteps()
+            
+        for i in range(self.classificationIterations):
+            self._insertIterationSteps(i)
+        
+        self._insertFunctionStep('createOutputStep')
+
+    def _insertInitialPartitionSteps(self):
         self._insertFunctionStep('projectMaskStep')
         self._insertFunctionStep('angularNeighborhoodStep')
-        self._insertFunctionStep('classifyStep')
+        self._insertFunctionStep('classifyDirectionsStep')
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('graphOptimizationStep')
         self._insertFunctionStep('classificationStep')
-        
+    
         for i in range(2):
-            self._insertFunctionStep('reconstructStep', i+1)
-        
-        self._insertFunctionStep('createOutputStep')
+            self._insertFunctionStep('reconstructStep', -1, i+1)
+
+    def _insertIterationSteps(self, iteration: int):
+        self._insertFunctionStep('classifyStep', iteration)
+
+        for i in range(2): #TODO
+            self._insertFunctionStep('reconstructStep', iteration, i+1)
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
@@ -250,7 +271,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         # different angular neighbourhoods
         self.runJob("xmipp_angular_neighbourhood", args, numberOfMpi=1)
         
-    def classifyStep(self):
+    def classifyDirectionsStep(self):
         maskGalleryMd = emlib.MetaData(self._getMaskGalleryMdFilename())
         particles = emlib.MetaData()
         directionalMd = emlib.MetaData()
@@ -468,15 +489,32 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         # Store
         result.write(self._getOutputMetadataFilename())
     
-    def reconstructStep(self, cls):
+    def classifyStep(self, iteration: int):
+        args = []
+        args += ['-i', self._getInputParticleMdFilename()]
+        args += ['-r', self._getVolumesMdFilename(iteration-1)]
+        args += ['-o', self._getClassificationMdFilename(iteration)]
+    
+        if self.considerInputCtf:
+            particles = self._getInputParticles()
+            acquisition = particles.getAcquisition()
+            
+            args += ['--useCtf']
+            args += ['--votage', acquisition.getVoltage()]
+            args += ['--spherical_aberration', acquisition.getSphericalAberration()]
+            args += ['--sampling_rate', particles.getSamplingRate()]
+            
+        self.runJob('xmipp_aligned_3d_classification', args)
+    
+    def reconstructStep(self, iteration, cls):
         # Select particles
-        classification = emlib.MetaData(self._getOutputMetadataFilename())
+        classification = emlib.MetaData(self._getClassificationMdFilename(iteration))
         classification.removeObjects(emlib.MDValueNE(emlib.MDL_REF3D, cls))
-        classification.write(self._getClassMdFilename(cls))
+        classification.write(self._getClassMdFilename(iteration, cls))
         
         args = []
-        args += ['-i', self._getClassMdFilename(cls)]
-        args += ['-o', self._getClassVolumeFilename(cls)]
+        args += ['-i', self._getClassMdFilename(iteration, cls)]
+        args += ['-o', self._getClassVolumeFilename(iteration, cls)]
         args += ['--sym', self._getSymmetryGroup()]
     
         # Determine the execution parameters
@@ -573,6 +611,9 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         gpus = self.getGpuList()
         return list(map('cuda:{:d}'.format, gpus))
     
+    def _getInputParticles(self) -> SetOfParticles:
+        return self.inputParticles.get()
+    
     def _getSamplingRate(self):
         return float(self.inputParticles.get().getSamplingRate())
     
@@ -603,20 +644,41 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     def _getWienerParticleStackFilename(self):
         return self._getExtraPath('particles_wiener.mrcs')
 
+    def _getInitialSplitPath(self, *paths):
+        return self._getExtraPath('initial_split', *paths)
+
+    def _getIterationPath(self, iteration: int, *paths):
+        if iteration == -1:
+            return self._getInitialSplitPath(*paths)
+        else:
+            return self._getExtraPath('iteration_%02d' % iteration, paths)
+
+    def _getClassificationMdFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'classification.xmd')
+    
+    def _getClassMdFilename(self, iteration: int, cls: int):
+        return self._getInitialSplitPath(iteration, 'class_%02d.xmd' % cls)
+
+    def _getClassVolumeFilename(self, iteration: int, cls: int):
+        return self._getInitialSplitPath(iteration, 'class_%02d.mrc' % cls)
+
+    def _getVolumesMdFilename(self, iteration: int):
+        return self._getInitialSplitPath(iteration, 'volumes.xmd')
+
     def _getMaskGalleryMdFilename(self):
-        return self._getExtraPath('mask_gallery.doc')
+        return self._getInitialSplitPath('mask_gallery.doc')
 
     def _getMaskGalleryAnglesMdFilename(self):
-        return self._getExtraPath('mask_gallery_angles.doc')
+        return self._getInitialSplitPath('mask_gallery_angles.doc')
 
     def _getMaskGalleryStackFilename(self):
-        return self._getExtraPath('mask_gallery.mrcs')
+        return self._getInitialSplitPath('mask_gallery.mrcs')
 
     def _getNeighborsMdFilename(self):
-        return self._getExtraPath('neighbors.xmd')
+        return self._getInitialSplitPath('neighbors.xmd')
     
     def _getDirectionPath(self, direction_id: int, *paths):
-        return self._getExtraPath('direction_%06d' % direction_id, *paths)
+        return self._getInitialSplitPath('direction_%06d' % direction_id, *paths)
     
     def _getDirectionParticlesMdFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'particles.xmd')
@@ -637,20 +699,14 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         return self._getDirectionPath(direction_id, 'gmm.pkl')
     
     def _getDirectionalMdFilename(self):
-        return self._getExtraPath('directional.xmd')
+        return self._getInitialSplitPath('directional.xmd')
 
     def _getGraphFilename(self):
-        return self._getExtraPath('graph.npz')
+        return self._getInitialSplitPath('graph.npz')
     
     def _getGraphCutFilename(self):
-        return self._getExtraPath('graph_cut.pkl')
+        return self._getInitialSplitPath('graph_cut.pkl')
     
-    def _getClassMdFilename(self, cls: int):
-        return self._getExtraPath('class_%02d.xmd' % cls)
-
-    def _getClassVolumeFilename(self, cls: int):
-        return self._getExtraPath('class_%02d.mrc' % cls)
-
     def _getOutputMetadataFilename(self):
         return self._getPath('output_particles.xmd')
     
