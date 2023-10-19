@@ -130,7 +130,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         if self.considerInputCtf:
             self._insertFunctionStep('correctCtfStep')
 
-        if len(self.inputVolumes) == 0:
+        if self._doInitialPartition():
             self._insertInitialPartitionSteps()
             
         for i in range(self.classificationIterations):
@@ -139,6 +139,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('createOutputStep')
 
     def _insertInitialPartitionSteps(self):
+        self._insertFunctionStep('prepareIterationStep', -1)
         self._insertFunctionStep('projectMaskStep')
         self._insertFunctionStep('angularNeighborhoodStep')
         self._insertFunctionStep('classifyDirectionsStep')
@@ -149,11 +150,16 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         for i in range(2):
             self._insertFunctionStep('reconstructStep', -1, i+1)
 
+        return self._insertFunctionStep('finishIterationStep', -1)
+
     def _insertIterationSteps(self, iteration: int):
+        self._insertFunctionStep('prepareIterationStep', iteration)
         self._insertFunctionStep('classifyStep', iteration)
 
         for i in range(self._getNumberOfClasses()):
             self._insertFunctionStep('reconstructStep', iteration, i+1)
+            
+        return self._insertFunctionStep('finishIterationStep', iteration)
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
@@ -209,6 +215,18 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                     
             else:
                 createLink(inputMask.getFileName(), self._getInputMaskFilename())
+                
+        # Write input volume set
+        if not self._doInitialPartition():
+            makePath(self._getInitialSplitPath())
+            volumesMd = emlib.MetaData()
+            
+            row = emlib.metadata.Row()
+            for volume in self.inputVolumes:
+                row.setValue(emlib.MDL_IMAGE, volume.get().getFileName())
+                row.addToMd(volumesMd)
+                
+            volumesMd.write(self._getVolumesMdFilename(-1))
             
     
     def correctCtfStep(self):
@@ -232,6 +250,19 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_swiftalign_wiener_2d', args, numberOfMpi=1, env=env)
+
+    def prepareIterationStep(self, interation: int):
+        makePath(self._getIterationPath(interation))
+
+    def finishIterationStep(self, iteration: int):
+        volumesMd = emlib.MetaData()
+        
+        row = emlib.metadata.Row()
+        for i in range(self._getNumberOfClasses()):
+            row.setValue(emlib.MDL_IMAGE, self._getClassVolumeFilename(iteration, i+1))
+            row.addToMd(volumesMd)
+            
+        volumesMd.write(self._getVolumesMdFilename(iteration))
 
     def projectMaskStep(self):
         args = []
@@ -557,7 +588,6 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         # Run
         self.runJob(reconstructProgram, args, numberOfMpi=numberOfMpi)
         
-    
     def createOutputStep(self):
         lastIteration = self._getIterationCount()-1
         classificationMd = emlib.MetaData(self._getClassificationMdFilename(lastIteration))
@@ -621,12 +651,15 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     def _getSamplingRate(self):
         return float(self.inputParticles.get().getSamplingRate())
     
-    def _getNumberOfClasses(self) -> int:
-        result = len(self.inputVolumes)
-        if result == 0:
-            result = 2 # TODO manual
-        return result
+    def _doInitialPartition(self):
+        return len(self.inputVolumes) < 2
     
+    def _getNumberOfClasses(self) -> int:
+        if self._doInitialPartition():
+            return 2 # TODO
+        else:
+            return len(self.inputVolumes)
+        
     def _getIterationCount(self) -> int:
         return int(self.classificationIterations)
     
