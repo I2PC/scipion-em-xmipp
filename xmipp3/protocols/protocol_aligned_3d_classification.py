@@ -559,7 +559,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         
     
     def createOutputStep(self):
-        lastIteration = self._getIterationCount()
+        lastIteration = self._getIterationCount()-1
         classificationMd = emlib.MetaData(self._getClassificationMdFilename(lastIteration))
         volumesMd = emlib.MetaData(self._getVolumesMdFilename(lastIteration))
         
@@ -715,4 +715,3 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getGraphCutFilename(self):
         return self._getInitialSplitPath('graph_cut.pkl')
-    
