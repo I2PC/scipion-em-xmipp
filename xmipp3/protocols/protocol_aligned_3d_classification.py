@@ -569,11 +569,15 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         for objId in volumesMd:
             volumeFilename = volumesMd.getValue(emlib.MDL_IMAGE, objId)
             if self.resize > 0:
+                resizedVolumeFilename = self._getOutputVolumeFilename(objId)
+
                 args = []
                 args += ['--fourier', self._getInputParticles().getXDim()]
                 args += ['-i', volumeFilename]
-                args += ['-o', volumeFilename] # TODO do not overwrite
+                args += ['-o', resizedVolumeFilename] 
                 self.runJob('xmipp_image_resize', args, numberOfMpi=1)
+
+                volumeFilename = resizedVolumeFilename
             
             volume = Volume(objId=objId)
             volume.setFileName(volumeFilename)
@@ -643,6 +647,9 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getInputParticleStackFilename(self):
         return self._getTmpPath('input_particles.mrcs')
+   
+    def _getOutputVolumeFilename(self, cls: int):
+        return self._getExtraPath('class_%02d' % cls)
 
     def _getWienerParticleMdFilename(self):
         if self.considerInputCtf:
