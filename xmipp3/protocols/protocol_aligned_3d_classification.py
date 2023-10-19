@@ -152,7 +152,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     def _insertIterationSteps(self, iteration: int):
         self._insertFunctionStep('classifyStep', iteration)
 
-        for i in range(2): #TODO
+        for i in range(self._getNumberOfClasses()):
             self._insertFunctionStep('reconstructStep', iteration, i+1)
 
     # --------------------------- STEPS functions -------------------------------
@@ -487,7 +487,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         result.operate('ref3d=(logLikelihood>0)+1')
         
         # Store
-        result.write(self._getOutputMetadataFilename())
+        result.write(self._getClassificationMdFilename(-1))
     
     def classifyStep(self, iteration: int):
         args = []
@@ -559,24 +559,24 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         
     
     def createOutputStep(self):
-        classificationMd = emlib.MetaData(self._getOutputMetadataFilename())
-
-        # Resize volumes to the output size
-        if self.resize > 0:
-            for i in range(2):
-                args = []
-                args += ['--fourier', self.inputParticles.get().getXDim()]
-                args += ['-i', self._getClassVolumeFilename(i+1)]
-                args += ['-o', self._getClassVolumeFilename(i+1)]
-                self.runJob('xmipp_image_resize', args, numberOfMpi=1)
+        lastIteration = self._getIterationCount()
+        classificationMd = emlib.MetaData(self._getClassificationMdFilename(lastIteration))
+        volumesMd = emlib.MetaData(self._getVolumesMdFilename(lastIteration))
         
         # Create volumes
         volumes = self._createSetOfVolumes()
         volumes.setSamplingRate(self._getSamplingRate())
-        for i in range(2):
-            clsId = i + 1
-            volume = Volume(objId=clsId)
-            volume.setFileName(self._getClassVolumeFilename(clsId))
+        for objId in volumesMd:
+            volumeFilename = volumesMd.getValue(emlib.MDL_IMAGE, objId)
+            if self.resize > 0:
+                args = []
+                args += ['--fourier', self._getInputParticles().getXDim()]
+                args += ['-i', volumeFilename]
+                args += ['-o', volumeFilename] # TODO do not overwrite
+                self.runJob('xmipp_image_resize', args, numberOfMpi=1)
+            
+            volume = Volume(objId=objId)
+            volume.setFileName(volumeFilename)
             volumes.append(volume)
         
         # Classify particles
@@ -616,6 +616,15 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getSamplingRate(self):
         return float(self.inputParticles.get().getSamplingRate())
+    
+    def _getNumberOfClasses(self) -> int:
+        result = len(self.inputVolumes)
+        if result == 0:
+            result = 2 # TODO manual
+        return result
+    
+    def _getIterationCount(self) -> int:
+        return int(self.classificationIterations)
     
     def _getSymmetryGroup(self):
         return self.symmetryGroup.get()
@@ -706,7 +715,4 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getGraphCutFilename(self):
         return self._getInitialSplitPath('graph_cut.pkl')
-    
-    def _getOutputMetadataFilename(self):
-        return self._getPath('output_particles.xmd')
     
