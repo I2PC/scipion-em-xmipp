@@ -84,7 +84,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                       pointerClass=SetOfParticles, pointerCondition='hasAlignmentProj',
                       help='Input particle set')
         form.addParam('inputVolumes', MultiPointerParam, label='Volumes', important=True,
-                      pointerClass=Volume, minNumObjects=0,
+                      pointerClass=Volume, allowsNull=True,
                       help='Initial volumes used for classification. When empty, a graph based approach '
                       'will be used to generate initial partiton')
         form.addParam('inputMask', PointerParam, label='Mask', important=True,
@@ -145,7 +145,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('classifyDirectionsStep')
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('graphOptimizationStep')
-        self._insertFunctionStep('classificationStep')
+        self._insertFunctionStep('graphPartitionStep')
     
         for i in range(2):
             self._insertFunctionStep('reconstructStep', -1, i+1)
@@ -453,7 +453,6 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         # Store the graph
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
 
-        
     def graphOptimizationStep(self):
         # Perform a max cut of the graph
         args = []
@@ -487,7 +486,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             directionalClassificationMd.operate('logLikelihood=-logLikelihood')
             directionalClassificationMd.write(directionalClassificationMdFilename)
     
-    def classificationStep(self):
+    def graphPartitionStep(self):
         # Accumulate all the likelihood values for a given particle
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
