@@ -681,7 +681,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         return self._getTmpPath('input_particles.mrcs')
    
     def _getOutputVolumeFilename(self, cls: int):
-        return self._getExtraPath('class_%02d' % cls)
+        return self._getExtraPath('class_%02d.mrc' % cls)
 
     def _getWienerParticleMdFilename(self):
         if self.considerInputCtf:
