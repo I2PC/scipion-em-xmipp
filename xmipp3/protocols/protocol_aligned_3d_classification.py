@@ -699,7 +699,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         if iteration == -1:
             return self._getInitialSplitPath(*paths)
         else:
-            return self._getExtraPath('iteration_%02d' % iteration, paths)
+            return self._getExtraPath('iteration_%02d' % iteration, *paths)
 
     def _getClassificationMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'classification.xmd')
