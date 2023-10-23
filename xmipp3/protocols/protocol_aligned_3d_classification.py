@@ -705,13 +705,13 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         return self._getIterationPath(iteration, 'classification.xmd')
     
     def _getClassMdFilename(self, iteration: int, cls: int):
-        return self._getInitialSplitPath(iteration, 'class_%02d.xmd' % cls)
+        return self._getIterationPath(iteration, 'class_%02d.xmd' % cls)
 
     def _getClassVolumeFilename(self, iteration: int, cls: int):
-        return self._getInitialSplitPath(iteration, 'class_%02d.mrc' % cls)
+        return self._getIterationPath(iteration, 'class_%02d.mrc' % cls)
 
     def _getVolumesMdFilename(self, iteration: int):
-        return self._getInitialSplitPath(iteration, 'volumes.xmd')
+        return self._getIterationPath(iteration, 'volumes.xmd')
 
     def _getMaskGalleryMdFilename(self):
         return self._getInitialSplitPath('mask_gallery.doc')
