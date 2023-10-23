@@ -133,7 +133,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         if self._doInitialPartition():
             self._insertInitialPartitionSteps()
             
-        for i in range(self.classificationIterations):
+        for i in range(self.classificationIterations.get()):
             self._insertIterationSteps(i)
         
         self._insertFunctionStep('createOutputStep')
