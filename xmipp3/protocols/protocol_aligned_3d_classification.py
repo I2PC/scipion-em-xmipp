@@ -309,7 +309,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         directionalClassificationMd = emlib.MetaData()
         maskRow = emlib.metadata.Row()
         directionRow = emlib.metadata.Row()
-        model = sklearn.mixture.GaussianMixture(n_components=2)
+        models = [sklearn.mixture.GaussianMixture(n_components=i+1) for i in range(2) ]
         
         for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
             directionId = int(block.split("_")[1])
@@ -355,22 +355,27 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             projections = projections[:,None]
             
             # Fit the GMM to the projection values
-            model.fit(projections)
+            for model in models:
+                model.fit(projections)
             
-            # Select the model that best fits the projection data
-            weights = model.weights_
-            means = model.means_[:,0]
-            variances = model.covariances_[:,0,0]
-            stddevs = np.sqrt(variances)
+            # Select the best fit
+            best_model = min(models, key=lambda model : model.bic(projections))
             
-            # Compute The likelihood ratio between classes
-            logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
-            logLikelihoodRatio = logLikelihoods[:,1] - logLikelihoods[:,0]
-            logLikelihoodRatio /= abs(logLikelihoodRatio).max()
+            if best_model.n_components == 2:
+                # Select the model that best fits the projection data
+                weights = best_model.weights_
+                means = best_model.means_[:,0]
+                variances = best_model.covariances_[:,0,0]
+                stddevs = np.sqrt(variances)
+                
+                # Compute The likelihood ratio between classes
+                logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
+                logLikelihoodRatio = logLikelihoods[:,1] - logLikelihoods[:,0]
+                logLikelihoodRatio /= abs(logLikelihoodRatio).max()
 
-            # Store the log likelihood ratio
-            directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatio))
-            directionalClassificationMd.write(directionalClassificationMdFilename)
+                # Store the log likelihood ratio
+                directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatio))
+                directionalClassificationMd.write(directionalClassificationMdFilename)
 
             # Ensemble the output row
             directionRow.copyFromRow(maskRow)
@@ -378,13 +383,13 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
             directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImageFilename(directionId))
             directionRow.setValue(emlib.MDL_SELFILE, directionalClassificationMdFilename)
-            directionRow.setValue(emlib.MDL_CLASS_COUNT, particles.size())
+            directionRow.setValue(emlib.MDL_COUNT, particles.size())
+            directionRow.setValue(emlib.MDL_CLASS_COUNT, best_model.n_components)
             directionRow.addToMd(directionalMd)
 
             # Store the gaussian model
             with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'wb') as f:
-                pickle.dump(model, f)  
-                
+                pickle.dump(best_model, f)  
 
         directionalMd.write(self._getDirectionalMdFilename())
                 
@@ -394,6 +399,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         symList = xmippLib.SymList()
         symList.readSymmetryFile(self._getSymmetryGroup())
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        directionMd.removeObjects(emlib.MDValueNE(emlib.MDL_CLASS_COUNT, 2))
         md0 = emlib.MetaData()
         md1 = emlib.MetaData()
         nDirections = directionMd.size()
@@ -474,6 +480,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         # Invert the projection values of the chosen
         # directions
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        directionMd.removeObjects(emlib.MDValueNE(emlib.MDL_CLASS_COUNT, 2))
         directionalClassificationMd = emlib.MetaData()
         for i in invert_list:
             objId = int(directionMd.firstObject() + i)
@@ -492,18 +499,19 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         directionalClassificationMd = emlib.MetaData()
         logLikelihoods = {}
         for objId in directionMd:
-            # Read the classification of this direction
-            directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, objId))
-            
-            # Increment the result likelihood value
-            for objId2 in directionalClassificationMd:
-                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId2)
-                logLikelihood = directionalClassificationMd.getValue(emlib.MDL_LL, objId2)
+            if directionMd.getValue(emlib.MDL_CLASS_COUNT, objId) == 2:
+                # Read the classification of this direction
+                directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, objId))
                 
-                if itemId in logLikelihoods:
-                    logLikelihoods[itemId] += logLikelihood
-                else:
-                    logLikelihoods[itemId] = logLikelihood
+                # Increment the result likelihood value
+                for objId2 in directionalClassificationMd:
+                    itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId2)
+                    logLikelihood = directionalClassificationMd.getValue(emlib.MDL_LL, objId2)
+                    
+                    if itemId in logLikelihoods:
+                        logLikelihoods[itemId] += logLikelihood
+                    else:
+                        logLikelihoods[itemId] = logLikelihood
         
         # Write likelihoods to the output metadata
         result = emlib.MetaData(self._getWienerParticleMdFilename())
@@ -514,7 +522,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         
         # Classify items according to their projection sign
         result.addLabel(emlib.MDL_REF3D)
-        result.operate('ref3d=(logLikelihood>0)+1')
+        result.operate('ref3d=(logLikelihood>0)+1') # TODO classify 0s
         
         # Store
         result.write(self._getClassificationMdFilename(-1))
