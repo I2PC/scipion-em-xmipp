@@ -29,6 +29,7 @@ import os
 
 # import emtable
 
+# from emtable import Table
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, EnumParam, IntParam, GPU_LIST)
@@ -172,7 +173,8 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                        
             args = ' -i  %s -o %s  '%(self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
-        
+            
+        #WIENER
         # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
         #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
         #
@@ -194,7 +196,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         
         
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        args = ' -i %s -s %s -c %s -n 18 -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
+        args = ' -i %s -s %s -c %s -n 15 -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
                 (inputIm, self.sampling, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
                  stfile)
         if mask:
