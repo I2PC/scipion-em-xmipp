@@ -24,7 +24,6 @@
 # *
 # ******************************************************************************
 import sys
-import timeit
 from os.path import join, dirname, exists
 import os
 from datetime import datetime
@@ -33,27 +32,25 @@ from pyworkflow.utils import prettyTime
 # import emtable
 
 from pyworkflow import VERSION_3_0
-from pyworkflow.object import Set, Float, String
+from pyworkflow.object import Set
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, EnumParam, IntParam, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STATUS_NEW
-from pyworkflow.utils.path import cleanPath, makePath
 from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
 
 import pwem.emlib.metadata as md
 from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D, SetOfParticles
-from pwem.constants import ALIGN_NONE, ALIGN_2D
+from pwem.objects import SetOfClasses2D
+from pwem.constants import ALIGN_2D
 import xmipp3
 
-from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
+from xmipp3.convert import (writeSetOfParticles,
                             writeSetOfClasses2D, xmippToLocation,
                             rowToAlignment)
-from threading import Event
 
 OUTPUT = "outputClasses"
-BATCH_CLASSIFICATION = 5000
-BATCH_UPDATE = 1000
+BATCH_CLASSIFICATION = 8000
+BATCH_UPDATE = 4000
 
 
 def updateEnviron(gpuNum):
@@ -131,6 +128,11 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                       label="particles for training",
                       help='Number of particles for PCA training')
 
+        form.addSection(label='Classification')
+        form.addParam('classificationBatch', IntParam, default=20000,
+                      label="particles for initial classification",
+                      help='Number of particles for an initial classification to compute the 2D references')
+
         # form.addParallelSection(threads=1, mpi=4)
         form.addParallelSection(threads=3, mpi=1)  # Poner 4 mpi?
 
@@ -163,7 +165,6 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                     self._insertPCASteps(newParticlesSet)
                 # ------------------------------------ CLASSIFICATION ----------------------------------------------
                 if self.doClassification(newParticlesSet):
-                    # TODO: va a haber un tamaño minimo para la primera clasificacion en el form?
                     self._insertClassificationSteps(newParticlesSet)
                     newParticlesSet = self._loadEmptyParticleSet()
                 # ------------------------------------ Update ----------------------------------------------
@@ -184,11 +185,10 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                         self.finish = True
 
             sys.stdout.flush()
-            time.sleep(10)
+            time.sleep(15)
 
     # --------------------------- STEPS functions -------------------------------
     def _initialStep(self):
-        updateEnviron(self.gpuList.get())
         self.finish = False
         self.lastParticleId = 0
         self.lastParticleProcessedId = 0
@@ -197,12 +197,10 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         self.lastRound = False
         self.particlesProcessed = []
         self.classificationRound = 0
-        if self.mode == self.UPDATE_CLASSES:
-            self.classificationDone = True
-        else:
-            self.classificationDone = False
+        self.firstTimeDone = False
 
     def _initFnStep(self):
+        updateEnviron(self.gpuList.get())
         self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
         self.imgsPcaFn = self._getTmpPath('images_pca.mrc')
         self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
@@ -210,6 +208,11 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         self.imgsFn = self._getTmpPath('images_.mrc')
         self.refXmd = self._getTmpPath('references.xmd')
         self.ref = self._getTmpPath('references.mrcs')
+        if self.mode == self.UPDATE_CLASSES:
+            self.classificationDone = True
+            self.info('Update classification')
+        else:
+            self.classificationDone = False
 
     def _insertPCASteps(self, newParticlesSet):
         # Process data
@@ -237,9 +240,10 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
 
     def convertInputStep(self, input, outputOrig, outputMRC):
         writeSetOfParticles(input, outputOrig)
-        if self.mode == self.UPDATE_CLASSES:
+        if self.mode == self.UPDATE_CLASSES and not self.firstTimeDone:
             initial2DClasses = self.initialClasses.get()
             if isinstance(initial2DClasses, SetOfClasses2D):
+                print('Write classes')
                 writeSetOfClasses2D(initial2DClasses,
                                     self.refXmd, writeParticles=False)
             else:
@@ -248,6 +252,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
 
             args = ' -i  %s -o %s  ' % (self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
+            self.firstTimeDone = True
         # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
         #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
         # env = self.getCondaEnv()
@@ -291,7 +296,6 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
             # For further updating
             writeSetOfClasses2D(outputClasses,
                                 self.refXmd, writeParticles=False)
-
             args = ' -i  %s -o %s  ' % (self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
 
@@ -427,8 +431,8 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                 (self.lastRound and not self.flagPcaDone)
 
     def doClassification(self, newParticlesSet):
-        return (len(newParticlesSet) >= BATCH_CLASSIFICATION and self.flagPcaDone and not self.classificationDone) \
-                        or (len(newParticlesSet) >= BATCH_UPDATE and self.classificationDone) or self.lastRound
+        return (len(newParticlesSet) >= self.classificationBatch.get() and self.flagPcaDone and not self.classificationDone) \
+                        or (len(newParticlesSet) >= BATCH_UPDATE and self.classificationDone and self.flagPcaDone) or self.lastRound
 
 def updateFileName(filepath, round):
     filename = os.path.basename(filepath)
