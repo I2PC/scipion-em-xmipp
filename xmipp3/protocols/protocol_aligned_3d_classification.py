@@ -310,7 +310,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         directionalClassificationMd = emlib.MetaData()
         maskRow = emlib.metadata.Row()
         directionRow = emlib.metadata.Row()
-        models = [sklearn.mixture.GaussianMixture(n_components=i+1) for i in range(2) ]
+        model = sklearn.mixture.GaussianMixture(n_components=2, covariance_type='tied')
         
         for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
             directionId = int(block.split("_")[1])
@@ -356,27 +356,20 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             projections = projections[:,None]
             
             # Fit the GMM to the projection values
-            for model in models:
-                model.fit(projections)
+            model.fit(projections)
+            weights = model.weights_
+            means = model.means_[:,0]
+            variances = model.covariances_[0,0]
+            stddevs = np.sqrt(variances)
             
-            # Select the best fit
-            best_model = min(models, key=lambda model : model.aic(projections))
-            
-            if best_model.n_components == 2:
-                # Select the model that best fits the projection data
-                weights = best_model.weights_
-                means = best_model.means_[:,0]
-                variances = best_model.covariances_[:,0,0]
-                stddevs = np.sqrt(variances)
-                
-                # Compute The likelihood ratio between classes
-                logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
-                logLikelihoodRatio = logLikelihoods[:,1] - logLikelihoods[:,0]
-                #logLikelihoodRatio /= abs(logLikelihoodRatio).max()
+            # Compute The likelihood ratio between classes
+            logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
+            logLikelihoodRatio = logLikelihoods[:,1] - logLikelihoods[:,0]
+            #logLikelihoodRatio /= abs(logLikelihoodRatio).max()
 
-                # Store the log likelihood ratio
-                directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatio))
-                directionalClassificationMd.write(directionalClassificationMdFilename)
+            # Store the log likelihood ratio
+            directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatio))
+            directionalClassificationMd.write(directionalClassificationMdFilename)
 
             # Ensemble the output row
             directionRow.copyFromRow(maskRow)
@@ -385,12 +378,12 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImageFilename(directionId))
             directionRow.setValue(emlib.MDL_SELFILE, directionalClassificationMdFilename)
             directionRow.setValue(emlib.MDL_COUNT, particles.size())
-            directionRow.setValue(emlib.MDL_CLASS_COUNT, best_model.n_components)
+            directionRow.setValue(emlib.MDL_CLASS_COUNT, model.n_components)
             directionRow.addToMd(directionalMd)
 
             # Store the gaussian model
             with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'wb') as f:
-                pickle.dump(best_model, f)  
+                pickle.dump(model, f)  
 
         directionalMd.write(self._getDirectionalMdFilename())
                 
