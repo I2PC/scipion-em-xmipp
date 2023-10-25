@@ -129,10 +129,11 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         
     def _display3dGraph(self, e):
         # Read from disk
-        points = self._readDirectionVectors()
+        objIds, graph_mask, points = self._readDirectionVectors()
+        graph_vertices = points[graph_mask]
         graph = scipy.sparse.tril(self._readGraph(), format='csr')
         edges = graph.nonzero()
-        segments = np.stack((points[edges[0]], points[edges[1]]), axis=1)
+        segments = np.stack((graph_vertices[edges[0]], graph_vertices[edges[1]]), axis=1)
         weights = graph[edges].A1
         colormap = self._getScalarColorMap()
         
@@ -140,9 +141,14 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         ax = plt.axes(projection='3d')
         
         # Display de direction vectors
-        ax.scatter(points[:,0], points[:,1], points[:,2], c='black', picker=True)
-        for directionId, point in enumerate(points, 1):
-            ax.text(point[0], point[1], point[2], str(directionId))
+        colors = np.where(graph_mask, 'black', 'orange')
+        ax.scatter(
+            points[:,0], points[:,1], points[:,2], 
+            c=colors,
+            picker=True
+        )
+        for objId, color, point in zip(objIds, colors, points):
+            ax.text(point[0], point[1], point[2], str(objId), c=color)
             
         
         # Display the graph edges
@@ -156,8 +162,8 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         
         # Setup interactive picking
         def on_pick(event):
-            directionId = int(event.ind[0] + 1)
-            figs = self._displayDirectionClassification(None, directionId)
+            objId = int(objIds[event.ind[0]])
+            figs = self._displayDirectionClassification(None, objId)
             figs[0].show()
             
         fig.canvas.mpl_connect('pick_event', on_pick)
@@ -186,11 +192,13 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         return scipy.sparse.load_npz(self._getGraphFilename())
         
     def _readDirectionVectors(self):
-        directionMd = emlib.MetaData(self._getMaskGalleryAnglesMdFilename())
+        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        objIds = list(directionMd)
+        graph_mask = np.array(directionMd.getColumnValues(emlib.MDL_CLASS_COUNT)) == 2
         x = directionMd.getColumnValues(emlib.MDL_X)
         y = directionMd.getColumnValues(emlib.MDL_Y)
         z = directionMd.getColumnValues(emlib.MDL_Z)
-        return np.stack((x, y, z), axis=-1)
+        return objIds, graph_mask, np.stack((x, y, z), axis=-1)
     
     def _readDirectionRow(self, directionId: int):
         result = emlib.metadata.Row()

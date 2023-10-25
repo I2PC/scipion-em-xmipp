@@ -48,6 +48,7 @@ import xmippLib
 import os.path
 import pickle
 import itertools
+import random
 import numpy as np
 import scipy.sparse
 import scipy.stats
@@ -359,7 +360,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                 model.fit(projections)
             
             # Select the best fit
-            best_model = min(models, key=lambda model : model.bic(projections))
+            best_model = min(models, key=lambda model : model.aic(projections))
             
             if best_model.n_components == 2:
                 # Select the model that best fits the projection data
@@ -371,7 +372,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                 # Compute The likelihood ratio between classes
                 logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
                 logLikelihoodRatio = logLikelihoods[:,1] - logLikelihoods[:,0]
-                logLikelihoodRatio /= abs(logLikelihoodRatio).max()
+                #logLikelihoodRatio /= abs(logLikelihoodRatio).max()
 
                 # Store the log likelihood ratio
                 directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatio))
@@ -402,13 +403,10 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         directionMd.removeObjects(emlib.MDValueNE(emlib.MDL_CLASS_COUNT, 2))
         md0 = emlib.MetaData()
         md1 = emlib.MetaData()
-        nDirections = directionMd.size()
+        objIds = list(directionMd)
+        nDirections = len(objIds)
         adjacency = np.zeros((nDirections, )*2)
-        for idx0, idx1 in itertools.combinations(range(nDirections), r=2):
-            # Get de direction ids of the indices
-            directionId0 = idx0 + directionMd.firstObject()
-            directionId1 = idx1 + directionMd.firstObject()
-            
+        for (idx0, directionId0), (idx1, directionId1) in itertools.combinations(enumerate(objIds), r=2):
             # Obtain the projection angles
             rot0 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId0)
             rot1 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId1)
@@ -481,9 +479,10 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         # directions
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionMd.removeObjects(emlib.MDValueNE(emlib.MDL_CLASS_COUNT, 2))
+        objIds = list(directionMd)
         directionalClassificationMd = emlib.MetaData()
         for i in invert_list:
-            objId = int(directionMd.firstObject() + i)
+            objId = objIds[i]
             directionalClassificationMdFilename = directionMd.getValue(
                 emlib.MDL_SELFILE, objId
             )
@@ -517,12 +516,19 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         result = emlib.MetaData(self._getWienerParticleMdFilename())
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
+            
+            # Write LL value
             logLikelihood = logLikelihoods.get(itemId, 0.0)
             result.setValue(emlib.MDL_LL, logLikelihood, objId)
-        
-        # Classify items according to their projection sign
-        result.addLabel(emlib.MDL_REF3D)
-        result.operate('ref3d=(logLikelihood>0)+1') # TODO classify 0s
+
+            # Write 3D class
+            if logLikelihood < 0.0:
+                ref3d = 1
+            elif logLikelihood > 0.0:
+                ref3d = 2
+            else:
+                ref3d = random.randint(1, 2)
+            result.setValue(emlib.MDL_REF3D, ref3d, objId)
         
         # Store
         result.write(self._getClassificationMdFilename(-1))
