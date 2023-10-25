@@ -121,7 +121,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
 
         form.addParam('resolution', FloatParam, label="max resolution", default=10,
                       help='Maximum resolution to be consider for alignment')
-        form.addParam('coef', FloatParam, label="% variance", default=0.4, expertLevel=LEVEL_ADVANCED,
+        form.addParam('coef', FloatParam, label="% variance", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
                            ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
         form.addParam('training', IntParam, default=40000,
@@ -208,6 +208,10 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         self.imgsFn = self._getTmpPath('images_.mrc')
         self.refXmd = self._getTmpPath('references.xmd')
         self.ref = self._getTmpPath('references.mrcs')
+        self.sigmaProt = self.sigma.get()
+        if self.sigmaProt == -1:
+            self.sigmaProt = self.inputParticles.get().getDimensions()[0] / 3
+
         if self.mode == self.UPDATE_CLASSES:
             self.classificationDone = True
             self.info('Update classification')
@@ -232,7 +236,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                                                      newParticlesSet, self.imgsOrigXmd, self.imgsFn,
                                                      prerequisites=self.pcaStep)
         self.classStep = self._insertFunctionStep(self.classification, self.imgsFn, self.numberOfClasses.get(),
-                                                  self.imgsOrigXmd, self.mask.get(), self.sigma.get(),
+                                                  self.imgsOrigXmd, self.mask.get(), self.sigmaProt,
                                                   prerequisites=self.convertStep2)
         self.updateStep = self._insertFunctionStep(self._updateOutputSetOfClasses, newParticlesSet,
                                                    Set.STREAM_OPEN, prerequisites=self.classStep)
@@ -253,8 +257,10 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
             args = ' -i  %s -o %s  ' % (self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
             self.firstTimeDone = True
+        # WIENER
         # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
         #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
+        #
         # env = self.getCondaEnv()
         # env['LD_LIBRARY_PATH'] = ''
         # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
