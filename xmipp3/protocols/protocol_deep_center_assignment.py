@@ -159,10 +159,10 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
         self.convertStep(self.inputTrainSet.get())
     
     def train(self, gpuId, mode="", orderSymmetry=None):
-        args = "%s %s %f %d %d %s %d %f %d" % (
+        args = "%s %s %f %d %d %s %d %f %d %d" % (
             self._getExtraPath(f"{self._trainingResizedFileName}.xmd"), self._getExtraPath("model"), self.sigma.get(),
             self.numEpochs, self.batchSize.get(), gpuId, self.numModels.get(), self.learningRate.get(),
-            self.patience.get())
+            self.patience.get(), 0)
         if orderSymmetry:
             args += " " + str(orderSymmetry)
         self.runJob(f"xmipp_deep_{mode}", args, numberOfMpi=1, env=self.getCondaEnv())
@@ -181,7 +181,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
         else:
             args = "%s %s %s %s %s %d %d %d" % (
                 self._getExtraPath(f"{self._trainingResizedFileName}.xmd"), gpuId, self._getPath(), predictImgsFn,
-                XmippScript.getModel("deep_center"), self.numModels.get(), self.tolerance.get(),
+                os.path.join(XmippScript.getModel("deep_center"), 'modelCenter'), self.numModels.get(), self.tolerance.get(),
                 self.maxModels.get())
         self.runJob(f"xmipp_deep_{mode}_predict", args, numberOfMpi=1, env=self.getCondaEnv())
         remove(self._getExtraPath(f"{self._trainingResizedFileName}.xmd"))
