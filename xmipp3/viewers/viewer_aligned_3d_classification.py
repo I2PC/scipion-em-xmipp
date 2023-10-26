@@ -81,93 +81,12 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         dv = DataView(self._getDirectionalMdFilename())
         return [dv]
     
-    def _displayDirectionClassification(self, e, directionId: int = None):
-        # Read data from disk
-        directionId = directionId or self.displayDirectionClassification.get()
-        directionRow = self._readDirectionRow(directionId)
-        projections = emlib.MetaData(directionRow.getValue(emlib.MDL_SELFILE)).getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
-        average = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE)).getData()
-        basis = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE_RESIDUAL)).getData()
-        gmm = self._readDirectionalGaussianMixtureModel(directionId)
-        
-        # Obtain GMM model parameters
-        weights = gmm.weights_
-        means = gmm.means_[:,0]
-        variances = gmm.covariances_[...,0,0]
-        stddevs = np.sqrt(variances)
-        
-        # Create the figure
-        fig, (ax1, ax2) = plt.subplots(2)
-        fig.suptitle('PCA projection histogram for direction %d' % directionId)
-        
-        # Show histogram and gaussian mixture
-        _, bins, _ = ax1.hist(projections, bins=64, density=True, color='black', picker=True)
-        x = (bins[1:] + bins[:-1]) / 2
-        ys = weights*scipy.stats.norm.pdf(x[:,None], means, stddevs)
-        n = ys.shape[-1]
-        if n > 1:
-            for i in range(n):
-                ax1.plot(x, ys[:,i], linestyle='dashed')
-        ax1.plot(x, ys.sum(axis=-1))
-        
-        # Show image
-        line = ax1.axvline(x=0, color='yellow')
-        ax2.imshow(average)
-        
-        # Setup interactive picking
-        def on_pick(event):
-            projection = event.mouseevent.xdata
-            line.set_xdata([projection, ]*2)
-            image = average + basis*projection
-            ax2.clear()
-            ax2.imshow(image)
-            fig.canvas.draw()
-            
-        fig.canvas.mpl_connect('pick_event', on_pick)
-        
+    def _displayDirectionClassification(self, e):
+        fig = self._showDirectionalClassification(self.displayDirectionClassification.get())
         return [fig]
         
     def _display3dGraph(self, e):
-        # Read from disk
-        objIds, graph_mask, points = self._readDirectionVectors()
-        graph_vertices = points[graph_mask]
-        graph = scipy.sparse.tril(self._readGraph(), format='csr')
-        edges = graph.nonzero()
-        segments = np.stack((graph_vertices[edges[0]], graph_vertices[edges[1]]), axis=1)
-        weights = graph[edges].A1
-        colormap = self._getScalarColorMap()
-        
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
-        
-        # Display de direction vectors
-        colors = np.where(graph_mask, 'black', 'orange')
-        ax.scatter(
-            points[:,0], points[:,1], points[:,2], 
-            c=colors,
-            picker=True
-        )
-        for objId, color, point in zip(objIds, colors, points):
-            ax.text(point[0], point[1], point[2], str(objId), c=color)
-            
-        
-        # Display the graph edges
-        absmax = abs(weights).max()
-        normalize = mpl.colors.Normalize(-absmax, +absmax)
-        lines = mpl3d.art3d.Line3DCollection(segments, linewidths=0.5, colors=colormap(normalize(weights)))
-        ax.add_collection(lines)
-        
-        #  Show colorbar
-        fig.colorbar(mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), label='Edge weights')
-        
-        # Setup interactive picking
-        def on_pick(event):
-            objId = int(objIds[event.ind[0]])
-            figs = self._displayDirectionClassification(None, objId)
-            figs[0].show()
-            
-        fig.canvas.mpl_connect('pick_event', on_pick)
-
+        fig = self._show3dGraph()
         return [fig]
         
 
@@ -209,3 +128,102 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
     def _readDirectionalGaussianMixtureModel(self, directionId) -> sklearn.mixture.GaussianMixture:
         with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'rb') as f:
             return pickle.load(f)
+        
+    def _plotGaussianMixture(self, 
+                             ax: plt.Axes, 
+                             xs: np.ndarray,
+                             gmm: sklearn.mixture.GaussianMixture ):
+        # Obtain GMM model parameters
+        weights = gmm.weights_
+        means = gmm.means_[:,0]
+        variances = gmm.covariances_[...,0,0]
+        stddevs = np.sqrt(variances)
+        
+        # Plot individual GMM curves
+        ys = weights*scipy.stats.norm.pdf(xs[:,None], means, stddevs)
+        n = ys.shape[-1]
+        if n > 1:
+            for i in range(n):
+                ax.plot(xs, ys[:,i], linestyle='dashed')
+        
+        # Plot the sum of the GMM curves     
+        ax.plot(xs, ys.sum(axis=-1))
+        
+    def _showDirectionalClassification(self, directionId: int) -> plt.Figure:
+        directionRow = self._readDirectionRow(directionId)
+        projections = emlib.MetaData(directionRow.getValue(emlib.MDL_SELFILE)).getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+        average = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE)).getData()
+        basis = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE_RESIDUAL)).getData()
+        gmm = self._readDirectionalGaussianMixtureModel(directionId)
+        
+        # Create the figure
+        fig, (ax1, ax2) = plt.subplots(2)
+        fig.suptitle('PCA projection histogram for direction %d' % directionId)
+        
+        # Show histogram
+        _, bins, _ = ax1.hist(projections, bins=64, density=True, color='black', picker=True)
+        x = (bins[1:] + bins[:-1]) / 2
+        
+        # Show gaussian mixuture
+        self._plotGaussianMixture(ax1, x, gmm)
+        
+        # Show image
+        line = ax1.axvline(x=0, color='yellow')
+        ax2.imshow(average)
+        
+        # Setup interactive picking
+        def on_pick(event):
+            projection = event.mouseevent.xdata
+            line.set_xdata([projection, ]*2)
+            image = average + basis*projection
+            ax2.clear()
+            ax2.imshow(image)
+            fig.canvas.draw()
+            
+        fig.canvas.mpl_connect('pick_event', on_pick)
+        
+        return fig
+    
+    def _show3dGraph(self) -> plt.Figure:
+        # Read from disk
+        objIds, graph_mask, points = self._readDirectionVectors()
+        graph_vertices = points[graph_mask]
+        graph = scipy.sparse.tril(self._readGraph(), format='csr')
+        edges = graph.nonzero()
+        segments = np.stack((graph_vertices[edges[0]], graph_vertices[edges[1]]), axis=1)
+        weights = graph[edges].A1
+        colormap = self._getScalarColorMap()
+        
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        
+        # Display de direction vectors
+        colors = np.where(graph_mask, 'black', 'orange')
+        ax.scatter(
+            points[:,0], points[:,1], points[:,2], 
+            c=colors,
+            picker=True
+        )
+        for objId, color, point in zip(objIds, colors, points):
+            ax.text(point[0], point[1], point[2], str(objId), c=color)
+            
+        
+        # Display the graph edges
+        absmax = abs(weights).max()
+        normalize = mpl.colors.Normalize(-absmax, +absmax)
+        lines = mpl3d.art3d.Line3DCollection(segments, linewidths=0.5, colors=colormap(normalize(weights)))
+        ax.add_collection(lines)
+        
+        #  Show colorbar
+        fig.colorbar(mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), label='Edge weights')
+        
+        # Setup interactive picking
+        def on_pick(event):
+            objId = int(objIds[event.ind[0]])
+            fig = self._showDirectionalClassification(objId)
+            fig.show()
+            
+        fig.canvas.mpl_connect('pick_event', on_pick)
+        
+        return fig
+
