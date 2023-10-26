@@ -161,8 +161,6 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
 
     def _insertAllSteps(self):
         self._createFilenameTemplates()
-
-        makePath(self._getExtraPath('DONE'))
         # Build the list of all processMovieStep ids by
         # inserting each of the steps for each movie
         self.insertedDict = {}
@@ -501,10 +499,9 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
     def getCoords(self):
         # to support multiple access to db
         coordSet = self.inputCoordinates.get()
-        coordSetCopy = SetOfCoordinates()
-        coordSetCopy.copy(coordSet)
+        coordSet.loadAllProperties()
         coordSet.close()
-        return coordSetCopy
+        return coordSet
 
     def _stepsCheck(self):
         # Streaming is not implemented yet for this protocol.
@@ -512,10 +509,9 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
     
     def _hasCoordinates(self, movie):
         coordSet = self.getCoords()
-
         len = 0
         for coord in coordSet.iterCoordinates(movie.getObjId()):
-            len  += 1
+            len += 1
             break
         if len > 0:
             return True
