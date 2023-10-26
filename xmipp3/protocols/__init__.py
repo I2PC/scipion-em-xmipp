@@ -40,9 +40,6 @@ from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
 #from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
-from .protocol_classification_gpuCorr import XmippProtGpuCrrCL2D
-from .protocol_classification_gpuCorr_semi import XmippProtStrGpuCrrSimple
-from .protocol_classification_gpuCorr_full import XmippProtStrGpuCrrCL2D
 from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
 from .protocol_compare_angles import XmippProtCompareAngles
