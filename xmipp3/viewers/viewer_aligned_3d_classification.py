@@ -93,7 +93,7 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         # Obtain GMM model parameters
         weights = gmm.weights_
         means = gmm.means_[:,0]
-        variances = gmm.covariances_[:,0,0]
+        variances = gmm.covariances_[...,0,0]
         stddevs = np.sqrt(variances)
         
         # Create the figure
