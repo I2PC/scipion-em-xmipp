@@ -451,7 +451,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                                'Try incrementing the maximum distance parameter')
 
         # Store the graph
-        scipy.sparse.save_npz(self._getGraphFilename(), graph)
+        self._writeGraph(graph)
 
     def graphOptimizationStep(self):
         # Perform a max cut of the graph
@@ -473,7 +473,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         
         # Invert the projection values of the chosen
         # directions
-        graph = scipy.sparse.load_npz(self._getGraphFilename())
+        graph = self._readGraph()
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionMd.removeObjects(emlib.MDValueNE(emlib.MDL_CLASS_COUNT, 2))
         objIds = list(directionMd)
@@ -492,8 +492,8 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             directionalClassificationMd.read(directionalClassificationMdFilename)
             directionalClassificationMd.operate('logLikelihood=-logLikelihood')
             directionalClassificationMd.write(directionalClassificationMdFilename)
-    
-        scipy.sparse.save_npz(self._getCorrectedGraphFilename(), graph)
+
+        self._writeCorrectedGraph(graph)
     
     def graphPartitionStep(self):
         # Accumulate all the likelihood values for a given particle
@@ -775,3 +775,15 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getGraphCutFilename(self):
         return self._getInitialSplitPath('graph_cut.pkl')
+    
+    def _writeGraph(self, graph: scipy.sparse.csr_matrix):
+        scipy.sparse.save_npz(self._getGraphFilename(), graph)
+    
+    def _readGraph(self) -> scipy.sparse.csr_matrix:
+        return scipy.sparse.load_npz(self._getGraphFilename())
+
+    def _writeCorrectedGraph(self, graph: scipy.sparse.csr_matrix):
+        scipy.sparse.save_npz(self._getCorrectedGraphFilename(), graph)
+    
+    def _readCorrectedGraph(self) -> scipy.sparse.csr_matrix:
+        return scipy.sparse.load_npz(self._getCorrectedGraphFilename())

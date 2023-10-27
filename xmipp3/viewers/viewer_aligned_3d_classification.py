@@ -101,26 +101,17 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
     def _getScalarColorMap(self):
         return mpl.cm.coolwarm
     
-    def _getMaskGalleryAnglesMdFilename(self):
-        return self.protocol._getMaskGalleryAnglesMdFilename()
-    
-    def _getGraphFilename(self):
-        return self.protocol._getGraphFilename()
-    
-    def _getCorrectedGraphFilename(self):
-        return self.protocol._getCorrectedGraphFilename()
-
     def _getDirectionalGaussianMixtureModelFilename(self, direction_id: int):
         return self.protocol._getDirectionalGaussianMixtureModelFilename(direction_id)
 
     def _getDirectionalMdFilename(self):
         return self.protocol._getDirectionalMdFilename()
     
-    def _readGraph(self, correct: bool = False) -> scipy.sparse:
-        return scipy.sparse.load_npz(self._getGraphFilename())
+    def _readGraph(self) -> scipy.sparse:
+        return self.protocol._readGraph()
         
-    def _readCorrectedGraph(self, correct: bool = False) -> scipy.sparse:
-        return scipy.sparse.load_npz(self._getCorrectedGraphFilename())
+    def _readCorrectedGraph(self) -> scipy.sparse:
+        return self.protocol._readCorrectedGraph()
 
     def _readDirectionVectors(self):
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
