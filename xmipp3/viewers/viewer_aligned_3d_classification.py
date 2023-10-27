@@ -64,6 +64,8 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         form.addSection(label='Graph')
         form.addParam('display3dGraph', LabelParam, label='Distance graph',
                       help='Shows a 3D representation of the distance graph')
+        form.addParam('displayCorrected3dGraph', LabelParam, label='Corrected distance graph',
+                      help='Shows a 3D representation of the distance graph')
 
 
     #--------------------------- INFO functions ----------------------------------------------------
@@ -75,6 +77,7 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
             'displayDirectionalMd': self._displayDirectionalMd,
             'displayDirectionClassification': self._displayDirectionClassification,
             'display3dGraph': self._display3dGraph,
+            'displayCorrected3dGraph': self._displayCorrected3dGraph,
         }
         
     def _displayDirectionalMd(self, e):
@@ -89,6 +92,9 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         fig = self._show3dGraph()
         return [fig]
         
+    def _displayCorrected3dGraph(self, e):
+        fig = self._show3dGraph(True)
+        return [fig]
 
 
     # --------------------------- UTILS functions -----------------------------
@@ -101,15 +107,21 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
     def _getGraphFilename(self):
         return self.protocol._getGraphFilename()
     
+    def _getCorrectedGraphFilename(self):
+        return self.protocol._getCorrectedGraphFilename()
+
     def _getDirectionalGaussianMixtureModelFilename(self, direction_id: int):
         return self.protocol._getDirectionalGaussianMixtureModelFilename(direction_id)
 
     def _getDirectionalMdFilename(self):
         return self.protocol._getDirectionalMdFilename()
     
-    def _readGraph(self) -> scipy.sparse:
+    def _readGraph(self, correct: bool = False) -> scipy.sparse:
         return scipy.sparse.load_npz(self._getGraphFilename())
         
+    def _readCorrectedGraph(self, correct: bool = False) -> scipy.sparse:
+        return scipy.sparse.load_npz(self._getCorrectedGraphFilename())
+
     def _readDirectionVectors(self):
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         objIds = list(directionMd)
@@ -184,11 +196,15 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         
         return fig
     
-    def _show3dGraph(self) -> plt.Figure:
+    def _show3dGraph(self, correct: bool = False) -> plt.Figure:
         # Read from disk
         objIds, graph_mask, points = self._readDirectionVectors()
         graph_vertices = points[graph_mask]
-        graph = scipy.sparse.tril(self._readGraph(), format='csr')
+        if correct:
+            graph = self._readCorrectedGraph()
+        else:
+            graph = self._readGraph()
+        graph = scipy.sparse.tril(graph, format='csr')
         edges = graph.nonzero()
         segments = np.stack((graph_vertices[edges[0]], graph_vertices[edges[1]]), axis=1)
         weights = graph[edges].A1

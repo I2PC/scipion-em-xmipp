@@ -473,6 +473,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         
         # Invert the projection values of the chosen
         # directions
+        graph = scipy.sparse.load_npz(self._getGraphFilename())
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionMd.removeObjects(emlib.MDValueNE(emlib.MDL_CLASS_COUNT, 2))
         objIds = list(directionMd)
@@ -483,10 +484,16 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                 emlib.MDL_SELFILE, objId
             )
             
+            # Invert graph
+            graph[:,i] *= -1
+            graph[i,:] *= -1
+            
             # Invert the projection values
             directionalClassificationMd.read(directionalClassificationMdFilename)
             directionalClassificationMd.operate('logLikelihood=-logLikelihood')
             directionalClassificationMd.write(directionalClassificationMdFilename)
+    
+        scipy.sparse.save_npz(self._getCorrectedGraphFilename(), graph)
     
     def graphPartitionStep(self):
         # Accumulate all the likelihood values for a given particle
@@ -762,6 +769,9 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
 
     def _getGraphFilename(self):
         return self._getInitialSplitPath('graph.npz')
+    
+    def _getCorrectedGraphFilename(self):
+        return self._getInitialSplitPath('corrected_graph.npz')
     
     def _getGraphCutFilename(self):
         return self._getInitialSplitPath('graph_cut.pkl')
