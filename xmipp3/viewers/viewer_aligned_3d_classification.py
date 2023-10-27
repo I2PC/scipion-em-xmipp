@@ -101,17 +101,17 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
     def _getScalarColorMap(self):
         return mpl.cm.coolwarm
     
-    def _getDirectionalGaussianMixtureModelFilename(self, direction_id: int):
-        return self.protocol._getDirectionalGaussianMixtureModelFilename(direction_id)
-
     def _getDirectionalMdFilename(self):
         return self.protocol._getDirectionalMdFilename()
     
-    def _readGraph(self) -> scipy.sparse:
+    def _readGraph(self) -> scipy.sparse.csr_matrix:
         return self.protocol._readGraph()
         
-    def _readCorrectedGraph(self) -> scipy.sparse:
+    def _readCorrectedGraph(self) -> scipy.sparse.csr_matrix:
         return self.protocol._readCorrectedGraph()
+
+    def _readDirectionalGaussianMixtureModel(self, directionId) -> sklearn.mixture.GaussianMixture:
+        return self.protocol._readDirectionalGaussianMixtureModel(directionId)
 
     def _readDirectionVectors(self):
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
@@ -127,10 +127,6 @@ class XmippViewerAligned3dClassification(ProtocolViewer):
         md = emlib.MetaData(self._getDirectionalMdFilename())
         result.readFromMd(md, directionId)
         return result
-    
-    def _readDirectionalGaussianMixtureModel(self, directionId) -> sklearn.mixture.GaussianMixture:
-        with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'rb') as f:
-            return pickle.load(f)
         
     def _plotGaussianMixture(self, 
                              ax: plt.Axes, 

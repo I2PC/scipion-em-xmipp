@@ -374,6 +374,9 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatios))
             directionalClassificationMd.write(directionalClassificationMdFilename)
 
+            # Store the gaussian model
+            self._writeDirectionalGaussianMixtureModel(directionId, model)
+
             # Ensemble the output row
             directionRow.copyFromRow(maskRow)
             directionRow.setValue(emlib.MDL_MASK, maskFilename)
@@ -383,10 +386,6 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             directionRow.setValue(emlib.MDL_COUNT, particles.size())
             directionRow.setValue(emlib.MDL_CLASS_COUNT, model.n_components)
             directionRow.addToMd(directionalMd)
-
-            # Store the gaussian model
-            with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'wb') as f:
-                pickle.dump(model, f)  
 
         directionalMd.write(self._getDirectionalMdFilename())
                 
@@ -776,14 +775,28 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     def _getGraphCutFilename(self):
         return self._getInitialSplitPath('graph_cut.pkl')
     
-    def _writeGraph(self, graph: scipy.sparse.csr_matrix):
-        scipy.sparse.save_npz(self._getGraphFilename(), graph)
+    def _writeDirectionalGaussianMixtureModel(self, directionId: int, model: sklearn.mixture.GaussianMixture) -> str:
+        path = self._getDirectionalGaussianMixtureModelFilename(directionId)
+        with open(path, 'wb') as f:
+            pickle.dump(model, f)
+        return path
+    
+    def _readDirectionalGaussianMixtureModel(self, directionId: int) -> sklearn.mixture.GaussianMixture:
+        with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'rb') as f:
+            return pickle.load(f)  
+    
+    def _writeGraph(self, graph: scipy.sparse.csr_matrix) -> str:
+        path = self._getGraphFilename()
+        scipy.sparse.save_npz(path, graph)
+        return path
     
     def _readGraph(self) -> scipy.sparse.csr_matrix:
         return scipy.sparse.load_npz(self._getGraphFilename())
 
-    def _writeCorrectedGraph(self, graph: scipy.sparse.csr_matrix):
-        scipy.sparse.save_npz(self._getCorrectedGraphFilename(), graph)
+    def _writeCorrectedGraph(self, graph: scipy.sparse.csr_matrix) -> str:
+        path = self._getCorrectedGraphFilename()
+        scipy.sparse.save_npz(path, graph)
+        return path
     
     def _readCorrectedGraph(self) -> scipy.sparse.csr_matrix:
         return scipy.sparse.load_npz(self._getCorrectedGraphFilename())
