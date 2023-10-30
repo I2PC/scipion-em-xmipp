@@ -236,12 +236,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             outputSet.setStreamState(outputSet.STREAM_OPEN)
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
-        # FIXME: The commented line below should work but it fails in streaming
-        #        when extracting particles. The line below it fixs that error..
-        # inMicsPointer = self.getMainInput().getMicrographs()
-        inMicsPointer = Pointer(self.getMapper().getParent(
-                                           self.getMainInput().getMicrographs()),
-                                           extended='outputMicrographs')
+        inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)
 
         return outputSet
