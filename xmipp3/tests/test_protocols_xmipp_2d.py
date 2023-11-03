@@ -617,7 +617,7 @@ class TestXmippTriggerParticles(TestXmippBase):
         # when first trigger (non-streaming mode) finishes must have 50 parts.
         self.checkResults(protTrigger, 50, "Static trigger fails")
         # when second trigger (full-streaming mode) finishes must have all parts.
-        self.checkResults(protTrigger2, 50, "Full streaming trigger fails")
+        self.checkResults(protTrigger2, 76, "Full streaming trigger fails")
 
         # When all have finished, the third (spliting mode) must have two outputs
         time.sleep(10)  # sometimes is not ready yet
