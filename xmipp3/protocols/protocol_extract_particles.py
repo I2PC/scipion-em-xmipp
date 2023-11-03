@@ -48,6 +48,10 @@ from xmipp3.constants import OTHER
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Protocol to extract particles from a set of coordinates"""
     _label = 'extract particles'
+
+    RESIZE_FACTOR = 0
+    RESIZE_DIMENSIONS = 1
+    RESIZE_SAMPLINGRATE = 2
     
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
@@ -55,26 +59,53 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
     #--------------------------- DEFINE param functions ------------------------
     def _definePreprocessParams(self, form):
+
+        form.addParam('doResize', params.BooleanParam, default=False,
+                      label='Rescale particles?',
+                      help='If you set to *Yes*, you should provide a resize option.')
+
+        form.addParam('resizeOption', params.EnumParam,
+                      choices=['Factor', 'Dimensions', 'Sampling Rate'],
+                      condition='doResize',
+                      default=self.RESIZE_FACTOR,
+                      label="Resize option", display=params.EnumParam.DISPLAY_COMBO,
+                      help='Select an option to resize the images: \n '
+                           '_Factor_: Set a resize factor to resize. \n '
+                           '_Dimensions_: Set the output dimensions in pixels. \n'
+                           '_Sampling Rate_: Set the desire sampling rate to resize.')
+
         # downFactor should always be 1.0 or greater
-        geOne = params.GE(1.0,
-                          error='Value should be greater or equal than 1.0')
+        geOne = params.GE(1.0, error='Value should be greater or equal than 1.0')
 
         form.addParam('downFactor', params.FloatParam, default=1.0,
                       validators=[geOne],
                       label='Downsampling factor',
+                      condition='doResize and resizeOption==%d' % self.RESIZE_FACTOR,
                       help='Select a value greater than 1.0 to reduce the size '
                            'of micrographs before extracting the particles. '
                            'If 1.0 is used, no downsample is applied. '
                            'Non-integer downsample factors are possible. ')
 
+        form.addParam('resizeDim', params.IntParam, default=0,
+                      condition='doResize and resizeOption==%d' % self.RESIZE_DIMENSIONS,
+                      allowsPointers=True,
+                      label='Re-scaled size (px)',
+                      help='Size in pixels of the particle images <x> <y=x> <z=x>.')
+
+        form.addParam('resizeSamplingRate', params.FloatParam, default=1.0,
+                      condition='doResize and resizeOption==%d' % self.RESIZE_SAMPLINGRATE,
+                      allowsPointers=True,
+                      label='Resize sampling rate (Å/px)',
+                      help='Set the new output sampling rate.')
+
         form.addParam('boxSize', params.IntParam,
-                      label='Particle box size (px)', allowsPointers=True, 
+                      label='Particle box size (px)', allowsPointers=True, default=-1,
                       # validators=[params.Positive],
-                      help='This is size of the boxed particles (in pixels). '
+                      help='This is the size of the boxed particles (in pixels). '
                            'Note that if you use downsample option, the '
-                           'particles are boxed out after downsampling. '
-                           'Use the wizard to check boxSize changes after '
-                           'downsampling or using a different pixel size. ')
+                           'particles are boxed in a downsampled boxsize conserving the same relation. '
+                           'Use the wizard to select a boxSize automatically. '
+                           'This is calculated by multiplying 1.5 * box size used for picking.')
 
         form.addParam('doBorders', params.BooleanParam, default=False,
                       label='Fill pixels outside borders',
@@ -174,8 +205,8 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         baseMicName = pwutils.removeBaseExt(fnLast)
         outputRoot = str(self._getExtraPath(baseMicName))
         fnPosFile = self._getMicPos(mic)
-        boxSize = self.boxSize.get()
-        downFactor = self.downFactor.get()
+        boxSize = self._getExtractBoxSize()
+        downFactor = self._getDownFactor()
         patchSize = self.patchSize.get() if self.patchSize.get() > 0 \
                     else int(boxSize*1.5*downFactor)
 
@@ -267,7 +298,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         if normType != "OldXmipp":
             bgRadius = self.backRadius.get()
             if bgRadius <= 0:
-                bgRadius = int(self.boxSize.get() / 2)
+                bgRadius = int(self._getExtractBoxSize() / 2)
             args += " --background circle %d" % bgRadius
 
         return args
@@ -275,6 +306,11 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
         errors = []
+        if self.doResize:
+            downFactor = self._getDownFactor()
+            if downFactor < 1:
+                errors.append('The new particles size should be smaller than the current one')
+
         if self.boxSize.get() == -1:
             self.boxSize.set(self.getBoxSize())
 
@@ -348,7 +384,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 methodsMsgs.append("Inverted contrast on images.")
             if self._doDownsample():
                 methodsMsgs.append("Particles downsampled by a factor of %0.2f."
-                                   % self.downFactor)
+                                   % self._getDownFactor())
             if self.doNormalize:
                 methodsMsgs.append("Normalization: %s."
                                    % self.getEnumText('normType'))
@@ -368,7 +404,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return self.ctfRelations.hasValue()
 
     def _doDownsample(self):
-        return self.downFactor > 1.0
+        return self._getDownFactor() > 1.0
 
     def notOne(self, value):
         return abs(value - 1) > 0.0001
@@ -379,9 +415,34 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         if self._doDownsample():
             # Set new sampling, it should be the input sampling of the used
             # micrographs multiplied by the downFactor
-            newSampling *= self.downFactor.get()
+            newSampling *= self._getDownFactor()
 
         return newSampling
+
+    def _getDownFactor(self):
+        downFactor = 1
+        if self.resizeOption == self.RESIZE_FACTOR:
+            downFactor = self.downFactor.get()
+        elif self.resizeOption == self.RESIZE_SAMPLINGRATE:
+            downFactor = self.resizeSamplingRate.get()/self.getCoordSampling()
+        elif self.resizeOption == self.RESIZE_DIMENSIONS:
+            downFactor = self.boxSize.get()/self.resizeDim.get()
+
+        return float(downFactor)
+
+    def _getExtractBoxSize(self):
+        if self.boxSize.get() == -1:
+            boxSize = int(self.getBoxSize())
+        else:
+            boxSize = int(self.boxSize.get())
+
+        downFactor =  self._getDownFactor()
+        if downFactor > 1:
+            newBoxSize = self.getEven(boxSize/downFactor)
+        else:
+            newBoxSize = boxSize
+
+        return int(newBoxSize)
 
     def _setupBasicProperties(self):
         # Set sampling rate (before and after doDownsample) and inputMics
@@ -451,14 +512,14 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         samplingPicking = self.getCoordSampling()
         samplingExtract = self.getMicSampling()
         f = float(samplingPicking) / samplingExtract
-        return f / self.downFactor.get() if self._doDownsample() else f
+        return f / self._getDownFactor() if self._doDownsample() else f
 
     def getEven(self, boxSize):
         return Integer(int(int(boxSize)/2+0.75)*2)
 
     def getBoxSize(self):
         # This function is needed by the wizard and for auto-boxSize selection
-        return self.getEven(self.getCoords().getBoxSize() * self.getBoxScale())
+        return self.getEven(self.getCoords().getBoxSize()*1.5) # * self.getBoxScale())
 
     def _getOutputImgMd(self):
         return self._getPath('images.xmd')
