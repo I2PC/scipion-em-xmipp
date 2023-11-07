@@ -38,7 +38,7 @@ from pwem.emlib import (MDL_XCOOR, MDL_YCOOR, MDL_ZCOOR,
                       MDL_MAX, MDL_MIN, MDL_INTSCALE)
 
 
-MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoDir'
+MONORES_METHOD_URL = 'https://github.com/I2PC/scipion/wiki/XmippProtMonoDir'
 
 
 OUTPUT_RADIAL_AVERAGES = 'Radial_averages.xmd'
