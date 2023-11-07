@@ -29,7 +29,6 @@ import os
 from datetime import datetime
 import time
 from pyworkflow.utils import prettyTime
-# import emtable
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
@@ -49,7 +48,9 @@ from xmipp3.convert import (writeSetOfParticles,
                             rowToAlignment)
 
 OUTPUT = "outputClasses"
-BATCH_CLASSIFICATION = 8000
+PCA_FILE = "pca_done.txt"
+CLASSIFICATION_FILE = "classification_done.txt"
+LAST_DONE_FILE = "last_done.txt"
 BATCH_UPDATE = 4000
 
 
@@ -145,14 +146,12 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         """
         newParticlesSet = self._loadEmptyParticleSet()
         self._initFnStep()
-        self._insertFunctionStep(self.closeOutputStep, wait=True)
         self.newDeps = []
 
         while not self.finish:
             if not self._newParticlesToProcess():
                 self.info('No new particles')
             else:
-                closeStep = self._getFirstJoinStep()
                 particlesSet = self._loadInputParticleSet()
                 self.isStreamClosed = particlesSet.getStreamState()
 
@@ -162,27 +161,24 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                 self.info(f'%d new particles' % len(newParticlesSet))
                 # ------------------------------------ PCA TRAINING ----------------------------------------------
                 if self.doPcaTraining(newParticlesSet):
-                    self._insertPCASteps(newParticlesSet)
+                    self.pcaStep = self._insertFunctionStep(self.runPCASteps, newParticlesSet, prerequisites=[])
                 # ------------------------------------ CLASSIFICATION ----------------------------------------------
                 if self.doClassification(newParticlesSet):
                     self._insertClassificationSteps(newParticlesSet)
                     newParticlesSet = self._loadEmptyParticleSet()
                 # ------------------------------------ Update ----------------------------------------------
                 self.lastParticleId = max(particlesSet.getIdSet())
-                print('Last particle input id', self.lastParticleId)
-                closeStep.addPrerequisites(*self.newDeps)
+                self.info('Last particle input id %d' % self.lastParticleId)
 
             if self.isStreamClosed == Set.STREAM_CLOSED:
-                print('Stream closed')
+                self.info('Stream closed')
                 # Finish everything and close output sets
                 if len(newParticlesSet):
-                    print(f'Finish processing with last batch %d' % len(newParticlesSet))
+                    self.info(f'Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
                 else:
-                    outputStep = self._getFirstJoinStep()
-                    if outputStep and outputStep.isWaiting():
-                        outputStep.setStatus(STATUS_NEW)
-                        self.finish = True
+                    self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps)
+                    self.finish = True
 
             sys.stdout.flush()
             time.sleep(15)
@@ -192,11 +188,12 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         self.finish = False
         self.lastParticleId = 0
         self.lastParticleProcessedId = 0
-        self.flagPcaDone = False
         self.isStreamClosed = False
         self.lastRound = False
+        self.pcaLaunch = False
+        self.classificationLaunch = False
         self.particlesProcessed = []
-        self.classificationRound = 0
+        self.classificationRound = 0 # todo: if continue catch this classificationRound
         self.firstTimeDone = False
 
     def _initFnStep(self):
@@ -212,42 +209,38 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         if self.sigmaProt == -1:
             self.sigmaProt = self.inputParticles.get().getDimensions()[0] / 3
 
-        if self.mode == self.UPDATE_CLASSES:
-            self.classificationDone = True
-            self.info('Update classification')
-        else:
-            self.classificationDone = False
-
-    def _insertPCASteps(self, newParticlesSet):
+    def runPCASteps(self, newParticlesSet):
         # Process data
-        self.convertStep = self._insertFunctionStep(self.convertInputStep,
-                                                    # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
-                                                    newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn,
-                                                    prerequisites=[])
+        self.convertInputStep(# self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
+                             newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
         numTrain = min(len(newParticlesSet), self.training.get())
-        self.pcaStep = self._insertFunctionStep(self.pcaTraining, self.imgsPcaFn, self.resolution.get(),
-                                                numTrain, prerequisites=self.convertStep)
-        self.flagPcaDone = True  # Activate flag so this step is only done once
+        self.pcaLaunch = True
+        self.pcaTraining(self.imgsPcaFn, self.resolution.get(),numTrain)
+        self.pcaLaunch = False
+        self._setPcaDone()
 
     def _insertClassificationSteps(self, newParticlesSet):
         self.updateFnClassification()
-        self.convertStep2 = self._insertFunctionStep(self.convertInputStep,
-                                                     # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
-                                                     newParticlesSet, self.imgsOrigXmd, self.imgsFn,
-                                                     prerequisites=self.pcaStep)
-        self.classStep = self._insertFunctionStep(self.classification, self.imgsFn, self.numberOfClasses.get(),
-                                                  self.imgsOrigXmd, self.mask.get(), self.sigmaProt,
-                                                  prerequisites=self.convertStep2)
+        self.classStep = self._insertFunctionStep(self.runClassificationSteps,
+                                                  newParticlesSet, prerequisites=self.pcaStep)
         self.updateStep = self._insertFunctionStep(self._updateOutputSetOfClasses, newParticlesSet,
                                                    Set.STREAM_OPEN, prerequisites=self.classStep)
         self.newDeps.append(self.updateStep)
+
+    def runClassificationSteps(self, newParticlesSet):
+        self.convertInputStep(# self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
+                              newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+        self.classificationLaunch = True
+        self.classification(self.imgsFn, self.numberOfClasses.get(),
+                            self.imgsOrigXmd, self.mask.get(), self.sigmaProt)
+        self.classificationLaunch = False
 
     def convertInputStep(self, input, outputOrig, outputMRC):
         writeSetOfParticles(input, outputOrig)
         if self.mode == self.UPDATE_CLASSES and not self.firstTimeDone:
             initial2DClasses = self.initialClasses.get()
             if isinstance(initial2DClasses, SetOfClasses2D):
-                print('Write classes')
+                self.info('Write classes')
                 writeSetOfClasses2D(initial2DClasses,
                                     self.refXmd, writeParticles=False)
             else:
@@ -282,14 +275,12 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         if mask:
             args += ' --mask --sigma %s ' % (sigma)
 
-        if self.mode == self.UPDATE_CLASSES or self.classificationDone:
+        if self.mode == self.UPDATE_CLASSES or self._isClassificationDone():
             args += ' -r %s ' % self.ref
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
         self.runJob("xmipp_classify_pca", args, numberOfMpi=1, env=env)
-        # Wait until the classification is finished
-        self.classificationDone = True
 
     def _updateOutputSetOfClasses(self, particles, streamMode):
         outputName = 'outputClasses'
@@ -304,27 +295,17 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                                 self.refXmd, writeParticles=False)
             args = ' -i  %s -o %s  ' % (self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
+            # Wait until the classification is finished
+            self._setClassificationDone()
 
         self.particlesProcessed.extend(particles.getIdSet())
         self.lastParticleProcessedId = max(particles.getIdSet())
+        self._writeLastDone(self.lastParticleProcessedId)
 
     def closeOutputStep(self):
         self._closeOutputSet()
 
     # --------------------------- UTILS functions -----------------------------
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'closeOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
     def _loadInputParticleSet(self):
         """ Returns te input set of particles"""
         partSet = self.inputParticles.get()
@@ -411,7 +392,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                                     skipDisabled=True)
         params = {}
         if update:
-            print(r'Last particle processed id is %s' %self.lastParticleProcessedId)
+            self.info(r'Last particle processed id is %s' %self.lastParticleProcessedId)
             params = {"where":"id > %s" %self.lastParticleProcessedId}
 
         with self._lock:
@@ -433,12 +414,48 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
         return outputSet, update
 
     def doPcaTraining(self, newParticlesSet):
-        return (len(newParticlesSet) >= self.training.get() and not self.flagPcaDone) or \
-                (self.lastRound and not self.flagPcaDone)
+        return (len(newParticlesSet) >= self.training.get() and not self._isPcaDone() and not self.pcaLaunch) or \
+               (self.lastRound and not self._isPcaDone() and not self.pcaLaunch)
 
     def doClassification(self, newParticlesSet):
-        return (len(newParticlesSet) >= self.classificationBatch.get() and self.flagPcaDone and not self.classificationDone) \
-                        or (len(newParticlesSet) >= BATCH_UPDATE and self.classificationDone and self.flagPcaDone) or self.lastRound
+        return (len(newParticlesSet) >= self.classificationBatch.get() and self._isPcaDone() and not self._isClassificationDone()) \
+               or (len(newParticlesSet) >= BATCH_UPDATE and self._isClassificationDone() and self._isPcaDone()) \
+               or (self.lastRound and not self.classificationLaunch)
+
+    def _isPcaDone(self):
+        done = False
+        if os.path.exists(self._getExtraPath(PCA_FILE)):
+            done = True
+        return done
+
+    def _setPcaDone(self):
+        with open(self._getExtraPath(PCA_FILE), "w") as file:
+            pass
+
+    def _isClassificationDone(self):
+        done = False
+        if os.path.exists(self._getExtraPath(CLASSIFICATION_FILE)):
+            done = True
+
+        if self.mode == self.UPDATE_CLASSES:
+            done = True
+
+        return done
+
+    def _setClassificationDone(self):
+        with open(self._getExtraPath(CLASSIFICATION_FILE), "w") as file:
+            pass
+
+    def _writeLastDone(self, particleId):
+        """ Write to a text file the last item done. """
+        with open(self._getExtraPath(LAST_DONE_FILE), 'w') as f:
+            f.write('%d\n' % particleId)
+
+    def _getLastDone(self):
+        # Open the file in read mode and read the number
+        with open(self._getExtraPath(LAST_DONE_FILE), "r") as file:
+            content = file.read()
+        return int(content)
 
 def updateFileName(filepath, round):
     filename = os.path.basename(filepath)
