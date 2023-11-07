@@ -105,6 +105,9 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                       condition="mode",
                       pointerClass='SetOfClasses2D, SetOfAverages',
                       help='Set of initial classes to start the classification')
+        form.addParam('correctCtf', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
+              label='Correct CTF?',
+              help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
         form.addParam('mask', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
               label='Use Gaussian Mask?',
               help='If you set to *Yes*, a gaussian mask is applied to the images.')
@@ -148,7 +151,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
 
     
         self._insertFunctionStep('convertInputStep', 
-                                # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
+                                # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener oier
                                 self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
         
         self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get(), self.training.get())
@@ -174,7 +177,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
             args = ' -i  %s -o %s  '%(self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
             
-        #WIENER
+        #WIENER Oier
         # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
         #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
         #
@@ -182,8 +185,12 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         # env['LD_LIBRARY_PATH'] = ''
         # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
         
-        args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
-        self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
+        if self.correctCtf: 
+            args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
+            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
+        else:      
+            args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
+            self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
         
         
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
@@ -232,29 +239,26 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        error=self.validateDLtoolkit()
-        return error
-    # def _validate(self):
-    #     validateMsgs = []
-    #     if self.numberOfMpi <= 1:
-    #         validateMsgs.append('Mpi needs to be greater than 1.')
-    #     if self.numberOfInitialClasses > self.numberOfClasses:
-    #         validateMsgs.append('The number of final classes cannot be smaller'
-    #                             ' than the number of initial classes')
-    #     if isinstance(self.initialClasses.get(), SetOfClasses2D):
-    #         if not self.initialClasses.get().hasRepresentatives():
-    #             validateMsgs.append("The input classes should have "
-    #                                 "representatives.")
-    #     return validateMsgs
-    #
-    # def _warnings(self):
-    #     validateMsgs = []
-    #     if self.inputParticles.get().getSamplingRate() < 3:
-    #         validateMsgs.append("The sampling rate is smaller than 3 A/pix, "
-    #                             "consider downsampling the input images to "
-    #                             "speed-up the process. Probably you don't want"
-    #                             " such a precise 2D classification.")
-    #     return validateMsgs
+        
+        errors = []
+        if self.inputParticles.get().getDimensions()[0] > 256:
+            errors.append("You should resize the particles."
+                                " Sizes smaller than 128 pixels are recommended.")
+        er = self.validateDLtoolkit()
+        if er:
+            errors.append(er)
+        return errors
+
+
+    def _warnings(self):
+        validateMsgs = []
+        if  self.inputParticles.get().getDimensions()[0] > 128:
+            validateMsgs.append("Particle sizes equal to or less"
+                                " than 128 pixels are recommended.")
+        elif self.inputParticles.get().getDimensions()[0] > 256:
+            validateMsgs.append("Particle sizes equal to or less"
+                                " than 128 pixels are recommended.")
+        return validateMsgs
     #
     # def _citations(self):
     #     citations=['Sorzano2010a']
