@@ -44,6 +44,7 @@ from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes)
 from xmipp3.constants import OTHER
 
+FACTOR_BOXSIZE = 1.5
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Protocol to extract particles from a set of coordinates"""
@@ -519,7 +520,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
     def getBoxSize(self):
         # This function is needed by the wizard and for auto-boxSize selection
-        return self.getEven(self.getCoords().getBoxSize()*1.5) # * self.getBoxScale())
+        return self.getEven(self.getCoords().getBoxSize()*FACTOR_BOXSIZE)
 
     def _getOutputImgMd(self):
         return self._getPath('images.xmd')
