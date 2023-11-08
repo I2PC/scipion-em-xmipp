@@ -623,11 +623,11 @@ class TestXmippExtractParticles(TestXmippBase):
 
     def testExtractOther(self):
         print("Run extract particles from original micrographs, with downsampling")
-        downFactor = 3.0
         protExtract = self.newProtocol(XmippProtExtractParticles,
-                                       boxSize=183, downsampleType=OTHER,
-                                       doDownsample=True,
-                                       downFactor=downFactor,
+                                       boxSize=166, downsampleType=OTHER,
+                                       doResize=True,
+                                       resizeOption=1,
+                                       resizeDim=80,
                                        doInvert=False,
                                        doFlip=False)
         # Get all the micrographs ids to validate that all particles
@@ -643,7 +643,7 @@ class TestXmippExtractParticles(TestXmippBase):
         inputCoords = protExtract.inputCoordinates.get()
         outputParts = protExtract.outputParticles
         samplingCoords = self.protPP.outputCoordinates.getMicrographs().getSamplingRate()
-        samplingFinal = self.protImport.outputMicrographs.getSamplingRate() * downFactor
+        samplingFinal = self.protImport.outputMicrographs.getSamplingRate() * protExtract._getDownFactor()
         samplingMics = protExtract.inputMicrographs.get().getSamplingRate()
         factor = samplingFinal / samplingCoords
         self.assertIsNotNone(outputParts,
@@ -665,20 +665,20 @@ class TestXmippExtractParticles(TestXmippBase):
 
         outputSampling = outputParts.getSamplingRate()
         self.assertAlmostEqual(outputSampling/samplingMics,
-                               downFactor, 1,
+                               protExtract._getDownFactor(), 1,
                                "There was a problem generating the output.")
         for particle in outputParts:
             self.assertTrue(particle.getCoordinate().getMicId() in micsId)
             self.assertAlmostEqual(outputSampling, particle.getSamplingRate())
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.229023, 0.512485)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.099442, 0.396918)
 
     def testExtractNoise(self):
         # here we will try a different patchSize than the default
         print("Run extract particles from original micrographs, with downsampling")
-        downFactor = 5.0
+        downFactor = 3.0
         protExtract = self.newProtocol(XmippProtExtractParticles,
-                                       boxSize=183, downsampleType=OTHER,
-                                       doDownsample=True,
+                                       boxSize=-1, downsampleType=OTHER,
+                                       doResize=True,
                                        downFactor=downFactor,
                                        doInvert=False,
                                        doFlip=False,
@@ -692,8 +692,8 @@ class TestXmippExtractParticles(TestXmippBase):
 
         outputParts = protExtract.outputParticles
         self.assertIsNotNone(outputParts, "There was a problem generating the output.")
-        self.assertAlmostEquals(outputParts.getSize(), 395, delta=1)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.1594, 0.5702)
+        self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.161262, 0.5702)
 
     def testExtractCTF(self):
         print("Run extract particles with CTF")
