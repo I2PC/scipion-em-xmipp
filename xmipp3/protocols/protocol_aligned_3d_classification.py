@@ -541,6 +541,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-r', self._getVolumesMdFilename(iteration-1)]
         args += ['-o', self._getClassificationMdFilename(iteration)]
         args += ['--keep_input_columns']
+        args += ['--mask', 'binary_file', self._getInputMaskFilename()]
         
         if self.considerInputCtf:
             particles = self._getInputParticles()
