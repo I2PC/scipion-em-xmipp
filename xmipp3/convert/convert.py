@@ -1688,7 +1688,10 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
 
     for i in range(f1, fN+1):
         frame.setIndex(stackIndex)
-        row.setValue(md.MDL_IMAGE, ih.locationToXmipp(frame))
+        frameFilename = ih.locationToXmipp(frame)
+        if os.path.splitext(frameFilename)[-1] == '.eer':
+            frameFilename += '#idk,4K,uint16'
+        row.setValue(md.MDL_IMAGE, frameFilename)
 
         if useAlignment:
             shiftIndex = i - firstFrame
