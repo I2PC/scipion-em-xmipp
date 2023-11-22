@@ -76,7 +76,10 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
         trainingGroup.addParam('inputTrainSet', PointerParam, label="Input train set",
                       pointerClass='SetOfParticles', allowsNull=True,
                       pointerCondition='hasAlignment2D or hasAlignmentProj',
-                      help='The set of particles to train the models')
+                      help='The set of particles to train the models. If empty, the input image set is taken.')
+
+        trainingGroup.addParam('trainSetSize', IntParam, label="Train set size", default=5000,
+                      help='How many particles from the training')
 
         trainingGroup.addParam('numEpochs', IntParam,
                       label="Number of epochs",
@@ -145,9 +148,12 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
         self._insertFunctionStep("train", numGPU[0])
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def convertStep(self, inputSet):
+    def convertStep(self, inputSet, train=False):
         self.Xdim = 128
         writeSetOfParticles(inputSet, self.predictImgsFn)
+        if train:
+            self.runJob("xmipp_metadata_utilities","-i %s --operate random_subset %d"%\
+                        (self.predictImgsFn,self.trainSetSize), numberOfMpi=1)
         self.runJob("xmipp_image_resize",
                     "-i %s -o %s --save_metadata_stack %s --fourier %d" %
                     (self.predictImgsFn,
@@ -156,7 +162,10 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
                      self.Xdim), numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
     
     def convertTrainStep(self):
-        self.convertStep(self.inputTrainSet.get())
+        if self.inputTrainSet.get() is None:
+            self.convertStep(self.inputImageSet.get(), True)
+        else:
+            self.convertStep(self.inputTrainSet.get(), True)
     
     def train(self, gpuId, mode="", orderSymmetry=None):
         args = "%s %s %f %d %d %s %d %f %d %d" % (
