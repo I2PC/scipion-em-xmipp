@@ -48,7 +48,8 @@ class XmippProtAddNoise(ProtRefine3D):
     STUDENT_NOISE = 1
     UNIFORM_NOISE = 2
     _lastUpdateVersion = VERSION_1_1
-    #--------------------------- DEFINE param functions ------------------------
+    # --------------------------- DEFINE param functions ------------------------
+
     def _defineParams(self, form):
         
         form.addParam('noiseType', EnumParam,
@@ -95,13 +96,9 @@ class XmippProtAddNoise(ProtRefine3D):
                       condition='noiseType == %d' % self.UNIFORM_NOISE,
                       label="Maximum Value", 
                       help='Please, introduce the maximum value (default = 1).')
-        
-        
         form.addParallelSection(threads=1, mpi=1)
 
-    #--------------------------- INSERT steps functions ------------------------
-
-
+    # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):        
         self.micsFn = self._getPath()
         # Convert input into xmipp Metadata format
@@ -122,9 +119,8 @@ class XmippProtAddNoise(ProtRefine3D):
             noiseParams = '%f %f' % (self.uniformMin, self.uniformMax)
         return kindNoise, noiseParams
 
-    #--------------------------- INFO functions -------------------------------
+    # --------------------------- INFO functions -------------------------------
     def _validate(self):
-        
         validateMsgs = []
         if self.input and not self.input.hasValue():
             validateMsgs.append('Please provide input volume.')  
@@ -132,19 +128,20 @@ class XmippProtAddNoise(ProtRefine3D):
 
     def _summary(self):
         summary = []
-
-        if  (not hasattr(self,'outputVolume')):
-            summary.append("Output volume not ready yet.")
-        else:
-            summary.append("Volume with %s noise has been obtained" 
-                           % (self.getEnumText("noiseType")) )
-            #
+        if hasattr(self, 'outputVolume'):
+            summary.append("Volume with %s noise has been obtained" % (self.getEnumText("noiseType")))
+        elif hasattr(self, 'outputParticles'):
+            summary.append("Particles with %s noise has been obtained" % (self.getEnumText("noiseType")))
+        elif not hasattr(self, 'outputVolume') or not hasattr(self, 'outputParticles'):
+                summary.append("Output not ready yet.")
         return summary
     
     def _methods(self):
         messages = []
-        if (hasattr(self,'outputVolume')):
+        if hasattr(self, 'outputVolume'):
             messages.append('Noisy volume has been obtained')
+        elif hasattr(self, 'outputParticles'):
+            messages.append('Noisy particles have been obtained')
         return messages
     
     def _citations(self):
@@ -164,7 +161,7 @@ class XmippProtAddNoiseVolumes(XmippProtAddNoise):
     """
     _label = 'add noise volume/s'
     
-    #--------------------------- DEFINE param functions ------------------------
+    # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
        
@@ -179,7 +176,7 @@ class XmippProtAddNoiseVolumes(XmippProtAddNoise):
         pass
         
     def _getNoisyOutputPath(self, fnvol):
-        fnNoisy = self._getExtraPath(removeExt(basename(fnvol)) + '_Noisy.vol')
+        fnNoisy = self._getExtraPath(removeExt(basename(fnvol)) + '_Noisy.mrc')
         return fnNoisy
 
     def _addNoisetoVolumeStep(self, kindNoise, noiseParams, vol):
@@ -188,6 +185,7 @@ class XmippProtAddNoiseVolumes(XmippProtAddNoise):
         params = " -i %s --type %s %s -o %s" % (fnvol, kindNoise, noiseParams, 
                                                     fnNoisy)
         self.runJob('xmipp_transform_add_noise', params, numberOfMpi=1)
+        self.runJob('xmipp_image_header', '-i %s --sampling_rate %f'%(fnvol, vol.getSamplingRate()), numberOfMpi=1)
 
     def addNoiseStep(self):
         kindNoise, noiseParams = self._getTypeOfNoise()
@@ -231,6 +229,7 @@ class XmippProtAddNoiseVolumes(XmippProtAddNoise):
     def _isSingleVolume(self):
         return isinstance(self.input.get(), Volume)
 
+
 class XmippProtAddNoiseParticles(XmippProtAddNoise):
     """    
     Given a set of particles, the protocol will add noise to them 
@@ -238,7 +237,7 @@ class XmippProtAddNoiseParticles(XmippProtAddNoise):
     """
     _label = 'add noise particles'
     
-    #--------------------------- DEFINE param functions --------------------
+    # --------------------------- DEFINE param functions --------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
        

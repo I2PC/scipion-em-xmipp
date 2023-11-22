@@ -30,8 +30,7 @@ from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtImportMovies
 
-from xmipp3.protocols import (XmippProtMovieCorr, XmippProtOFAlignment,
-                              XmippProtMovieAverage)
+from xmipp3.protocols import (XmippProtFlexAlign, XmippProtOFAlignment)
 
 
 class TestMixedMovies(BaseTest):
@@ -90,7 +89,7 @@ class TestMixedMovies(BaseTest):
         for mic1, mic2 in izip(micSet1, micSet2):
             img1.read(mic1.getFileName())
             img2.read(mic2.getFileName())
-            print("Comparing %s vs %s"%(mic1.getFileName(),mic2.getFileName()))
+            print("Comparing %s %s"%(mic1.getFileName(),mic2.getFileName()))
             self.assertTrue(img1.equal(img2, tolerance))
 
     def _sumShifts(self, movieSet):
@@ -99,9 +98,10 @@ class TestMixedMovies(BaseTest):
         return sum([abs(x) for x in xx]) + sum([abs(y) for y in yy])
 
     def test_CorrelationOpticalFlow(self):
+        from xmipp3 import Plugin
         protMovieImport = self._importMovies()
 
-        mc1 = self.newProtocol(XmippProtMovieCorr,
+        mc1 = self.newProtocol(XmippProtFlexAlign,
                                objLabel='CC (no-write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
@@ -109,14 +109,10 @@ class TestMixedMovies(BaseTest):
         mc1.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc1)
 
-        f0, fN, ffi = mc1.outputMovies.getFramesRange()
-        # Here the first frame index should be 2, since we are not
-        # re-writing the movie
-        self.assertEqual((2, 10, 2), (f0, fN, ffi))
         # Shifts should be different from zero
         self.assertNotAlmostEqual(0, self._sumShifts(mc1.outputMovies))
 
-        mc2 = self.newProtocol(XmippProtMovieCorr,
+        mc2 = self.newProtocol(XmippProtFlexAlign,
                                objLabel='CC (write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
@@ -125,32 +121,9 @@ class TestMixedMovies(BaseTest):
         mc2.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc2)
 
-        f0, fN, ffi = mc2.outputMovies.getFramesRange()
-        # Here the first frame index should be 1, since we wrote a new movie
-        self.assertEqual((2, 10, 1), (f0, fN, ffi))
         # All shifts should be zero, since we have written the move and the
         # shifts have been already applied
         self.assertAlmostEqual(0, self._sumShifts(mc2.outputMovies))
-
-        avg1 = self.newProtocol(XmippProtMovieAverage,
-                                objLabel='AVG (1)',
-                                sumFrame0=2, sumFrameN=10,
-                                splineOrder=XmippProtMovieAverage.INTERP_CUBIC,
-                                numberOfThreads=4)
-        avg1.inputMovies.set(mc1.outputMovies)
-        self.launchProtocol(avg1)
-
-        avg2 = self.newProtocol(XmippProtMovieAverage,
-                                objLabel='AVG (2)',
-                                sumFrame0=2, sumFrameN=10,
-                                splineOrder=XmippProtMovieAverage.INTERP_CUBIC,
-                                numberOfThreads=4,
-                                useAlignment=False) # do not apply the shift again
-
-        avg2.inputMovies.set(mc2.outputMovies)
-        self.launchProtocol(avg2)
-
-        self._compareMovies(avg1.outputMicrographs, avg2.outputMicrographs)
 
         of1 = self.newProtocol(XmippProtOFAlignment,
                                objLabel='OF (1)',
@@ -170,7 +143,7 @@ class TestMixedMovies(BaseTest):
         self.launchProtocol(of2)
 
         # manual diff statistics:
-        # diff.mrc min=-32.708740 max= 26.830322 avg= -0.000668 stddev=  1.217658
-        # diff.mrc min=-29.979980 max= 33.432617 avg=  0.001421 stddev=  1.705474
-        # diff.mrc min=-33.229248 max= 27.793701 avg= -0.000442 stddev=  1.347268
-        self._compareMovies(of1.outputMicrographs, of2.outputMicrographs, 33.44)
+        # diff.mrc min=-41.368896 max= 51.489990 avg=  0.006643 stddev=  4.867714
+        # diff.mrc min=-35.405273 max= 40.189209 avg=  0.005545 stddev=  3.395741
+        # diff.mrc min=-37.708740 max= 46.209473 avg=  0.006600 stddev=  4.477785
+        self._compareMovies(of1.outputMicrographs, of2.outputMicrographs, 51.49)

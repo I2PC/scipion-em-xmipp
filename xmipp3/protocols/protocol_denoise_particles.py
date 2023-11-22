@@ -28,6 +28,8 @@ import pwem.emlib.metadata as md
 from pyworkflow.object import String
 from pyworkflow.protocol.params import IntParam, PointerParam, LEVEL_ADVANCED
 from pwem.protocols import ProtProcessParticles
+from pwem.objects import SetOfVolumes
+from pwem.objects import SetOfAverages
 
 from xmipp3.convert import (writeSetOfParticles, writeSetOfClasses2D,
                             xmippToLocation)
@@ -52,7 +54,7 @@ class XmippProtDenoiseParticles(ProtProcessParticles):
                                                       'respect to the chosen set of classes. This is the standard situation '
                                                       'after CL2D or ML2D.')
         form.addParam('inputClasses', PointerParam, label='Input Classes', important=True,
-                      pointerClass='SetOfClasses', 
+                      pointerClass='SetOfClasses, SetOfAverages',
                       help='Select the input classes for the basis construction against images will be projected to.')
         
         form.addSection(label='Basis construction')
@@ -88,7 +90,10 @@ class XmippProtDenoiseParticles(ProtProcessParticles):
         imagesMd = self._getPath('images.xmd')
         writeSetOfParticles(self.inputParticles.get(), imagesMd)
         classesMd = self._getPath('classes.xmd')
-        writeSetOfClasses2D(self.inputClasses.get(), classesMd)
+        if isinstance(self.inputClasses.get(), SetOfAverages):
+            writeSetOfClasses2D(self.inputClasses.get(), classesMd)
+        else:
+            writeSetOfClasses2D(self.inputClasses.get(), classesMd)
 
         fnRoot = self._getExtraPath('pca')
         fnRootDenoised = self._getExtraPath('imagesDenoised')

@@ -29,6 +29,7 @@ from pwem.protocols import ProtReconstruct3D
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 from xmipp3.convert import writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 import os
 
 
@@ -101,7 +102,7 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
         """ Centralize how files are called for iterations and references. """
         myDict = {
             'input_xmd': self._getExtraPath('input_particles.xmd'),
-            'output_volume': self._getPath('output_volume.vol')
+            'output_volume': self._getPath('output_volume.mrc')
             }
         self._updateFilenamesDict(myDict)
 
@@ -177,6 +178,10 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
                 self.runJob('xmipp_reconstruct_fourier', params)
             else:
                 self.runJob('xmipp_reconstruct_fourier_accel', params)
+
+        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f"%\
+                    (self._getFileName('output_volume'), self.inputParticles.get().getSamplingRate()),
+                    numberOfMpi=1)
             
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
@@ -199,6 +204,8 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
             errors.append("Approximative version is not implemented for Legacy code")
         if not self.useGpu.get() and self.numberOfThreads.get() > 1:
             errors.append("CPU version can use only a single thread. Use MPI instead")
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find Xmipp GPU programs in the path")
         return errors
     
     def _summary(self):

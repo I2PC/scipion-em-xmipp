@@ -28,6 +28,7 @@ from pwem.constants import ALIGN_NONE
 from pwem.protocols import ProtProcessParticles, ProtPreprocessVolumes
 from pwem.objects import Volume
 import pwem.emlib.metadata as md
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             writeSetOfVolumes, getImageLocation)
@@ -37,6 +38,8 @@ class XmippProcessParticles(ProtProcessParticles):
     """ Class to create a base template for Xmipp protocols 
     that process SetOfParticles
     """
+    _devStatus = UPDATED
+
     def __init__(self, **kwargs):
         ProtProcessParticles.__init__(self, **kwargs)
         self._args = "-i %(inputFn)s "
@@ -87,7 +90,7 @@ class XmippProcessParticles(ProtProcessParticles):
         inputSet = self.inputParticles.get()
         # outputSet could be SetOfParticles, SetOfAverages or any future sub-class of SetOfParticles
         className = inputSet.getClassName()
-        outputSet = self._createSetFromName(className)
+        outputSet = inputSet.createCopy(self._getPath())
         outputSet.copyInfo(inputSet)
 
         self._preprocessOutput(outputSet)
@@ -105,7 +108,7 @@ class XmippProcessParticles(ProtProcessParticles):
     def _defineFilenames(self):
         self.inputFn = self._getTmpPath('input_particles.xmd')
         self.outputMd = self._getExtraPath('output_images.xmd')
-        self.outputStk = self._getExtraPath('output_images.stk')
+        self.outputStk = self._getExtraPath('output_images.mrcs')
 
 
 class XmippProcessVolumes(ProtPreprocessVolumes):
@@ -152,7 +155,9 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             volClass = volInput.getClass()
             vol = volClass() # Create an instance with the same class of input 
             vol.copyInfo(volInput)
-            vol.setLocation(1, self.outputStk)
+            vol.setLocation(self.outputStk)
+            if self.outputStk.endswith(".mrc"):
+                self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk,volInput.getSamplingRate()))
             if volInput.hasOrigin():
                 vol.setOrigin(volInput.getOrigin())
             self._postprocessOutput(vol)
@@ -179,7 +184,7 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
         """ Prepare the files to process """
         if self._isSingleInput():
             self.inputFn = getImageLocation(self.inputVolumes.get())
-            self.outputStk = self._getExtraPath("output_volume.vol")
+            self.outputStk = self._getExtraPath("output_volume.mrc")
         else:
             self.inputFn = self._getTmpPath('input_volumes.xmd')
             self.outputStk = self._getExtraPath("output_volumes.stk")

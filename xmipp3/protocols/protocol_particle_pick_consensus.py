@@ -29,7 +29,7 @@ Consensus picking protocol
 """
 
 import os
-
+import enum
 from math import sqrt
 import numpy as np
 
@@ -43,6 +43,13 @@ from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 
 PICK_MODE_LARGER = 0
 PICK_MODE_EQUAL = 1
+
+
+class ProtPickingConsensusOutput(enum.Enum):
+    """ Possible outputs for particle picking protocols
+    """
+    consensusCoordinates = SetOfCoordinates
+
 
 class XmippProtConsensusPicking(ProtParticlePicking):
     """
@@ -65,7 +72,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     """
 
     _label = 'picking consensus'
-    outputName = 'consensusCoordinates'
+    _possibleOutputs = ProtPickingConsensusOutput
+    outputName = ProtPickingConsensusOutput.consensusCoordinates.name
     FN_PREFIX = 'consensusCoords_'
 
     def __init__(self, **args):
@@ -79,7 +87,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                       label="Input coordinates", important=True,
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius', params.IntParam, default=10,
-                      label="Radius",
+                      label="Radius",  allowsPointers=True, allowsNull=True,
                       help="All coordinates within this radius (in pixels) "
                            "are presumed to correspond to the same particle")
         form.addParam('consensus', params.IntParam, default=-1,
@@ -228,10 +236,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             outputSet.setStreamState(outputSet.STREAM_OPEN)
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
-        #inMicsPointer = Pointer(self.getMapper().getParent(
-        #                                    self.getMainInput().getMicrographs()),
-        #                                    extended='outputMicrographs')
-        inMicsPointer = Pointer(self.getMainInput().getMicrographs())
+        inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)
 
         return outputSet

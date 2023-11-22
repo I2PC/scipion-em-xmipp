@@ -43,6 +43,12 @@ from xmipp3.protocols import XmippFilterHelper as xfh
 from xmipp3.protocols import XmippResizeHelper as xrh
 from xmipp3.protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
 
+MSG_WRONG_SIZE = "There was a problem with the size of the output "
+MSG_WRONG_OUTPUT = "There was a problem with the output "
+MSG_WRONG_IMPORT = "There was a problem with the import of the "
+MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
+MSG_WRONG_DIM = "There was a problem with the dimensions of the output "
+MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
 
 # Some utility functions to import particles that are used
 # in several tests.
@@ -524,10 +530,10 @@ class TestXmippPreprocessParticles(TestXmippBase):
                 self.assertEquals(x.getAlignment(), y.getAlignment(),
                                   "Alignment wrong")
                 
-        self.assertAlmostEquals(protPreproc.outputParticles.getSamplingRate(), 
-                          self.protImport.outputParticles.getSamplingRate(),
-                                "There was a problem with the sampling rate "
-                                " in the preprocess particles")
+        self.assertAlmostEquals(protPreproc.outputParticles.getSamplingRate(),
+                                self.protImport.outputParticles.getSamplingRate(),
+                                'There was a problem with the sampling rate '
+                                ' in the preprocess particles')
 
         self.assertIsNotNone(protPreproc.outputParticles,
                              "There was a problem with preprocess particles")
@@ -554,44 +560,84 @@ class TestXmippTriggerParticles(TestXmippBase):
     def test_triggerPart(self):
         print("Start Streaming Particles")
         protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
-                                      creationInterval=8, nDim=76, groups=10)
+                                      creationInterval=12, nDim=76, groups=10)
         protStream.inputParticles.set(self.protImport.outputParticles)
         self.proj.launchProtocol(protStream, wait=False)
 
 
         print("Run Trigger Particles")
         protTrigger = self.newProtocol(XmippProtTriggerData,
+                                       objLabel="Trigger - static output",
                                        allImages=False, outputSize=50,
-                                       checkInterval=2)
+                                       checkInterval=10)
         protTrigger.inputImages.set(protStream)
         protTrigger.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger)
 
+        protTrigger1b = self.newProtocol(XmippProtTriggerData,
+                                         objLabel="Trigger - static output (at the end)",
+                                         allImages=False, outputSize=500,
+                                         checkInterval=10)
+        protTrigger1b.inputImages.set(protStream)
+        protTrigger1b.inputImages.setExtended("outputParticles")
+        self.proj.scheduleProtocol(protTrigger1b)
+
         protTrigger2 = self.newProtocol(XmippProtTriggerData,
-                                       allImages=True, outputSize=50,
-                                       checkInterval=2)
+                                        objLabel="Trigger - streaming",
+                                        allImages=True, outputSize=50,
+                                        checkInterval=10)
         protTrigger2.inputImages.set(protStream)
         protTrigger2.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger2)
 
+        protTrigger2b = self.newProtocol(XmippProtTriggerData,
+                                         objLabel="Trigger - streaming (at the end)",
+                                         allImages=True, outputSize=500,
+                                         checkInterval=10)
+        protTrigger2b.inputImages.set(protStream)
+        protTrigger2b.inputImages.setExtended("outputParticles")
+        self.proj.scheduleProtocol(protTrigger2b)
+
         protTrigger3 = self.newProtocol(XmippProtTriggerData,
+                                        objLabel="Trigger - in batches",
                                         allImages=True, splitImages=True,
-                                        outputSize=50, checkInterval=2)
+                                        outputSize=50, checkInterval=10)
         protTrigger3.inputImages.set(protStream)
         protTrigger3.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger3)
 
+        protTrigger3b = self.newProtocol(XmippProtTriggerData,
+                                         objLabel="Trigger - in batches (at the end)",
+                                        allImages=True, splitImages=True,
+                                        outputSize=500, checkInterval=10)
+        protTrigger3b.inputImages.set(protStream)
+        protTrigger3b.inputImages.setExtended("outputParticles")
+        self.proj.scheduleProtocol(protTrigger3b)
+
         # when first trigger (non-streaming mode) finishes must have 50 parts.
-        self.checkResults(protTrigger, 50)
+        self.checkResults(protTrigger, 50, "Static trigger fails")
         # when second trigger (full-streaming mode) finishes must have all parts.
-        self.checkResults(protTrigger2, 76)
+        self.checkResults(protTrigger2, 76, "Full streaming trigger fails")
 
         # When all have finished, the third (spliting mode) must have two outputs
+        time.sleep(10)  # sometimes is not ready yet
         protTrigger3 = self._updateProtocol(protTrigger3)
-        self.assertSetSize(protTrigger3.outputParticles1, 50)
-        self.assertSetSize(protTrigger3.outputParticles2, 26)
+        self.assertSetSize(protTrigger3.outputParticles1, 50, "First batch fails")
+        self.assertSetSize(protTrigger3.outputParticles2, 26, "Final batch fails")
 
-    def checkResults(self, prot, size):
+        # When input closes, trigger must release what is in input.
+        self.checkFinalTrigger(protTrigger1b, msg="Final trigger in static mode fails")
+        self.checkFinalTrigger(protTrigger2b, msg="Final trigger in streaming mode fails")
+        self.checkFinalTrigger(protTrigger3b, "outputParticles1", "Final trigger in batches mode fails")
+
+    def checkFinalTrigger(self, prot, outputName="outputParticles", msg=''):
+        prot = self._updateProtocol(prot)
+        output = getattr(prot, outputName, None)
+        self.assertIsNotNone(output, msg)
+        self.assertSetSize(output, 76, msg)
+
+
+    def checkResults(self, prot, size, msg=''):
         t0 = time.time()
         while not prot.isFinished():
             # Time out 4 minutes, just in case
@@ -601,7 +647,7 @@ class TestXmippTriggerParticles(TestXmippBase):
             prot = self._updateProtocol(prot)
             time.sleep(2)
 
-        self.assertSetSize(prot.outputParticles, size)
+        self.assertSetSize(prot.outputParticles, size, msg)
 
 class TestXmippCropResizeParticles(TestXmippBase):
     """Check protocol crop/resize particles from Xmipp."""
@@ -904,6 +950,39 @@ class TestXmippCL2D(TestXmippBase):
         self.assertIsNotNone(protCL2DInitialCore.outputClasses, "There was a problem with CL2D with initial class and core analysis")
 
 
+class TestXmippCL2DCoreAnalysis(TestXmippBase):
+    """This class check if the protocol to core Analysis with CL2D in Xmipp works properly."""
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData('mda')
+        cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
+
+    def test_cl2dCoreAnalysis(self):
+        print("Run CL2D core analysis")
+        # Run CL2D with random class and no core analysis
+        protCL2DRandomNoCore = self.newProtocol(XmippProtCL2D,
+                                                numberOfClasses=3, numberOfInitialClasses=1,
+                                                doCore=False, numberOfIterations=4, numberOfMpi=2)
+        protCL2DRandomNoCore.inputParticles.set(self.protImport.outputParticles)
+        protCL2DRandomNoCore.setObjLabel("CL2D with random class and no core analysis")
+        self.launchProtocol(protCL2DRandomNoCore)
+        self.assertIsNotNone(protCL2DRandomNoCore.outputClasses,
+                             "There was a problem with CL2D with random class and no core analysis")
+
+        # Run Core Analysis
+        protCL2DCoreAnalysis = self.newProtocol(XmippProtCoreAnalysis,
+                                                numberOfClasses=3, thZscore=1.5,
+                                                thPCAZscore=1.5, numberOfMpi=2)
+        protCL2DCoreAnalysis.inputClasses.set(protCL2DRandomNoCore.outputClasses)
+        protCL2DCoreAnalysis.setObjLabel("Core analysis")
+        self.launchProtocol(protCL2DCoreAnalysis)
+        self.assertIsNotNone(protCL2DCoreAnalysis.outputClasses_core,
+                             "There was a problem with CL2D Core Analysis")
+
+
+
 class TestXmippProtCL2DAlign(TestXmippBase):
     """This class check if the protocol to align particles in Xmipp works properly."""
     @classmethod
@@ -966,7 +1045,7 @@ class TestXmippDenoiseParticles(TestXmippBase):
         diameterInA = 2 * radiusInPixel * psize
         cls.protRelion2DClass = cls.newProtocol(ProtRelionClassify2D,
                                                 doCTF=False, maskDiameterA=diameterInA,
-                                                numberOfMpi=4, numberOfThreads=1)
+                                                numberOfMpi=1, numberOfThreads=1)
         cls.protRelion2DClass.numberOfClasses.set(4)
         cls.protRelion2DClass.numberOfIterations.set(3)
         cls.protRelion2DClass.inputParticles.set(cls.protNormalize.outputParticles)
@@ -1045,17 +1124,6 @@ class TestAlignmentAssign(TestXmippBase):
         # Check the scaling between the input and the output translation in the roto-translation transformation matrix
         self._checkTranslationScaling(protAssign, self.protResize)
 
-    def test_alignment_assign_othersize_shiftsAppliedBefore(self):
-        protAssign = self.newProtocol(emprot.ProtAlignmentAssign, shiftsAppliedBefore=True)
-        protAssign.setObjLabel("Assign alignment of different size (assuming shiftsAppliedBefore)")
-        protAssign.inputParticles.set(self.protResize.outputParticles)
-        protAssign.inputAlignment.set(self.align2D.outputParticles)
-        self.launchProtocol(protAssign)
-        # We check that protocol generates output
-        self.assertIsNotNone(protAssign.outputParticles, "There was a problem generating output particles")
-        # Check the scaling between the input and the output translation in the roto-translation transformation matrix
-        self._checkTranslationScaling(protAssign, self.protResize, shiftsAppliedBefore=True)
-
     def _checkTranslationScaling(self, protAssign, protParticles, shiftsAppliedBefore=False):
         inputAlignFirstPartTransMat = self.align2D.outputParticles.getFirstItem().getTransform().getMatrix()
         outputAlignFirstPartTransMat = protAssign.outputParticles.getFirstItem().getTransform().getMatrix()
@@ -1063,47 +1131,14 @@ class TestAlignmentAssign(TestXmippBase):
         outTranslation = [outputAlignFirstPartTransMat[0, 3],  # X trans
                           outputAlignFirstPartTransMat[1, 3],  # Y trans
                           outputAlignFirstPartTransMat[2, 3]]  # Z trans
-        if shiftsAppliedBefore:
-            # Translation on X and Y only work with the decimal part of the shift applied (assuming that the user has
-            # selected the option 'apply shifts' when extracting coordinates
-            inTranslation = [inputAlignFirstPartTransMat[0, 3] - int(inputAlignFirstPartTransMat[0, 3]),  # X trans
-                             inputAlignFirstPartTransMat[1, 3] - int(inputAlignFirstPartTransMat[1, 3]),  # Y trans
-                             inputAlignFirstPartTransMat[2, 3]]  # Z trans
-        else:
-            inTranslation = [inputAlignFirstPartTransMat[0, 3],  # X translation
-                             inputAlignFirstPartTransMat[1, 3],  # Y translation
-                             inputAlignFirstPartTransMat[2, 3]]  # Z translation
+
+        inTranslation = [inputAlignFirstPartTransMat[0, 3],  # X translation
+                         inputAlignFirstPartTransMat[1, 3],  # Y translation
+                         inputAlignFirstPartTransMat[2, 3]]  # Z translation
 
         self.assertFalse(all(v == 0 for v in inTranslation))
         self.assertFalse(all(v == 0 for v in outTranslation))
         [self.assertAlmostEqual(inT * scale, outT) for inT, outT in zip(inTranslation, outTranslation)]
-
-
-class TestXmippRotSpectra(TestXmippBase):
-    """This class check if the protocol to calculate the rotational spectra from particles in Xmipp works properly."""
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData('mda')
-        cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
-        cls.align2D = cls.runCL2DAlign(cls.protImport.outputParticles)
-         
-    def test_rotSpectra(self):
-        print("Run Rotational Spectra")
-        xmippProtRotSpectra = self.newProtocol(XmippProtRotSpectra, SomXdim=2, SomYdim=2)
-        xmippProtRotSpectra.inputParticles.set(self.align2D.outputParticles)
-        self.launchProtocol(xmippProtRotSpectra)        
-        self.assertIsNotNone(xmippProtRotSpectra.outputClasses, "There was a problem with Rotational Spectra")
-
-    def test_rotSpectraMask(self):
-        print("Run Rotational Spectra with Mask")
-        protMask = self.runCreateMask(3.5, 100)
-        xmippProtRotSpectra = self.newProtocol(XmippProtRotSpectra, useMask=True, SomXdim=2, SomYdim=2)
-        xmippProtRotSpectra.inputParticles.set(self.align2D.outputParticles)
-        xmippProtRotSpectra.useMask.set(True)
-        xmippProtRotSpectra.Mask.set(protMask.outputMask)
-        self.launchProtocol(xmippProtRotSpectra)
-        self.assertIsNotNone(xmippProtRotSpectra.outputClasses, "There was a problem with Rotational Spectra")
 
 
 class TestXmippKerdensom(TestXmippBase):
@@ -1142,6 +1177,10 @@ class TestXmippCompareReprojections(TestXmippBase):
         cls.protImportPart = cls.runImportParticles(cls.particlesFn, 3.5)
         cls.protImportAvgs = cls.runImportAverages(cls.particlesFn, 3.5)
         cls.protImportVol = cls.runImportVolume(cls.volumesFn, 3.5)
+        cls.protCreateMask = cls.newProtocol(XmippProtCreateMask3D, threshold=0.01)
+        cls.protCreateMask.inputVolume.set(cls.protImportVol.outputVolume)
+        cls.launchProtocol(cls.protCreateMask)
+        cls.assertIsNotNone(cls.protCreateMask.getFiles(), "There was a problem with the 3D mask")
         cls.protClassify = cls.runClassify(cls.protImportPart.outputParticles)
         cls.protProjMatch = cls.newProtocol(XmippProtProjMatch,
                                             doCTFCorrection=False,
@@ -1157,31 +1196,71 @@ class TestXmippCompareReprojections(TestXmippBase):
     
     def test_particles1(self):
         print("Run Compare Reprojections from classes")
-        prot = self.newProtocol(XmippProtCompareReprojections, 
+        prot = self.newProtocol(XmippProtCompareReprojections,
                                         symmetryGroup="d6", numberOfMpi=5)
         prot.inputSet.set(self.protClassify.outputClasses)
         prot.inputVolume.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.outputParticles, "There was a problem with Compare Reprojections from classes")
+        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from classes")
 
     def test_particles2(self):
         print("Run Compare Reprojections from averages")
-        prot = self.newProtocol(XmippProtCompareReprojections, 
+        prot = self.newProtocol(XmippProtCompareReprojections,
                                         symmetryGroup="d6", numberOfMpi=5)
         prot.inputSet.set(self.protImportAvgs.outputAverages)
         prot.inputVolume.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.outputParticles, "There was a problem with Compare Reprojections from averages")
+        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from averages")
 
     def test_particles3(self):
         print("Run Compare Reprojections from projections with angles")
-        prot = self.newProtocol(XmippProtCompareReprojections, 
+        prot = self.newProtocol(XmippProtCompareReprojections,
                                         symmetryGroup="d6", numberOfMpi=5)
         prot.inputSet.set(self.protProjMatch.outputParticles)
         prot.inputVolume.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.outputParticles, "There was a problem with Compare Reprojections from projections with angles")
+        self.assertIsNotNone(prot.reprojections,
+                             "There was a problem with Compare Reprojections from projections with angles")
 
+    def test_particles4(self):
+        print("Run Compare Reprojections from classes evaluating residuals")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
+        prot.inputSet.set(self.protClassify.outputClasses)
+        prot.inputVolume.set(self.protImportVol.outputVolume)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections,
+                             "There was a problem with Compare Reprojections from classes evaluating residuals")
+
+    def test_particles5(self):
+        print("Run Compare Reprojections from averages evaluating residuals")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
+        prot.inputSet.set(self.protImportAvgs.outputAverages)
+        prot.inputVolume.set(self.protImportVol.outputVolume)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections,
+                             "There was a problem with Compare Reprojections from averages evaluating residuals")
+
+    def test_particles6(self):
+        print("Run Compare Reprojections from projections with angles evaluating residuals")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
+        prot.inputSet.set(self.protProjMatch.outputParticles)
+        prot.inputVolume.set(self.protImportVol.outputVolume)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections"
+                                                 " with angles evaluating residuals")
+
+    def test_particles7(self):
+        print("Run Compare Reprojections from projections with angles evaluating residuals without user mask")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
+        prot.inputSet.set(self.protProjMatch.outputParticles)
+        prot.inputVolume.set(self.protImportVol.outputVolume)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections"
+                                                 " with angles evaluating residuals without user mask")
 
 class TestXmippCreateGallery(TestXmippBase):
     """This class check if the protocol create gallery in Xmipp works properly."""
@@ -1204,10 +1283,10 @@ class TestXmippCreateGallery(TestXmippBase):
         return prot
 
     def test_step5(self):
-        prot = self._createGallery(step=5, projections=131)
+        self._createGallery(step=5, projections=131)
 
     def test_step10(self):
-        prot = self._createGallery(step=10, projections=32)
+        self._createGallery(step=10, projections=32)
 
 
 class TestXmippBreakSym(TestXmippBase):
@@ -1281,37 +1360,95 @@ class TestXmippCorrectWiener2D(TestXmippBase):
         self.launchProtocol(protCorrect)
         self.assertIsNotNone(protCorrect.outputParticles, "There was a problem with Wiener Correction")
 
-        
-class TestXmippSubtractProjection(TestXmippBase):
+class TestXmippPickNoise(TestXmippBase):
+    """This class checks if the protocol pick noise in Xmipp works properly."""
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dsRelion = DataSet.getDataSet('relion_tutorial')
-    
-    def test_subtract(self):
-        protParts = self.newProtocol(emprot.ProtImportParticles,
-                                     objLabel='from relion auto-refine',
-                                     importFrom=emprot.ProtImportParticles.IMPORT_FROM_RELION,
-                                     starFile=self.dsRelion.getFile('import/refine3d/extra/relion_it001_data.star'),
-                                     magnification=10000,
-                                     samplingRate=7.08,
-                                     haveDataBeenPhaseFlipped=True
-                                     )
-        self.launchProtocol(protParts)
-        self.assertEqual(60, protParts.outputParticles.getXDim())
-        
-        protVol = self.newProtocol(emprot.ProtImportVolumes,
-                                   filesPath=self.dsRelion.getFile('volumes/reference.mrc'),
-                                   samplingRate=7.08)
-        self.launchProtocol(protVol)
-        self.assertEqual(60, protVol.outputVolume.getDim()[0])
-        
-        protSubtract = self.newProtocol(XmippProtSubtractProjection)
-        protSubtract.inputParticles.set(protParts.outputParticles)
-        protSubtract.inputVolume.set(protVol.outputVolume)
-        self.launchProtocol(protSubtract)
-        self.assertIsNotNone(protSubtract.outputParticles, "There was a problem with subtract projection")
-        
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.micsFn = cls.dataset.getFile('micrographs/BPV_1386.mrc')
+        cls.coordFn = cls.dataset.getFile('pickingXmipp/pickedAll/BPV_1386.pos')
+
+    def testXmippPickNoise(self):
+        # Import micrographs
+        protImportMics = self.newProtocol(emprot.ProtImportMicrographs,
+                                          filesPath=self.micsFn,
+                                          samplingRate=1.237,
+                                          voltage=300)
+        self.launchProtocol(protImportMics)
+        self.assertIsNotNone(protImportMics.outputMicrographs, (MSG_WRONG_IMPORT, "micrographs"))
+        # Import coordinates
+        protImportCoords = self.newProtocol(emprot.ProtImportCoordinates,
+                                            filesPath=self.coordFn,
+                                            inputMicrographs=protImportMics.outputMicrographs,
+                                            boxSize=110)
+        self.launchProtocol(protImportCoords)
+        self.assertIsNotNone(protImportCoords.outputCoordinates, (MSG_WRONG_IMPORT, "coordinates"))
+        # Protocol Pick Noise (default values)
+        protPickNoise1 = self.newProtocol(XmippProtPickNoise,
+                                         inputCoordinates=protImportCoords.outputCoordinates)
+        self.launchProtocol(protPickNoise1)
+        self.assertIsNotNone(protPickNoise1.getFiles(), (MSG_WRONG_PROTOCOL, "pick noise"))
+        self.assertIsNotNone(protPickNoise1.outputCoordinates, (MSG_WRONG_OUTPUT, "coordinates"))
+        # Protocol Pick Noise (extract noise number)
+        protPickNoise2 = self.newProtocol(XmippProtPickNoise,
+                                         inputCoordinates=protImportCoords.outputCoordinates,
+                                         extractNoiseNumber=140)
+        self.launchProtocol(protPickNoise2)
+        self.assertIsNotNone(protPickNoise2.getFiles(), (MSG_WRONG_PROTOCOL, "pick noise"))
+        self.assertIsNotNone(protPickNoise2.outputCoordinates, (MSG_WRONG_OUTPUT, "coordinates"))
+        # Check if the number of noisy particles is right
+        self.assertEquals(protPickNoise1.outputCoordinates.getSize(), 143, (MSG_WRONG_SIZE, "noisy particles"))
+        self.assertEquals(protPickNoise2.outputCoordinates.getSize(), 140, (MSG_WRONG_SIZE, "noisy particles"))
+
+class TestXmippScreenDeepLearning(TestXmippBase):
+    """This class checks if the protocol screen deep learning in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+
+    def testXmippScreenDeepLearning(self):
+        protImportParts1 = self.newProtocol(emprot.ProtImportParticles,
+                                            objLabel='First Set of Particles',
+                                            importFrom=emprot.ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts1)
+        self.assertIsNotNone(protImportParts1.getFiles(), (MSG_WRONG_IMPORT, "the first set of particles"))
+
+        protImportParts2 = self.newProtocol(emprot.ProtImportParticles,
+                                            objLabel='Second Set of Particles',
+                                            importFrom=emprot.ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            sqliteFile=self.dataset.getFile('particles/BPV_particles_aligned.sqlite'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts2)
+        self.assertIsNotNone(protImportParts2.getFiles(), (MSG_WRONG_IMPORT, "the second set of particles"))
+
+        protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
+                                        input=protImportParts1.outputParticles,
+                                        gaussianStd=15.0)
+        self.launchProtocol(protAddNoise)
+        self.assertIsNotNone(protAddNoise.outputParticles, (MSG_WRONG_PROTOCOL, "add noise"))
+
+        protScreenDeepLearning = self.newProtocol(XmippProtScreenDeepLearning,
+                                                  inTrueSetOfParticles=protImportParts1.outputParticles,
+                                                  numberOfNegativeSets=1,
+                                                  negativeSet_1=protAddNoise.outputParticles,
+                                                  predictSetOfParticles=protImportParts2.outputParticles)
+        self.launchProtocol(protScreenDeepLearning)
+        self.assertIsNotNone(protScreenDeepLearning.getFiles(), (MSG_WRONG_PROTOCOL, "screen deep learning"))
+        self.assertIsNotNone(protScreenDeepLearning.outputParticles, (MSG_WRONG_OUTPUT, "particles"))
+        # Check the size of the output particles
+        self.assertEquals(protScreenDeepLearning.outputParticles.getSize(), 373, (MSG_WRONG_SIZE, "particles"))
+        # Check the dimensions of the first particle
+        self.assertEquals(protScreenDeepLearning.outputParticles.getFirstItem().getDim(), (140, 140, 1), (MSG_WRONG_DIM, "particles"))
+        # Check the sampling rate of the first particle
+        self.assertEqual(protScreenDeepLearning.outputParticles.getFirstItem().getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "particles"))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

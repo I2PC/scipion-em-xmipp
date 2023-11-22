@@ -35,6 +35,7 @@ from pwem.objects import Volume, SetOfParticles, SetOfClasses2D
 from pwem import emlib
 from xmipp3.constants import *
 from xmipp3.convert import  writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 from .protocol_process import XmippProcessParticles,\
     XmippProcessVolumes
 
@@ -174,7 +175,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         form.addParam('doPhaseFlip', BooleanParam, default=False,
                       label='Phase flip images')
         XmippPreprocessHelper._defineProcessParams(form)
-    
+
     #--------------------------- INSERT steps functions ------------------------
     def _insertProcessStep(self):
         self.isFirstStep = True
@@ -417,7 +418,7 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
         form.addParam('doSymmetrize', BooleanParam, default=False,
                       label="Symmetrize", 
                       help='Symmetrize the input model.')
-        form.addParam('symmetryGroup', TextParam, default='i1',
+        form.addParam('symmetryGroup', StringParam, default='i1',
                       label="Symmetry group", condition='doSymmetrize',
                       help='See [[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]] '
                       'for a description of the symmetry groups format.'
@@ -598,7 +599,7 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                 fnAngles = 'images_iter001_00.xmd'
                 args = '-i %s -r %s -o %s --odir %s --keepBestN 1 --dev %s ' % (
                 imgsFn, fnGalleryMd, fnAngles, self._getTmpPath(), GpuListCuda)
-                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
     def adjustStep(self, isFirstStep, changeInserts):
         if isFirstStep:
@@ -854,7 +855,10 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                 validateMsgs.append('c1 is not a valid symmetry group.'
                                     'If you do not want to symmetrize set'
                                     'the field Symmetrize to not.')
-                
+
+        if self.useGpu and not isXmippCudaPresent(CUDA_ALIGN_SIGNIFICANT):
+            validateMsgs.append("You asked to use GPU, but I cannot find Xmipp cuda programs in the path")
+
         return validateMsgs
     
     def _summary(self):

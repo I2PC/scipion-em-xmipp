@@ -33,6 +33,7 @@ from pyworkflow.protocol.params import (EnumParam, NumericRangeParam,
                                         LabelParam, IntParam, FloatParam)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+import pyworkflow.utils as pwutils
 from pwem.viewers import (ObjectView, showj, EmProtocolViewer, ChimeraAngDist)
 
 from pwem.emlib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
@@ -122,7 +123,7 @@ Examples:
         if self.viewIter.get() == ITER_LAST:
             self._iterations = [self.lastIter]
         else:
-            self._iterations = self._getListFromRangeString(self.iterSelection.get())
+            self._iterations = pwutils.getListFromRangeString(self.iterSelection.get())
             
         from matplotlib.ticker import FuncFormatter
         self._plotFormatter = FuncFormatter(self._formatFreq) 
@@ -246,10 +247,10 @@ Examples:
             self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles),
                                              itemDataIterator=self._iterAngles(fnAngles))
             vol = os.path.join(fnDir, "volumeAvg.mrc")
-            tmpFilesPath = self.protocol._getTmpPath()
+            extraFilesPath = self.protocol._getExtraPath()
             volOrigin = self.protocol.outputVolume.getShiftsFromOrigin()
             radius = self.spheresScale.get()
-            view = ChimeraAngDist(vol, tmpFilesPath,
+            view = ChimeraAngDist(vol, extraFilesPath,
                                   angularDistFile=fnAngles,
                                   spheresDistance=radius,
                                   voxelSize=self.protocol.outputVolume.getSamplingRate(),

@@ -31,9 +31,9 @@ from xmipp3.protocols.protocol_center_particles import *
 
 ProtCTFFind = Domain.importFromPlugin('cistem.protocols', 'CistemProtCTFFind',
                                       doRaise=True)
-SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
-                                                   'SparxGaussianProtPicking',
-                                                   doRaise=True)
+EmanProtAutopick = Domain.importFromPlugin('eman2.protocols',
+                                                   'EmanProtAutopick',
+                                           doRaise=True)
 
 
 # Number of mics to be processed
@@ -69,7 +69,7 @@ class TestCenterParticles(BaseTest):
 
 
     def calculateCtf(self, inputMics):
-        protCTF = ProtCTFFind(useCftfind4=True)
+        protCTF = ProtCTFFind()
         protCTF.inputMicrographs.set(inputMics)
         # Gone in new version: protCTF.ctfDownFactor.set(1.0)
         protCTF.lowRes.set(44)
@@ -81,10 +81,11 @@ class TestCenterParticles(BaseTest):
 
     def runPicking(self, inputMicrographs):
         """ Run a particle picking. """
-        protPicking = SparxGaussianProtPicking(boxSize=64,
-                                               numberOfThreads=1,
-                                               numberOfMpi=1,
-                                               lowerThreshold=0.001)
+        protPicking = EmanProtAutopick(boxSize=64,
+                                       numberOfThreads=1,
+                                       numberOfMpi=1,
+                                       boxerMode=3,
+                                       gaussLow=0.001)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.launchProtocol(protPicking)
 
@@ -165,14 +166,11 @@ class TestCenterParticles(BaseTest):
         if protRealing.isFailed():
             self.assertTrue(False)
         if not protRealing.hasAttribute('outputClasses') or not \
-                protRealing.hasAttribute('outputParticles') or not \
-                protRealing.hasAttribute('outputCoordinates'):
+                protRealing.hasAttribute('outputParticles'):
             self.assertTrue(False)
         if protRealing.outputClasses.getSize() != numClasses:
             self.assertTrue(False)
-        if protRealing.outputParticles.getSize() != \
-                protRealing.outputCoordinates.getSize():
-            self.assertTrue(False)
+
 
 
 

@@ -188,7 +188,7 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
     def testDownsampling(self):
         # test downsampling a set of micrographs
         downFactorValue = 2
-        protDown = XmippProtPreprocessMicrographs(doDownsample=True, downFactor=downFactorValue)
+        protDown = XmippProtPreprocessMicrographs(doDownsample=True, downFactor=downFactorValue, objLabel='Downsampling')
         protDown.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protDown, wait=True)
         # check that output micrographs have double sampling rate than input micrographs
@@ -198,21 +198,22 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
     def testPreprocessing(self):
         # test Crop, Take logarithm and Remove bad pixels on a set of micrographs
         cropPixels = 100
-        protPreprocess = XmippProtPreprocessMicrographs(doCrop=True, doLog=True, doRemoveBadPix=True, cropPixels=cropPixels)
+        protPreprocess = XmippProtPreprocessMicrographs(doCrop=True, doLog=True, doRemoveBadPix=True,
+                                                        cropPixels=cropPixels, objLabel='Crop, Log and bad pixels')
         protPreprocess.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protPreprocess, wait=True)
         self.assertIsNotNone(protPreprocess.outputMicrographs, "SetOfMicrographs has not been preprocessed.")
 
     def testInvertNormalize(self):
         # test invert and normalize a set of micrographs
-        protInvNorm = XmippProtPreprocessMicrographs(doInvert=True, doNormalize=True)
+        protInvNorm = XmippProtPreprocessMicrographs(doInvert=True, doNormalize=True, objLabel='Invert and normalize')
         protInvNorm.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protInvNorm, wait=True)
         self.assertIsNotNone(protInvNorm.outputMicrographs, "SetOfMicrographs has not been preprocessed.")
 
     def testSmooth(self):
         # test smooth a set of micrographs
-        protSmooth = XmippProtPreprocessMicrographs(doSmooth=True, sigmaConvolution=3)
+        protSmooth = XmippProtPreprocessMicrographs(doSmooth=True, sigmaConvolution=3, objLabel='Smooth')
         protSmooth.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protSmooth, wait=True)
         self.assertIsNotNone(protSmooth.outputMicrographs, "SetOfMicrographs has not been preprocessed.")
@@ -242,13 +243,13 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
 
-        while not protStream.hasAttribute('outputMicrographs'):
-            time.sleep(3)
-            protStream = self._updateProtocol(protStream)
+        self._waitOutput(protStream,'outputMicrographs')
 
         protDenoise = self.newProtocol(XmippProtPreprocessMicrographs,
-                                       doDenoise=True, maxIteration=50)
-        protDenoise.inputMicrographs.set(protStream.outputMicrographs)
+                                       doDenoise=True, maxIteration=50,
+                                       objLabel= 'denoise in streaming')
+        protDenoise.inputMicrographs.set(protStream)
+        protDenoise.inputMicrographs.setExtended('outputMicrographs')
         self.proj.launchProtocol(protDenoise)
 
 
@@ -288,30 +289,6 @@ class TestXmippCTFEstimation(TestXmippBase):
         self.assertAlmostEquals(ctfModel.getDefocusAngle(), 60.0, delta=20)
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
-
-class TestXmippBoxsize(TestXmippBase):
-    """This class check if the protocol to determine the BoxSize in Xmipp works properly."""
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData()
-        fileName = DataSet.getDataSet('relion_tutorial').getFile('allMics')
-        cls.protImport = cls.runImportMicrograph(fileName,
-                                                 samplingRate=3.54,
-                                                 voltage=300,
-                                                 sphericalAberration=2,
-                                                 scannedPixelSize=None,
-                                                 magnification=56000)
-    def test1(self):
-        #TODO: CHECK IF THE PREDICTIONS ON MIC MATCH THE PREDICTIONS ON DOWNSAMPLED MICS
-        # Estimate CTF on the downsampled micrographs
-        print("Estimating boxsize...")
-        protCTF = XmippProtParticleBoxsize()
-        protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
-        self.proj.launchProtocol(protCTF, wait=True)
-        self.assertIsNotNone(protCTF.boxsize, "Boxsize has not been produced.")
-        self.assertAlmostEquals(protCTF.boxsize.get(), 50, delta=20,
-                                msg='Wrong estimated boxsize.')
 
 
 class TestXmippAutomaticPicking(TestXmippBase):
@@ -416,11 +393,9 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
       from xmipp3 import Plugin
       import subprocess
       xmippBinPath= Plugin.getHome("bin")
-      scipionPython= subprocess.check_output(["which", "python"]).strip()
-      scipionPath= (os.path.sep).join( scipionPython.split(os.path.sep)[:-3] )
-      cmd= [ os.path.join(scipionPath,"scipion"), "python", os.path.join(xmippBinPath,"xmipp_deep_micrograph_cleaner"), "-h" ]
+      cmd= [os.path.join("python", os.path.join(xmippBinPath,"xmipp_deep_micrograph_cleaner")), "-h"]
       print(" ".join(cmd))
-      subprocess.check_call( cmd, env=Plugin.getEnviron() )
+      subprocess.check_call(cmd, env=Plugin.getEnviron())
 
     def test_noThreshold(self):
         print("Run cleanMics no thr")
@@ -648,11 +623,11 @@ class TestXmippExtractParticles(TestXmippBase):
 
     def testExtractOther(self):
         print("Run extract particles from original micrographs, with downsampling")
-        downFactor = 3.0
         protExtract = self.newProtocol(XmippProtExtractParticles,
-                                       boxSize=183, downsampleType=OTHER,
-                                       doDownsample=True,
-                                       downFactor=downFactor,
+                                       boxSize=166, downsampleType=OTHER,
+                                       doResize=True,
+                                       resizeOption=1,
+                                       resizeDim=80,
                                        doInvert=False,
                                        doFlip=False)
         # Get all the micrographs ids to validate that all particles
@@ -668,7 +643,7 @@ class TestXmippExtractParticles(TestXmippBase):
         inputCoords = protExtract.inputCoordinates.get()
         outputParts = protExtract.outputParticles
         samplingCoords = self.protPP.outputCoordinates.getMicrographs().getSamplingRate()
-        samplingFinal = self.protImport.outputMicrographs.getSamplingRate() * downFactor
+        samplingFinal = self.protImport.outputMicrographs.getSamplingRate() * protExtract._getDownFactor()
         samplingMics = protExtract.inputMicrographs.get().getSamplingRate()
         factor = samplingFinal / samplingCoords
         self.assertIsNotNone(outputParts,
@@ -690,20 +665,20 @@ class TestXmippExtractParticles(TestXmippBase):
 
         outputSampling = outputParts.getSamplingRate()
         self.assertAlmostEqual(outputSampling/samplingMics,
-                               downFactor, 1,
+                               protExtract._getDownFactor(), 1,
                                "There was a problem generating the output.")
         for particle in outputParts:
             self.assertTrue(particle.getCoordinate().getMicId() in micsId)
             self.assertAlmostEqual(outputSampling, particle.getSamplingRate())
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.229023, 0.512485)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.099442, 0.396918)
 
     def testExtractNoise(self):
         # here we will try a different patchSize than the default
         print("Run extract particles from original micrographs, with downsampling")
-        downFactor = 5.0
+        downFactor = 3.0
         protExtract = self.newProtocol(XmippProtExtractParticles,
-                                       boxSize=183, downsampleType=OTHER,
-                                       doDownsample=True,
+                                       boxSize=-1, downsampleType=OTHER,
+                                       doResize=True,
                                        downFactor=downFactor,
                                        doInvert=False,
                                        doFlip=False,
@@ -717,8 +692,8 @@ class TestXmippExtractParticles(TestXmippBase):
 
         outputParts = protExtract.outputParticles
         self.assertIsNotNone(outputParts, "There was a problem generating the output.")
-        self.assertAlmostEquals(outputParts.getSize(), 395, delta=1)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.1594, 0.5702)
+        self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.161262, 0.5702)
 
     def testExtractCTF(self):
         print("Run extract particles with CTF")
@@ -878,14 +853,21 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         cls.protPP = cls.runFakedPicking(cls.protDown.outputMicrographs,
                                          cls.allCrdsDir)
 
-    def _updateProtocol(self, prot):
-        prot2 = getProtocolFromDb(prot.getProject().path,
-                                  prot.getDbPath(),
-                                  prot.getObjId())
+    def _updateProtocol(self, protocol):
+        jobId = protocol.getJobId()
+        label = protocol.getObjLabel()
+        comment = protocol.getObjComment()
+
+        prot2 = getProtocolFromDb(protocol.getProject().path,
+                                  protocol.getDbPath(),
+                                  protocol.getObjId())
+        protocol.copy(prot2, copyId=False, excludeInputs=True)
+        protocol.setJobId(jobId)
+        protocol.setObjLabel(label)
+        protocol.setObjComment(comment)
         # Close DB connections
         prot2.getProject().closeMapper()
         prot2.closeMappers()
-        return prot2
 
     def testStreamingAndNonStreaming(self):
         protExtract = self.newProtocol(XmippProtExtractParticles,
@@ -909,22 +891,21 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
                         "Output sets size does not much the input set size.")
 
         kwargs = {'nDim': 20,  # 20 objects/particles
-                  'creationInterval': 1,  # wait 1 sec. after creation
+                  'creationInterval': 10,  # wait 1 sec. after creation
+                  'groups': 10,
                   'setof': 3,  # create SetOfParticles
                   'inputParticles': protExtract.outputParticles
                   }
 
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
-
-        count = 0
-        while not protStream.hasAttribute('outputParticles') and count < 600:
-            time.sleep(1)
-            protStream = self._updateProtocol(protStream)
+        self._waitOutput(protStream, "outputParticles")
 
         protElimination2 = self.newProtocol(XmippProtEliminateEmptyParticles)
-        protElimination2.inputParticles.set(protStream.outputParticles)
+        protElimination2.inputParticles.set(protStream)
+        protElimination2.inputParticles.setExtended("outputParticles")
         self.launchProtocol(protElimination2)
+
 
         partSet = SetOfParticles(
             filename=protStream._getPath("particles.sqlite"))
@@ -932,7 +913,7 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
             filename=protElimination2._getPath('outputParticles.sqlite'))
         elimSet = SetOfParticles(
             filename=protElimination2._getPath('eliminatedParticles.sqlite'))
-        self.assertTrue(outSet.getSize() + elimSet.getSize() ==
+        self.assertEquals(outSet.getSize() + elimSet.getSize(),
                         partSet.getSize(),
                         "Output sets size does not much the input set size.")
 
@@ -985,7 +966,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.launchProtocol(protCons1)
 
         self.assertTrue(protCons1.isFinished(), "Consensus failed")
-        self.assertSetSize(protCons1.consensusCoordinates,383,
+        self.assertSetSize(protCons1.consensusCoordinates,382,
                         "Output coordinates size for AND consensus is wrong.")
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
@@ -1000,19 +981,6 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.assertSetSize(protConsOr.consensusCoordinates, 432,
                         "Output coordinates size for OR consensus is wrong.")
 
-
-        # STREAMING tests
-        def waitForOutput(prot, output, timeout=600):
-            """ Waits until the output is ready
-                or till timeout (in seconds) is reached (10min by default).
-            """
-            count = 0
-            while not prot.hasAttribute(output) and count < timeout:
-                prot = self._updateProtocol(prot)
-                time.sleep(1)
-                count += 1
-            return prot
-
         kwargs = {'nDim': 3,  # 3 objects
                   'creationInterval': 20,  # wait 1 sec. after creation
                   'setof': 1,  # create SetOfMicrographs
@@ -1021,15 +989,14 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
-
-        protStream = waitForOutput(protStream, 'outputMicrographs')
+        self._waitOutput(protStream, 'outputMicrographs')
 
         protAutoPP = XmippParticlePickingAutomatic()
         protAutoPP.xmippParticlePicking.set(self.protFaPi)
         protAutoPP.micsToPick.set(1)
         protAutoPP.inputMicrographs.set(protStream.outputMicrographs)
         self.proj.launchProtocol(protAutoPP, wait=False)
-        protAutoPP = waitForOutput(protAutoPP, 'outputCoordinates')
+        self._waitOutput(protAutoPP, 'outputCoordinates')
 
         # Consensus Picking launching
         protCons2 = self.newProtocol(XmippProtConsensusPicking,
@@ -1048,7 +1015,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         time.sleep(3)  # protDupl2 should be as long as protCons2, but just in case
         protCons2 = self._updateProtocol(protCons2)
-        self.assertSetSize(protCons2.consensusCoordinates, 383,
+        self.assertSetSize(protCons2.consensusCoordinates, 382,
                         "Output coordinates size does not is wrong.")
         protDupl2 = self._updateProtocol(protDupl2)
         self.assertSetSize(protDupl2.outputCoordinates, 245,
@@ -1201,3 +1168,39 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     #     self.assertAlmostEqual(outputParts.getSamplingRate() / samplingMics,
     #                            downFactor, 1)
     #     self._checkSamplingConsistency(outputParts)
+
+
+class TestXmippProtTiltAnalysis(TestXmippBase):
+    """This class check if the preprocessing micrographs protocol in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData()
+        fileName = DataSet.getDataSet('relion_tutorial').getFile('allMics')
+        cls.protImport = cls.runImportMicrograph(fileName,
+                                                 samplingRate=3.54,
+                                                 voltage=300,
+                                                 sphericalAberration=2,
+                                                 scannedPixelSize=None,
+                                                 magnification=56000)
+
+    def testTiltAnalysis(self):
+        protTilt = XmippProtTiltAnalysis(window_size=512, objective_resolution=8, objLabel=
+                                        'Tilt analysis window 512 obj resolution 8A')
+        protTilt.inputMicrographs.set(self.protImport.outputMicrographs)
+        self.proj.launchProtocol(protTilt, wait=True)
+        # check that output micrographs have double sampling rate than input micrographs
+        self.assertEquals(len(protTilt.outputMicrographs), 20, "Incorrect number of accepted micrographs")
+        self.assertTrue(protTilt.isFinished(), "Tilt analysis failed")
+
+
+    def testTiltAnalysis2(self):
+        protTilt2 = XmippProtTiltAnalysis(window_size=600, objective_resolution=4,
+                                          meanCorr_threshold=0.9,
+                                          objLabel='Tilt analysis window 600 obj resolution 4A and threshold 0.9')
+        protTilt2.inputMicrographs.set(self.protImport.outputMicrographs)
+        self.proj.launchProtocol(protTilt2, wait=True)
+        # check that output micrographs have double sampling rate than input micrographs
+        self.assertEquals(len(protTilt2.outputMicrographs), 17, "Incorrect number of accepted micrographs")
+        self.assertEquals(len(protTilt2.discardedMicrographs), 3, "Incorrect number of discarded micrographs")
+        self.assertTrue(protTilt2.isFinished(), "Tilt analysis failed")

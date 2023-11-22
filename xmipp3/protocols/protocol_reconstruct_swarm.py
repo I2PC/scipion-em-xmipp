@@ -27,6 +27,9 @@
 from functools import reduce
 import math
 import random
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
+
 try:
     from itertools import izip
 except ImportError:
@@ -43,14 +46,11 @@ from pyworkflow.utils.path import cleanPath, copyFile, moveFile, makePath, creat
 from pwem.protocols import ProtRefine3D
 from pwem.objects import Volume, SetOfVolumes
 from pwem.emlib.image import ImageHandler
-from pwem.emlib.metadata import getFirstRow, getSize
-from pyworkflow.utils import getFloatListFromValues
-import pwem.emlib.metadata as md
+
 
 from pwem import emlib
-from xmipp3.base import HelicalFinder
-from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
-                            setXmippAttributes, getImageLocation)
+from xmipp3.base import isXmippCudaPresent
+from xmipp3.convert import (writeSetOfParticles, getImageLocation)
 
 
 class XmippProtReconstructSwarm(ProtRefine3D):
@@ -264,7 +264,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
 
                 args = '-i %s -r %s -o %s --keepBestN 1 --dev %s ' % (
                 fnTest, fnGalleryMd, fnAngles, GpuListCuda)
-                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
             # Evaluate
             fnAngles = join(fnDir, "angles_iter001_00.xmd")
@@ -335,9 +335,13 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         TsOrig=self.inputParticles.get().getSamplingRate()
         XdimOrig=self.inputParticles.get().getDimensions()[0]
         fnAvg = self._getExtraPath("volumeAvg.vol")
+        fnAvgMrc = self._getExtraPath("volumeAvg.mrc")
         self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnAvg,XdimOrig),numberOfMpi=1)
+        self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnAvg,fnAvgMrc),numberOfMpi=1)
+        cleanPath(fnAvg)
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnAvgMrc,TsOrig),numberOfMpi=1)
         volume=Volume()
-        volume.setFileName(fnAvg)
+        volume.setFileName(fnAvgMrc)
         volume.setSamplingRate(TsOrig)
         self._defineOutputs(outputVolume=volume)
         self._defineSourceRelation(self.inputParticles.get(),volume)
@@ -348,8 +352,13 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         volSet.setSamplingRate(Ts)
         for i in range(self.inputVolumes.get().getSize()):
             fnVol = self._getExtraPath("volume%03d_best.vol"%i)
+            fnMrc = self._getExtraPath("volume%03d_best.mrc"%i)
+            self.runJob("xmipp_image_convert", "-i %s -o %s" % (fnVol, fnMrc), numberOfMpi=1)
+            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (fnMrc, TsOrig), numberOfMpi=1)
+            cleanPath(fnVol)
+
             vol=Volume()
-            vol.setFileName(fnVol)
+            vol.setFileName(fnMrc)
             vol.setSamplingRate(Ts)
             volSet.append(vol)
         self._defineOutputs(outputVolumes=volSet)
@@ -415,7 +424,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
 
                 args = '-i %s -r %s -o %s --keepBestN 1 --dev %s ' % (
                 fnTrain, fnGalleryMd, fnAngles, GpuListCuda)
-                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
             # Reconstruct
             if exists(fnAngles):
@@ -443,7 +452,6 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                             GpuListAux = GpuListAux+str(elem)+','
                             count+=1
                         os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-
                     args += " --thr %s" % self.numberOfThreads.get()
                     if self.numberOfMpi.get()==1:
                         args += " --device %s" % GpuListCuda
@@ -563,3 +571,9 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 strline+="We imposed %s symmetry. "%self.symmetryGroup
             strline += "We performed %d iterations of "%self.numberOfIterations.get()
         return [strline]
+
+    def _validate(self):
+        errors = []
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
+        return errors

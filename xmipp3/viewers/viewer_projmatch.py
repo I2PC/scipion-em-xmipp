@@ -32,17 +32,19 @@ visualization program.
 
 from pyworkflow.protocol.executor import StepExecutor
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pwem.viewers import (DataView, EmPlotter, showj, ChimeraClientView,
+from pwem.viewers import (DataView, EmPlotter, showj,
                           ChimeraView, ObjectView, ChimeraAngDist)
-from pyworkflow.utils import createUniqueFileName, cleanPattern
+import pwem.objects as emobj
+from pyworkflow.utils import createUniqueFileName, cleanPattern, cleanPath
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
                                         StringParam, EnumParam,
                                         NumericRangeParam, BooleanParam)
+import pyworkflow.utils as pwutils
+
 from xmipp3.convert import *
 from xmipp3.viewers.plotter import XmippPlotter
-from xmipp3.protocols import XmippProtProjMatch
-from pyworkflow.utils.path import cleanPath
+from ..protocols.protocol_projmatch import XmippProtProjMatch
 
 
 ITER_LAST = 0
@@ -221,7 +223,7 @@ Examples:
         if self.showRef3DNo == REF_ALL:
             self._refsList = range(1, self.protocol.numberOfReferences+1)
         else:
-            self._refsList = self._getListFromRangeString(self.ref3DSelection.get())
+            self._refsList = pwutils.getListFromRangeString(self.ref3DSelection.get())
         # ToDo: enhance this
         self.firstIter = 1
         #self.lastIter = self.protocol.numberOfIterations.get()
@@ -230,7 +232,7 @@ Examples:
         if self.viewIter.get() == ITER_LAST:
             self._iterations = [self.lastIter]
         else:
-            self._iterations = self._getListFromRangeString(self.iterSelection.get())
+            self._iterations = pwutils.getListFromRangeString(self.iterSelection.get())
             
         from matplotlib.ticker import FuncFormatter
         self._plotFormatter = FuncFormatter(self._formatFreq) 
@@ -274,8 +276,7 @@ Examples:
     
     def _createVolumesMd(self, volumes):
         """ Write a metadata with all volumes selected for visualization. """
-        mdPath = self.protocol._getTmpPath('viewer_volumes.xmd')
-        cleanPath(mdPath)
+        mdPath = self.protocol._getExtraPath('viewer_volumes.xmd')
         md = emlib.MetaData()
         
         for volFn in volumes:
@@ -286,6 +287,23 @@ Examples:
             md.write("%s@%s"% (blockName, mdPath), emlib.MD_APPEND)
         return [self.createDataView(mdPath)]
 
+    def createVolumesSqlite(self, files, path, samplingRate,
+                            updateItemCallback=None):
+        cleanPath(path)
+        volSet = emobj.SetOfVolumes(filename=path)
+        volSet.setSamplingRate(samplingRate)
+
+        for volFn in files:
+            vol = emobj.Volume()
+            vol.setFileName(volFn)
+            if updateItemCallback:
+                updateItemCallback(vol)
+            volSet.append(vol)
+        volSet.write()
+        volSet.close()
+
+        return volSet
+
     def viewVolumesSqlite(self, volumes):
         path = self.protocol._getExtraPath('viewer_volumes.sqlite')
         samplingRate = self.protocol.inputParticles.get().getSamplingRate()
@@ -295,20 +313,18 @@ Examples:
     def _showVolumesChimera(self, volumes):
         """ Create a chimera script to visualize selected volumes. """
         if len(volumes) > 1:
-            cmdFile = self.protocol._getTmpPath('chimera_volumes.cxc')
-            cleanPath(cmdFile)
+            cmdFile = self.protocol._getExtraPath('chimera_volumes.cxc')
             f = open(cmdFile, 'w+')
             f.write('windowsize 800 600\n')
             for volFn in volumes:
-                vol = os.path.relpath(volFn, self.protocol._getTmpPath())
+                vol = os.path.relpath(volFn, self.protocol._getExtraPath())
                 f.write("open %s\n" % vol)
             f.write('tile\n')
             f.close()
             view = ChimeraView(cmdFile)
         else:
             
-            #view = CommandView('xmipp_chimera_client --input "%s" --mode projector 256 &' % volumes[0])
-            view = ChimeraClientView(volumes[0], showProjection=True)
+            view = ChimeraView(volumes[0])
         
         return [view]
     
@@ -382,7 +398,7 @@ Examples:
         list = []
         mdIn  = emlib.MetaData()
         mdOut = emlib.MetaData()
-        cleanPattern(self.protocol._getTmpPath('references_library*'))
+        cleanPattern(self.protocol._getExtraPath('references_library*'))
         
         for ref3d in self._refsList:
             for it in self._iterations:
@@ -413,7 +429,7 @@ Examples:
                         if mdOut.size() == 0:
                             print("Empty metadata: ", file_nameReferences)
                         else:
-                            file_nameReferences = self.protocol._getTmpPath('references_library.xmd')
+                            file_nameReferences = self.protocol._getExtraPath('references_library.xmd')
                             sfn = createUniqueFileName(file_nameReferences)
                             file_nameReferences = 'projectionDirections@' + sfn
                             mdOut.write(file_nameReferences)
@@ -614,7 +630,7 @@ Examples:
                     if self.angleSort:
                         mDoutRef3D.sort(emlib.MDL_ANGLE_DIFF)
                         fn = emlib.FileName()
-                        baseFileName   = self.protocol._getTmpPath("angle_sort.xmd")
+                        baseFileName   = self.protocol._getExtraPath("angle_sort.xmd")
                         fn = self.protocol._getRefBlockFileName("angle_iter", it, "ref3D", ref3d, baseFileName)
                         mDoutRef3D.write(fn, emlib.MD_APPEND)
                         print("File with sorted angles saved in:", fn)
@@ -622,7 +638,7 @@ Examples:
                     if self.shiftSort:
                         mDoutRef3D.sort(emlib.MDL_SHIFT_DIFF)
                         fn = emlib.FileName()
-                        baseFileName   = self.protocol._getTmpPath("angle_sort.xmd")
+                        baseFileName   = self.protocol._getExtraPath("angle_sort.xmd")
                         fn = self.protocol._getRefBlockFileName("shift_iter", it, "ref3D", ref3d, baseFileName)
                         mDoutRef3D.write(fn, emlib.MD_APPEND)
                         print("File with sorted shifts saved in:", fn)
@@ -659,7 +675,7 @@ Examples:
             classesFn = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
             vol = self.protocol._getFileName('reconstructedFilteredFileNamesIters', iter=it, ref=ref3d)
             if exists(classesFn):
-                tmpFilesPath = self.protocol._getTmpPath()
+                tmpFilesPath = self.protocol._getExtraPath()
                 volOrigin = self.protocol.outputVolume.getShiftsFromOrigin()
                 return ChimeraAngDist(vol, tmpFilesPath,
                                       angularDistFile=classesFn,

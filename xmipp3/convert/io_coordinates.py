@@ -17,9 +17,10 @@ def readSetOfCoordsFromPosFnames(posDir, setOfInputCoords, sqliteOutName,
     """
 
     inputMics = setOfInputCoords.getMicrographs()
+    inputMicsPointer = setOfInputCoords.getMicrographs(asPointer=True)
     cleanPath(sqliteOutName)
     setOfOutputCoordinates= SetOfCoordinates(filename= sqliteOutName)
-    setOfOutputCoordinates.setMicrographs(inputMics)
+    setOfOutputCoordinates.setMicrographs(inputMicsPointer)
     setOfOutputCoordinates.setBoxSize(setOfInputCoords.getBoxSize())
     readSetOfCoordinates(posDir, micSet=inputMics,
                            coordSet=setOfOutputCoordinates,
@@ -31,17 +32,17 @@ def readSetOfCoordsFromPosFnames(posDir, setOfInputCoords, sqliteOutName,
 
 def writeCoordsListToPosFname(mic_fname, list_x_y, outputRoot):
     s = """# XMIPP_STAR_1 *
-    #
-    data_header
-    loop_
-     _pickingMicrographState
-    Auto
-    data_particles
-    loop_
-     _xcoor
-     _ycoor
-    """
-    baseName = os.path.basename(mic_fname).split(".")[0]
+#
+data_header
+loop_
+_pickingMicrographState
+Auto
+data_particles
+loop_
+_xcoor
+_ycoor
+"""
+    baseName, _ = os.path.splitext(os.path.basename(mic_fname))
     print("%d %s %s"%(len(list_x_y), mic_fname,
                       os.path.join(outputRoot, baseName+".pos")))
 

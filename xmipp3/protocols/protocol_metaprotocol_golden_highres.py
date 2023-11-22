@@ -36,6 +36,8 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, LEVEL_ADVANCED,
                                         EnumParam, NumericListParam, GPU_LIST,
                                         USE_GPU)
+from pyworkflow import BETA, UPDATED, NEW, PROD
+
 from pyworkflow.project import Manager
 import pyworkflow.object as pwobj
 from pyworkflow.protocol import getProtocolFromDb
@@ -50,6 +52,7 @@ class XmippMetaProtGoldenHighRes(EMProtocol):
     """ Metaprotocol to run golden version of highres"""
     _label = 'metaprotocol golden highres'
     _lastUpdateVersion = VERSION_2_0
+    _devStatus = BETA
 
     SPLIT_HT = 0
     SPLIT_OTSU = 1
@@ -247,7 +250,7 @@ class XmippMetaProtGoldenHighRes(EMProtocol):
             newHighRes.inputVolumes.set(previousProtVol)
             newHighRes.inputVolumes.setExtended(namePreviousVol)
 
-            project.launchProtocol(newHighRes)
+            project.scheduleProtocol(newHighRes)
 
             # Next schedule will be after this one
             self._runPrerequisites.append(newHighRes.getObjId())
