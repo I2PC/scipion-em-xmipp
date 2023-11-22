@@ -83,7 +83,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
 
         trainingGroup.addParam('numEpochs', IntParam,
                       label="Number of epochs",
-                      default=25,
+                      default=10,
                       expertLevel=LEVEL_ADVANCED,
                       help="Number of epochs for training.")
 
@@ -251,9 +251,9 @@ class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
         trainingGroup.condition = String('True')
 
         section = form.getSection(label=Message.LABEL_INPUT)
-        section.addParam('orderSymmetry', IntParam,
-                      label="Order of symmetry", default=1,
-                      help="Order of the group of the molecule.")
+        section.addParam('orderSymmetry', StringParam,
+                      label="Symmetry", default="c1",
+                      help="Symmetry of the molecule")
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
