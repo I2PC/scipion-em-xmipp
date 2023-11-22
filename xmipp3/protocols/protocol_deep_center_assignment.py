@@ -64,7 +64,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
                       help='The set of particles to predict')
 
         form.addParam('trainModels', BooleanParam, label="Train models",
-                      pointerClass='SetOfParticles', default=False,
+                      pointerClass='SetOfParticles', default=True,
                       help='Choose if you want to train a model using a centered set of particles')
         
         trainingGroup = form.addGroup('Training parameters', condition='trainModels==True')
