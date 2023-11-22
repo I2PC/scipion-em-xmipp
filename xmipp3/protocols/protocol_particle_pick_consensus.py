@@ -29,20 +29,27 @@ Consensus picking protocol
 """
 
 import os
-
+import enum
 from math import sqrt
 import numpy as np
 
 from pyworkflow.object import Set, String, Pointer
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtParticlePicking
+from pwem.protocols import ProtParticlePicking
 from pyworkflow.protocol.constants import *
-from pyworkflow.em.data import SetOfCoordinates, Coordinate
+from pwem.objects import SetOfCoordinates, Coordinate
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 
 
 PICK_MODE_LARGER = 0
 PICK_MODE_EQUAL = 1
+
+
+class ProtPickingConsensusOutput(enum.Enum):
+    """ Possible outputs for particle picking protocols
+    """
+    consensusCoordinates = SetOfCoordinates
+
 
 class XmippProtConsensusPicking(ProtParticlePicking):
     """
@@ -65,7 +72,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     """
 
     _label = 'picking consensus'
-    outputName = 'consensusCoordinates'
+    _possibleOutputs = ProtPickingConsensusOutput
+    outputName = ProtPickingConsensusOutput.consensusCoordinates.name
     FN_PREFIX = 'consensusCoords_'
 
     def __init__(self, **args):
@@ -79,7 +87,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                       label="Input coordinates", important=True,
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius', params.IntParam, default=10,
-                      label="Radius",
+                      label="Radius",  allowsPointers=True, allowsNull=True,
                       help="All coordinates within this radius (in pixels) "
                            "are presumed to correspond to the same particle")
         form.addParam('consensus', params.IntParam, default=-1,
@@ -130,7 +138,9 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         deps = []
         for micrograph in mics:
             stepId = self._insertFunctionStep("calculateConsensusStep",
-                                              micrograph, prerequisites=[])
+                                              micrograph.getObjId(),
+                                              micrograph.getFileName(),
+                                              prerequisites=[])
             deps.append(stepId)
         return deps
 
@@ -226,17 +236,15 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             outputSet.setStreamState(outputSet.STREAM_OPEN)
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
-        inMicsPointer = Pointer(self.getMapper().getParent(
-                                            self.getMainInput().getMicrographs()),
-                                            extended='outputMicrographs')
+        inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)
 
         return outputSet
 
-    def calculateConsensusStep(self, micrograph):
-        micId = micrograph.getObjId()
+    def calculateConsensusStep(self, micId, micName):
+
         print("Consensus calculation for micrograph %d: '%s'"
-              % (micId, micrograph.getMicName()))
+              % (micId, micName))
 
         # Take the sampling rates just once
         if not self.sampligRates:

@@ -25,32 +25,25 @@
 # *
 # **************************************************************************
 
-from glob import glob
 import os
-from os.path import exists, basename
 
-import pyworkflow.em.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
-                                           STATUS_FINISHED, STATUS_NEW)
+from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtExtractParticles
-from pyworkflow.em.data import Particle
+from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
-from pyworkflow.em.constants import RELATION_CTF
 
-from xmipp3 import Plugin
-from xmipp3.base import XmippProtocol, createMetaDataFromPattern
-from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
-                            xmippToLocation, setXmippAttributes, readSetOfCoordinates)
+from xmipp3.base import XmippProtocol
+from xmipp_base import createMetaDataFromPattern
+from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
-from xmipp3.utils import validateDLtoolkit
 
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Protocol to remove coordinates in carbon zones or large impurities"""
     _label = 'deep micrograph cleaner'
-    
+    _conda_env= "xmipp_MicCleaner"
+
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL
@@ -100,20 +93,20 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                            'will be mapped to the new micrographs and rescaled accordingly.')
 
 
-        form.addParam("threshold", params.FloatParam, default=-1,expertLevel=params.LEVEL_ADVANCED,
+        form.addParam("threshold", params.FloatParam, default=-1,
                       label="Threshold", help="Deep learning goodness score to select/discard coordinates. The bigger the threshold "+
                            "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to skip thresholding. "+
                            "Manual thresholding can be performed after execution through analyze results button. "+
                            "\n0.75 <= Recommended threshold <= 0.9")
 
-        form.addParam("streamingBatchSize", params.IntParam, default=50,
+        form.addParam("streamingBatchSize", params.IntParam, default=-1,
                       label="Batch size", expertLevel=params.LEVEL_ADVANCED,
                       help="This value allows to group several items to be "
                            "processed inside the same protocol step. You can "
                            "use the following values: \n"
                            "*0*    Put in the same step all the items  available.\n "
                            "*>1*   The number of items that will be grouped into "
-                           "a step.")
+                           "a step. -1, automatic decission")
 
         form.addParam("saveMasks", params.BooleanParam, default=False,expertLevel=params.LEVEL_ADVANCED,
                       label="saveMasks", help="Save predicted masks?")
@@ -206,7 +199,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           args += ' -o %s' % self._getExtraPath('outputCoords')
           args += ' -b %d' % self.getBoxSize()
           args += ' -s 1' #Downsampling is automatically managed by scipion
-          args += ' -d %s' % Plugin.getModel('deepMicrographCleaner', 'defaultModel.keras')
+          args += ' -d %s' % self.getModel('deepMicrographCleaner', 'defaultModel.keras')
 
           if self.threshold.get() > 0:
               args += ' --deepThr %f ' % (1-self.threshold.get())
@@ -222,8 +215,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           else:
               args += ' -g -1'
 
+          os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
           self.runJob('xmipp_deep_micrograph_cleaner', args)
-
 
 
     def _checkNewOutput(self):
@@ -290,7 +283,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
       return scale
 
     def _updateOutputCoordSet(self, micList, streamMode):
-
         # Do no proceed if there is not micrograph ready
         if not micList:
             return []
@@ -304,15 +296,13 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         firstTime = outputCoords is None
 
         if firstTime:
-            if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
+            if self.useOtherScale.get() == 1:
               boxSize = self.getBoxSize()
-              micSetPtr = self.getInputMicrographs()
             else:
               boxSize = self.inputCoordinates.get().getBoxSize()
-              micSetPtr = self.inputCoordinates.get().getMicrographs()
-              
-            outputCoords = self._createSetOfCoordinates(micSetPtr,
-                                                        suffix=self.getAutoSuffix())
+
+            micSetPtr = self.getInputMicrographsPointer()
+            outputCoords = self._createSetOfCoordinates(micSetPtr, suffix=self.getAutoSuffix())
             outputCoords.copyInfo(self.inputCoordinates.get())
             outputCoords.setBoxSize(boxSize)
         else:
@@ -328,15 +318,50 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         return micList
 
-
     #--------------------------- INFO functions --------------------------------
-    def _validate(self):
-        # errors =[]
-        errors = validateDLtoolkit(assertModel=True,
-                                   model=('deepMicrographCleaner', 'defaultModel.keras'))
+    def _getStreamingBatchSize(self):
+      self.firstBatch = True
+      if self.streamingBatchSize.get() == -1:
+        if not hasattr(self, "actualBatchSize"):
+          if self.isInStreaming():
+            self.actualBatchSize = 16
+            batchSize = self.actualBatchSize
+          else:
+            if self.firstBatch:
+              self.firstBatch = False
+              batchSize = 4
+            else:
+              nPickMics = self._getNumPickedMics()
+              self.actualBatchSize = min(50, nPickMics)
+              batchSize = self.actualBatchSize
+        else:
+            batchSize = self.actualBatchSize
+      else:
+        batchSize = self.streamingBatchSize.get()
 
-        if self.streamingBatchSize.get() == 1:
+      return batchSize
+
+    def _getNumPickedMics(self):
+      nPickMics = 0
+      lastId=None
+      for coord in self.inputCoordinates.get():
+        curId=coord.getMicId()
+        if lastId!=curId:
+          lastId=curId
+          nPickMics+=1
+      return nPickMics
+
+    def _validate(self):
+        errors = self.validateDLtoolkit(assertModel=True,
+                                        model=('deepMicrographCleaner', 'defaultModel.keras'))
+
+        batchSize = self.streamingBatchSize.get()
+        if batchSize == 1:
             errors.append('Batch size must be 0 (all at once) or larger than 1.')
+        elif not self.isInStreaming() and batchSize > len(self.inputCoordinates.get().getMicrographs()):
+            errors.append('Batch size (%d) must be <= that the number of micrographs '
+                          '(%d) in static mode. Set it to 0 to use only one batch'
+                          %(batchSize, self._getNumPickedMics()))
 
         return errors
 
@@ -396,6 +421,15 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             return self.inputCoordinates.get().getMicrographs()
         else:
             return self.inputMicrographs.get()
+
+    def getInputMicrographsPointer(self):
+        """ Return the micrographs pointer associated to the SetOfCoordinates or
+        Other micrographs. """
+        if not self._micsOther():
+            inMicsPointer = self.getCoords().getMicrographs(asPointer=True)
+            return inMicsPointer
+        else:
+            return self.inputMicrographs
 
     def getCoords(self):
         return self.inputCoordinates.get()
@@ -460,12 +494,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         and it is used from the Java picking GUI to register
         a new SetOfCoordinates when the user click on +Particles button.
         """
-
-        inputset = self.getInputMicrographs()
-        
+        inputset = self.getInputMicrographsPointer()
         mySuffix = '_Manual_%s' % coordsDir.split('manualThresholding_')[1]
         outputName = 'outputCoordinates' + mySuffix
-
         outputset = self._createSetOfCoordinates(inputset, suffix=mySuffix)
         readSetOfCoordinates(coordsDir, outputset.getMicrographs(), outputset)
         # summary = self.getSummary(outputset)
@@ -476,6 +507,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         # Using a pointer to define the relations is more robust to scheduling
         # and id changes between the protocol run.db and the main project
         # database. The pointer defined below points to the outputset object
-        self._defineSourceRelation(self.getInputMicrographs(),
+        self._defineSourceRelation(inputset,
                                    Pointer(value=self, extended=outputName))
         self._store()

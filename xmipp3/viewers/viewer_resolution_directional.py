@@ -24,23 +24,24 @@
 # *
 # **************************************************************************
 
-from pyworkflow.gui.plotter import Plotter
-from plotter import XmippPlotter
+
 from pyworkflow.protocol.params import LabelParam, StringParam, EnumParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from pyworkflow.em.viewers import ChimeraView, DataView
+from pwem.viewers import ChimeraView, DataView
 from xmipp3.protocols.protocol_resolution_directional import XmippProtMonoDir
-from pyworkflow.em.metadata import MetaData
-from xmippLib import *
-from pyworkflow.em import ImageHandler
+from pwem.emlib.metadata import MetaData
+from pwem.emlib.image import ImageHandler
 import numpy as np
 import matplotlib.pyplot as plt
-from math import sqrt
 from matplotlib import cm
 import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath, exists
 from collections import OrderedDict
+
+from .plotter import XmippPlotter
+
+from pwem.emlib import *
 
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'MG_Chimera_resolution.vol'
 
@@ -142,46 +143,28 @@ class XmippMonoDirViewer(ProtocolViewer):
         
         groupRadAzim.addParam('doShowAzimuthalColorSlices', LabelParam,
                label="Show azimuthal resolution colored slices")
-        
-        groupRadAzim.addParam('doShowRadialHistogram', LabelParam,
-               label="Show radial resolution histogram")
-        
-        groupRadAzim.addParam('doShowAzimuthalHistogram', LabelParam,
-               label="Show azimuthal resolution histogram")
-        
-        groupRadAzim.addParam('doShowHighestResolutionMap', LabelParam,
-               label="Show highest Resolution Map")
-        
-        groupRadAzim.addParam('doShowLowestResolutionMap', LabelParam,
-               label="Show lowest Resolution Map")        
-        
-#        groupRadAzim.addParam('doshowAnisotropyResolution', LabelParam,
-#               label="Anisotropy and resolution")  
-        
+
         groupRadAzim.addParam('doShowDirectionsHistogram', LabelParam,
                label="Show directions histogram")
         
         groupRadAzim.addParam('doShowDirectionsSphere', LabelParam,
                label="Show directions sphere")
         
-#        groupRadAzim.addParam('doshowZscoreMap', LabelParam,
-#               label="Show zscore map")
-        
         groupRadAzim.addParam('doShowRadialAverages', LabelParam,
                label="Show radial averages")
 
         group = form.addGroup('Choose a Color Map')
-        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES.values(),
+        group.addParam('colorMap', EnumParam, choices=list(COLOR_CHOICES.values()),
                       default=COLOR_JET,
                       label='Color map',
-                      help='Select the color map to be applied'
-                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
+                      help='Select the color map to be applied '
+                            'https://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
         
         group.addParam('otherColorMap', StringParam, default='jet',
                       condition = binaryCondition,
                       label='Customized Color map',
                       help='Name of a color map to apply to be applied. Valid names can be found at '
-                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
+                            'https://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
                        display=EnumParam.DISPLAY_HLIST,
@@ -194,16 +177,10 @@ class XmippMonoDirViewer(ProtocolViewer):
                 'doShowDoAColorPol': self._showHalfInterQuartile,
                 'doShowRadialColorSlices': self._showRadialColorSlices,
                 'doShowAzimuthalColorSlices': self._showAzimuthalColorSlices,
-                'doShowHighestResolutionMap': self._showHighestResolutionColorSlices,
-                'doShowLowestResolutionMap': self._showLowestResolutionColorSlices,
-                #'doShowChimera': self._showChimera,
-                #'doShowDoAHistogram': self._plotHistogramDoA,
-                'doShowRadialHistogram': self._plotHistogramRadial,
-                'doShowAzimuthalHistogram': self._plotHistogramAzimuthal,
+                #'doShowRadialHistogram': self._plotHistogramRadial,
+                #'doShowAzimuthalHistogram': self._plotHistogramAzimuthal,
                 'doShowDirectionsHistogram': self._plotHistogramDirections,
                 'doShowDirectionsSphere': self._show2DDistribution,
-                #'doshowAnisotropyResolution': self._showAnisotropyResolution,
-                #'doshowZscoreMap': self._showZscoreMap,
                 'doShowRadialAverages': self._showRadialAverages
      }
 
@@ -219,22 +196,10 @@ class XmippMonoDirViewer(ProtocolViewer):
         
     def _showRadialColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_RADIAL_FILE, False, 'Radial Resolution', -1, -1)
-        
-#    def _showZscoreMap(self, param=None):
-#        self._showColorSlices(OUTPUT_ZSCOREMAP_FILE, True, 'Zscore map', 0, 5)
-        
-    def _showHighestResolutionColorSlices(self, param=None):
-        self._showColorSlices(OUTPUT_RESOLUTION_HIGHEST_FILE, False, 'Highest Resolution', -1, -1)
-        
-    def _showLowestResolutionColorSlices(self, param=None):
-        self._showColorSlices(OUTPUT_RESOLUTION_LOWEST_FILE, False, 'Lowest Resolution', -1, -1)
-        
+
     def _showAzimuthalColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_AZIMUHTAL_FILE, False, 'Tangential Resolution', -1, -1)
-        
-#    def _showAnisotropyResolution(self, param=None):
-#        self.plotAnisotropyResolution(self.protocol._getExtraPath('anires.xmd'))
-        
+
     def _show2DDistribution(self, param=None):
         self._createAngDist2D(self.protocol._getExtraPath('hist_prefdir.xmd'))
         
@@ -261,7 +226,7 @@ class XmippMonoDirViewer(ProtocolViewer):
     
 
     def _plotCurve(self, a, fnDir, labelmd):
-        print labelmd
+        print(labelmd)
         md = MetaData(fnDir)
         resolution = []
         radius = []
@@ -286,7 +251,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         return xplotter
         
     def _showOriginalVolumeSlices(self, param=None):
-        if self.protocol.halfVolumes.get() is True:
+        if self.protocol.hasAttribute('halfVolumes'):
             cm = DataView(self.protocol.inputVolume.get().getFileName())
             cm2 = DataView(self.protocol.inputVolume2.get().getFileName())
             return [cm, cm2]
@@ -322,33 +287,19 @@ class XmippMonoDirViewer(ProtocolViewer):
         cbar = fig.colorbar(im, cax=cax)
         cbar.ax.invert_yaxis()
 
-        return plt.show(fig)
+        return plt.show()
 
     def _plotHistogramDoA(self, param=None):
         self._plotHistogram('hist_DoA.xmd', 'DoA', 'DoA')
-        
-    def _plotHistogramRadial(self, param=None):
-        self._plotHistogram('hist_radial.xmd', 'Azimuthal Resolution', 'Resolution')
-        
-    def _plotHistogramAzimuthal(self, param=None):
-        self._plotHistogram('hist_azimuthal.xmd', 'Azimuthal Resolution', 'Resolution')
-        
+
     def _plotHistogramDirections(self, param=None):
         self._plotHistogram('hist_prefdir.xmd', 'Highest Resolution per Direction', 'Direction')
         
     def _createAngDist2D(self, path):
         view = XmippPlotter(x=1, y=1, mainTitle="Highest Resolution per Direction", windowTitle="Angular distribution")
         
-        #md = MetaData(path)
-        #wmax=-1
-        #for objId in md:
-        #    w=md.getValue(MDL_WEIGHT,objId)
-        #    w=sqrt(w)
-        #    wmax=max(wmax,w)
-        #    md.setValue(MDL_WEIGHT,w,objId)
-        #md.write(path)
-        #print(w)
-        return view.plotAngularDistributionFromMd(path, 'directional resolution distribution',  min_w=0)
+        view.plotAngularDistributionFromMd(path, 'directional resolution distribution')#,  min_w=0)
+        return view.show()
 
     def _plotHistogram(self, fnhist, titlename, xname):
         md = MetaData()
@@ -488,9 +439,9 @@ class XmippMonoDirViewer(ProtocolViewer):
         fhCmd.close()
 
 #     def plotAnisotropyResolution(self, path):        
-#         from xmippLib import XmippPlotter as Xmplt
+#         from pwem.emlib import XmippPlotter as Xmplt
 #  
-#         print path
+#         print(path)
 #         md = MetaData(path)
 #         y = md.getColumnValues(MDL_COST)
 #         x = md.getColumnValues(MDL_RESOLUTION_SSNR)
@@ -520,7 +471,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         xbin = floor((xmax - xmin)/resstep)
         ybin = ceil((ymax - ymin)/0.05)
         
-        print xbin, ybin
+        print(xbin, ybin)
         
         from matplotlib.pyplot import contour, contourf
         plt.figure()
@@ -537,14 +488,14 @@ class XmippMonoDirViewer(ProtocolViewer):
         xplotter = XmippPlotter(x=1, y=1, mainTitle="aaaaa "
                                                      "along %s-axis."
                                                      %self._getAxis())
-        a = xplotter.createSubPlot("Slice " , '', '')
+        a = xplotter.createSubPlot("Slice ", '', '')
         matrix = img
-        print matrix
+        print(matrix)
         plot = xplotter.plotMatrix(a, matrix, 0, 200,
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
-        print matrix
+        print(matrix)
         
         return [xplotter]
 
@@ -568,10 +519,10 @@ class XmippMonoDirViewer(ProtocolViewer):
         return colors
     
     def getColorMap(self):
-        if (COLOR_CHOICES[self.colorMap.get()] is 'other'): 
+        if (COLOR_CHOICES[self.colorMap.get()] == 'other'):
             cmap = cm.get_cmap(self.otherColorMap.get())
         else:
             cmap = cm.get_cmap(COLOR_CHOICES[self.colorMap.get()])
         if cmap is None:
             cmap = cm.jet
-	return cmap
+        return cmap

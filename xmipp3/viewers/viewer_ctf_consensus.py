@@ -24,8 +24,8 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.viewers import EmPlotter, ObjectView, MicrographsView, CtfView
-from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, ZOOM
+from pwem.viewers import EmPlotter, ObjectView, MicrographsView, CtfView
+from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, ZOOM
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 
@@ -83,13 +83,23 @@ class XmippCTFConsensusViewer(ProtocolViewer):
         views = []
 
         # display metadata with selected variables
-        labels = 'id enabled %s _micObj_filename _resolution ' \
-                 '_xmipp_consensus_resolution _xmipp_discrepancy_astigmatism' \
-                 ' _defocusU _defocusV _defocusAngle' % ' '.join(CtfView.PSD_LABELS)
+        labels = ('id enabled _micObj._filename _psdFile _ctf2_psdFile '
+                  '_xmipp_ctfmodel_quadrant '
+                  '_defocusU _defocusV _ctf2_defocus_diff '
+                  '_astigmatism _ctf2_astigmatism '
+                  '_defocusRatio _ctf2_defocusRatio '
+                  '_defocusAngle _ctf2_defocusAngle_diff '
+                  '_resolution _ctf2_resolution _consensus_resolution '
+                  '_phaseShift _ctf2_phaseShift_diff '
+                  '_fitQuality _ctf2_fitQuality ')
+
+        if self.protocol.useCritXmipp.get():
+            labels += ' '.join(CtfView.EXTRA_LABELS)
+
         if self.protocol.hasAttribute(objName):
+            set = getattr(self.protocol, objName)
             views.append(ObjectView(
-                self._project, self.protocol.strId(),
-                getattr(self.protocol, objName).getFileName(),
+                self._project, set.getObjId(),set.getFileName(),
                 viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
         else:
             self.infoMessage('%s does not have %s%s'
@@ -148,7 +158,8 @@ class XmippCTFConsensusViewer(ProtocolViewer):
             plotter.plotHist(resolution, nbins=numberOfBins)
             views.append(plotter)
         return views
-    
+
+# TODO: Add histograms using viewer_eliminate_empty_images.plotMultiHistogram()
     
 def getStringIfActive(prot):
     return ', yet.' if prot.isActive() else '.'

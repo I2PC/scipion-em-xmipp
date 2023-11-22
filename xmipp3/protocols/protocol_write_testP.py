@@ -26,13 +26,18 @@
 
 import os
 
-from pyworkflow import VERSION_1_1
-import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.protocol.constants import STEPS_PARALLEL
 from pyworkflow.protocol.params import IntParam
+from pyworkflow import VERSION_1_1
 
-from xmippLib import *
+from pwem.objects import Image
+from pwem.protocols import ProtProcessParticles
+import pwem.emlib.metadata as md
+
+
+from pwem.emlib import *
+
+from xmipp3.convert import xmippToLocation
 
 
 class XmippProtWriteTestP(ProtProcessParticles):

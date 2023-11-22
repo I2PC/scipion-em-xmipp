@@ -1,0 +1,9 @@
+scipion-pyworkflow>=3.0.31
+scikit-learn==0.22
+scipion-em
+scipy<=1.10.0
+joblib
+peppercorn
+plotter
+scons
+PyWavelets

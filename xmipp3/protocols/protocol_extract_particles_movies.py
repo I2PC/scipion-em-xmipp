@@ -29,17 +29,17 @@
 
 import os
 
-import pyworkflow.em.metadata as md
-from pyworkflow.em import SetOfCoordinates
+from pwem.objects import SetOfCoordinates
 
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.protocol import ProtExtractMovieParticles, ProtProcessMovies
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam, BooleanParam,
                                         Positive, FloatParam, EnumParam)
-from pyworkflow.utils.path import cleanPath
+from pyworkflow.utils.path import cleanPath, makePath
 
-from xmipp3.base import XmippMdRow
+import pwem.emlib.metadata as md
+from pwem.emlib.image import ImageHandler
+from pwem.protocols import ProtExtractMovieParticles, ProtProcessMovies
+
 from xmipp3.convert import coordinateToRow
 from xmipp3.convert import readSetOfMovieParticles, xmippToLocation
 
@@ -161,10 +161,10 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
 
     def _insertAllSteps(self):
         self._createFilenameTemplates()
-
         # Build the list of all processMovieStep ids by
         # inserting each of the steps for each movie
         self.insertedDict = {}
+        makePath(self._getExtraPath('DONE'))
         
         # Conversion step is part of processMovieStep.
         movieSteps = self._insertNewMoviesSteps(self.insertedDict,
@@ -266,9 +266,9 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
                     # to final particles folder
                     newImageName = '%d@%s' % newLocation
                     frameRow.setValue(md.MDL_IMAGE, newImageName)
-                    frameRow.setValue(md.MDL_MICROGRAPH_ID, long(movId))
+                    frameRow.setValue(md.MDL_MICROGRAPH_ID, int(movId))
                     frameRow.setValue(md.MDL_MICROGRAPH, str(movId))
-                    frameRow.setValue(md.MDL_FRAME_ID, long(frame))
+                    frameRow.setValue(md.MDL_FRAME_ID, int(frame))
                     frameRow.setValue(md.MDL_PARTICLE_ID,
                                       frameRow.getValue(md.MDL_ITEM_ID))
                     frameRow.writeToMd(movieMd, movieMd.addObject())
@@ -415,11 +415,11 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
         coordSet = self.getCoords()
         
         mData = md.MetaData()
-        coordRow = XmippMdRow()
+        coordRow = md.Row()
 
         for coord in coordSet.iterCoordinates(movie.getObjId()):
-            coord.shiftX( int(round(float(shiftX))))
-            coord.shiftY( int(round(float(shiftY))))
+            coord.shiftX(int(round(float(shiftX))))
+            coord.shiftY(int(round(float(shiftY))))
             coordinateToRow(coord, coordRow)
             coordRow.writeToMd(mData, mData.addObject())
 
@@ -499,10 +499,9 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
     def getCoords(self):
         # to support multiple access to db
         coordSet = self.inputCoordinates.get()
-        coordSetCopy = SetOfCoordinates()
-        coordSetCopy.copy(coordSet)
+        coordSet.loadAllProperties()
         coordSet.close()
-        return coordSetCopy
+        return coordSet
 
     def _stepsCheck(self):
         # Streaming is not implemented yet for this protocol.
@@ -510,10 +509,9 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
     
     def _hasCoordinates(self, movie):
         coordSet = self.getCoords()
-
         len = 0
         for coord in coordSet.iterCoordinates(movie.getObjId()):
-            len  += 1
+            len += 1
             break
         if len > 0:
             return True

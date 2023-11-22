@@ -26,22 +26,25 @@
 
 from os.path import join, isfile
 from shutil import copyfile
+import os
 
 from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         STEPS_PARALLEL,
                                         StringParam, BooleanParam, IntParam,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST)
-from pyworkflow.em.data import Volume
-from pyworkflow.em import Viewer
-import pyworkflow.em.metadata as md
-from pyworkflow.em.protocol import ProtAnalysis3D
+
 from pyworkflow.utils.path import moveFile, makePath, cleanPattern
 from pyworkflow.gui.plotter import Plotter
 
+from pwem.objects import Volume
+import pwem.emlib.metadata as md
+from pwem.protocols import ProtAnalysis3D
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, \
     getImageLocation
-
+from xmipp3.base import isXmippCudaPresent
 
 class XmippProtMultiRefAlignability(ProtAnalysis3D):
     """    
@@ -50,6 +53,9 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
     precision and accuracy parameters.
     """
     _label = 'multireference alignability'
+
+    INPUTARG = "-i %s"
+    OUTPUTARG = " -o %s"
 
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)
@@ -133,6 +139,14 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
 
         form.addParallelSection(threads=1, mpi=1)
 
+    def _getFileName(self, key, **kwargs):
+        if key=="volume":
+            return self._getExtraPath("volume.mrc")
+        elif key=="reference_particles":
+            return self._getPath("reference_particles.xmd")
+        else:
+            return ""
+
     # --------------------------- INSERT steps functions --------------------------------------------
 
     def _insertAllSteps(self):
@@ -194,8 +208,8 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
                             self._getPath('input_particles.xmd'))
 
         if self.doWiener.get():
-            params = '  -i %s' % self._getPath('input_particles.xmd')
-            params += '  -o %s' % self._getExtraPath(
+            params = self.INPUTARG % self._getPath('input_particles.xmd')
+            params += self.OUTPUTARG % self._getExtraPath(
                 'corrected_ctf_particles.stk')
             params += '  --save_metadata_stack %s' % self._getExtraPath(
                 'corrected_ctf_particles.xmd')
@@ -218,29 +232,26 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         newTs, newXdim = self._getModifiedSizeAndSampling()
 
         if self.doWiener.get():
-            params = '  -i %s' % self._getExtraPath(
-                'corrected_ctf_particles.xmd')
-        else:
-            params = '  -i %s' % self._getPath('input_particles.xmd')
-
-        params += '  -o %s' % self._getExtraPath('scaled_particles.stk')
-        params += '  --save_metadata_stack %s' % self._getExtraPath(
-            'scaled_particles.xmd')
-        params += '  --fourier %d' % newXdim
-
-        self.runJob('xmipp_image_resize', params)
-
-        from pyworkflow.em.convert import ImageHandler
+            params =  self.INPUTARG % self._getExtraPath('corrected_ctf_particles.xmd')
+        else :
+            params =  self.INPUTARG % self._getPath('input_particles.xmd')
+            
+        params +=  self.OUTPUTARG % self._getExtraPath('scaled_particles.stk')
+        params +=  '  --save_metadata_stack %s' % self._getExtraPath('scaled_particles.xmd')
+        params +=  '  --fourier %d' % newXdim
+        
+        self.runJob('xmipp_image_resize',params)
+        
+        from pwem.emlib.image import ImageHandler
         img = ImageHandler()
-        img.convert(self.inputVolumes.get(), self._getExtraPath("volume.vol"))
+        img.convert(self.inputVolumes.get(), self._getFileName("volume"))
         Xdim = self.inputVolumes.get().getDim()[0]
         if Xdim != newXdim:
             self.runJob("xmipp_image_resize", "-i %s --dim %d" % \
-                        (self._getExtraPath("volume.vol"),
-                         newXdim), numberOfMpi=1)
+                        (self._getFileName("volume"), newXdim), numberOfMpi=1)
 
     def _getCommonParams(self):
-        params = '  -i %s' % self._getExtraPath('scaled_particles.xmd')
+        params = self.INPUTARG % self._getExtraPath('scaled_particles.xmd')
         params += ' --sym %s' % self.symmetryGroup.get()
         params += ' --dontReconstruct'
         params += ' --useForValidation %0.3f' % (self.numOrientations.get() - 1)
@@ -248,7 +259,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         return params
 
     def _getCommonParamsRef(self):
-        params = '  -i %s' % self._getPath('reference_particles.xmd')
+        params = self.INPUTARG % self._getFileName("reference_particles")
         params += ' --sym %s' % self.symmetryGroup.get()
         params += ' --dontReconstruct'
         params += ' --useForValidation %0.3f' % (self.numOrientations.get() - 1)
@@ -284,19 +295,19 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
                                self.inputParticles.get().isPhaseFlipped(),
                                self.doWiener.get()))
         f.close()
-        param = ' -i %s' % self._getExtraPath("volume.vol")
+        param = self.INPUTARG % self._getFileName("volume")
         param += ' --params %s' % self._getExtraPath('params.txt')
-        param += ' -o %s' % self._getPath('reference_particles.xmd')
+        param += self.OUTPUTARG % self._getFileName("reference_particles")
         param += ' --sampling_rate % 0.3f' % newTs
         param += ' --method fourier'
+                
+        #while (~isfile(self._getExtraPath('params'))):
+        #    print('No created')
+        
+        self.runJob('xmipp_phantom_project', 
+                    param, numberOfMpi=1,numberOfThreads=1)
 
-        # while (~isfile(self._getExtraPath('params'))):
-        #    print 'No created'
-
-        self.runJob('xmipp_phantom_project',
-                    param, numberOfMpi=1, numberOfThreads=1)
-
-        param = ' -i %s' % self._getPath('reference_particles.stk')
+        param = self.INPUTARG % self._getPath('reference_particles.stk')
         param += ' --mask circular %d' % R
         self.runJob('xmipp_transform_mask', param, numberOfMpi=nproc,
                     numberOfThreads=nT)
@@ -306,7 +317,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         # Generate projections from this reconstruction
         nproc = self.numberOfMpi.get()
         nT = self.numberOfThreads.get()
-        volName = self._getExtraPath("volume.vol")
+        volName = self._getFileName("volume")
         makePath(volDir)
         fnGallery = (volDir + '/gallery.stk')
         params = '-i %s -o %s --sampling_rate %f --sym %s --method fourier 1 0.25 bspline --compute_neighbors --angular_distance %f --experimental_images %s --max_tilt_angle %f --min_tilt_angle %f' \
@@ -332,16 +343,32 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
             copyfile(volDir + '/angles_iter001_00.xmd',
                      self._getTmpPath(anglesPath))
         else:
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
             if anglesPath == 'exp_particles.xmd':
-                params = '  -i %s' % self._getExtraPath('scaled_particles.xmd')
+                params = self.INPUTARG % self._getExtraPath('scaled_particles.xmd')
             elif anglesPath == 'ref_particles.xmd':
-                params = '  -i %s' % self._getPath('reference_particles.xmd')
+                params = self.INPUTARG % self._getFileName("reference_particles")
             params += ' --keepBestN %f' % (self.numOrientations.get() - 1)
             params += ' -r  %s' % fnGallery
             params += ' -o  %s' % self._getTmpPath(anglesPath)
-            params += ' --dev %s ' % GpuList
-            self.runJob('xmipp_cuda_align_significant', params, numberOfMpi=1)
+            params += ' --dev %s ' % GpuListCuda
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, params, numberOfMpi=1)
 
     def alignabilityStep(self, volName, volDir, sym):
 
@@ -350,12 +377,12 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
 
         makePath(volDir)
         inputFile = self._getPath('input_particles.xmd')
-        inputFileRef = self._getPath('reference_particles.xmd')
+        inputFileRef = self._getFileName("reference_particles")
         aFile = self._getTmpPath('exp_particles.xmd')
         aFileRef = self._getTmpPath('ref_particles.xmd')
         aFileGallery = (volDir + '/gallery.doc')
 
-        params = '  -i %s' % inputFile
+        params = self.INPUTARG % inputFile
         params += ' -i2 %s' % inputFileRef
         params += '  --volume %s' % volName
         params += '  --angles_file %s' % aFile
@@ -378,7 +405,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
 
         params = '  --i1 %s' % self._getPath('input_particles.xmd')
         params += ' --i2 %s' % aFileGallery
-        params += ' -o %s' % neighbours
+        params += self.OUTPUTARG % neighbours
         params += ' --dist %s' % (self.angDist.get() + 1)
         params += ' --sym %s' % sym
 
@@ -392,9 +419,9 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
 
         neighbours = (volDir + '/neighbours.xmd')
 
-        params = ' -i %s' % volName
+        params = self.INPUTARG % volName
         params += ' --i2 %s' % neighbours
-        params += ' -o %s' % (
+        params += self.OUTPUTARG % (
                 volDir + '/pruned_particles_alignability_accuracy.xmd')
 
         self.runJob('xmipp_angular_accuracy_pca', params, numberOfMpi=nproc,
@@ -456,7 +483,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         cleanPattern(self._getExtraPath("scaled_particles.*"))
         cleanPattern(self._getExtraPath("reference_particles.*"))
         cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
-        cleanPattern(self._getExtraPath("volume.vol"))
+        cleanPattern(self._getFileName("volume"))
         cleanPattern(self._getExtraPath("params.txt"))
         cleanPattern(self._getExtraPath("input_particles.xmd"))
 
@@ -468,6 +495,8 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
             validateMsgs.append('Please provide input particles.')
+        if self.useGpu and not isXmippCudaPresent(CUDA_ALIGN_SIGNIFICANT):
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs in the path")
         return validateMsgs
 
     def _summary(self):
@@ -560,16 +589,13 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         item._xmipp_scoreAlignabilityAccuracy = Float(
             row.getValue(md.MDL_SCORE_BY_ALIGNABILITY_ACCURACY))
         item._xmipp_scoreMirror = Float(row.getValue(md.MDL_SCORE_BY_MIRROR))
-        item._xmipp_weight = Float(
-            float(item._xmipp_scoreAlignabilityAccuracy) * float(
-                item._xmipp_scoreAlignabilityPrecision))
-
-    def createPlot2D(self, volPrefix, md):
-
-        import xmippLib
-
-        figurePath = self._getExtraPath(
-            volPrefix + 'softAlignmentValidation2D.png')
+        item._xmipp_weight = Float( float(item._xmipp_scoreAlignabilityAccuracy)*float(item._xmipp_scoreAlignabilityPrecision))
+        
+    def createPlot2D(self,volPrefix,md):
+        
+        from pwem import emlib
+        
+        figurePath = self._getExtraPath(volPrefix + 'softAlignmentValidation2D.png')
         figureSize = (8, 6)
 
         # alignedMovie = mic.alignMetaData
@@ -583,9 +609,9 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         ax.set_ylabel('Angular Accuracy')
 
         for objId in md:
-            x = md.getValue(xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, objId)
-            y = md.getValue(xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY, objId)
-            ax.plot(x, y, 'r.', markersize=1)
+            x = md.getValue(emlib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, objId)
+            y = md.getValue(emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY, objId)
+            ax.plot(x, y, 'r.',markersize=1)
 
         ax.grid(True, which='both')
         ax.autoscale_view(True, True, True)

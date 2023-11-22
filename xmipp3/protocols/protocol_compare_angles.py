@@ -26,12 +26,12 @@
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import ProtAnalysis3D
-import pyworkflow.em.metadata as md
+from pwem.protocols import ProtAnalysis3D
+import pwem.emlib.metadata as md
+from pwem.constants import ALIGN_PROJ
 
-import xmippLib
-from xmipp3.convert import (rowToAlignment, setXmippAttributes,
-                       xmippToLocation, writeSetOfParticles)
+from pwem import emlib
+from xmipp3.convert import (setXmippAttributes, writeSetOfParticles)
 from xmipp3.constants import SYM_URL
 
 
@@ -93,8 +93,8 @@ class XmippProtCompareAngles(ProtAnalysis3D):
         particlesId: is only need to detect changes in
         input particles and cause restart from here.
         """
-        writeSetOfParticles(self.inputParticles1.get(), self._getExtraPath("angles1.xmd"))
-        writeSetOfParticles(self.inputParticles2.get(), self._getExtraPath("angles2.xmd"))
+        writeSetOfParticles(self.inputParticles1.get(), self._getExtraPath("angles1.xmd"), alignType=ALIGN_PROJ)
+        writeSetOfParticles(self.inputParticles2.get(), self._getExtraPath("angles2.xmd"), alignType=ALIGN_PROJ)
 
     def analyzeDistanceStep(self, particlesId1, particlesId2, symmetryGroup):
         self.runJob("xmipp_metadata_utilities","-i %s -o %s --operate keep_column itemId"%\
@@ -147,7 +147,7 @@ class XmippProtCompareAngles(ProtAnalysis3D):
         particle._appendItem = count > 0
         
     def _createItemMatrix(self, particle, row):
-        setXmippAttributes(particle, row, xmippLib.MDL_SHIFT_DIFF, xmippLib.MDL_ANGLE_DIFF)
+        setXmippAttributes(particle, row, emlib.MDL_SHIFT_DIFF, emlib.MDL_ANGLE_DIFF)
 
     # --------------------------- INFO functions -------------------------------
 

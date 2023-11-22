@@ -30,30 +30,28 @@
 import os
 from datetime import datetime
 
-import pyworkflow.em as em
 import pyworkflow.protocol.constants as cons
-
-from pyworkflow.em.metadata import getSize, isEmpty
 from pyworkflow.utils import cleanPath
-from pyworkflow.em.data import SetOfParticles
-from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.object import Set, Float
 from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         Range, LEVEL_ADVANCED, FloatParam,
                                         BooleanParam)
 
-import xmippLib
+from pwem.constants import ALIGN_NONE
+from pwem.emlib.metadata import getSize, isEmpty
+from pwem.objects import SetOfParticles
+from pwem.protocols import ProtProcessParticles
+
+from pwem import emlib
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 
 
 class XmippProtScreenParticles(ProtProcessParticles):
-    """ Attach different merit values to every particle in order to
-        prune the set.
-        zScore evaluates the similarity of a particles with an average
-        (lower zScore -> high similarity).
-        SSNR evaluates the signal/noise ration in the Fourier space.
-        Variance evaluates the varaince on the micrographs context where
-        the particle was picked.
+    """Protocol to attach different merit values to every particle metadata for subsequent pruning the set.
+There are different merit values to be calculated:
+    - zScore evaluates the similarity of a particles with an average (lower zScore -> higher similarity).
+    - SSNR evaluates the signal/noise ration in the Fourier space.
+    - Variance evaluates the varaince on the micrographs context where the particle was picked.
     """
 
     _label = 'screen particles'
@@ -135,7 +133,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
         """This protocol doesn't have mpi version"""
         return (0, 0)
 
-    #--------------------------- INSERT steps functions ----------------------
+    # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         self._initializeZscores()
         self.outputSize = 0
@@ -207,13 +205,13 @@ class XmippProtScreenParticles(ProtProcessParticles):
             break
         if self.check is None:
             writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
+                                alignType=ALIGN_NONE, orderBy='creation')
         else:
             writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation>"' + str(self.check) + '"')
             writeSetOfParticles(inPartsSet, self.fnInputOldMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation<"' + str(self.check) + '"')
         self.check = check
 
@@ -248,7 +246,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
 
                 writeSetOfParticles(outSet.iterItems(orderBy='_xmipp_zScore'),
                                     self._getPath("images.xmd"),
-                                    alignType=em.ALIGN_NONE)
+                                    alignType=ALIGN_NONE)
                 cleanPath(self.fnOutputMd)
 
             self._updateOutputSet('outputParticles', outSet, streamMode)
@@ -274,7 +272,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
 
         return outputSet
 
-    #--------------------------- STEP functions -----------------------------
+    # --------------------------- STEP functions -----------------------------
     def sortImagesStep(self):
         args = "-i Particles@%s -o %s --addToInput " % (self.fnInputMd,
                                                         self.fnOutputMd)
@@ -302,17 +300,17 @@ class XmippProtScreenParticles(ProtProcessParticles):
                 varList = []
                 giniList = []
                 print('  - Reading metadata')
-                mdata = xmippLib.MetaData(self.fnInputMd)
+                mdata = emlib.MetaData(self.fnInputMd)
                 for objId in mdata:
-                    varList.append(mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId))
-                    giniList.append(mdata.getValue(xmippLib.MDL_SCORE_BY_GINI, objId))
+                    varList.append(mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId))
+                    giniList.append(mdata.getValue(emlib.MDL_SCORE_BY_GINI, objId))
 
                 if self.autoParRejectionVar == self.REJ_VARIANCE:
                     valuesList = varList
-                    self.mdLabels = [xmippLib.MDL_SCORE_BY_VAR]
+                    self.mdLabels = [emlib.MDL_SCORE_BY_VAR]
                 else:  # not working pretty well
-                    valuesList = [var*(1-gini) for var, gini in zip(varList, giniList)]
-                    self.mdLabels = [xmippLib.MDL_SCORE_BY_VAR, xmippLib.MDL_SCORE_BY_GINI]
+                    valuesList = [var * (1 - gini) for var, gini in zip(varList, giniList)]
+                    self.mdLabels = [emlib.MDL_SCORE_BY_VAR, emlib.MDL_SCORE_BY_GINI]
 
                 self.varThreshold.set(histThresholding(valuesList))
                 print('  - Variance threshold: %f' % self.varThreshold)
@@ -359,7 +357,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
 
         if self.autoParRejectionVar is not None:
             sumRejMet['Var'] = ("Variance rejection method: " +
-                               self.VAR_CHOICES[self.autoParRejectionVar.get()])
+                                self.VAR_CHOICES[self.autoParRejectionVar.get()])
 
         # If no output yet, just the form choices are shown plus a no-ready text
         if not hasattr(self, 'outputParticles'):
@@ -383,7 +381,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
                 else:
                     summary.append(" - Variance threshold not calculed yet.")
         return summary
-    
+
     def _validate(self):
         validateMsgs = []
         if self.autoParRejectionVar != self.REJ_NONE:
@@ -394,18 +392,18 @@ class XmippProtScreenParticles(ProtProcessParticles):
                                     'scoreByVariance attribute. Use Xmipp to '
                                     'extract the particles.')
         return validateMsgs
-        
+
     def _citations(self):
         return ['Vargas2013b']
-    
+
     def _methods(self):
         methods = []
         if hasattr(self, 'outputParticles'):
             outParticles = (len(self.outputParticles) if self.outputParticles
                                                          is not None else None)
-            particlesRejected = (len(self.inputParticles.get())-outParticles
+            particlesRejected = (len(self.inputParticles.get()) - outParticles
                                  if outParticles is not None else None)
-            particlesRejectedText = (' ('+str(particlesRejected)+')' if
+            particlesRejectedText = (' (' + str(particlesRejected) + ')' if
                                      particlesRejected is not None else '')
             rejectionText = ['',  # REJ_NONE
                              ' and removing those not reaching %s%s'
@@ -437,8 +435,8 @@ def histThresholding(valuesList, nBins=256, portion=4, takeNegatives=False):
         valuesList = [x for x in valuesList if not x < 0]
 
     import numpy as np
-    while len(valuesList)*1.0/nBins < 5:
-        nBins = nBins/2
+    while len(valuesList) * 1.0 / nBins < 5:
+        nBins = int(nBins / 2)
 
     print('Thresholding with %d bins for the histogram.' % nBins)
 
@@ -447,21 +445,22 @@ def histThresholding(valuesList, nBins=256, portion=4, takeNegatives=False):
     histRight = hist
     histRight[0:hist.argmax()] = 0
 
-    idx = (np.abs(histRight-hist.max()/portion)).argmin()
+    idx = (np.abs(histRight - hist.max() / portion)).argmin()
     return bin_edges[idx]
+
 
 def rejectByVariance(inputMdFn, outputMdFn, threshold, mode):
     """ Sets MDL_ENABLED to -1 to those items with a higher value
         than the threshold
     """
-    mdata = xmippLib.MetaData(inputMdFn)
+    mdata = emlib.MetaData(inputMdFn)
     for objId in mdata:
         if mode == XmippProtScreenParticles.REJ_VARIANCE:
-            if mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId) > threshold:
-                mdata.setValue(xmippLib.MDL_ENABLED, -1, objId)
+            if mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId) > threshold:
+                mdata.setValue(emlib.MDL_ENABLED, -1, objId)
         elif mode == XmippProtScreenParticles.REJ_VARGINI:
-            if (mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId) *
-                (1 - mdata.getValue(xmippLib.MDL_SCORE_BY_GINI, objId)) > threshold):
-                mdata.setValue(xmippLib.MDL_ENABLED, -1, objId)
+            if (mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId) *
+                    (1 - mdata.getValue(emlib.MDL_SCORE_BY_GINI, objId)) > threshold):
+                mdata.setValue(emlib.MDL_ENABLED, -1, objId)
 
     mdata.write(outputMdFn)

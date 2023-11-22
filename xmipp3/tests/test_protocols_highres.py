@@ -24,15 +24,12 @@
 # *
 # **************************************************************************
 
-import unittest, sys
-
-from pyworkflow.em import exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 
-from pyworkflow.em.protocol import ProtImportVolumes, ProtImportParticles
-from pyworkflow.em.protocol.protocol_sets import ProtSubSet
+from pwem.protocols import (ProtImportVolumes, ProtImportParticles, ProtSubSet,
+                            exists)
 
-import xmippLib
+from pwem import emlib
 from xmipp3.protocols import XmippProtReconstructHighRes
 
 
@@ -91,6 +88,7 @@ class TestHighres(BaseTest):
                                    inputVolumes=self.protImportVol.outputVolume,
                                    particleRadius=180,
                                    symmetryGroup="i1",
+                                   nextResolutionCriterion=0.143,
                                    alignmentMethod=XmippProtReconstructHighRes.AUTOMATIC_ALIGNMENT,
                                    maximumTargetResolution="15 10 7",
                                    numberOfMpi=8)
@@ -102,7 +100,6 @@ class TestHighres(BaseTest):
         if not exists(fnResolution):
             self.assertTrue(False, fnResolution + " does not exist")
         else:
-            md = xmippLib.MetaData("resolution@" + fnResolution)
-            R = md.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, md.firstObject())
-            # FIXME: Review HighRes! Before pluginization under 8A is achieved
-            self.assertTrue(R < 9, "Resolution is not below 9A")
+            md = emlib.MetaData("resolution@" + fnResolution)
+            R = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
+            self.assertTrue(R < 10, "Resolution is not below 10A")

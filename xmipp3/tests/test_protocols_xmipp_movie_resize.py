@@ -28,8 +28,8 @@
 from pyworkflow.tests import *
 from pyworkflow.protocol import getProtocolFromDb
 from pyworkflow.protocol.constants import STATUS_FINISHED
-from pyworkflow.em.protocol import ProtCreateStreamData, ProtImportMovies
-from pyworkflow.em.protocol.protocol_create_stream_data import SET_OF_MOVIES
+from pwem.protocols import ProtCreateStreamData, ProtImportMovies
+from pwem.protocols.protocol_create_stream_data import SET_OF_MOVIES
 
 from xmipp3.protocols import XmippProtMovieResize
 
@@ -46,32 +46,21 @@ class TestMovieResize(BaseTest):
     def setUpClass(cls):
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet('movies')
+        cls.dataFile = cls.dataset.getFile('ribo/')
         cls.movie1 = cls.dataset.getFile('qbeta/qbeta.mrc')
         cls.movie2 = cls.dataset.getFile('cct/cct_1.em')
 
-    def _updateProtocol(self, prot):
-        prot2 = getProtocolFromDb(prot.getProject().path,
-                                  prot.getDbPath(),
-                                  prot.getObjId())
-        # Close DB connections
-        prot2.getProject().closeMapper()
-        prot2.closeMappers()
-        return prot2
-
-
-    def runImportMoviesRibo(cls):
-        args = {'filesPath': cls.dataset.getFile('ribo/'),
+    def runImportMoviesRibo(self):
+        args = {'filesPath': self.dataFile,
                 'filesPattern': '*.mrcs',
                 'amplitudConstrast': 0.1,
                 'sphericalAberration': 2.,
                 'voltage': 300,
                 'samplingRate': 3.54
                 }
-        cls.protMovieImport = cls.newProtocol(ProtImportMovies, **args)
-        cls.proj.launchProtocol(cls.protMovieImport, wait=False)
-        return cls.protMovieImport
-
-
+        protMovieImport = self.newProtocol(ProtImportMovies, **args)
+        self.proj.launchProtocol(protMovieImport, wait=False)
+        return protMovieImport
 
     def importMoviesStr(self, fnMovies):
         kwargs = {'inputMovies': fnMovies,
@@ -102,27 +91,23 @@ class TestMovieResize(BaseTest):
 
         return protResize
 
+    def _updateProtocol(self, prot):
+        prot2 = getProtocolFromDb(prot.getProject().path,
+                                  prot.getDbPath(),
+                                  prot.getObjId())
+        # Close DB connections
+        prot2.getProject().closeMapper()
+        prot2.closeMappers()
+        return prot2
 
 
     def test_pattern(self):
 
         protImport = self.runImportMoviesRibo()
-        counter = 1
-        while not protImport.hasAttribute('outputMovies'):
-            time.sleep(2)
-            protImport = self._updateProtocol(protImport)
-            if counter > 100:
-                break
-            counter += 1
+        self._waitOutput(protImport, 'outputMovies')
 
         protImportMovsStr = self.importMoviesStr(protImport.outputMovies)
-        counter = 1
-        while not protImportMovsStr.hasAttribute('outputMovies'):
-            time.sleep(2)
-            protImportMovsStr = self._updateProtocol(protImportMovsStr)
-            if counter > 100:
-                break
-            counter += 1
+        self._waitOutput(protImportMovsStr, 'outputMovies')
         if protImportMovsStr.isFailed():
             self.assertTrue(False)
 
@@ -130,40 +115,18 @@ class TestMovieResize(BaseTest):
         protMovieResize = self.runMovieResize(protImportMovsStr.outputMovies,
                                               RESIZE_SAMPLINGRATE,
                                               newSamplingRate)
-
-        counter = 1
-        while not protMovieResize.hasAttribute('outputMovies'):
-            time.sleep(2)
-            protMovieResize = self._updateProtocol(protMovieResize)
-            if counter > 100:
-                break
-            counter += 1
+        self._waitOutput(protMovieResize, 'outputMovies')
 
         newDimensions = 1700
         protMovieResize2 = self.runMovieResize(protMovieResize.outputMovies,
                                               RESIZE_DIMENSIONS,
                                               newDimensions)
-
-        counter = 1
-        while not protMovieResize2.hasAttribute('outputMovies'):
-            time.sleep(2)
-            protMovieResize2 = self._updateProtocol(protMovieResize2)
-            if counter > 100:
-                break
-            counter += 1
-
+        self._waitOutput(protMovieResize2, 'outputMovies')
 
         newFactor = 2.15
         protMovieResize3 = self.runMovieResize(protMovieResize2.outputMovies,
                                               RESIZE_FACTOR, newFactor)
-
-        counter = 1
-        while not protMovieResize3.hasAttribute('outputMovies'):
-            time.sleep(2)
-            protMovieResize3 = self._updateProtocol(protMovieResize3)
-            if counter > 100:
-                break
-            counter += 1
+        self._waitOutput(protMovieResize3, 'outputMovies')
 
         if not protMovieResize3.hasAttribute('outputMovies'):
             self.assertTrue(False)

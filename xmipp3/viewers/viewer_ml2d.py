@@ -32,9 +32,9 @@ import os
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
-import pyworkflow.em as em
 from pyworkflow.protocol.params import EnumParam, StringParam
-from pyworkflow.em.viewers import ClassesView
+import pyworkflow.utils as pwutils
+from pwem.viewers import ClassesView
 from xmipp3.protocols.protocol_ml2d import XmippProtML2D
 
 
@@ -81,7 +81,7 @@ class XmippML2DViewer(ProtocolViewer):
                        help='Should approach to zero when convergence.')
         group.addParam('doShowMirror', LabelParam,
                        label="Show mirror fraction for last iteration?",
-                       help='he the mirror fraction of each class in last iteration.')
+                       help='the mirror fraction of each class in last iteration.')
         
     
     def _getVisualizeDict(self):
@@ -107,7 +107,7 @@ class XmippML2DViewer(ProtocolViewer):
                 viewFinalClasses = True
             iterations = [self.protocol._lastIteration()]
         else:
-            iterations = self._getListFromRangeString(self.iterSelection.get())
+            iterations = pwutils.getListFromRangeString(self.iterSelection.get())
         
         views = []
         
@@ -127,13 +127,13 @@ class XmippML2DViewer(ProtocolViewer):
 def createPlots(protML, selectedPlots):
     ''' Launch some plot for an ML2D protocol run '''
     from xmipp3.viewers.plotter import XmippPlotter
-    import xmippLib
+    from pwem import emlib
     
     protML._plot_count = 0
     lastIter = protML._lastIteration()
     if lastIter == 0:
         return
-    refs = protML._getIterClasses(it=lastIter, block='classes')
+    refs = protML._getIterMdClasses(it=lastIter, block='classes')
 #    if not exists(refs):
 #        return 
 #    blocks = getBlocksInMetaDataFile(refs)
@@ -149,7 +149,7 @@ def createPlots(protML, selectedPlots):
     n = len(selectedPlots)
     if n == 0:
         #showWarning("ML2D plots", "Nothing to plot", protML.master)
-        print "No plots"
+        print("No plots")
         return 
     elif n == 1:
         gridsize = [1, 1]
@@ -161,15 +161,15 @@ def createPlots(protML, selectedPlots):
     xplotter = XmippPlotter(x=gridsize[0], y=gridsize[1])
         
     # Create data to plot
-    iters = range(1, lastIter+1)
+    iters = range(0, lastIter+1, 1)
     ll = []
     pmax = []
     for iter in iters:
-        logs = protML._getIterClasses(it=iter, block='info')
-        md = xmippLib.MetaData(logs)
+        logs = protML._getIterMdImages(it=iter, block='info')
+        md = emlib.MetaData(logs)
         id = md.firstObject()
-        ll.append(md.getValue(xmippLib.MDL_LL, id))
-        pmax.append(md.getValue(xmippLib.MDL_PMAX, id))
+        ll.append(md.getValue(emlib.MDL_LL, id))
+        pmax.append(md.getValue(emlib.MDL_PMAX, id))
             
     if doPlot('doShowLL'):
         a = xplotter.createSubPlot('Log-likelihood (should increase)', 'iterations', 'LL', yformat=True)
@@ -179,8 +179,8 @@ def createPlots(protML, selectedPlots):
     if doPlot('doShowMirror'):
         from numpy import arange
         from matplotlib.ticker import FormatStrFormatter
-        md = xmippLib.MetaData(refs)
-        mirrors = [md.getValue(xmippLib.MDL_MIRRORFRAC, id) for id in md]
+        md = emlib.MetaData(refs)
+        mirrors = [md.getValue(emlib.MDL_MIRRORFRAC, id) for id in md]
         nrefs = len(mirrors)
         ind = arange(1, nrefs + 1)
         width = 0.85
@@ -189,27 +189,26 @@ def createPlots(protML, selectedPlots):
         a.xaxis.set_major_formatter(FormatStrFormatter('%1.0f'))
         a.bar(ind, mirrors, width, color='b')
         a.set_ylim([0, 1.])
-        a.set_xlim([0.8, nrefs + 1])
+        #a.set_xlim([0.3, nrefs + 1])
         
     if doPlot('doShowPmax'):
         a = xplotter.createSubPlot('Probabilities distribution', 'iterations', 'Pmax/Psum') 
         a.plot(iters, pmax, color='green')
     
     if doPlot('doShowSignalChange'):
-        md = xmippLib.MetaData()
+        md = emlib.MetaData()
         for iter in iters:
-            fn = protML._getIterClasses(it=iter, block='classes')
-            md2 = xmippLib.MetaData(fn)
-            md2.fillConstant(xmippLib.MDL_ITER, str(iter))
+            fn = protML._getIterMdClasses(it=iter, block='classes')
+            md2 = emlib.MetaData(fn)
+            md2.fillConstant(emlib.MDL_ITER, str(iter))
             md.unionAll(md2)
         # 'iter(.*[1-9].*)@2D/ML2D/run_004/ml2d_iter_refs.xmd')
-        #a = plt.subplot(gs[1, 1])
-        #print "md:", md
-        md2 = xmippLib.MetaData()
-        md2.aggregate(md, xmippLib.AGGR_MAX, xmippLib.MDL_ITER, xmippLib.MDL_SIGNALCHANGE, xmippLib.MDL_MAX)
-        signal_change = [md2.getValue(xmippLib.MDL_MAX, id) for id in md2]
+        # a = plt.subplot(gs[1, 1])
+        # print("md: %s" % md)
+        md2 = emlib.MetaData()
+        md2.aggregate(md, emlib.AGGR_MAX, emlib.MDL_ITER, emlib.MDL_SIGNALCHANGE, emlib.MDL_MAX)
+        signal_change = [md2.getValue(emlib.MDL_MAX, id) for id in md2]
         xplotter.createSubPlot('Maximum signal change', 'iterations', 'signal change')
         xplotter.plot(iters, signal_change, color='green')
     
     return [xplotter]
-    

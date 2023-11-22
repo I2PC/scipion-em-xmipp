@@ -28,14 +28,15 @@ from os.path import exists
 import numpy as np
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol.protocol_movies import ProtProcessMovies
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
-from pyworkflow.em.data import SetOfMovies, SetOfMicrographs
+
+from pwem.protocols import ProtProcessMovies
+from pwem.objects import SetOfMicrographs, SetOfMovies
 
 
 class XmippProtMovieMaxShift(ProtProcessMovies):
@@ -112,13 +113,14 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             self.setInputMics()
         # Insert the selection/rejection step
         movieStepId = self._insertFunctionStep('_evaluateMovieAlign',
-                                               movie.clone(),
+                                               movie.getObjId(),
                                                prerequisites=[])
         return movieStepId
 
-    def _evaluateMovieAlign(self, movie):
+    def _evaluateMovieAlign(self, movieId):
         """ Fill the accepted or the rejected list with the movie.
         """
+        movie = self.inputMovies.get()[movieId].clone()
         alignment = movie.getAlignment()
         sampling = self.samplingRate
 
@@ -134,7 +136,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             shiftArrayY = np.asarray(shiftListY)
 
             evalBoth = self.rejType==self.REJ_AND or self.rejType==self.REJ_OR
-
             if self.rejType == self.REJ_MOVIE or evalBoth:
                 rangeX = np.max(shiftArrayX) - np.min(shiftArrayX)
                 rangeY = np.max(shiftArrayY) - np.min(shiftArrayY)
@@ -230,7 +231,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                         tryToAppend(outSet, micOut, tries+1)
                     else:
                         labelStr = ' '.join([labelPrefix, micOut.getMicName()])
-                        self.warning("The %s seems corrupted. Skkiping it...\n "
+                        self.warning("The %s seems corrupted. Skipping it...\n "
                                      " > %s" % (labelStr, ex))
 
             for movie in newDoneList:
@@ -290,21 +291,23 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         pass
 
     #--------------------------- UTILS functions -------------------------------
-    def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
-        """ Load the output set if it exists or create a new one.
-        fixSampling: correct the output sampling rate if binning was used,
-        except for the case when the original movies are kept and shifts
-            refers to that one.
+    def _loadOutputSet(self, SetClass, baseName):
+        """ Load the output set if it exists or create a new one based on the inputs.
         """
         if SetClass == SetOfMicrographs:
             if 'dose-weighted' in baseName:
                 if self.inputDwMics is None:
                     # if no DwMics to do, do nothing and exit
                     return None
+                inputSet = self.inputDwMics
             else:
                 if self.inputMics is None:
                     # if no mics to do, do nothing and exit
                     return None
+                inputSet = self.inputMics
+        else:
+            inputSet = self.inputMovies.get()
+
         setFile = self._getPath(baseName)
 
         if exists(setFile):
@@ -320,12 +323,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
-        inputMovies = self.inputMovies.get()
-        outputSet.copyInfo(inputMovies)
-
-        if fixSampling:
-            newSampling = inputMovies.getSamplingRate()
-            outputSet.setSamplingRate(newSampling)
+        outputSet.copyInfo(inputSet)
 
         return outputSet
 

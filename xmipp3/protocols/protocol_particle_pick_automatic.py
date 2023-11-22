@@ -24,17 +24,22 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from os.path import exists, basename, join
 
-from pyworkflow.em import *  
-from pyworkflow.utils.path import *  
+from pyworkflow.protocol.params import STEPS_PARALLEL, PointerParam, EnumParam, FileParam
+from pyworkflow.utils.path import *
 
-import xmippLib
+from pwem.protocols import ProtParticlePickingAuto
+
+from pwem import emlib
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import readSetOfCoordinates
 
 
 MICS_SAMEASPICKING = 0
 MICS_OTHER = 1
+SRC_MANUAL_PICKING = 0
+SRC_DIR = 1
 
 
 class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
@@ -42,9 +47,8 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
     micrographs using previous training """
     _label = 'auto-picking (step 2)'  
     
-    filesToCopy = ['model_training.txt', 'model_svm.txt',
-                   'model_pca_model.stk', 'model_rotpca_model.stk',
-                   'model_particle_avg.xmp', 'config.xmd', 'templates.stk']
+    filesToCopy = ['model_svm.txt', 'model_pca_model.stk', 'model_rotpca_model.stk',
+                   'model_particle_avg.xmp', 'templates.stk']
     
     def __init__(self, **kwargs):
         ProtParticlePickingAuto.__init__(self, **kwargs)
@@ -55,11 +59,25 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
     
         form.addSection(label='Input')
 
+        form.addParam('modelSource', EnumParam, label="Model source",
+                      choices=["Manual picking in this project", "External directory"],
+                      default=0, help="The files model_* can be copied from a previous protocol execution within this "
+                                      "project or copied from an external directory. This latter option is useful in"
+                                      "cases in which the same kind of molecule is processed many times.")
+
         form.addParam('xmippParticlePicking', PointerParam,
                       label="Xmipp particle picking run",
                       pointerClass='XmippProtParticlePicking',
+                      condition="modelSource==%d"%SRC_MANUAL_PICKING,
                       #pointerCondition='isFinished',
                       help='Select the previous xmipp particle picking run.')
+
+        form.addParam('xmippParticlePickingDir', FileParam,
+                      label="Xmipp particle picking model directory",
+                      allowsNull=True,
+                      condition="modelSource==%d"%SRC_DIR,
+                      #pointerCondition='isFinished',
+                      help='The directory must contain the files model_*, config.xmd and templates.stk')
 
         form.addParam('micsToPick', EnumParam,
                       choices=['Same as supervised', 'Other'],
@@ -95,16 +113,28 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         return [copyId]
 
     # --------------------------- STEPS functions ------------------------------
+    def getSrcDir(self):
+        if self.modelSource == SRC_MANUAL_PICKING:
+            return self.xmippParticlePicking.get()._getExtraPath()
+        else:
+            return self.xmippParticlePickingDir.get()
+
     def copyInputFilesStep(self):
         # Copy training model files to current run
+        srcDir = self.getSrcDir()
         for f in self.filesToCopy:
-            copyFile(self.particlePickingRun._getExtraPath(f),
-                     self._getExtraPath(f))
+            createLink(os.path.join(srcDir, f), self._getExtraPath(f))
+        copyFile(os.path.join(srcDir, "config.xmd"), self._getExtraPath("config.xmd"))
+
+        # Get the box size
+        mdInfo = emlib.MetaData("properties@"+self._getExtraPath("config.xmd"))
+        self.boxSize = mdInfo.getValue(emlib.MDL_PICKING_PARTICLE_SIZE,mdInfo.firstObject())
+        mdInfo.setValue(emlib.MDL_PICKING_MANUALPARTICLES_SIZE,0,mdInfo.firstObject())
+        mdInfo.write("properties@"+self._getExtraPath("config.xmd"),emlib.MD_APPEND)
 
     def _pickMicrograph(self, mic, *args):
         micPath = mic.getFileName()
         # Get particle picking boxsize from the previous run
-        boxSize = self.particlePickingRun.outputCoordinates.getBoxSize()
         modelRoot = self._getExtraPath('model')
 
         micName = removeBaseExt(micPath)
@@ -113,11 +143,11 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
             basePos = replaceBaseExt(micPath, "pos")
             fnPos = self.particlePickingRun._getExtraPath(basePos)
             if exists(fnPos):
-                blocks = xmippLib.getBlocksInMetaDataFile(fnPos)
+                blocks = emlib.getBlocksInMetaDataFile(fnPos)
                 copy = True
                 if 'header' in blocks:
-                    mdheader = xmippLib.MetaData("header@" + fnPos)
-                    state = mdheader.getValue(xmippLib.MDL_PICKING_MICROGRAPH_STATE,
+                    mdheader = emlib.MetaData("header@" + fnPos)
+                    state = mdheader.getValue(emlib.MDL_PICKING_MICROGRAPH_STATE,
                                               mdheader.firstObject())
                     if state == "Available":
                         copy = False
@@ -128,7 +158,7 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
 
         if proceed:
             args = "-i %s " % micPath
-            args += "--particleSize %d " % boxSize
+            args += "--particleSize %d " % self.boxSize
             args += "--model %s " % modelRoot
             args += "--outputRoot %s " % self._getExtraPath(micName)
             args += "--mode autoselect --thr %d" % self.numberOfThreads
@@ -144,13 +174,13 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         validateMsgs = []
-        
-        if not hasattr(self.xmippParticlePicking.get(),"outputCoordinates"):
+
+        if self.modelSource == SRC_MANUAL_PICKING and not hasattr(self.xmippParticlePicking.get(),"outputCoordinates"):
             validateMsgs.append("You need to generate coordinates for the "
                                 "supervised picking")
    
-        srcPaths = [self.xmippParticlePicking.get()._getExtraPath(k)
-                    for k in self.filesToCopy]
+        srcDir = self.getSrcDir()
+        srcPaths = [os.path.join(srcDir,k) for k in self.filesToCopy]
         # Check that all needed files exist
         if missingPaths(*srcPaths):
             validateMsgs.append('Input picking run has not been trained, '
@@ -158,7 +188,7 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
             
         # If other set of micrographs is provided they should have same
         # sampling rate and acquisition
-        if self.micsToPick.get() == MICS_OTHER:
+        if self.micsToPick.get() == MICS_OTHER and self.modelSource != SRC_DIR:
             inputMics = self.inputMicrographs.get()
             manualMics = self.xmippParticlePicking.get().inputMicrographs.get()
             # FIXME: manualMics is always None when scheduled...
@@ -178,34 +208,20 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
                                         'acquisition parameters as the ones '
                                         'already picked.')
 
+        if self.modelSource.get()==SRC_DIR and self.micsToPick.get()==MICS_SAMEASPICKING:
+            validateMsgs.append("You cannot take the model from a directory and indicate that the set of micrograohs "
+                                "is the same as picking. If you take the model from a directory, probably you want "
+                                "to pick from a different set.")
         return validateMsgs
     
     def getSummary(self, coordSet):
         summary = []
-        summary.append("Previous run: %s" %
-                       self.xmippParticlePicking.get().getNameId())
-        configfile = join(self._getExtraPath(), 'config.xmd')
-        existsConfig = exists(configfile)
-        if existsConfig:
-            md = xmippLib.MetaData('properties@' + configfile)
-            configobj = md.firstObject()
-            def _get(label):
-                return md.getValue(label, configobj)
-            pickingState = _get(xmippLib.MDL_PICKING_STATE)
-            particleSize = _get(xmippLib.MDL_PICKING_PARTICLE_SIZE)
-            activeMic = _get(xmippLib.MDL_MICROGRAPH)
-            isAutopick = pickingState != "Manual"
-            manualParticlesSize = _get(xmippLib.MDL_PICKING_MANUALPARTICLES_SIZE)
-            autoParticlesSize = _get(xmippLib.MDL_PICKING_AUTOPARTICLES_SIZE)
-            
-            summary.append("Manual particles picked: %s" % manualParticlesSize)
-            summary.append("Particle size:%d" %(particleSize))
-            autopick = "Yes" if isAutopick else "No"
-            summary.append("Autopick: " + autopick)
-            if isAutopick:
-                summary.append("Automatic particles picked: %s"
-                               % autoParticlesSize)
-            summary.append("Last micrograph: " + activeMic)
+        if self.modelSource == SRC_MANUAL_PICKING:
+            summary.append("Previous run: %s" %
+                           self.xmippParticlePicking.get().getNameId())
+        else:
+            summary.append("Model from: %s" %
+                           self.xmippParticlePickingDir.get())
         return "\n".join(summary)
 
     def getMethods(self, output):
@@ -218,7 +234,7 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
 
     def _citations(self):
         return ['Abrishami2013']
-    
+
     # --------------------------- UTILS functions ------------------------------
     def getCoordsDir(self):
         return self._getExtraPath()
@@ -227,10 +243,7 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         # Get micrographs to pick
         if self.micsToPick == MICS_SAMEASPICKING:
             inputPicking = self.xmippParticlePicking.get()
-            if inputPicking is None:
-                return None
-            else:
-                return inputPicking.inputMicrographs
+            return inputPicking.inputMicrographs if inputPicking else None
         else:
             return self.inputMicrographs
         
@@ -240,7 +253,4 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         a new set of micrographs with the same properties than a previous
         trained ones. )
         """ 
-        if self.getInputMicrographsPointer() is not None:
-            return self.getInputMicrographsPointer().get()
-        else:
-            return None
+        return self.getInputMicrographsPointer().get() if self.getInputMicrographsPointer() else None

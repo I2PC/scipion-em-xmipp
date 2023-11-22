@@ -25,18 +25,21 @@
 # **************************************************************************
 
 from os.path import join
+import os
 
 from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         STEPS_PARALLEL,
                                         StringParam, EnumParam, LEVEL_ADVANCED,
                                         BooleanParam, USE_GPU, GPU_LIST)
-from pyworkflow.em.data import Volume
-from pyworkflow.em.protocol import ProtAnalysis3D
+from pwem.objects import Volume
+from pwem.protocols import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
-import pyworkflow.em.metadata as md
+import pwem.emlib.metadata as md
 
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 
 PROJECTION_MATCHING = 0
 SIGNIFICANT = 1
@@ -173,30 +176,46 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
 
         args = '-i %(inputVol)s -o %(gallery)s --sampling_rate %(angSampling)f --sym %(symmetry)s'
         args += ' --method fourier 1 0.25 bspline --compute_neighbors --angular_distance -1'
-        args += ' --experimental_images %(expParticles)s --max_tilt_angle 90'
+        args += ' --experimental_images %(expParticles)s --max_tilt_angle 180'
 
         self.runJob("xmipp_angular_project_library", args % params)
 
     def significantStep(self, volId):
-        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+        count=0
+        GpuListCuda=''
+        if self.useGpu.get():
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
         params = {"inputParts": self._getMdParticles(),
                   "symmetry": self.symmetryGroup.get(),
                   "angSampling": self.angularSampling.get(),
                   "orientations": self.numOrientations.get(),
                   "gallery": self._getGalleryMd(volId),
                   "outDir": self._getVolDir(volId),
-                  "output": self._getAnglesMd(volId),
-                  "device": GpuList,
+                  "output": "angles_iter001_00.xmd",
+                  "device": GpuListCuda,
                   }
 
         if not self.useGpu.get():
             args = ' -i %(inputParts)s --sym %(symmetry)s --angularSampling %(angSampling)0.3f --dontReconstruct'
-            args += ' --useForValidation %(orientations)0.3f --initgallery  %(gallery)s --odir %(outDir)s --iter 1'
+            args += ' --useForValidation %(orientations)0.3f --initgallery  %(gallery)s --odir %(outDir)s --iter 1 --dontCheckMirrors'
             self.runJob('xmipp_reconstruct_significant', args % params)
         else:
             args = '-i %(inputParts)s -r %(gallery)s -o %(output)s --keepBestN %(orientations)f '
             args += '--odir %(outDir)s --dev %(device)s '
-            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args % params, numberOfMpi=1)
 
     def projectionMatchingStep(self, volId):
         params = {"inputParts": self._getMdParticles(),
@@ -261,6 +280,8 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
             validateMsgs.append('Please provide input particles.')
+        if self.useGpu and not isXmippCudaPresent(CUDA_ALIGN_SIGNIFICANT):
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return validateMsgs
 
     def _summary(self):

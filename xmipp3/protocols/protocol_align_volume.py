@@ -26,8 +26,13 @@
 
 import numpy as np
 import pyworkflow.protocol.params as params
-import pyworkflow.em as em
-from ..convert import getImageLocation
+from pyworkflow.protocol import STEPS_PARALLEL
+
+from pwem.protocols import ProtAlignVolume
+from pwem.objects import Volume, Transform, SetOfVolumes
+
+from xmipp3.convert import getImageLocation
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 ALIGN_MASK_CIRCULAR = 0
@@ -39,7 +44,7 @@ ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL = 2
 ALIGN_ALGORITHM_FAST_FOURIER = 3
 
 
-class XmippProtAlignVolume(em.ProtAlignVolume):
+class XmippProtAlignVolume(ProtAlignVolume):
     """ 
     Aligns a set of volumes using cross correlation 
     or a Fast Fourier method. 
@@ -47,10 +52,12 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
      """
     _label = 'align volume'
     nVols = 0
+    _devStatus = UPDATED
+
     
     def __init__(self, **args):
-        em.ProtAlignVolume.__init__(self, **args)
-        self.stepsExecutionMode = em.STEPS_PARALLEL
+        ProtAlignVolume.__init__(self, **args)
+        self.stepsExecutionMode = STEPS_PARALLEL
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -78,7 +85,7 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
                       help='Select the volume mask object')
         
         form.addSection(label='Search strategy')
-        form.addParam('alignmentAlgorithm', params.EnumParam, default=ALIGN_ALGORITHM_EXHAUSTIVE, 
+        form.addParam('alignmentAlgorithm', params.EnumParam, default=ALIGN_ALGORITHM_FAST_FOURIER,
                       choices=['exhaustive',
                                'local', 
                                'exhaustive + local', 
@@ -187,37 +194,50 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
             self.runJob("xmipp_volume_align", args)
     
     def createOutputStep(self):        
+        Ts = self.inputReference.get().getSamplingRate()
+
         vols = []
         idx=1
         for vol in self._iterInputVolumes():
-            outVol = em.Volume()
-            outVol.setLocation(self._getExtraPath("vol%02d.mrc"%idx))
+            outVol = Volume()
+            fnOutVol = self._getExtraPath("vol%02d.mrc"%idx)
+            outVol.setLocation(fnOutVol)
             outVol.setObjComment(vol.getObjComment())
-            #set transformation matrix             
+            outVol.setObjLabel(vol.getObjLabel())
+
+            #set transformation matrix
             fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%idx)
             transMatFromFile = np.loadtxt(fhInputTranMat)
             transformationMat = np.reshape(transMatFromFile,(4,4))
-            transform = em.Transform()
+            transform = Transform()
             transform.setMatrix(transformationMat)
             outVol.setTransform(transform)            
             vols.append(outVol)
+
+            # Set the sampling rate in the mrc header
+            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f"%(fnOutVol, Ts))
+
             idx+=1
-                        
+
         if len(vols) > 1:
             volSet = self._createSetOfVolumes()
-            volSet.setSamplingRate(self.inputReference.get().getSamplingRate())
+            volSet.setSamplingRate(Ts)
             for vol in vols:
                 volSet.append(vol)
             outputArgs = {'outputVolumes': volSet}
         else:
-            vols[0].setSamplingRate(self.inputReference.get().getSamplingRate())
+            vols[0].setSamplingRate(Ts)
             outputArgs = {'outputVolume': vols[0]}
             
         self._defineOutputs(**outputArgs)
-        for pointer in self.inputVolumes:
-            self._defineSourceRelation(pointer, outputArgs.values()[0])
-    #--------------------------- INFO functions --------------------------------------------
-    
+        if len(vols) > 1:
+            for pointer in self.inputVolumes:
+                self._defineSourceRelation(pointer, outputArgs['outputVolumes'])
+        else:
+            for pointer in self.inputVolumes:
+                self._defineSourceRelation(pointer, outputArgs['outputVolume'])
+
+    #  --------------------------- INFO functions --------------------------------------------
     def _validate(self):
         errors = []
         for pointer in self.inputVolumes:
@@ -274,8 +294,8 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
             if item is None:
                 break
             itemId = item.getObjId()
-            if isinstance(item, em.Volume):
-                item.outputName = self._getExtraPath('output_vol%06d.vol' % itemId)
+            if isinstance(item, Volume):
+                item.outputName = self._getExtraPath('output_vol%06d.mrc' % itemId)
                 # If item is a Volume and label is empty
                 if not item.getObjLabel():
                     # Volume part of a set
@@ -284,9 +304,9 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
                     else:
                         item.setObjLabel('%s.%s' % (self.getMapper().getParent(item).getRunName(), item.getClassName()))
                 yield item
-            elif isinstance(item, em.SetOfVolumes):
+            elif isinstance(item, SetOfVolumes):
                 for vol in item:
-                    vol.outputName = self._getExtraPath('output_vol%06d_%03d.vol' % (itemId, vol.getObjId()))
+                    vol.outputName = self._getExtraPath('output_vol%06d_%03d.mrc' % (itemId, vol.getObjId()))
                     # If set item label is empty
                     if not vol.getObjLabel():
                         # if set label is not empty use it
@@ -310,11 +330,11 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
             if self.maskType == ALIGN_MASK_CIRCULAR:
                 maskArgs+=" --mask circular -%d" % self.maskRadius
             else:
-                maskArgs+=" --mask binary_file %s" % self.volMask
+                maskArgs+=" --mask binary_file %s" % self.maskFile.get().getFileName()
         return maskArgs
     
     def _getAlignArgs(self):
-        alignArgs = ''
+        alignArgs = ' --dontWrap'
         
         if self.alignmentAlgorithm == ALIGN_ALGORITHM_FAST_FOURIER:
             alignArgs += " --frm"

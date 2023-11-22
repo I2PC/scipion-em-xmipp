@@ -30,11 +30,12 @@
 
 from collections import OrderedDict
 
-from pyworkflow.em.constants import ALIGN_NONE
+from pwem.constants import ALIGN_NONE
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtOperateParticles, ProtOperateVolumes
+from pwem.protocols import ProtOperateParticles, ProtOperateVolumes
 
-from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, getImageLocation
+from xmipp3.convert import (writeSetOfParticles, writeSetOfVolumes,
+                            getImageLocation)
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
 
@@ -115,7 +116,7 @@ class XmippOperateHelper():
 
     #--------------------------- DEFINE param functions -----------------------
     def _defineProcessParams(self, form):
-        form.addParam('operation', params.EnumParam, choices=OP_CHOICES.values(),
+        form.addParam('operation', params.EnumParam, choices=list(OP_CHOICES.values()),
                       default=OP_PLUS,
                       label="Operation",
                       help="Binary operations: \n"

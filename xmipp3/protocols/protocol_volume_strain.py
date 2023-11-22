@@ -26,12 +26,10 @@
 
 import os
 
-from pyworkflow.object import Float, String
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam
-from pyworkflow.em.protocol.protocol import EMProtocol
-from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
-from pyworkflow.utils import cleanPath
+from pyworkflow.protocol.params import PointerParam, StringParam
+from pwem.protocols import ProtAnalysis3D
+
+import xmipp3
 
         
 class XmippProtVolumeStrain(ProtAnalysis3D):
@@ -60,6 +58,9 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
                         'If no symmetry is present, give c1')
     
     #--------------------------- INSERT steps functions --------------------------------------------
+    def _getFileName(self, fnRoot, key, **kwargs):
+        return "%s_%s.mrc"%(fnRoot,key)
+
     def _insertAllSteps(self):
         fnVol0 = self.inputVolume0.get().getFileName()
         fnVolF = self.inputVolumeF.get().getFileName()
@@ -71,56 +72,68 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
     #--------------------------- STEPS functions ---------------------------------------------------
     def calculateStrain(self, fnVol0, fnVolF, fnMask):
         fnRoot=self._getExtraPath('result')
-        mirtDir = os.path.join(os.environ['XMIPP_HOME'], 'external', 'mirt')
+        mirtDir = xmipp3.base.getXmippPath('external', 'mirt')
         # -wait -nodesktop
-        args='''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''%(fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot)
-        self.runJob("matlab", args, env=getMatlabEnviron(mirtDir))
+        args=('''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''
+              % (fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot))
+        self.runJob("matlab", args, env=xmipp3.Plugin.getMatlabEnviron(mirtDir))
     
     def prepareOutput(self):
         volDim = self.inputVolume0.get().getDim()[0]
+        Ts=self.inputVolume0.get().getSamplingRate()
         fnRoot=self._getExtraPath('result')
-        self.runJob("xmipp_image_convert", "-i %s_initial.raw#%d,%d,%d,0,float -o %s_initial.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_initial.vol --flipX"%fnRoot)
-        self.runJob("xmipp_image_convert", "-i %s_final.raw#%d,%d,%d,0,float -o %s_final.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_final.vol --flipX"%fnRoot)
-        self.runJob("xmipp_image_convert", "-i %s_initialDeformedToFinal.raw#%d,%d,%d,0,float -o %s_initialDeformedToFinal.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_initialDeformedToFinal.vol --flipX"%fnRoot)
-        self.runJob("xmipp_image_convert", "-i %s_strain.raw#%d,%d,%d,0,float -o %s_strain.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_strain.vol --flipX"%fnRoot)
-        self.runJob("xmipp_image_convert", "-i %s_localrot.raw#%d,%d,%d,0,float -o %s_localrot.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_localrot.vol --flipX"%fnRoot)
+
+        def symmetrize(key):
+            self.runJob("xmipp_transform_symmetrize", "-i %s --sym %s --dont_wrap" % \
+                        (self._getFileName(fnRoot, key), self.symmetryGroup.get()))
+
+        def changeSamplingRate(key):
+            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot, key), Ts))
+
+        def convert(key):
+            self.runJob("xmipp_image_convert", "-i %s_%s.raw#%d,%d,%d,0,float -o %s" %
+                        (fnRoot, key, volDim, volDim, volDim, self._getFileName(fnRoot, key)))
+            self.runJob("xmipp_transform_mirror", "-i %s --flipX" % self._getFileName(fnRoot, key))
+            changeSamplingRate(key)
+
+        convert("initial")
+        convert("final")
+        convert("initialDeformedToFinal")
+        convert("strain")
+        convert("localrot")
+
         self.runJob("rm","-f "+self._getExtraPath('result_*.raw'))
         if self.symmetryGroup!="c1":
-            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --dont_wrap"%(fnRoot+"_strain.vol",self.symmetryGroup.get()))
-            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --dont_wrap"%(fnRoot+"_localrot.vol",self.symmetryGroup.get()))
-    
+            symmetrize("strain")
+            symmetrize("localrot")
+            changeSamplingRate("strain")
+            changeSamplingRate("localrot")
+
     def createChimeraScript(self):
         fnRoot = "extra/result"
         scriptFile = self._getPath('result') + '_strain_chimera.cmd'
+
+        openStr = "open %s\n"
+
         fhCmd = open(scriptFile, 'w')
-        fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
-        fhCmd.write("open %s\n" % (fnRoot+"_strain.vol"))
+        fhCmd.write(openStr % self._getFileName(fnRoot,"final"))
+        fhCmd.write(openStr % self._getFileName(fnRoot,"strain"))
         fhCmd.write("vol #1 hide\n")
         fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
         fhCmd.close()
 
         scriptFile = self._getPath('result') + '_localrot_chimera.cmd'
         fhCmd = open(scriptFile, 'w')
-        fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
-        fhCmd.write("open %s\n" % (fnRoot+"_localrot.vol"))
+        fhCmd.write(openStr % self._getFileName(fnRoot,"final"))
+        fhCmd.write(openStr % self._getFileName(fnRoot,"localrot"))
         fhCmd.write("vol #1 hide\n")
         fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
         fhCmd.close()
 
         scriptFile = self._getPath('result') + '_morph_chimera.cmd'
         fhCmd = open(scriptFile, 'w')
-        fhCmd.write("open %s\n" % (fnRoot+"_initial.vol"))
-        fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
+        fhCmd.write(openStr % self._getFileName(fnRoot,"initial"))
+        fhCmd.write(openStr % self._getFileName(fnRoot,"final"))
         fhCmd.write("vol #0 hide\n")
         fhCmd.write("vol #1 hide\n")
         fhCmd.write("vop morph #0,1 frames 50\n")

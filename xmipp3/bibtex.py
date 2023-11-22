@@ -161,7 +161,7 @@ keywords = "Image processing, Cluster analysis, Neural networks, Self-organizing
 }
 
 @article{PascualMontano2001,
-title = "A Novel Neural Network Technique for Analysis and Classification of \{EM\} Single-Particle Images",
+title = "A Novel Neural Network Technique for Analysis and Classification of \\{EM\\} Single-Particle Images",
 journal = "JSB",
 volume = "133",
 number = "2 - 3",
@@ -318,7 +318,7 @@ author = "Sorzano, C.O.S. and S. Jonic and C. El-Bez and J.M. Carazo and S. De C
 
 @Article{Sorzano2007a,
   Title                    = {Fast, robust and accurate determination of transmission electron microscopy contrast transfer function},
-  Author                   = {Sorzano, C. O. S. and Jonic, S. and N\'u\~nez-Ram\'irez, R. and Boisset, N. and Carazo, J. M.},
+  Author                   = {Sorzano, C. O. S. and Jonic, S. and N\'u\\~nez-Ram\'irez, R. and Boisset, N. and Carazo, J. M.},
   Journal                  = {J. Structural Biology},
   Year                     = {2007},
   Pages                    = {249--262},
@@ -564,10 +564,99 @@ keywords = ""
   pages                    = "337--344",
   volume                   = "26",
   doi = {10.1016/j.str.2017.12.018},
-  url = {https://doi.org/10.1016/j.str.2017.12.018},
+  url = {http://doi.org/10.1016/j.str.2017.12.018},
 }
 
 
+@Article{strelak2020flexalign,
+AUTHOR = {Střelák, David and Filipovič, Jiří and Jiménez-Moreno, Amaya and Carazo, Jose María and Sánchez Sorzano, Carlos Óscar},
+TITLE = {FlexAlign: An Accurate and Fast Algorithm for Movie Alignment in Cryo-Electron Microscopy},
+JOURNAL = {Electronics},
+VOLUME = {9},
+YEAR = {2020},
+NUMBER = {6},
+ARTICLE-NUMBER = {1040},
+URL = {http://www.mdpi.com/2079-9292/9/6/1040},
+ISSN = {2079-9292},
+DOI = {http://doi.org/10.3390/electronics9061040}
+}
+
+@Article{Vilas2023,
+AUTHOR = {Vilas, JL and Tagare, HD},
+TITLE = {A simple and intuitive measurement of directional resolution anisotropy of cryoEM maps},
+JOURNAL = {Nature Methods},
+VOLUME = {X},
+YEAR = {2023},
+NUMBER = {X},
+ARTICLE-NUMBER = {in press},
+URL = {https://github.com/I2PC/xmipp/wiki/FSO---Fourier-Shell-Occupancy},
+}
+
+@article{Fernandez-Gimenez2021,
+title = {Cryo-EM density maps adjustment for subtraction, consensus and sharpening},
+journal = {Journal of Structural Biology},
+volume = {213},
+number = {4},
+year = {2021},
+issn = {1047-8477},
+doi = {https://doi.org/10.1016/j.jsb.2021.107780},
+url = {https://www.sciencedirect.com/science/article/pii/S104784772100085X},
+author = {E. Fernández-Giménez and M. Martínez and R. Sánchez-García and R. Marabini and E. Ramírez-Aportela and
+P. Conesa and J.M. Carazo and C.O.S. Sorzano},
+}
+
+@Article{Strelak2021,
+AUTHOR = {Strelak, David and Jiménez-Moreno, Amaya and Vilas, José L. and Ramírez-Aportela, Erney and Sánchez-García, Ruben and Maluenda, David and Vargas, Javier and Herreros, David and Fernández-Giménez, Estrella and de Isidro-Gómez, Federico P. and Horacek, Jan and Myska, David and Horacek, Martin and Conesa, Pablo and Fonseca-Reyna, Yunior C. and Jiménez, Jorge and Martínez, Marta and Harastani, Mohamad and Jonić, Slavica and Filipovic, Jiri and Marabini, Roberto and Carazo, José M. and Sorzano, Carlos O. S.},
+TITLE = {Advances in Xmipp for Cryo–Electron Microscopy: From Xmipp to Scipion},
+JOURNAL = {Molecules},
+VOLUME = {26},
+YEAR = {2021},
+NUMBER = {20},
+ARTICLE-NUMBER = {6224},
+URL = {https://www.mdpi.com/1420-3049/26/20/6224},
+PubMedID = {34684805},
+ISSN = {1420-3049},
+DOI = {https://doi.org/10.3390/molecules26206224}
+}
+
+
+@article{Fernandez-Gimenez2023a,
+title = {A new algorithm for particle weighted subtraction to eliminate signals from unwanted components in Single Particle Analysis},
+journal = {Journal of Structural Biology},
+volume = {215},
+number = {4},
+year = {2023},
+issn = {1047-8477},
+doi = {https://doi.org/10.1016/j.jsb.2023.108024},
+url = {https://www.sciencedirect.com/science/article/pii/S1047847723000874},
+author = {E. Fernández-Giménez, M. Martínez, R. Marabini, D. Strelak, R. Sánchez-García, J.M. Carazo and C.O.S. Sorzano},
+}
+
+@article{Fernandez-Gimenez2023b,
+title = {Local defocus estimation in Single Particle Analysis in Cryo-Electron Microscopy},
+journal = {Journal of Structural Biology},
+volume = {215},
+number = {4},
+year = {2023},
+issn = {1047-8477},
+doi = {https://doi.org/10.1016/j.jsb.2023.108030},
+url = {https://www.sciencedirect.com/science/article/pii/S104784772300093X},
+author = {E. Fernández-Giménez, J.M. Carazo and C.O.S. Sorzano},
+
+
+@Article{Strelak2023performance,
+AUTHOR = {Střelák, David and Marchán, Daniel and Carazo, José María and S. Sorzano, Carlos O.},
+TITLE = {Performance and Quality Comparison of Movie Alignment Software for Cryogenic Electron Microscopy},
+JOURNAL = {Micromachines},
+VOLUME = {14},
+YEAR = {2023},
+NUMBER = {10},
+ARTICLE-NUMBER = {1835},
+URL = {https://www.mdpi.com/2072-666X/14/10/1835},
+ISSN = {2072-666X},
+DOI = {https://doi.org/10.3390/mi14101835}
+
+}
 
 """
 

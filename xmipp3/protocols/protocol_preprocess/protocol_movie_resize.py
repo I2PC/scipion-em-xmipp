@@ -28,13 +28,14 @@ from os.path import exists
 
 from pyworkflow import VERSION_1_2
 from pyworkflow.utils.properties import Message
-from pyworkflow.protocol.params import PointerParam, FloatParam, EnumParam, \
-                                       IntParam
-from pyworkflow.em.protocol import EMProtocol, ProtProcessMovies
+from pyworkflow.protocol.params import (PointerParam, FloatParam, EnumParam,
+                                       IntParam)
 from pyworkflow.object import Set
 import pyworkflow.protocol.constants as cons
-from pyworkflow.em import STEPS_PARALLEL
-from pyworkflow.em.data import SetOfMovies, Movie
+from pyworkflow.protocol.constants import STEPS_PARALLEL
+
+from pwem.protocols import EMProtocol, ProtProcessMovies
+from pwem.objects import SetOfMovies, Movie
 
 
 RESIZE_SAMPLINGRATE = 0
@@ -48,7 +49,6 @@ class XmippProtMovieResize(ProtProcessMovies):
     """
     _label = 'movie resize'
     _lastUpdateVersion = VERSION_1_2
-
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
@@ -170,6 +170,10 @@ class XmippProtMovieResize(ProtProcessMovies):
             imgOut.setAcquisition(movie.getAcquisition())
             imgOut.setSamplingRate(self.newSamplingRate)
             imgOut.setFramesRange(self.inputMovies.get().getFramesRange())
+            
+            if imageSet.isEmpty():
+                imageSet.setDim(imgOut.getDim())
+            
             imageSet.append(imgOut)
 
         self._updateOutputSet('outputMovies', imageSet, streamMode)
@@ -191,13 +195,11 @@ class XmippProtMovieResize(ProtProcessMovies):
             outputSet.loadAllProperties()
             outputSet.enableAppend()
         else:
+            inputMovies = self.inputMovies.get()
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
-
-        inputMovies = self.inputMovies.get()
-        outputSet.copyInfo(inputMovies)
-
-        outputSet.setSamplingRate(self.newSamplingRate)
+            outputSet.copyInfo(inputMovies)
+            outputSet.setSamplingRate(self.newSamplingRate)
 
         return outputSet
 

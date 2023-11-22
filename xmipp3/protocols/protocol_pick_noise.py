@@ -30,11 +30,11 @@ import os
 from pyworkflow import VERSION_2_0
 from pyworkflow.object import Pointer
 
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, STEPS_SERIAL, LEVEL_ADVANCED)
+from pyworkflow.protocol.constants import (STEPS_SERIAL, LEVEL_ADVANCED)
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtParticlePicking
+from pwem.protocols import ProtParticlePicking
 
-import pyworkflow.em.metadata as MD
+import pwem.emlib.metadata as MD
 from xmipp3.convert import writeSetOfCoordinates, readSetOfCoordsFromPosFnames
 from xmipp3 import XmippProtocol
 
@@ -141,6 +141,8 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
         summary = []
         if hasattr(self, 'outputCoordinates'):
             summary.append('%d noisy particles were picked'%self.outputCoordinates.getSize())
+        else:
+            summary.append("The output set of noisy particles has not finished yet")
         return summary
 
 

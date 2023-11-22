@@ -27,7 +27,7 @@
 
 import os
 import numpy as np
-import Tkinter as tk
+import tkinter as tk
 from math import sqrt
 
 from pyworkflow.utils.properties import Icon
@@ -35,12 +35,14 @@ import pyworkflow.gui as gui
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.gui.widgets import Button, HotButton
-from pyworkflow.em.viewers.views import DataView
+from pwem.viewers.views import DataView
 import pyworkflow.gui.dialog as dialog
 
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_resolution3d import XmippProtResolution3D
+from xmipp3.utils import PathData
+
 from .plotter import XmippPlotter
 from os.path import exists
 
@@ -83,19 +85,19 @@ class XmippResolution3DViewer(ProtocolViewer):
                                       'Execute again the protocol with FSC\n'
                                       'and/or DPR options enabled.',
                                       title='Missing result file')]
-        md = xmippLib.MetaData(fscFn)
+        md = emlib.MetaData(fscFn)
         plotter = self._createPlot(title, FREQ_LABEL, plotLabel, md, 
-                                   xmippLib.MDL_RESOLUTION_FREQ, resolutionLabel,
+                                   emlib.MDL_RESOLUTION_FREQ, resolutionLabel,
                                    **kwargs)
         return [plotter, DataView(fscFn)]
         
     def _viewFsc(self, e=None):
         return self._loadPlots("Fourier Shell Correlation", 'FSC', 
-                               xmippLib.MDL_RESOLUTION_FRC, color='r')
+                               emlib.MDL_RESOLUTION_FRC, color='r')
 
     def _viewDpr(self, e=None):
         return self._loadPlots("Differential Phase Residual", 'DPR', 
-                       xmippLib.MDL_RESOLUTION_DPR)
+                       emlib.MDL_RESOLUTION_DPR)
         
     def _createPlot(self, title, xTitle, yTitle, md, mdLabelX, mdLabelY, color='g', figure=None):        
         xplotter = XmippPlotter(figure=figure)
@@ -113,10 +115,10 @@ class XmippResolution3DViewer(ProtocolViewer):
         X=[]
         Y=[]
         for objId in self.md:
-            f=self.md.getValue(xmippLib.MDL_RESOLUTION_FREQ2,objId)
+            f=self.md.getValue(emlib.MDL_RESOLUTION_FREQ2,objId)
             if f>=x[0] and f<=x[1]:
                 X.append(f)
-                Y.append(self.md.getValue(xmippLib.MDL_RESOLUTION_LOG_STRUCTURE_FACTOR,objId))
+                Y.append(self.md.getValue(emlib.MDL_RESOLUTION_LOG_STRUCTURE_FACTOR,objId))
         X=np.array(X)
         Y=np.array(Y)
         A=np.array([np.ones(X.size), X.T])
@@ -136,7 +138,6 @@ class XmippResolution3DViewer(ProtocolViewer):
         f.close()
             
     def _loadData(self):
-        from xmipp3.protocols.nma.data import PathData
         data = PathData(dim=2)
         bfactorFile = self.protocol._getPath('bfactor.txt')
         if os.path.exists(bfactorFile):
@@ -159,15 +160,15 @@ class XmippResolution3DViewer(ProtocolViewer):
         
     def _viewStructureFactor(self, e=None):
         strFactFn = self.protocol._defineStructFactorName()
-        self.md = xmippLib.MetaData(strFactFn)
+        self.md = emlib.MetaData(strFactFn)
         win = self.tkWindow(BfactorWindow, 
                            title='Clustering Tool',
                            callback=self._applyBfactor
                             )
         plotter = self._createPlot("Structure Factor", 'frequency^2 (1/A^2)', 
                                    'log(Structure Factor)',
-                                   self.md, xmippLib.MDL_RESOLUTION_FREQ2,
-                                   xmippLib.MDL_RESOLUTION_LOG_STRUCTURE_FACTOR,
+                                   self.md, emlib.MDL_RESOLUTION_FREQ2,
+                                   emlib.MDL_RESOLUTION_LOG_STRUCTURE_FACTOR,
                                    figure=win.figure)
         self.path = PointPath(plotter.getLastSubPlot(), self._loadData(), 
                               callback=self._adjustPoints,

@@ -29,16 +29,19 @@ Protocol to split a volume in two volumes based on a set of images
 
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam
-from pyworkflow.em.protocol import ProtClassify3D
-from pyworkflow.em.data import Volume
-from pyworkflow.em.convert import ImageHandler
+from pyworkflow.utils.path import cleanPath
+from pyworkflow import BETA, UPDATED, NEW, PROD
+from pwem.protocols import ProtClassify3D
+from pwem.objects import Volume
+from pwem.emlib.image import ImageHandler
 from xmipp3.convert import writeSetOfParticles
 
 
 class XmippProtSplitvolume(ProtClassify3D):
     """Split volume in two"""
     _label = 'split volume'
-    
+    _devStatus = BETA
+
     def __init__(self, **args):
         ProtClassify3D.__init__(self, **args)
 
@@ -74,11 +77,17 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def createOutput(self):
         inputParticles = self.directionalClasses.get()
+        Ts = inputParticles.getSamplingRate()
         volumesSet = self._createSetOfVolumes()
-        volumesSet.setSamplingRate(inputParticles.getSamplingRate())
+        volumesSet.setSamplingRate(Ts)
         for i in range(2):
             vol = Volume()
-            vol.setLocation(1, self._getExtraPath("split_v%d.vol"%(i+1)))
+            fnVol = self._getExtraPath("split_v%d.vol"%(i+1))
+            fnMrc = self._getExtraPath("split_v%d.mrc"%(i+1))
+            self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnVol,fnMrc), numberOfMpi=1)
+            self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, Ts), numberOfMpi=1)
+            cleanPath(fnVol)
+            vol.setLocation(1, fnMrc)
             volumesSet.append(vol)
         
         self._defineOutputs(outputVolumes=volumesSet)

@@ -30,11 +30,12 @@ Protocols for particles filter operations.
 """
 
 from pyworkflow.object import Float
-from pyworkflow.protocol.params import (
-    FloatParam, EnumParam, DigFreqParam, BooleanParam, PointerParam)
-from pyworkflow.em.data import ImageDim, CTFModel
-from pyworkflow.em.constants import FILTER_LOW_PASS, FILTER_HIGH_PASS, FILTER_BAND_PASS
-from pyworkflow.em.protocol import ProtFilterParticles, ProtFilterVolumes
+from pyworkflow.protocol.params import (FloatParam, EnumParam, DigFreqParam,
+                                        BooleanParam, PointerParam)
+
+from pwem.objects import ImageDim
+from pwem.constants import FILTER_LOW_PASS, FILTER_HIGH_PASS, FILTER_BAND_PASS
+from pwem.protocols import ProtFilterParticles, ProtFilterVolumes
 
 from xmipp3.constants import (FILTER_SPACE_FOURIER, FILTER_SPACE_REAL,
                               FILTER_SPACE_WAVELET)
@@ -68,11 +69,11 @@ class XmippFilterHelper():
 
     #--------------------------- DEFINE param functions --------------------------------------------
     @classmethod
-    def _defineProcessParams(cls, form):
+    def _defineProcessParams(cls, form, fourierChoices=['low pass', 'high pass', 'band pass', 'ctf']):
         form.addParam('filterSpace', EnumParam, choices=['fourier', 'real', 'wavelets'],
                       default=FILTER_SPACE_FOURIER,
                       label="Filter space")
-        form.addParam('filterModeFourier', EnumParam, choices=['low pass', 'high pass', 'band pass', 'ctf'],
+        form.addParam('filterModeFourier', EnumParam, choices=fourierChoices,
                       default=cls.FM_BAND_PASS,
                       condition='filterSpace == %d' % FILTER_SPACE_FOURIER,
                       label="Filter mode",
@@ -118,7 +119,7 @@ class XmippFilterHelper():
         #fourier
 
         form.addParam('freqInAngstrom', BooleanParam, default=True,
-                      condition='filterSpace == %d' % FILTER_SPACE_FOURIER,
+                      condition='filterSpace == %d and filterModeFourier != %d' % (FILTER_SPACE_FOURIER, cls.FM_CTF),
                       label='Provide resolution in Angstroms?',
                       help='If *Yes*, the resolution values for the filter\n'
                            'should be provided in Angstroms. If *No*, the\n'
@@ -213,8 +214,8 @@ class XmippFilterHelper():
             lowFreq = cls.getLowFreq(protocol)
             highFreq = cls.getHighFreq(protocol)
             freqDecay = cls.getFreqDecay(protocol)
-            print "protocol.freqInAngstrom: ", protocol.freqInAngstrom.get()
-            print "lowFreq, highFreq, freqDecay: ", lowFreq, highFreq, freqDecay 
+            print("protocol.freqInAngstrom: ", protocol.freqInAngstrom.get())
+            print("lowFreq, highFreq, freqDecay: ", lowFreq, highFreq, freqDecay)
             
             mode = protocol.filterModeFourier.get()
 
@@ -432,7 +433,7 @@ class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
 
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineProcessParams(self, form):
-        XmippFilterHelper._defineProcessParams(form)
+        XmippFilterHelper._defineProcessParams(form, fourierChoices=['low pass', 'high pass', 'band pass'])
         
     def _insertProcessStep(self):
         XmippFilterHelper._insertProcessStep(self)

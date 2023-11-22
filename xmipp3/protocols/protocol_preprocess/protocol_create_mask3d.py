@@ -26,11 +26,16 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *  
+from pwem import emlib
+from pwem.emlib.image import ImageHandler
 
-import xmippLib
+from pyworkflow.protocol.params import PointerParam, StringParam, PathParam
+
+from pwem.objects import VolumeMask
+from pwem.protocols import ProtCreateMask3D
+
+
 from xmipp3.convert import getImageLocation
-from xmipp3.constants import *
 from .geometrical_mask import *
 
 
@@ -65,27 +70,29 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
     def _defineParams(self, form):
         form.addSection(label='Mask generation')
         form.addParam('source', EnumParam, default=SOURCE_VOLUME,
-                      choices=['Volume','Geometry','Feature File'	],
+                      choices=['Volume', 'Geometry', 'Feature File'	],
                       label='Mask source')
         # For volume sources
         isVolume = 'source==%d' % SOURCE_VOLUME
         form.addParam('inputVolume', PointerParam, pointerClass="Volume",
-                      label="Input volume",  condition=isVolume,
+                      label="Input volume", allowsNull=True, condition=isVolume,
                       help="Select the volume that will be used to create the mask")
         form.addParam('volumeOperation', EnumParam, default=OPERATION_THRESHOLD,
-                      choices=['Threshold','Segment','Only postprocess'],
+                      choices=['Threshold', 'Segment', 'Only postprocess'],
                       label='Operation', condition=isVolume)
         #TODO: add wizard
         form.addParam('threshold', FloatParam, default=0.0,
                       condition='volumeOperation==%d and %s'
                       % (OPERATION_THRESHOLD, isVolume),
-                      label='Threshold')
+                      label='Threshold',
+                      help="Select the threshold. Gray values lesser than the threshold" \
+                           "will be set to zero, otherwise will be one (mask area).")
         isSegmentation = 'volumeOperation==%d and %s' % (OPERATION_SEGMENT, isVolume)
         form.addParam('segmentationType', EnumParam, default=SEGMENTATION_DALTON, 
                       condition=isSegmentation,
                       label='Segmentation type',
-                      choices=['Number of voxels','Number of aminoacids',
-                               'Dalton mass','Automatic'])
+                      choices=['Number of voxels', 'Number of aminoacids',
+                               'Dalton mass', 'Automatic'])
         form.addParam('nvoxels', IntParam, 
                       condition='%s and segmentationType==%d'
                       % (isSegmentation, SEGMENTATION_VOXELS),
@@ -106,12 +113,10 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         XmippGeometricalMask3D.defineParams(self, form, 
                                             isGeometry='source==%d'
                                             % SOURCE_GEOMETRY,
-                                            addSize=True, 
-                                            isFeature='source!=%d'
-                                            % SOURCE_FEATURE_FILE)
+                                            addSize=True)
         # Feature File
         isFeatureFile = 'source==%d' % SOURCE_FEATURE_FILE
-        form.addParam('featureFilePath', params.PathParam,
+        form.addParam('featureFilePath', PathParam,
                       condition=isFeatureFile,
                       label="Feature File",
                       help="""Create a mask using a feature file. Follows an example of feature file 
@@ -147,19 +152,20 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
         form.addSection(label='Postprocessing')
         form.addParam('doSmall', BooleanParam, default=False,
                       label='Remove small objects',
-                      help="The input mask has to be binary")
+                      help="To remove small clusters of points. "
+                           "The input mask has to be binary.")
         form.addParam('smallSize', IntParam, default=50,
                       label='Minimum size',condition="doSmall",
                       help='Connected components whose size is smaller than '
                            'this number in voxels will be removed')
         form.addParam('doBig', BooleanParam, default=False,
                       label='Keep largest component',
-                      help="The input mask has to be binary")
+                      help="To keep cluster greater than a given size. The input mask has to be binary")
         form.addParam('doSymmetrize', BooleanParam, default=False,
                       label='Symmetrize mask')
         form.addParam('symmetry', StringParam, default='c1',
                       label='Symmetry group',condition="doSymmetrize",
-                      help="See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry \n"
+                      help="To obtain a symmetric mask. See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry \n"
                            "for a description of the symmetry groups format. \n"
                            "If no symmetry is present, give c1")
         form.addParam('doMorphological', BooleanParam, default=False,
@@ -186,7 +192,7 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
-        self.maskFile = self._getPath('mask.vol')
+        self.maskFile = self._getPath('mask.mrc')
         
         if self.source == SOURCE_VOLUME:
             self._insertFunctionStep('createMaskFromVolumeStep')
@@ -202,6 +208,8 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
     def createMaskFromVolumeStep(self):
         volume = self.inputVolume.get()
         fnVol = getImageLocation(volume)
+        if fnVol.endswith(".mrc"):
+            fnVol += ":mrc"
         Ts = volume.getSamplingRate()
         
         if self.volumeOperation == OPERATION_THRESHOLD:
@@ -228,7 +236,7 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
     def createMaskFromGeometryStep(self):
         # Create empty volume file with desired dimensions
         size = self.size.get()
-        xmippLib.createEmptyFile(self.maskFile, size, size, size)
+        emlib.createEmptyFile(self.maskFile, size, size, size)
         
         # Create the mask
         args = '-i %s ' % self.maskFile
@@ -281,10 +289,12 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
         volMask.setFileName(self.maskFile)
         
         if self.source==SOURCE_VOLUME:
-            volMask.setSamplingRate(self.inputVolume.get().getSamplingRate())
+            Ts = self.inputVolume.get().getSamplingRate()
         else:
-            volMask.setSamplingRate(self.samplingRate.get())
-        
+            Ts = self.samplingRate.get()
+        volMask.setSamplingRate(Ts)
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.maskFile,Ts))
+
         self._defineOutputs(outputMask=volMask)
         
         if self.source==SOURCE_VOLUME:
@@ -384,7 +394,11 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
             messages.append("And, we smoothed it (sigma=%f voxels)."
                             % self.sigmaConvolution.get())
         if self.hasAttribute('outputMask'):
-            messages.append('We refer to the output mask as %s.'
-                            % self.outputMask.getNameId())
+            messages.append('We refer to the output mask as %s.'  % self.outputMask.getNameId())
         return messages
     
+    def _validate(self):
+        errors = []
+        if self.source == SOURCE_VOLUME and not self.inputVolume.get():
+            errors.append("You need to select an input volume")
+            return errors

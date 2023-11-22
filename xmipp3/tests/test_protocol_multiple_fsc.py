@@ -24,12 +24,8 @@
 # *
 # **************************************************************************
 
-import unittest, sys
-# import numpy as np
-
-from pyworkflow.em import *
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from pyworkflow.em.protocol import ProtImportVolumes, ProtImportMask
+from pwem.protocols import ProtImportVolumes, ProtImportMask
 
 from xmipp3.protocols import XmippProtMultipleFSCs
 

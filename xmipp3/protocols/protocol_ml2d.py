@@ -26,14 +26,16 @@
 
 from os.path import join, exists
 
-import pyworkflow.em.data as data
-import pyworkflow.em.metadata as md
+import pwem.emlib.metadata as md
 import pyworkflow.utils.path as path
-from pyworkflow.em.protocol import ProtClassify2D
-from pyworkflow.em.constants import ALIGN_2D
+from pwem.objects import SetOfClasses2D
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
                                         FloatParam)
+
+from pwem.protocols import ProtClassify2D
+from pwem.constants import ALIGN_2D
+
 
 from xmipp3.convert import writeSetOfParticles, rowToAlignment, xmippToLocation
 
@@ -62,9 +64,9 @@ class XmippProtML2D(ProtClassify2D):
         myDict = {
                   'input_particles': self._getTmpPath('input_particles.xmd'),
                   'input_references': self._getTmpPath('input_references.xmd'),
-                  'output_classes': self._getOroot() + 'classes.xmd',
+                  'output_classes': self._getOroot() + 'classes.xmd', # self._getExtraPath('classes.xmd'),
                   'final_classes': self._getPath('classes2D.sqlite'),
-                  'output_particles': self._getOroot() + 'images.xmd',
+                  'output_particles':  self._getOroot() + 'images.xmd',# self._getExtraPath('images.xmd'),
                   'classes_scipion': self._getPath('classes_scipion_iter_%(iter)02d.sqlite')
                   }
         self._updateFilenamesDict(myDict)
@@ -241,7 +243,7 @@ class XmippProtML2D(ProtClassify2D):
     #--------------------------- UTILS functions --------------------------------------------
     def _getMLParams(self):
         """ Mainly prepare the command line for call ml(f)2d program"""
-        params = ' -i %s --oroot %s' % (self._getFileName('input_particles'), self._getOroot())
+        params = ' -i %s --oroot %s' % (self._getFileName('input_particles'), self._getOroot()) #self._getPath()
         if self.doGenerateReferences:
             params += ' --nref %d' % self.numberOfClasses.get()
             self.inputReferences.set(None)
@@ -294,14 +296,14 @@ class XmippProtML2D(ProtClassify2D):
             it = self._lastIteration()
         extra = self._getOroot() + 'extra'
         mdFile = join(extra, 'iter%03d' % it, 'iter_%s.xmd' %fn)
-        if block:
-            mdFile = block + '@' + mdFile
-        
+        #if block:
+            #mdFile = block + '@' + mdFile
+
         return mdFile
     
     def _lastIteration(self):
         """ Find the last iteration number """
-        it = 0        
+        it = -1
         while True:
             if not exists(self._getIterMdClasses(it+1)):
                 break
@@ -328,7 +330,7 @@ class XmippProtML2D(ProtClassify2D):
     def _updateClass(self, item):
         classId = item.getObjId()
         
-        if  classId in self._classesInfo:
+        if classId in self._classesInfo:
             index, fn, _ = self._classesInfo[classId]
             item.setAlignment2D()
             item.getRepresentative().setLocation(index, fn)
@@ -367,7 +369,7 @@ class XmippProtML2D(ProtClassify2D):
             path.cleanPath(dataClasses)
         
         if not exists(dataClasses):
-            clsSet = data.SetOfClasses2D(filename=dataClasses)
+            clsSet = SetOfClasses2D(filename=dataClasses)
             clsSet.setImages(self.inputParticles.get())
             self._fillClassesFromIter(clsSet, it)
             clsSet.write()

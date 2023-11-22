@@ -26,10 +26,13 @@
 
 import pyworkflow
 import pyworkflow.object as pwobj
-from pyworkflow.em import *
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pwem.emlib.image import ImageHandler
+from pwem.objects import Volume
 
-from xmippLib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
+from pwem.protocols import (ProtPreprocessVolumes)
+from pyworkflow.protocol import (PointerParam, IntParam, EnumParam, FloatParam)
+
+from pwem.emlib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
 from xmipp3.convert import getImageLocation
 
 
@@ -55,7 +58,7 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
                       label='Symmetry order',
                       help="3 for a three-fold symmetry axis, "
                            "4 for a four-fold symmetry axis, ...")
-        form.addParam('searchMode', EnumParam,
+        form.addParam('searchMode', EnumParam,label='Search mode',
                       choices=['Global','Local','Global+Local'],
                       default=self.GLOBAL_LOCAL_SEARCH)
 
@@ -84,8 +87,8 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
         tilt.addParam('tiltF', FloatParam, default=180, label='Max')
         tilt.addParam('tiltStep', FloatParam, default=5, label='Step')
 
-        self.rotSym = Float()
-        self.tiltSym = Float()
+        self.rotSym = pwobj.Float()
+        self.tiltSym = pwobj.Float()
 
         form.addParallelSection(threads=4, mpi=0)
 
@@ -99,7 +102,7 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
         self._insertFunctionStep('symmetrize')
         self._insertFunctionStep('createOutput')
         self.fnVol = getImageLocation(self.inputVolume.get())
-        self.fnVolSym=self._getPath('volume_symmetrized.vol')
+        self.fnVolSym=self._getPath('volume_symmetrized.mrc')
         [self.height,_,_]=self.inputVolume.get().getDim()
     
     #--------------------------- STEPS functions -------------------------------
@@ -147,6 +150,9 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
                     (self.fnVolSym,self.symOrder.get()))
 
     def createOutput(self):
+        Ts = self.inputVolume.get().getSamplingRate()
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f" %(self.fnVolSym,Ts))
+
         volume = Volume()
         volume.setFileName(self.fnVolSym)
         volume.copyInfo(self.inputVolume.get())
