@@ -30,6 +30,7 @@ from pyworkflow.protocol.params import MultiPointerParam
 from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
 
+CITE = 'Fernandez-Gimenez2021'
 
 class XmippProtVolConsensus(ProtInitialVolume):
     """ This protocol performs a fusion of all the input volumes, which should be preprocessed with protocol 'volume
@@ -112,7 +113,7 @@ class XmippProtVolConsensus(ProtInitialVolume):
         errors = []
         voxel_size = []
         for i, vol in enumerate(self.vols):
-            voxel_size.append(vol.get().getSamplingRate())
+            voxel_size.append(round(vol.get().getSamplingRate(), 2))
         result = all(element == voxel_size[0] for element in voxel_size)
         if not result:
             errors.append('Pixel size should be the same for all input volumes.')

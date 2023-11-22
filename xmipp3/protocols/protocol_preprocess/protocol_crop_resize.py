@@ -26,19 +26,24 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
 import pyworkflow.protocol.constants as const
+from pyworkflow.object import String
+from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.protocol.params import (BooleanParam, EnumParam, FloatParam,
                                         IntParam)
-from pwem.objects import Volume
+from pwem.objects import Volume, SetOfParticles, Mask
 
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippResizeHelper:
     """ Common features to change dimensions of either SetOfParticles,
     Volume or SetOfVolumes objects.
     """
+    _devStatus = UPDATED
 
     RESIZE_SAMPLINGRATE = 0
     RESIZE_DIMENSIONS = 1
@@ -47,9 +52,9 @@ class XmippResizeHelper:
 
     WINDOW_OP_CROP = 0
     WINDOW_OP_WINDOW = 1
-
-    #--------------------------- DEFINE param functions --------------------------------------------
-    @classmethod
+    
+    #--------------------------- DEFINE param functions --------------------------------------------       
+    @classmethod   
     def _defineProcessParams(cls, protocol, form):
         # Resize operation
         form.addParam('doResize', BooleanParam, default=False,
@@ -241,13 +246,28 @@ def _getSampling(imgSet):
 
 class XmippProtCropResizeParticles(XmippProcessParticles):
     """ Crop or resize a set of particles """
+    # Protocol constants
+    OUTPUT_PARTICLES_NAME = 'outputParticles'
+    OUTPUT_MASK_NAME = 'outputMask'
+
     _label = 'crop/resize particles'
     _inputLabel = 'particles'
+    _possibleOutputs = {OUTPUT_PARTICLES_NAME: SetOfParticles, OUTPUT_MASK_NAME: Mask}
     
     def __init__(self, **kwargs):
         XmippProcessParticles.__init__(self, **kwargs)
     
     #--------------------------- DEFINE param functions --------------------------------------------
+    def _defineParams(self, form):
+        # Creating super form
+        super()._defineParams(form)
+       
+        # Obtaining input particles param to accept also a mask
+        inputParticles = form.getParam('inputParticles')
+        inputParticles.pointerClass = String(str(inputParticles.pointerClass) + ',Mask')
+        inputParticles.label = String(str(inputParticles.label) + '/Mask')
+        inputParticles.help = String('Input particles or 2D Mask to be cropped/resized.')
+
     def _defineProcessParams(self, form):
         XmippResizeHelper._defineProcessParams(self, form)
         form.addParallelSection(threads=0, mpi=8)
@@ -264,15 +284,44 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
     
     def windowStep(self, isFirstStep, args):
         XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep)+args)
+    
+    def convertInputStep(self):
+        """ convert if necessary"""
+        if self.isMask():
+            # If input is a Mask, modify filter params
+            self.inputFn = self.inputParticles.get().getFileName()
+            inputName = os.path.splitext(os.path.basename(self.inputFn))[0]
+
+            # Set output mask path
+            self.outputStk = self._getExtraPath(os.path.basename(inputName + '.mrc'))
+            self.outputMd = self._getTmpPath('tmp.xmd')
+        else:
+            # If input is not Mask, keep default behaviour
+            super().convertInputStep()
+    
+    def createOutputStep(self):
+        if self.isMask():
+            # If input is a Mask, create output Mask
+            outputMask = Mask(self.outputStk)
+            outputMask.copyInfo(self.inputParticles.get())
+            self._preprocessOutput(outputMask)
+            self._defineOutputs(**{self.OUTPUT_MASK_NAME: outputMask})
+            self._defineTransformRelation(self.inputParticles.get(), outputMask)
+        else:
+            # If input is not Mask, keep default behaviour
+            super().createOutputStep()
         
     def _preprocessOutput(self, output):
-        """ We need to update the sampling rate of the 
+        """
+        We need to update the sampling rate of the 
         particles if the Resize option was used.
         """
-        self.inputHasAlign = self.inputParticles.get().hasAlignment()
+        if not self.isMask():
+            self.inputHasAlign = self.inputParticles.get().hasAlignment()
         
         if self.doResize:
             output.setSamplingRate(self.samplingRate)
+            setMRCSamplingRate(self.outputStk, self.samplingRate)
             
     def _updateItem(self, item, row):
         """ Update also the sampling rate and 
@@ -336,9 +385,22 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         return [str]
 
     def _validate(self):
-        return XmippResizeHelper._validate(self)
+        """ This function validates the input parameters so only allowed operations take place. """
+        # Getting default errors
+        errors = XmippResizeHelper._validate(self)
+
+        # Checking if at least one of the operations has been selected
+        if not self.doResize and not self.doWindow.get():
+            errors.append('At least one of the possible operations needs to be selected.')
+        
+        # Returning errors
+        return errors
     
     #--------------------------- UTILS functions ---------------------------------------------------
+    def isMask(self):
+        """ This function returns True if the input object is a Mask. False otherwise. """
+        return isinstance(self.inputParticles.get(), Mask)
+      
     def _ioArgs(self, isFirstStep):
         if isFirstStep:
             return "-i %s -o %s --save_metadata_stack %s --keep_input_columns " % (self.inputFn, self.outputStk, self.outputMd)
@@ -398,31 +460,32 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
         XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep)+args)
         
     def _preprocessOutput(self, volumes):
-        # We use the preprocess only whne input is a set
+        # We use the preprocess only when input is a set
         # we do not use postprocess to setup correctly
         # the samplingRate before each volume is added
         if not self._isSingleInput():
             if self.doResize:
                 volumes.setSamplingRate(self.samplingRate)
 
-    def _postprocessOutput(self, volumes):
+    def _postprocessOutput(self, volume:Volume):
         # We use the postprocess only when input is a volume
         if self._isSingleInput():
             if self.doResize:
-                volumes.setSamplingRate(self.samplingRate)
+                volume.setSamplingRate(self.samplingRate)
                 # we have a new sampling so origin need to be adjusted
                 iSampling = self.inputVolumes.get().getSamplingRate()
                 oSampling = self.samplingRate
                 xdim_i, ydim_i, zdim_i = self.inputVolumes.get().getDim()
-                xdim_o, ydim_o, zdim_o = volumes.getDim()
+                xdim_o, ydim_o, zdim_o = volume.getDim()
 
                 xOrig, yOrig , zOrig = \
                     self.inputVolumes.get().getShiftsFromOrigin()
                 xOrig += (xdim_i*iSampling-xdim_o*oSampling)/2.
                 yOrig += (ydim_i*iSampling-ydim_o*oSampling)/2.
                 zOrig += (zdim_i*iSampling-zdim_o*oSampling)/2.
-                volumes.setShiftsInOrigin(xOrig, yOrig, zOrig)
-                volumes.setSamplingRate(oSampling)
+                volume.setShiftsInOrigin(xOrig, yOrig, zOrig)
+                volume.setSamplingRate(oSampling)
+                setMRCSamplingRate(volume.getFileName(), oSampling)
 
     #--------------------------- INFO functions ----------------------------------------------------
     def _summary(self):

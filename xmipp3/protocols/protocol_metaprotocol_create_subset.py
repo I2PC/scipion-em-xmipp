@@ -26,6 +26,7 @@
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import PointerParam, IntParam
+from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.protocols import EMProtocol
 from pwem.objects import Volume
 
@@ -36,6 +37,7 @@ class XmippMetaProtCreateSubset(EMProtocol):
      """
     _label = 'metaprotocol heterogeneity subset'
     _lastUpdateVersion = VERSION_2_0
+    _devStatus = BETA
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):

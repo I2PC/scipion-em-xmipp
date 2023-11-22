@@ -31,14 +31,15 @@ import time
 from datetime import datetime
 
 import pyworkflow.protocol.constants as cons
-from pyworkflow import VERSION_2_0
+from pyworkflow import VERSION_3_0
+from pyworkflow.protocol import Protocol
 from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 
 SIGNAL_FILENAME = "STOP_STREAM.TXT"
 
-class XmippProtTriggerData(EMProtocol):
+class XmippProtTriggerData(EMProtocol, Protocol):
     """
     Waits until certain number of images is prepared and then
     send them to output.
@@ -55,7 +56,7 @@ class XmippProtTriggerData(EMProtocol):
                 a certain number of items (completely in streaming).
     """
     _label = 'trigger data'
-    _lastUpdateVersion = VERSION_2_0
+    _lastUpdateVersion = VERSION_3_0
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -94,7 +95,7 @@ class XmippProtTriggerData(EMProtocol):
                            '\n For this option, select the option send all items to output.')
         form.addParam('triggerProt', PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='triggerSignal', allowsNull=True,
+                      condition='triggerSignal',
                       label='Trigger data protocol',
                       help='Select the trigger data protocol that you will send a signal to stop the stream.')
         form.addParam('delay', IntParam, default=10, label="Delay (sec)",
@@ -121,7 +122,7 @@ class XmippProtTriggerData(EMProtocol):
         self._checkNewOutput()
 
     def createOutputStep(self):
-        pass
+        self._closeOutputSet()
 
     def _checkNewInput(self):
         imsFile = self.inputImages.get().getFileName()
@@ -173,16 +174,15 @@ class XmippProtTriggerData(EMProtocol):
             self.finished = False
 
         # Send the signal to the connected protocol
-        if self.triggerSignal.get():
-            if len(self.images) >= self.outputSize:
-                print('Sending signal to stop the input trigger data protocol')
-                self.stopWait()
+        if self.triggerSignal.get() and len(self.images) >= self.outputSize:
+            self.info('Sending signal to stop the input trigger data protocol')
+            self.stopWait()
 
         # Wait for trigger data signal
         if self.triggerWait.get():
-            print('Waiting for signal to stop the stream')
+            self.info('Waiting for signal to stop the stream')
             if self.waitingHasFinished():
-                print('Stopped by received signal from a trigger data protocol')
+                self.info('Stopped by received signal from a trigger data protocol')
                 self.finished = True
 
         outputStep = self._getFirstJoinStep()
@@ -253,23 +253,6 @@ class XmippProtTriggerData(EMProtocol):
         outputSet.copyItems(newImages)
         return outputSet
 
-    def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
-        outputSet.setStreamState(state)
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protocol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            self._defineOutputs(**{outputName: outputSet})
-            self._defineTransformRelation(self.inputImages, outputSet)
-            self._store(outputSet)
-
-        # Close set database to avoid locking it
-        outputSet.close()
-
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
         summary = []
@@ -307,7 +290,10 @@ class XmippProtTriggerData(EMProtocol):
         return summary
 
     def _validate(self):
-        pass
+        errors = []
+        if self.triggerSignal.get():
+            if not isinstance(self.triggerProt.get(), XmippProtTriggerData):
+                errors.append("There is not a Trigger protocol connected to send a stop signal.")
 
     # --------------------------- UTILS functions -----------------------------
     def _getFirstJoinStepName(self):

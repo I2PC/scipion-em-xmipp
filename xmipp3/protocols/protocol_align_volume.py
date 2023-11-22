@@ -32,6 +32,7 @@ from pwem.protocols import ProtAlignVolume
 from pwem.objects import Volume, Transform, SetOfVolumes
 
 from xmipp3.convert import getImageLocation
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 ALIGN_MASK_CIRCULAR = 0
@@ -51,6 +52,8 @@ class XmippProtAlignVolume(ProtAlignVolume):
      """
     _label = 'align volume'
     nVols = 0
+    _devStatus = UPDATED
+
     
     def __init__(self, **args):
         ProtAlignVolume.__init__(self, **args)
@@ -200,7 +203,9 @@ class XmippProtAlignVolume(ProtAlignVolume):
             fnOutVol = self._getExtraPath("vol%02d.mrc"%idx)
             outVol.setLocation(fnOutVol)
             outVol.setObjComment(vol.getObjComment())
-            #set transformation matrix             
+            outVol.setObjLabel(vol.getObjLabel())
+
+            #set transformation matrix
             fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%idx)
             transMatFromFile = np.loadtxt(fhInputTranMat)
             transformationMat = np.reshape(transMatFromFile,(4,4))
@@ -329,7 +334,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
         return maskArgs
     
     def _getAlignArgs(self):
-        alignArgs = ''
+        alignArgs = ' --dontWrap'
         
         if self.alignmentAlgorithm == ALIGN_ALGORITHM_FAST_FOURIER:
             alignArgs += " --frm"

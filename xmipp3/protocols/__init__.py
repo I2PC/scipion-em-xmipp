@@ -31,6 +31,7 @@ from .protocol_preprocess import *
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
 from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
+from .protocol_angular_resolution_alignment import XmippProtResolutionAlignment
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
@@ -38,10 +39,7 @@ from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMa
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
-from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
-from .protocol_classification_gpuCorr import XmippProtGpuCrrCL2D
-from .protocol_classification_gpuCorr_semi import XmippProtStrGpuCrrSimple
-from .protocol_classification_gpuCorr_full import XmippProtStrGpuCrrCL2D
+#from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
 from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
 from .protocol_compare_angles import XmippProtCompareAngles
@@ -51,7 +49,7 @@ from .protocol_create_gallery import XmippProtCreateGallery
 from .protocol_ctf_consensus import XmippProtCTFConsensus
 from .protocol_ctf_micrographs import XmippProtCTFMicrographs
 from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
-from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
+from .protocol_consensus_classes import XmippProtConsensusClasses
 from .protocol_denoise_particles import XmippProtDenoiseParticles
 #from .protocol_deep_align import XmippProtDeepAlign
 from .protocol_deep_center import XmippProtDeepCenter
@@ -68,10 +66,10 @@ from .protocol_helical_parameters import XmippProtHelicalParameters
 from .protocol_kerdensom import XmippProtKerdensom
 from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
-from .protocol_movie_average import XmippProtMovieAverage
-from .protocol_movie_correlation import XmippProtMovieCorr
+from .protocol_flexalign import XmippProtFlexAlign
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
+from .protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
 from .protocol_movie_split_frames import XmippProtSplitFrames
 from .protocol_multiple_fscs import XmippProtMultipleFSCs
 from .protocol_multireference_alignability import XmippProtMultiRefAlignability
@@ -79,7 +77,7 @@ from .protocol_normalize_strain import XmippProtNormalizeStrain
 from .protocol_particle_pick_automatic import XmippParticlePickingAutomatic
 from .protocol_particle_pick_consensus import XmippProtConsensusPicking
 from .protocol_pick_noise import XmippProtPickNoise
-from .protocol_particle_boxsize import XmippProtParticleBoxsize
+#from .protocol_particle_boxsize import XmippProtParticleBoxsize
 from .protocol_particle_pick import XmippProtParticlePicking
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from .protocol_phantom_create import XmippProtPhantom
@@ -100,7 +98,7 @@ from .protocol_resolution_monogenic_signal import XmippProtMonoRes
 from .protocol_resolution_deepres import XmippProtDeepRes
 from .protocol_postProcessing_deepPostProcessing import XmippProtDeepVolPostProc
 from .protocol_rotate_volume import XmippProtRotateVolume
-from .protocol_rotational_spectra import XmippProtRotSpectra
+#from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
@@ -111,6 +109,7 @@ from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_subtract_projection import XmippProtSubtractProjection
+from .protocol_subtract_projection import XmippProtBoostParticles
 from .protocol_tilt_analysis import XmippProtTiltAnalysis
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt
@@ -122,11 +121,7 @@ from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 from .protocol_deep_denoising import XmippProtDeepDenoising  # deepDenoising has to be after XmippProtGenerateReprojections and XmippProtCompareReprojections
-from .protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
-from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneous
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
-from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
-from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
 from .protocol_volume_deform_zernike3d import XmippProtVolumeDeformZernike3D
 from .protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
@@ -141,5 +136,7 @@ from .protocol_structure_map import XmippProtStructureMap
 from .protocol_apply_zernike3d import XmippApplyZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
+from .protocol_volume_local_adjust import XmippProtLocalVolAdj
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
+from .protocol_deep_center_assignment import XmippProtDeepCenter, XmippProtDeepGlobalAssignment
