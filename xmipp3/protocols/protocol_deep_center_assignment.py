@@ -163,9 +163,9 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
     
     def convertTrainStep(self):
         if self.inputTrainSet.get() is None:
-            self.convertStep(self.inputImageSet.get(), True)
+            self.convertStep(self.inputImageSet.get(), train=True)
         else:
-            self.convertStep(self.inputTrainSet.get(), True)
+            self.convertStep(self.inputTrainSet.get(), train=True)
     
     def train(self, gpuId, mode="", orderSymmetry=None):
         args = "%s %s %f %d %d %s %d %f %d %d" % (
