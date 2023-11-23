@@ -167,34 +167,34 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
         else:
             self.convertStep(self.inputTrainSet.get(), train=True)
     
-    def train(self, gpuId, mode="", orderSymmetry=None):
+    def train(self, gpuId, mode="", symmetry=None):
         args = "%s %s %f %d %d %s %d %f %d %d" % (
             self._getExtraPath(f"{self._trainingResizedFileName}.xmd"), self._getExtraPath("model"), self.sigma.get(),
             self.numEpochs, self.batchSize.get(), gpuId, self.numModels.get(), self.learningRate.get(),
             self.patience.get(), 0)
-        if orderSymmetry:
-            args += " " + str(orderSymmetry)
+        if symmetry:
+            args += " " + str(symmetry)
         self.runJob(f"xmipp_deep_{mode}", args, numberOfMpi=1, env=self.getCondaEnv())
 
         remove(self._getExtraPath(f"{self._trainingResizedFileName}.xmd"))
         remove(self._getExtraPath(f"{self._trainingResizedFileName}.stk"))
 
-    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, orderSymmetry=None):
+    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, symmetry=None):
         if mode != "center" or trainedModel:
             args = "%s %s %s %s %s %d %d %d" % (
                 self._getExtraPath(f"{self._trainingResizedFileName}.xmd"), gpuId, self._getPath(), predictImgsFn,
                 inputModel, self.numModels.get(), self.tolerance.get(),
                 self.maxModels.get())
-            if orderSymmetry:
-                args += " " + str(orderSymmetry)
+            if symmetry:
+                args += " " + str(symmetry)
         else:
             args = "%s %s %s %s %s %d %d %d" % (
                 self._getExtraPath(f"{self._trainingResizedFileName}.xmd"), gpuId, self._getPath(), predictImgsFn,
                 os.path.join(XmippScript.getModel("deep_center"), 'modelCenter'), self.numModels.get(), self.tolerance.get(),
                 self.maxModels.get())
         self.runJob(f"xmipp_deep_{mode}_predict", args, numberOfMpi=1, env=self.getCondaEnv())
-        remove(self._getExtraPath(f"{self._trainingResizedFileName}.xmd"))
-        remove(self._getExtraPath(f"{self._trainingResizedFileName}.stk"))
+        #remove(self._getExtraPath(f"{self._trainingResizedFileName}.xmd"))
+        #remove(self._getExtraPath(f"{self._trainingResizedFileName}.stk"))
 
     def createOutputStep(self):
         imgFname = self._getPath('predict_results.xmd')
@@ -225,10 +225,10 @@ class XmippProtDeepCenter(XmippProtDeepCenterAssignmentPredictBase):
         super()._insertAllSteps()
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def train(self, gpuId, mode="", orderSymmetry=None):
+    def train(self, gpuId, mode="", symmetry=None):
         super().train(gpuId, mode="center")
 
-    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, orderSymmetry=None):
+    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, symmetry=None):
         super().predict(gpuId, predictImgsFn, mode="center",
                                                            inputModel=self._getExtraPath("model"),
                                                            trainedModel=self.trainModels.get())
@@ -251,7 +251,7 @@ class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
         trainingGroup.condition = String('True')
 
         section = form.getSection(label=Message.LABEL_INPUT)
-        section.addParam('orderSymmetry', StringParam,
+        section.addParam('symmetry', StringParam,
                       label="Symmetry", default="c1",
                       help="Symmetry of the molecule")
     
@@ -261,8 +261,9 @@ class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
         super()._insertAllSteps()
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def train(self, gpuId, mode="", orderSymmetry=None):
-        super().train(gpuId, mode="global_assignment", orderSymmetry=self.orderSymmetry.get())
+    def train(self, gpuId, mode="", symmetry=None):
+        super().train(gpuId, mode="global_assignment", symmetry=self.symmetry.get())
 
-    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, orderSymmetry=None):
-        super().predict(gpuId, predictImgsFn, mode="global_assignment", inputModel=self._getExtraPath("model"), orderSymmetry=self.orderSymmetry.get())
+    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, symmetry=None):
+        super().predict(gpuId, predictImgsFn, mode="global_assignment", inputModel=self._getExtraPath("model"),
+                        symmetry=self.symmetry.get())
