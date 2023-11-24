@@ -1,13 +1,19 @@
 ## Release 3.23.11 - Voting... 
    - New protocols
-   - 
+      - Volume local adjustment
    - Protocols updated
-   - 
+      - convert_pdb: allowed conversion natively from CIFs
+      - particle_pick_automatic: The model can now be given by a directory
    - Protocols fixed
-   - 
+      - movie_resize: Fixed movie resize output size
+      - movie_gain: fix update output step by using a generic one from scipion
+      - tilt_analysis: fixes in the generated tilt images and in updating correctly the output sets
+      - ctf_consensus: fix the dependencies of the step
    - Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
-   - 
+      - 
    - Viewers
+   - More scipio-em-xmipp
+      - Updated Nvidia driver required version
 
 
 ## Release 3.23.07 - Morpheus 
