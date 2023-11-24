@@ -2,16 +2,24 @@
    - New protocols
       - Volume local adjustment
    - Protocols updated
-      - convert_pdb: allowed conversion natively from CIFs
+      - convert_pdb: Allowed conversion natively from CIFs
       - particle_pick_automatic: The model can now be given by a directory
+      - volume_local_adjust: Save occupancy volume
+      - extract_particles: Added two different cases for downsampling, by dimensions and by sampling rate
    - Protocols fixed
       - movie_resize: Fixed movie resize output size
-      - movie_gain: fix update output step by using a generic one from scipion
-      - tilt_analysis: fixes in the generated tilt images and in updating correctly the output sets
-      - ctf_consensus: fix the dependencies of the step
+      - movie_gain: Fix update output step by using a generic one from scipion
+      - tilt_analysis: Fixes in the generated tilt images and in updating correctly the output sets
+      - ctf_consensus: Fix the dependencies of the step
+      - preprocess_micrographs: Fixed output size in preprocess micrographs
+      - deep_center_assignment: Fixed deep center calls
+      - extract_particles_movies: Get coords correctly
+      - particle_pick_consensus: Fix MicsPointer
+      - trigger_data: fix updateOutput and close correclty the output set
    - Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
-      - 
-   - Viewers
+      - classification_gpuCorr
+      - classification_gpuCorr_full
+      - classification_gpuCorr_semi
    - More scipio-em-xmipp
       - Updated Nvidia driver required version
 
