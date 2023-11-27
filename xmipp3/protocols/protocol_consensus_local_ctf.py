@@ -45,7 +45,7 @@ CITE ='Fernandez-Gimenez2023b'
 class XmippProtConsensusLocalCTF(ProtAnalysis3D):
     """This protocol compares the estimations of local defocus computed by different protocols for a set of particles"""
     _label = 'consensus local defocus'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     _lastUpdateVersion = VERSION_2_0
     _possibleOutputs = {OUTPUTNAME:SetOfParticles}

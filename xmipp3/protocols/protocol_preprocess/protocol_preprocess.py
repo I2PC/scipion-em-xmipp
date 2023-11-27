@@ -38,6 +38,7 @@ from xmipp3.convert import  writeSetOfParticles
 from xmipp3.base import isXmippCudaPresent
 from .protocol_process import XmippProcessParticles,\
     XmippProcessVolumes
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippPreprocessHelper:
@@ -122,7 +123,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
     """ Preprocess a set of particles. You can remove dust, normalize, 
         apply threshold, etc """
     _label = 'preprocess particles'
-
+    _devStatus = PROD
     # Normalization enum constants
     NORM_OLD = 0
     NORM_NEW = 1
@@ -373,7 +374,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
     """ Protocol for Xmipp-based preprocess for volumes """
     _label = 'preprocess volumes'
-    
+    _devStatus = PROD
     # Aggregation constants
     AGG_AVERAGE=0
     AGG_SUM=1
