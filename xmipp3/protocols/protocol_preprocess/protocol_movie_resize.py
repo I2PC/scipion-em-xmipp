@@ -170,6 +170,10 @@ class XmippProtMovieResize(ProtProcessMovies):
             imgOut.setAcquisition(movie.getAcquisition())
             imgOut.setSamplingRate(self.newSamplingRate)
             imgOut.setFramesRange(self.inputMovies.get().getFramesRange())
+            
+            if imageSet.isEmpty():
+                imageSet.setDim(imgOut.getDim())
+            
             imageSet.append(imgOut)
 
         self._updateOutputSet('outputMovies', imageSet, streamMode)
@@ -191,13 +195,11 @@ class XmippProtMovieResize(ProtProcessMovies):
             outputSet.loadAllProperties()
             outputSet.enableAppend()
         else:
+            inputMovies = self.inputMovies.get()
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
-
-        inputMovies = self.inputMovies.get()
-        outputSet.copyInfo(inputMovies)
-
-        outputSet.setSamplingRate(self.newSamplingRate)
+            outputSet.copyInfo(inputMovies)
+            outputSet.setSamplingRate(self.newSamplingRate)
 
         return outputSet
 

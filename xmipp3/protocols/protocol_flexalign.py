@@ -188,7 +188,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
     def tryProcessMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
 
-        x, y, n = movie.getDim()
+        _, _, n = movie.getDim()
         a0, aN = self._getFrameRange(n, 'align')
         s0, sN = self._getFrameRange(n, 'sum')
 
@@ -422,4 +422,4 @@ class XmippProtFlexAlign(ProtAlignMovies):
         return errors
 
     def _citations(self):
-        return ['strelak2020flexalign']
+        return ['strelak2020flexalign', 'Strelak2023performance']

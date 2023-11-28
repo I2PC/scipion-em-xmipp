@@ -28,6 +28,9 @@
 # *
 # **************************************************************************
 
+# General imports
+import os
+
 # Scipion em imports
 from pwem.convert.headers import setMRCSamplingRate
 from pwem.emlib.image import ImageHandler
@@ -37,7 +40,7 @@ from pwem.protocols import ProtInitialVolume
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt, removeBaseExt
-from pyworkflow import BETA, UPDATED, NEW, PROD
+from pyworkflow import UPDATED
 
 class XmippProtConvertPdb(ProtInitialVolume):
     """ Convert atomic structure(s) into volume(s) """
@@ -70,7 +73,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         coordsCondition = 'setSize and not vol'
 
         # Defining parallel arguments
-        form.addParallelSection(threads=4)
+        form.addParallelSection(threads=4, mpi=1)
 
         # Generating form
         form.addSection(label='Input')
@@ -102,12 +105,16 @@ class XmippProtConvertPdb(ProtInitialVolume):
         form.addParam('centerPdb', params.BooleanParam, default=True,
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Center PDB",
-                      help='Center PDB with the center of mass')
+                      help='Center PDB with the center of mass.')
         form.addParam('outPdb', params.BooleanParam, default=False, 
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Store centered PDB",
                       help='Set to \'Yes\' if you want to save centered PDB. '
-                           'It will be stored in the output directory of this protocol')
+                           'It will be stored in the output directory of this protocol.')
+        form.addParam('convertCif', params.BooleanParam, default=True,
+                      expertLevel=const.LEVEL_ADVANCED, 
+                      label="Convert CIF to PDB",
+                      help='If set to true and input atom struct file is a CIF, it will get converted to PDB.')
         form.addParam('clean', params.BooleanParam, default=True,
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Clean tmp files",
@@ -138,8 +145,8 @@ class XmippProtConvertPdb(ProtInitialVolume):
     # --------------------------- STEPS functions --------------------------------------------
     def processConversion(self, pdb, samplingR, isSet):
         """ This step runs the pdb conversion. """
-        # Converting all input atomic structures to .pdb
-        pdb = self._convertToPdb(pdb)
+        # Conditionally converting all input atomic structures to .pdb
+        pdb = self._convertAtomStruct(pdb)
         
         # Generating output file for each input
         outFile = removeExt(pdb)
@@ -260,13 +267,14 @@ class XmippProtConvertPdb(ProtInitialVolume):
             # If it is a SetOfAtom Structs, get all of the elements iterating the set
             return [i.getFileName() for i in pbdObj]
 
-    def _convertToPdb(self, pdbRaw):
-        """ This function receives an atomic struct file, and converts it to .pdb if it is in .cif format. """
-        # Get output path for pdb file
-        convertedPdb = self._getExtraPath(replaceBaseExt(pdbRaw, 'pdb')).replace(" ", "_")
+    def _convertAtomStruct(self, pdbRaw):
+        """ This function receives an atomic struct file, and conditionally converts it to .pdb if it is in .cif format. """
+        # Get output path for atomic struct file
+        baseExt = replaceBaseExt(pdbRaw, 'pdb') if self.convertCif.get() else os.path.basename(pdbRaw)
+        convertedPdb = self._getExtraPath(baseExt).replace(" ", "_")
 
-        # If file extension is .cif, convert to .pdb, or else we link it as is
-        if getExt(pdbRaw) == ".cif":
+        # If file extension is .cif and conversion is required, convert to .pdb, or else we link it as is
+        if getExt(pdbRaw) == ".cif" and self.convertCif.get():
             cifToPdb(pdbRaw, convertedPdb)
         else:
             createLink(pdbRaw, convertedPdb)
