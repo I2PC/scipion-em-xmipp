@@ -38,7 +38,7 @@ import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pwem.emlib.metadata as md
 from pwem import emlib
-from pwem.objects import Image
+from pwem.objects import Image, SetOfMovies
 from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
 from pwem.protocols import ProtAlignMovies
@@ -66,6 +66,13 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
     def _defineAlignmentParams(self, form):
         ProtAlignMovies._defineAlignmentParams(self, form)
+
+        EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and inputMovies.getFiles().pop().endswith(".eer")'
+
+        form.addParam('eerFrameDose', params.FloatParam, label='EER Frame dose [e/A²]',
+                      condition=EER_CONDITION, default=0.5, 
+                      #validators=[params.GT(0.0, error='Dose per frame must be greater than zero')],
+                      help='Dose per frame used when rendering EER movies. Must be greater than zero')
 
         # FlexAlign does not support cropping
         form._paramsDict['Alignment']._paramList.remove('Crop_offsets__px_')
@@ -193,7 +200,8 @@ class XmippProtFlexAlign(ProtAlignMovies):
         s0, sN = self._getFrameRange(n, 'sum')
 
         inputMd = os.path.join(movieFolder, 'input_movie.xmd')
-        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False)
+        print(self._getEERFrameStep())
+        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False, eerFrameStep=self._getEERFrameStep())
 
         args = '-i "%s" ' % inputMd
         args += ' -o "%s"' % self._getShiftsFile(movie)
@@ -284,6 +292,13 @@ class XmippProtFlexAlign(ProtAlignMovies):
       flipped_array, M = xmutils.rotation(imag_array, angle, imag_array.shape, M)
       xmutils.writeImageFromArray(flipped_array, outFn)
       return outFn
+
+    def _getEERFrameStep(self):
+        movies: SetOfMovies = self.inputMovies.get()
+        subframeDose = movies.getAcquisition().getDosePerFrame()
+        desiredDose = self.eerFrameDose.get()
+        nSubrames = int(desiredDose / subframeDose)
+        return nSubrames
 
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
