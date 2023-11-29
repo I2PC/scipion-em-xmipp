@@ -1653,7 +1653,7 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
     globalShiftsMD.write(xmdFn)
 
 
-def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
+def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrameStep=16):
     movieMd = md.MetaData()
     frame = movie.clone()
     # get some info about the movie
@@ -1690,7 +1690,7 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
         frame.setIndex(stackIndex)
         frameFilename = ih.locationToXmipp(frame)
         if os.path.splitext(frameFilename)[-1] == '.eer':
-            frameFilename += '#idk,4K,uint8'
+            frameFilename += f'#{eerFrameStep},4K,uint8'
         row.setValue(md.MDL_IMAGE, frameFilename)
 
         if useAlignment:
