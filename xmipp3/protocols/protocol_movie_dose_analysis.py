@@ -38,6 +38,7 @@ from pwem.objects import SetOfMovies
 from pwem.protocols import ProtProcessMovies
 from xmipp3.convert import getScipionObj
 import statistics as stat
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 THRESHOLD = 2
 OUTPUT_ACCEPTED = 'outputMovies'
@@ -46,6 +47,7 @@ OUTPUT_DISCARDED = 'outputMoviesDiscarded'
 class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     """ Protocol for the dose analysis """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
+    _devStatus = PROD
 
     _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0

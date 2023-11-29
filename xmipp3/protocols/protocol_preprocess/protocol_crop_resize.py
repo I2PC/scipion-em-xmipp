@@ -36,12 +36,14 @@ from pyworkflow.protocol.params import (BooleanParam, EnumParam, FloatParam,
 from pwem.objects import Volume, SetOfParticles, Mask
 
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippResizeHelper:
     """ Common features to change dimensions of either SetOfParticles,
     Volume or SetOfVolumes objects.
     """
+    _devStatus = PROD
 
     RESIZE_SAMPLINGRATE = 0
     RESIZE_DIMENSIONS = 1

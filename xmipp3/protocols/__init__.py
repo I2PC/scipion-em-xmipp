@@ -31,6 +31,7 @@ from .protocol_preprocess import *
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
 from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
+from .protocol_angular_resolution_alignment import XmippProtResolutionAlignment
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
@@ -39,9 +40,6 @@ from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
 #from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
-from .protocol_classification_gpuCorr import XmippProtGpuCrrCL2D
-from .protocol_classification_gpuCorr_semi import XmippProtStrGpuCrrSimple
-from .protocol_classification_gpuCorr_full import XmippProtStrGpuCrrCL2D
 from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
 from .protocol_compare_angles import XmippProtCompareAngles
@@ -120,7 +118,6 @@ from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 from .protocol_deep_denoising import XmippProtDeepDenoising  # deepDenoising has to be after XmippProtGenerateReprojections and XmippProtCompareReprojections
-from .protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_volume_deform_zernike3d import XmippProtVolumeDeformZernike3D
 from .protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
@@ -136,6 +133,11 @@ from .protocol_structure_map import XmippProtStructureMap
 from .protocol_apply_zernike3d import XmippApplyZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
+from .protocol_volume_local_adjust import XmippProtLocalVolAdj
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
+<<<<<<< HEAD
 from .protocol_reconstruct_global_pca import XmippProtReconstructGlobalPca
+=======
+from .protocol_deep_center_assignment import XmippProtDeepCenter, XmippProtDeepGlobalAssignment
+>>>>>>> devel

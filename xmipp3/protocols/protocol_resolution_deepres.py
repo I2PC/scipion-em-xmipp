@@ -45,7 +45,7 @@ def updateEnviron(gpuNum):
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 
-DEEPRES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtDeepRes'
+DEEPRES_METHOD_URL = 'https://github.com/I2PC/scipion/wiki/XmippProtDeepRes'
 RESIZE_MASK = 'binaryMask.vol' 
 MASK_DILATE = 'Mask_dilate.vol'  
 RESIZE_VOL = 'originalVolume.vol'

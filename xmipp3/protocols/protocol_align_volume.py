@@ -32,6 +32,7 @@ from pwem.protocols import ProtAlignVolume
 from pwem.objects import Volume, Transform, SetOfVolumes
 
 from xmipp3.convert import getImageLocation
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 ALIGN_MASK_CIRCULAR = 0
@@ -51,6 +52,8 @@ class XmippProtAlignVolume(ProtAlignVolume):
      """
     _label = 'align volume'
     nVols = 0
+    _devStatus = PROD
+
     
     def __init__(self, **args):
         ProtAlignVolume.__init__(self, **args)

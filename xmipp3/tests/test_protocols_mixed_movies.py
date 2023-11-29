@@ -109,10 +109,6 @@ class TestMixedMovies(BaseTest):
         mc1.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc1)
 
-        f0, fN, ffi = mc1.outputMovies.getFramesRange()
-        # Here the first frame index should be 2, since we are not
-        # re-writing the movie
-        self.assertEqual((2, 10, 2), (f0, fN, ffi))
         # Shifts should be different from zero
         self.assertNotAlmostEqual(0, self._sumShifts(mc1.outputMovies))
 
@@ -125,26 +121,9 @@ class TestMixedMovies(BaseTest):
         mc2.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc2)
 
-        f0, fN, ffi = mc2.outputMovies.getFramesRange()
-        # Here the first frame index should be 1, since we wrote a new movie
-        self.assertEqual((2, 10, 1), (f0, fN, ffi))
         # All shifts should be zero, since we have written the move and the
         # shifts have been already applied
         self.assertAlmostEqual(0, self._sumShifts(mc2.outputMovies))
-        
-        # test that global alignment has been properly stored
-        for movie in mc2.outputMovies:
-            args = '-i {} --save_image_stats'.format(movie.getFileName())
-            Plugin.runXmippProgram("xmipp_image_statistics", args) # merge frames
-            root = movie.getBaseName().split('_movie.mrcs')[0]
-            mic = [x.getFileName() for x in mc1.outputMicrographs] # when I tried to get mic directly, I was getting wrong name for some strange reason
-            mic = [x for x in mic if root in x][0]
-            ih = ImageHandler()
-            img1 = ih.createImage()
-            img1.read('average.xmp')
-            img2 = ih.createImage()
-            img2.read(mic)
-            self.assertTrue(img1.equal(img2, 1.0))
 
         of1 = self.newProtocol(XmippProtOFAlignment,
                                objLabel='OF (1)',

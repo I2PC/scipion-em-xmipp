@@ -37,12 +37,16 @@ from pwem import emlib
 from pwem.objects import SetOfParticles
 
 from xmipp3.convert import setXmippAttribute
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 OUTPUTNAME = "outputParticles"
+CITE ='Fernandez-Gimenez2023b'
 
 class XmippProtConsensusLocalCTF(ProtAnalysis3D):
     """This protocol compares the estimations of local defocus computed by different protocols for a set of particles"""
     _label = 'consensus local defocus'
+    _devStatus = PROD
+
     _lastUpdateVersion = VERSION_2_0
     _possibleOutputs = {OUTPUTNAME:SetOfParticles}
 

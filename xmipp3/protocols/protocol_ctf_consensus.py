@@ -41,6 +41,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import ProtCTFMicrographs
 from pwem.emlib.metadata import Row
 from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem import emlib
 import xmipp3
@@ -58,6 +59,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     the agreement with a secondary CTF for the same set of micrographs.
     """
     _label = 'ctf consensus'
+    _devStatus = PROD
     _lastUpdateVersion = VERSION_3_0
 
     def __init__(self, **args):
@@ -198,12 +200,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             self.ctfFn2 = self.inputCTF2.get().getFileName()
             self.allCtf2 = {}
 
-        ctfSteps = self._checkNewInput()
         self._insertFunctionStep('createOutputStep',
-                                 prerequisites=ctfSteps, wait=True)
+                                 prerequisites=[], wait=True)
 
     def createOutputStep(self):
-        pass
+        self._closeOutputSet()
 
     def initializeParams(self):
         self.finished = False
