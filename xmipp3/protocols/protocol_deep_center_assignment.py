@@ -36,6 +36,7 @@ import os
 from os import remove
 import xmipp3
 from xmipp_base import XmippScript
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol):
     """Super protocol of Deep Center and Deep Global Assignment."""
@@ -208,7 +209,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
 class XmippProtDeepCenter(XmippProtDeepCenterAssignmentPredictBase):
     """Predict the center particles using deep learning.""" 
     _label = 'deep center'
-
+    _devStatus = BETA
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         if self.trainModels.get():
@@ -227,6 +228,7 @@ class XmippProtDeepCenter(XmippProtDeepCenterAssignmentPredictBase):
 class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
     """Predict Euler Angles using deep learning."""
     _label = 'deep global assignment'
+    _devStatus = BETA
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
