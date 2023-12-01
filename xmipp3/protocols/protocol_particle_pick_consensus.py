@@ -174,7 +174,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             # for non streaming do all and in the last iteration of streaming do the rest
             newMicIds = allMics.difference(self.checkedMics)
         else:  # for streaming processing, only go for the ready mics in all pickers
-            newMicIds = readyMics.difference(self.checkedMics)
+            if readyMics is not None:
+                newMicIds = readyMics.difference(self.checkedMics)
 
         if newMicIds:
             self.checkedMics.update(newMicIds)

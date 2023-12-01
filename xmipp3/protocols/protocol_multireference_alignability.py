@@ -164,7 +164,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
             volDir = self._getVolDir(i + 1)
 
             pmStepId = self._insertFunctionStep('projectionLibraryStep',
-                                                volName, volDir,
+                                                volDir,
                                                 self.angularSampling.get(),
                                                 prerequisites=[convertId])
 
@@ -312,7 +312,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         self.runJob('xmipp_transform_mask', param, numberOfMpi=nproc,
                     numberOfThreads=nT)
 
-    def projectionLibraryStep(self, volName, volDir, angularSampling):
+    def projectionLibraryStep(self, volDir, angularSampling):
 
         # Generate projections from this reconstruction
         nproc = self.numberOfMpi.get()
@@ -573,10 +573,6 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         if mdrootname == 'Volume':
             VolPrefix = 'vol%03d_' % (volId)
             return self._getExtraPath(VolPrefix + 'validation.xmd')
-
-    def _definePName(self):
-        fscFn = self._defineMetadataRootName('P')
-        return fscFn
 
     def _defineVolumeName(self, volId):
         fscFn = self._defineMetadataRootName('Volume', volId)
