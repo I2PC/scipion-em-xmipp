@@ -1017,45 +1017,45 @@ class TestSetConvert(BaseTest):
         #TODO: FIX THIS test according to the new SetOfDefocusGroup
         return
         #reference metadata
-        md = emlib.MetaData()
-        objId = md.addObject()
-        defocusGroupRow = metadata.Row()
-
-        defocusGroupRow.setValue(emlib.MDL_ENABLED, 1)
-        defocusGroupRow.setValue(emlib.MDL_CTF_GROUP, 1)
-        defocusGroupRow.setValue(emlib.MDL_MIN, 2000.)
-        defocusGroupRow.setValue(emlib.MDL_MAX, 2500.)
-        defocusGroupRow.setValue(emlib.MDL_AVG, 2100.)
-        defocusGroupRow.writeToMd(md, objId)
-
-        objId = md.addObject()
-        defocusGroupRow.setValue(emlib.MDL_ENABLED, 1)
-        defocusGroupRow.setValue(emlib.MDL_CTF_GROUP, 2)
-        defocusGroupRow.setValue(emlib.MDL_MIN, 3000.)
-        defocusGroupRow.setValue(emlib.MDL_MAX, 5500.)
-        defocusGroupRow.setValue(emlib.MDL_AVG, 5000.)
-        defocusGroupRow.writeToMd(md, objId)
+        # md = emlib.MetaData()
+        # objId = md.addObject()
+        # defocusGroupRow = metadata.Row()
         #
-        fnScipion = self.getOutputPath("writeSetOfDefocusGroups.sqlite")
-        setOfDefocus = SetOfDefocusGroup(filename=fnScipion)
-
-        df = DefocusGroup()
-        df.setDefocusMin(2000.)
-        df.setDefocusMax(2500.)
-        df.setDefocusAvg(2100.)
-        setOfDefocus.append(df)
-        
-        df.cleanObjId()
-        df.setDefocusMin(3000)
-        df.setDefocusMax(5500)
-        df.setDefocusAvg(5000)
-        setOfDefocus.append(df)
-        
-        fnXmipp = self.getOutputPath("writeSetOfDefocusGroups.xmd")
-        fnScipion = self.getOutputPath("writeSetOfDefocusGroups2.xmd")
-        writeSetOfDefocusGroups(setOfDefocus, fnXmipp)
-        mdAux = emlib.MetaData(fnXmipp)
-        md.write(fnScipion)
-        print("Comparing metadatas: \n%s\n%s" % (fnXmipp, fnScipion))
-        self.assertEqual(md, mdAux, "test writeSetOfDefocusGroups fails")
-       
+        # defocusGroupRow.setValue(emlib.MDL_ENABLED, 1)
+        # defocusGroupRow.setValue(emlib.MDL_CTF_GROUP, 1)
+        # defocusGroupRow.setValue(emlib.MDL_MIN, 2000.)
+        # defocusGroupRow.setValue(emlib.MDL_MAX, 2500.)
+        # defocusGroupRow.setValue(emlib.MDL_AVG, 2100.)
+        # defocusGroupRow.writeToMd(md, objId)
+        #
+        # objId = md.addObject()
+        # defocusGroupRow.setValue(emlib.MDL_ENABLED, 1)
+        # defocusGroupRow.setValue(emlib.MDL_CTF_GROUP, 2)
+        # defocusGroupRow.setValue(emlib.MDL_MIN, 3000.)
+        # defocusGroupRow.setValue(emlib.MDL_MAX, 5500.)
+        # defocusGroupRow.setValue(emlib.MDL_AVG, 5000.)
+        # defocusGroupRow.writeToMd(md, objId)
+        # #
+        # fnScipion = self.getOutputPath("writeSetOfDefocusGroups.sqlite")
+        # setOfDefocus = SetOfDefocusGroup(filename=fnScipion)
+        #
+        # df = DefocusGroup()
+        # df.setDefocusMin(2000.)
+        # df.setDefocusMax(2500.)
+        # df.setDefocusAvg(2100.)
+        # setOfDefocus.append(df)
+        #
+        # df.cleanObjId()
+        # df.setDefocusMin(3000)
+        # df.setDefocusMax(5500)
+        # df.setDefocusAvg(5000)
+        # setOfDefocus.append(df)
+        #
+        # fnXmipp = self.getOutputPath("writeSetOfDefocusGroups.xmd")
+        # fnScipion = self.getOutputPath("writeSetOfDefocusGroups2.xmd")
+        # writeSetOfDefocusGroups(setOfDefocus, fnXmipp)
+        # mdAux = emlib.MetaData(fnXmipp)
+        # md.write(fnScipion)
+        # print("Comparing metadatas: \n%s\n%s" % (fnXmipp, fnScipion))
+        # self.assertEqual(md, mdAux, "test writeSetOfDefocusGroups fails")
+        #
