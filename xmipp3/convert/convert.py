@@ -852,8 +852,10 @@ def writeSetOfCoordinatesWithState(posDir, coordSet, state, scale=1):
             f.write(" %06d   1   %d  %d  %d   %06d\n"
                     % (coord.getObjId(), x, y, 1, micId))
 
+    except (FileNotFoundError, PermissionError) as error:
+        print(f"Error occurred: {error}")
     except Exception as e:
-        print(f"Error occurred: {e}")
+        print(f"Unexpected error occurred: {e}")
     finally:
         if f:
             f.close()
