@@ -43,13 +43,14 @@ from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes)
 from xmipp3.constants import OTHER
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 FACTOR_BOXSIZE = 1.5
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Protocol to extract particles from a set of coordinates"""
     _label = 'extract particles'
-
+    _devStatus = UPDATED
     RESIZE_FACTOR = 0
     RESIZE_DIMENSIONS = 1
     RESIZE_SAMPLINGRATE = 2
