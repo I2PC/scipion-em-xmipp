@@ -34,6 +34,7 @@ from pwem.protocols import ProtParticlePickingAuto
 from pwem import emlib
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import readSetOfCoordinates
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 MICS_SAMEASPICKING = 0
@@ -46,7 +47,7 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
     """Protocol to pick particles automatically in a set of
     micrographs using previous training """
     _label = 'auto-picking (step 2)'  
-    
+    _devStatus = UPDATED
     filesToCopy = ['model_svm.txt', 'model_pca_model.stk', 'model_rotpca_model.stk',
                    'model_particle_avg.xmp', 'templates.stk']
     

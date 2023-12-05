@@ -1106,9 +1106,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
 
-        if posTestDict and posTestDict:
+        if posTestDict and negTestDict:
           fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTestDict)
-          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(posTestDict)
+          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTestDict)
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
 
         if not gpuToUse is None:
