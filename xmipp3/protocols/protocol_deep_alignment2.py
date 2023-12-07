@@ -75,6 +75,9 @@ class XmippProtDeepAlign2(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('angSample', FloatParam, label="Angular sampling", default=5,
                       help="Angular sampling of the projection sphere in degrees")
 
+        form.addParam('SNR', FloatParam, label="SNR", default=-1,
+                      help="SNR of the simulated images. -1 for no noise")
+
         form.addSection(label="Training")
 
         form.addParam('Xdim', IntParam,
@@ -155,9 +158,10 @@ _noiseCoord '0 0'
 
     def train(self, gpuId):
         fnReference = self._getExtraPath("reference.xmd")
-        args = "%s %s %f %d %d %s %d %f %s" % (
+        args = "%s %s %f %d %d %s %d %f %s %f" % (
             fnReference, self._getExtraPath("model"), self.maxShift,
-            self.trainSetSize, self.batchSize, gpuId, self.numModels, self.learningRate, self.symmetry)
+            self.trainSetSize, self.batchSize, gpuId, self.numModels, self.learningRate, self.symmetry,
+            self.SNR)
         self.runJob(f"xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
