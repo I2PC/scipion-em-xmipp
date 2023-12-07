@@ -149,7 +149,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self, inputSet, train=False):
-        self.Xdim = 128
+        self.Xdim = 32
         writeSetOfParticles(inputSet, self.predictImgsFn)
         if train:
             self.runJob("xmipp_metadata_utilities","-i %s --operate random_subset %d"%\
