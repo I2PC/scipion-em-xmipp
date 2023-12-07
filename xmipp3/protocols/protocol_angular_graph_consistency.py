@@ -521,7 +521,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         if (not hasattr(self, 'outputParticles')):
             summary.append("Output not ready yet.")
         else:
-            if self.percentage == 100.0:
+            if self.percentage == 100:
                 text = 'After validation, all of the images are likely to be within the realiable assignment zone'
             else:
                 text = 'After validation, a %.2f' % self.percentage

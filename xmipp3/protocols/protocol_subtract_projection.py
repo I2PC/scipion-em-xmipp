@@ -40,7 +40,7 @@ CITE = 'Fernandez-Gimenez2023a'
 class XmippProtSubtractProjectionBase(EMProtocol):
     """ Helper class that contains some Protocol utilities methods
     used by both  XmippProtSubtractProjection and XmippProtBoostParticles."""
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     # --------------------------- DEFINE param functions --------------------------------------------
     @classmethod

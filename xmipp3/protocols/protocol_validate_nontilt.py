@@ -341,9 +341,6 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
             VolPrefix = 'vol%03d_' % (volId)
             return self._getExtraPath(VolPrefix + 'validation.xmd')
 
-    def _definePName(self):
-        fscFn = self._defineMetadataRootName('P')
-        return fscFn
 
     def _defineVolumeName(self, volId):
         fscFn = self._defineMetadataRootName('Volume', volId)

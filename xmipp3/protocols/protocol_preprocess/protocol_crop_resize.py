@@ -43,7 +43,7 @@ class XmippResizeHelper:
     """ Common features to change dimensions of either SetOfParticles,
     Volume or SetOfVolumes objects.
     """
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     RESIZE_SAMPLINGRATE = 0
     RESIZE_DIMENSIONS = 1
