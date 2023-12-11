@@ -69,7 +69,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
         EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and inputMovies.getFiles().pop().endswith(".eer")'
 
-        form.addParam('nFrames', params.IntParam, label='Number of frames',
+        form.addParam('nFrames', params.IntParam, label='Number of EER frames',
                       condition=EER_CONDITION, default=40, 
                       help='Number of frames to be generated. EER files contain subframes, that will be grouped into the selected number of frames.')
 
@@ -199,8 +199,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
         s0, sN = self._getFrameRange(n, 'sum')
 
         inputMd = os.path.join(movieFolder, 'input_movie.xmd')
-        print(self._getEERFrameStep())
-        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False, eerFrameStep=self._getEERFrameStep())
+        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False, eerFrameStep=self.nFrames.get())
 
         args = '-i "%s" ' % inputMd
         args += ' -o "%s"' % self._getShiftsFile(movie)
@@ -291,13 +290,6 @@ class XmippProtFlexAlign(ProtAlignMovies):
       flipped_array, M = xmutils.rotation(imag_array, angle, imag_array.shape, M)
       xmutils.writeImageFromArray(flipped_array, outFn)
       return outFn
-
-    def _getEERFrameStep(self):
-        movies: SetOfMovies = self.inputMovies.get()
-        subframeDose = movies.getAcquisition().getDosePerFrame()
-        desiredDose = self.nFrames.get()
-        nSubrames = int(desiredDose / subframeDose)
-        return nSubrames
 
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
@@ -432,6 +424,10 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
         if (self.binFactor.get() < 1):
             errors.append("Bin factor must be >= 1")
+        
+        # Check if number of EER frames is positive
+        if self.inputMovies is not None and len(self.inputMovies) > 0 and self.inputMovies.getFiles().pop().endswith(".eer") and self.nFrames.get():
+            errors.append("Number of EER frames must be positive")
 
         return errors
 
