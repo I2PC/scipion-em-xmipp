@@ -199,7 +199,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
         s0, sN = self._getFrameRange(n, 'sum')
 
         inputMd = os.path.join(movieFolder, 'input_movie.xmd')
-        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False, eerFrameStep=self.nFrames.get())
+        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False, eerFrames=self.nFrames.get())
 
         args = '-i "%s" ' % inputMd
         args += ' -o "%s"' % self._getShiftsFile(movie)
