@@ -69,10 +69,9 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
         EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and inputMovies.getFiles().pop().endswith(".eer")'
 
-        form.addParam('eerFrameDose', params.FloatParam, label='EER Frame dose [e/A²]',
-                      condition=EER_CONDITION, default=0.5, 
-                      #validators=[params.GT(0.0, error='Dose per frame must be greater than zero')],
-                      help='Dose per frame used when rendering EER movies. Must be greater than zero')
+        form.addParam('nFrames', params.IntParam, label='Number of frames',
+                      condition=EER_CONDITION, default=40, 
+                      help='Number of frames to be generated. EER files contain subframes, that will be grouped into the selected number of frames.')
 
         # FlexAlign does not support cropping
         form._paramsDict['Alignment']._paramList.remove('Crop_offsets__px_')
@@ -296,7 +295,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
     def _getEERFrameStep(self):
         movies: SetOfMovies = self.inputMovies.get()
         subframeDose = movies.getAcquisition().getDosePerFrame()
-        desiredDose = self.eerFrameDose.get()
+        desiredDose = self.nFrames.get()
         nSubrames = int(desiredDose / subframeDose)
         return nSubrames
 
