@@ -541,7 +541,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
     def getPDBFile(self):
         baseName = 'inputPDB'
-        extension = os.path.splitext(self.getInputStructFile())[-1] if self.isStructMaintainable() else '.pdb'
+        extension = os.path.splitext(self.getInputStructFile())[-1] if self.isStructExtensionMaintainable() else '.pdb'
         return self._getExtraPath(baseName + extension)
 
     def getInputStruct(self):
@@ -562,7 +562,7 @@ class XmippProtValFit(ProtAnalysis3D):
             self.getInputStructFile().endswith('.cif') or
             self.getInputStructFile().endswith('.cif.gz'))
     
-    def isStructMaintainable(self) -> bool:
+    def isStructExtensionMaintainable(self) -> bool:
         """
         ### This function returns True if the input struct extension is one of the accepted types and must be maintained.
 
