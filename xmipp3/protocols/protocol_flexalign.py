@@ -70,7 +70,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
         EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and inputMovies.getFiles().pop().endswith(".eer")'
 
         form.addParam('nFrames', params.IntParam, label='Number of EER frames',
-                      condition=EER_CONDITION, default=40, 
+                      condition=EER_CONDITION, default=40, validators=[params.GT(0)],
                       help='Number of frames to be generated. EER files contain subframes, that will be grouped into the selected number of frames.')
 
         # FlexAlign does not support cropping
@@ -425,10 +425,6 @@ class XmippProtFlexAlign(ProtAlignMovies):
         if (self.binFactor.get() < 1):
             errors.append("Bin factor must be >= 1")
         
-        # Check if number of EER frames is positive
-        if self.inputMovies is not None and len(self.inputMovies) > 0 and self.inputMovies.getFiles().pop().endswith(".eer") and self.nFrames.get():
-            errors.append("Number of EER frames must be positive")
-
         return errors
 
     def _citations(self):
