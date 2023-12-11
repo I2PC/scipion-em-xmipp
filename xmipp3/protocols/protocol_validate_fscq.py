@@ -165,10 +165,7 @@ class XmippProtValFit(ProtAnalysis3D):
     def convertInputStep(self):
         """ Convert inputs to desired format."""
         #Convert Input to pdb
-        if (self.getInputStructFile().endswith('.pdb') or 
-            self.getInputStructFile().endswith('.ent') or 
-            self.getInputStructFile().endswith('.cif') or
-            self.getInputStructFile().endswith('.cif.gz')):
+        if self.isStructExtensionValid():
             os.symlink(os.path.abspath(self.getInputStructFile()), self.getPDBFile())
         else:
             toPdb(self.getInputStructFile(), self.getPDBFile())
@@ -543,7 +540,9 @@ class XmippProtValFit(ProtAnalysis3D):
             return self.inputPDBObj.get().getFileName()
 
     def getPDBFile(self):
-        return self._getExtraPath('inputPDB.pdb')
+        baseName = 'inputPDB'
+        extension = os.path.splitext(self.getInputStructFile())[-1] if self.isStructExtensionValid() else '.pdb'
+        return self._getExtraPath(baseName + extension)
 
     def getInputStruct(self):
         if self.fromFile:
@@ -551,3 +550,14 @@ class XmippProtValFit(ProtAnalysis3D):
         else:
             return self.inputPDBObj.get()
 
+    def isStructExtensionValid(self) -> bool:
+        """
+        ### This function returns True if the input struct extension is one of the accepted types.
+
+        #### Returns:
+        - (bool): True if the input struct has an accepted extension. False otherwise.
+        """
+        return (self.getInputStructFile().endswith('.pdb') or 
+            self.getInputStructFile().endswith('.ent') or 
+            self.getInputStructFile().endswith('.cif') or
+            self.getInputStructFile().endswith('.cif.gz'))
