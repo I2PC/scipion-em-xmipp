@@ -25,12 +25,14 @@
 # **************************************************************************
 
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol.params import (PointerParam, EnumParam, FileParam, StringParam, GPU_LIST)
+from pyworkflow.protocol.params import (PointerParam, EnumParam, FileParam, StringParam, BooleanParam, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils import Message
+from pyworkflow.utils.path import cleanPattern
 from pwem.protocols import ProtRefine3D
 from pwem.objects import String
 from pwem.emlib.image import ImageHandler
+from pwem.emlib.metadata import getFirstRow
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 import glob
 import math
@@ -65,6 +67,8 @@ class XmippProtDeepAlign2Predict(ProtRefine3D, xmipp3.XmippProtocol):
 
         form.addParam('inputParticles', PointerParam, label="Input particles",
                       pointerClass='SetOfParticles', allowsNull=False)
+        form.addParam('correctCTF', BooleanParam, label='Correct CTF', default=True,
+                      help='Correct the CTF through a Wiener filter')
 
         form.addParam('modelSource', EnumParam, label='Model source', choices=['Protocol', 'Directory'], default=0)
         form.addParam('modelProtocol', PointerParam, label='Protocol', condition='modelSource==0',
@@ -101,20 +105,37 @@ class XmippProtDeepAlign2Predict(ProtRefine3D, xmipp3.XmippProtocol):
 
     def prepareData(self):
         fnImgs = self._getTmpPath("images")
-        fnImgsResized = self._getTmpPath("imagesResized")
         writeSetOfParticles(self.inputParticles.get(), fnImgs+".xmd")
+
+        if self.correctCTF:
+            fnImgsCorrected=self._getTmpPath("imagesCorrected")
+            args = "-i %s.xmd -o %s.mrcs --save_metadata_stack %s.xmd --keep_input_columns" % (
+                fnImgs, fnImgsCorrected, fnImgsCorrected)
+            args += " --sampling_rate %f --correct_envelope" % self.inputParticles.get().getSamplingRate()
+            if self.inputParticles.get().isPhaseFlipped():
+                args += " --phase_flipped"
+            self.runJob("xmipp_ctf_correct_wiener2d", args,
+                        numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
+            fnImgs=fnImgsCorrected
+
+        fnImgsResized = self._getTmpPath("imagesResized")
         cropSize = int(self.volDiameter/self.inputParticles.get().getSamplingRate())
         self.runJob("xmipp_transform_window", "-i %s.xmd -o %s.mrcs --save_metadata_stack %s.xmd --keep_input_columns --size %d"%(
                     fnImgs,fnImgsResized,fnImgsResized, cropSize),
                     numberOfMpi=1)
         self.runJob("xmipp_image_resize", "-i %s.mrcs --fourier %d"%(fnImgsResized, self.Xdim),
                     numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
-        XdimOrig, _, _, _, _ = xmippLib.MetaDataInfo(fnImgs+".xmd")
-        K=float(self.Xdim)/float(cropSize)
-        self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftX=%f*shiftX"' %
-                    (fnImgsResized, K), numberOfMpi=1)
-        self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftY=%f*shiftY"' %
-                    (fnImgsResized, K), numberOfMpi=1)
+        row = getFirstRow(fnImgs+".xmd")
+        hasShift = row.containsLabel(xmippLib.MDL_SHIFT_X)
+        if hasShift:
+            XdimOrig, _, _, _, _ = xmippLib.MetaDataInfo(fnImgs+".xmd")
+            K=float(self.Xdim)/float(cropSize)
+            self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftX=%f*shiftX"' %
+                        (fnImgsResized, K), numberOfMpi=1)
+            self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftY=%f*shiftY"' %
+                        (fnImgsResized, K), numberOfMpi=1)
+        if self.correctCTF:
+            cleanPattern(fnImgsCorrected+"*")
 
     def predict(self, gpuId):
         fnImgs = self._getTmpPath("images.xmd")
