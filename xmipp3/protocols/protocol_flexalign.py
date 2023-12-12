@@ -67,7 +67,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
     def _defineAlignmentParams(self, form):
         ProtAlignMovies._defineAlignmentParams(self, form)
 
-        EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and inputMovies.getFiles().pop().endswith(".eer")'
+        EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and next(iter(inputMovies.getFiles())).endswith(".eer")'
 
         form.addParam('nFrames', params.IntParam, label='Number of EER frames',
                       condition=EER_CONDITION, default=40, validators=[params.GT(0, "Number of EER frames must be a positive integer (> 0).")],
@@ -194,7 +194,10 @@ class XmippProtFlexAlign(ProtAlignMovies):
     def tryProcessMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
 
-        _, _, n = movie.getDim()
+        if next(iter(self.inputMovies.get().getFiles())).endswith('.eer'):
+            n = self.nFrames.get()
+        else:
+            _, _, n = movie.getDim()
         a0, aN = self._getFrameRange(n, 'align')
         s0, sN = self._getFrameRange(n, 'sum')
 
