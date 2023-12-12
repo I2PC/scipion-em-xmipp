@@ -539,10 +539,14 @@ class XmippProtValFit(ProtAnalysis3D):
         else:
             return self.inputPDBObj.get().getFileName()
 
-    def getPDBFile(self):
-        baseName = 'inputPDB'
-        extension = os.path.splitext(self.getInputStructFile())[-1] if self.isStructExtensionMaintainable() else '.pdb'
-        return self._getExtraPath(baseName + extension)
+    def getPDBFile(self) -> str:
+        """
+        ### This function returns the full path for the Atom Struct file.
+
+        #### Returns:
+        - (str): Atom Struct's file's path.
+        """
+        return self._getExtraPath('inputPDB' + self.getStructExtension())
 
     def getInputStruct(self):
         if self.fromFile:
@@ -557,18 +561,26 @@ class XmippProtValFit(ProtAnalysis3D):
         #### Returns:
         - (bool): True if the input struct has an accepted extension. False otherwise.
         """
-        return (self.getInputStructFile().endswith('.pdb') or 
-            self.getInputStructFile().endswith('.ent') or 
-            self.getInputStructFile().endswith('.cif') or
-            self.getInputStructFile().endswith('.cif.gz'))
+        # Getting file's natural extension
+        extension = os.path.splitext(self.getInputStructFile())[-1]
+
+        # Return extension validity
+        return extension == '.pdb' or extension == '.ent' or extension == '.cif'
     
-    def isStructExtensionMaintainable(self) -> bool:
+    def getStructExtension(self) -> str:
         """
-        ### This function returns True if the input struct extension is one of the accepted types and must be maintained.
+        ### This function returns the expected extension for the Atom Struct file.
 
         #### Returns:
-        - (bool): True if the input struct has a maintainable extension. False otherwise.
+        - (str): Atom Struct's file's extension.
         """
-        return (self.getInputStructFile().endswith('.pdb') or 
-            self.getInputStructFile().endswith('.cif') or
-            self.getInputStructFile().endswith('.cif.gz'))
+        # Getting file's natural extension
+        extension = os.path.splitext(self.getInputStructFile())[-1]
+
+        # If extension is a maintainable type, return as is (not all valid types are maintainable)
+        # .pdb is not considered "maintainable" type as it is the default
+        if extension == '.cif':
+            return extension
+        
+        # Return .pdb by default
+        return '.pdb'
