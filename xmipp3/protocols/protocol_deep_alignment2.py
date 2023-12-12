@@ -25,7 +25,7 @@
 # **************************************************************************
 
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, EnumParam,
                                         IntParam, BooleanParam, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils import Message
@@ -90,6 +90,9 @@ class XmippProtDeepAlign2(ProtRefine3D, xmipp3.XmippProtocol):
 
         form.addParam('trainSetSize', IntParam, label="Train set size", default=100000,
                       help='How many particles should be used in the training')
+
+        form.addParam('modelSize', EnumParam, label="Model size", choices=['Small', 'Medium', 'Large'], default=0,
+                      help='Model size (1M, ..., 19M) parameters')
 
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
@@ -158,10 +161,10 @@ _noiseCoord '0 0'
 
     def train(self, gpuId):
         fnReference = self._getExtraPath("reference.xmd")
-        args = "%s %s %f %d %d %s %d %f %s %f" % (
+        args = "%s %s %f %d %d %s %d %f %s %f %d" % (
             fnReference, self._getExtraPath("model"), self.maxShift,
             self.trainSetSize, self.batchSize, gpuId, self.numModels, self.learningRate, self.symmetry,
-            self.SNR)
+            self.SNR, self.modelSize.get())
         self.runJob(f"xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
