@@ -47,7 +47,7 @@ BLOCRES_AVG_FILE = 'blocresAvg'
 BLOCRES_HALF_FILE = 'blocresHalf'
 RESTA_FILE = 'diferencia.vol'
 RESTA_FILE_MRC = 'diferencia.map'
-PDB_VALUE_FILE = 'pdb_fsc-q.pdb'
+VALUE_FILE = 'pdb_fsc-q'
 MASK_FILE_MRC = 'mask.map'
 MASK_FILE = 'mask.vol'
 FN_VOL = 'vol.map'
@@ -56,7 +56,7 @@ FN_HALF2 = 'half2.map'
 MD_MEANS = 'params.xmd'
 MD2_MEANS = 'params2.xmd'
 RESTA_FILE_NORM = 'diferencia_norm.map'
-PDB_NORM_FILE = 'pdb_fsc-q_norm.pdb'
+NORM_FILE = VALUE_FILE + '_norm'
 OUTPUT_CIF = 'fscq_struct.cif'
 
 
@@ -138,8 +138,8 @@ class XmippProtValFit(ProtAnalysis3D):
                  RESTA_FILE: self._getTmpPath('diferencia.vol'),
                  RESTA_FILE_MRC: self._getExtraPath('diferencia.map'),
                  RESTA_FILE_NORM: self._getExtraPath('diferencia_norm.map'),
-                 PDB_VALUE_FILE:  self._getExtraPath('pdb_fsc-q.pdb'),
-                 PDB_NORM_FILE: self._getExtraPath('pdb_fsc-q_norm.pdb'),
+                 VALUE_FILE:  self.getValueNormFile(),
+                 NORM_FILE: self.getValueNormFile(norm=True),
                  MASK_FILE_MRC : self._getExtraPath('mask.map'),
                  MASK_FILE: self._getTmpPath('mask.vol'),
                  FN_VOL: self._getTmpPath("vol.map"),
@@ -366,7 +366,7 @@ class XmippProtValFit(ProtAnalysis3D):
         params = ' --pdb %s ' % self.getPDBFile()
         params += ' --vol %s ' % self._getFileName(RESTA_FILE_MRC)
         params += ' --mask %s ' % self.mask_xmipp
-        params += ' -o %s ' % self._getFileName(PDB_VALUE_FILE)
+        params += ' -o %s ' % self._getFileName(self.getValueNormFile())
         params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()
         params += ' --origin %f %f %f' %(self.x, self.y, self.z)
         params += ' --radius 0.8'
@@ -377,7 +377,7 @@ class XmippProtValFit(ProtAnalysis3D):
         params = ' --pdb %s ' % self.getPDBFile()
         params += ' --vol %s ' % self._getFileName(RESTA_FILE_NORM)
         params += ' --mask %s ' % self.mask_xmipp
-        params += ' -o %s ' % self._getFileName(PDB_NORM_FILE)
+        params += ' -o %s ' % self._getFileName(self.getValueNormFile(norm=True))
         params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()
         params += ' --origin %f %f %f' %(self.x, self.y, self.z)
         params += ' --radius 0.8'
@@ -406,7 +406,7 @@ class XmippProtValFit(ProtAnalysis3D):
         total_atom = 0
         fscq_greater = 0
         fscq_less = 0
-        with open(self._getFileName(PDB_VALUE_FILE)) as f:
+        with open(self._getFileName(self.getValueNormFile())) as f:
             lines_data = f.readlines()
             for j, lin in enumerate(lines_data):
 
@@ -437,7 +437,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
     def getFscqAttrDic(self):
         fscqDic = {}
-        with open(self._getFileName(PDB_VALUE_FILE)) as f:
+        with open(self._getFileName(self.getValueNormFile())) as f:
             lines_data = f.readlines()
             for j, lin in enumerate(lines_data):
                 if (lin.startswith('ATOM') or lin.startswith('HETATM')):
@@ -584,3 +584,19 @@ class XmippProtValFit(ProtAnalysis3D):
         
         # Return .pdb by default
         return '.pdb'
+    
+    def getValueNormFile(self, norm: bool=False) -> str:
+        """
+        ### This function returns the filenames for value file or norm file.
+
+        #### Params:
+        - norm (bool): If set to True, the norm file is returned, otherwise, value file is returned.
+
+        #### Returns:
+        - (str): Value/norm file's full name with extension.
+        """
+        # Getting basename deppending on param
+        baseName = VALUE_FILE if not norm else NORM_FILE
+
+        # Return file name
+        return baseName + self.getStructExtension()
