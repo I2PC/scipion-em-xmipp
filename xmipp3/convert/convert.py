@@ -1675,13 +1675,13 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
             lastFrame = frames
 
     if isEer:
-        firstFrame = (firstFrame - 1) // eerFrames + 1
-        lastFrame = (lastFrame - 1) // eerFrames + 1
-        frameIndex = (frameIndex - 1) // eerFrames + 1
+        firstFrame = 1 # TODO determine
+        lastFrame = eerFrames
+        frameIndex = 1 # TODO determine
 
     if f1 < firstFrame or fN > lastFrame:
-        raise Exception("Frame range could not be greater"
-                        " than the movie one.")
+        raise Exception(f"Frame range [{f1}-{fN}] could not be greater"
+                        f" than the movie one [{firstFrame}-{lastFrame}].")
 
     ih = ImageHandler()
 
