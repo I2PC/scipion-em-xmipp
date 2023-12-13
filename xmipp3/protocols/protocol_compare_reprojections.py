@@ -103,7 +103,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         else:
             anglesFn = self.imgsFn
 
-        self._insertFunctionStep("produceResiduals", vol.getFileName(), anglesFn, vol.getSamplingRate())
+        self._insertFunctionStep("produceResiduals", anglesFn, vol.getSamplingRate())
 
         if self.doEvaluateResiduals.get():
             self._insertFunctionStep("evaluateResiduals")
@@ -126,7 +126,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         if xdim != self._getDimensions():
             self.runJob("xmipp_image_resize", "-i %s --dim %d" % (fnVol, self._getDimensions()), numberOfMpi=1)
 
-    def produceResiduals(self, fnVol, fnAngles, Ts):
+    def produceResiduals(self, fnAngles, Ts):
         anglesOutFn = self._getExtraPath("anglesCont.stk")
         projectionsOutFn = self._getExtraPath("projections.stk")
         fnVol = self._getTmpPath("volume.vol")

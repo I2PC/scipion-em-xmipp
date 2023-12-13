@@ -364,7 +364,8 @@ There are different merit values to be calculated:
             summary += sumRejMet.values()
             summary.append("Output particles not ready yet.")
         else:
-            summary.append(sumRejMet['Zscore'])
+            if 'Zscore' in sumRejMet:
+                summary.append(sumRejMet['Zscore'])
             if hasattr(self, 'sumZScore'):
                 summary.append(" - The minimum ZScore is %.2f" % self.minZScore)
                 summary.append(" - The maximum ZScore is %.2f" % self.maxZScore)
@@ -373,8 +374,10 @@ There are different merit values to be calculated:
             else:
                 summary.append(
                     "Summary values not calculated during processing.")
-            summary.append(sumRejMet['SSNR'])
-            summary.append(sumRejMet['Var'])
+            if 'SSNR' in sumRejMet:
+                summary.append(sumRejMet['SSNR'])
+            if 'Var' in sumRejMet:
+                summary.append(sumRejMet['Var'])
             if self.autoParRejectionVar != self.REJ_NONE:
                 if hasattr(self, 'varThreshold'):
                     summary.append(" - Variance threshold: %.2f" % self.varThreshold)

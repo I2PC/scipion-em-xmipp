@@ -68,16 +68,16 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         vol = self.inputVolume.get()
         
-        self._insertFunctionStep("convertStep", self.imgsFn)
+        self._insertFunctionStep("convertStep")
         imgSet = self.inputSet.get()
-        anglesFn=self.imgsFn
-        self._insertFunctionStep("produceProjections", vol.getFileName(),
+        anglesFn = self.imgsFn
+        self._insertFunctionStep("produceProjections",
                                  anglesFn,
                                  vol.getSamplingRate())
         self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
-    def convertStep(self, imgsFn):
+    def convertStep(self):
         from xmipp3.convert import writeSetOfParticles
         imgSet = self.inputSet.get()
         writeSetOfParticles(imgSet, self.imgsFn)
@@ -86,21 +86,21 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
         img = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)
-        xdim=self.inputVolume.get().getDim()[0]
+        xdim = self.inputVolume.get().getDim()[0]
 
-        imgXdim=imgSet.getDim()[0]
-        if xdim!=imgXdim:
-            self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,imgXdim),numberOfMpi=1)
+        imgXdim = imgSet.getDim()[0]
+        if xdim != imgXdim:
+            self.runJob("xmipp_image_resize", "-i %s --dim %d" % (fnVol, imgXdim), numberOfMpi=1)
     
-    def produceProjections(self, fnVol, fnAngles, Ts):
+    def produceProjections(self, fnAngles, Ts):
         fnVol = self._getTmpPath("volume.vol")
-        anglesOutFn=self._getExtraPath("anglesCont.stk")
-        projectionsOutFn=self._getExtraPath("projections.stk")
-        args="-i %s -o %s --ref %s --oprojections %s --sampling %f " \
-             "--max_angular_change 90"%(fnAngles,anglesOutFn,fnVol,
-                                  projectionsOutFn,Ts)
+        anglesOutFn = self._getExtraPath("anglesCont.stk")
+        projectionsOutFn = self._getExtraPath("projections.stk")
+        args = "-i %s -o %s --ref %s --oprojections %s --sampling %f " \
+             "--max_angular_change 90" % (fnAngles, anglesOutFn, fnVol,
+                                          projectionsOutFn, Ts)
         self.runJob("xmipp_angular_continuous_assign2", args)
-        fnNewParticles=self._getExtraPath("images.stk")
+        fnNewParticles = self._getExtraPath("images.stk")
         if os.path.exists(fnNewParticles):
             cleanPath(fnNewParticles)
     
