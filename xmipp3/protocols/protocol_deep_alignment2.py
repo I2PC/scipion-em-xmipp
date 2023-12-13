@@ -29,9 +29,9 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, E
                                         IntParam, BooleanParam, FileParam, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils import Message
-from pyworkflow.utils.path import cleanPattern
+from pyworkflow.utils.path import cleanPattern, createLink
 from pwem.protocols import ProtRefine3D
-from pwem.objects import String
+from pwem.objects import String, Integer
 from pwem.emlib.image import ImageHandler
 from pwem.emlib.metadata import getFirstRow
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
@@ -41,15 +41,56 @@ import xmipp3
 import xmippLib
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
-class XmippProtDeepAlign2(ProtRefine3D, xmipp3.XmippProtocol):
-    """Learn neural network models to align particles"""
-    _label = 'deep global training'
+class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
     _devStatus = BETA
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
 
     def __init__(self, **args):
         ProtRefine3D.__init__(self, **args)
+
+    def prepareImages(self):
+        fnImgs = self._getTmpPath("images")
+        writeSetOfParticles(self.inputParticles.get(), fnImgs + ".xmd")
+
+        if self.correctCTF:
+            fnImgsCorrected = self._getTmpPath("imagesCorrected")
+            args = "-i %s.xmd -o %s.mrcs --save_metadata_stack %s.xmd --keep_input_columns" % (
+                fnImgs, fnImgsCorrected, fnImgsCorrected)
+            args += " --sampling_rate %f --correct_envelope" % self.inputParticles.get().getSamplingRate()
+            if self.inputParticles.get().isPhaseFlipped():
+                args += " --phase_flipped"
+            self.runJob("xmipp_ctf_correct_wiener2d", args,
+                        numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
+            fnImgs = fnImgsCorrected
+
+        fnImgsResized = self._getTmpPath("imagesResized")
+        if isinstance(self.volDiameter,Integer):
+            cropSize = int(self.volDiameter.get() / self.inputParticles.get().getSamplingRate())
+        else:
+            cropSize = int(self.volDiameter / self.inputParticles.get().getSamplingRate())
+        self.runJob("xmipp_transform_window",
+                    "-i %s.xmd -o %s.mrcs --save_metadata_stack %s.xmd --keep_input_columns --size %d" % (
+                        fnImgs, fnImgsResized, fnImgsResized, cropSize),
+                    numberOfMpi=1)
+        self.runJob("xmipp_image_resize", "-i %s.mrcs --fourier %d" % (fnImgsResized, self.Xdim),
+                    numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
+        row = getFirstRow(fnImgs + ".xmd")
+        hasShift = row.containsLabel(xmippLib.MDL_SHIFT_X)
+        if hasShift:
+            XdimOrig, _, _, _, _ = xmippLib.MetaDataInfo(fnImgs + ".xmd")
+            K = float(self.Xdim) / float(cropSize)
+            self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftX=%f*shiftX"' %
+                        (fnImgsResized, K), numberOfMpi=1)
+            self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftY=%f*shiftY"' %
+                        (fnImgsResized, K), numberOfMpi=1)
+        if self.correctCTF:
+            cleanPattern(fnImgsCorrected + "*")
+
+
+class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
+    """Learn neural network models to align particles"""
+    _label = 'deep global training'
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -164,10 +205,10 @@ class XmippProtDeepAlign2(ProtRefine3D, xmipp3.XmippProtocol):
 
             self.runJob("xmipp_phantom_project",
                         "-i %s -o %s --method fourier 2 0.5 --params %s --sym %s" %
-                        (fnVol, self._getExtraPath("reference.mrcs"), fnParam, self.symmetry), numberOfMpi=1)
+                        (fnVol, self._getTmpPath("reference.mrcs"), fnParam, self.symmetry), numberOfMpi=1)
         else:
-            # TODO> no esta hecho
-            pass
+            self.prepareImages()
+            createLink(self._getTmpPath('imagesResized.xmd'), self._getTmpPath('reference.xmd'))
 
         fhInfo = open(self._getExtraPath("info.txt"),'w')
         fhInfo.write("Xdim=%d\n"%self.Xdim)
@@ -176,11 +217,12 @@ class XmippProtDeepAlign2(ProtRefine3D, xmipp3.XmippProtocol):
         fhInfo.close()
 
     def train(self, gpuId):
-        fnReference = self._getExtraPath("reference.xmd")
+        fnReference = self._getTmpPath("reference.xmd")
+        snr = self.SNR.get() if self.inputType==0 else 0.0
         args = "%s %s %f %d %d %s %d %f %s %f %d" % (
             fnReference, self._getExtraPath("model"), self.maxShift,
             self.trainSetSize, self.batchSize, gpuId, self.numModels, self.learningRate, self.symmetry,
-            self.SNR, self.modelSize.get())
+            snr, self.modelSize.get())
         self.runJob(f"xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
@@ -191,15 +233,9 @@ class XmippProtDeepAlign2(ProtRefine3D, xmipp3.XmippProtocol):
                            % (self.inputSet.get().getSize(), self.getObjectTag('inputSet')))
         return methods
 
-class XmippProtDeepAlign2Predict(ProtRefine3D, xmipp3.XmippProtocol):
+class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
     """Apply neural network models to align particles"""
     _label = 'deep global predict'
-    _devStatus = BETA
-    _lastUpdateVersion = VERSION_3_0
-    _conda_env = 'xmipp_DLTK_v1.0'
-
-    def __init__(self, **args):
-        ProtRefine3D.__init__(self, **args)
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -235,7 +271,7 @@ class XmippProtDeepAlign2Predict(ProtRefine3D, xmipp3.XmippProtocol):
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
         self._insertFunctionStep("getInfo")
-        self._insertFunctionStep("prepareData")
+        self._insertFunctionStep("prepareImages")
         self._insertFunctionStep("predict", numGPU[0])
         self._insertFunctionStep("createOutputStep")
 
@@ -251,40 +287,6 @@ class XmippProtDeepAlign2Predict(ProtRefine3D, xmipp3.XmippProtocol):
         self.volDiameter = int(fhInfo.readline().split('=')[1])
         self.symmetry = fhInfo.readline().split('=')[1].strip()
         fhInfo.close()
-
-    def prepareData(self):
-        fnImgs = self._getTmpPath("images")
-        writeSetOfParticles(self.inputParticles.get(), fnImgs+".xmd")
-
-        if self.correctCTF:
-            fnImgsCorrected=self._getTmpPath("imagesCorrected")
-            args = "-i %s.xmd -o %s.mrcs --save_metadata_stack %s.xmd --keep_input_columns" % (
-                fnImgs, fnImgsCorrected, fnImgsCorrected)
-            args += " --sampling_rate %f --correct_envelope" % self.inputParticles.get().getSamplingRate()
-            if self.inputParticles.get().isPhaseFlipped():
-                args += " --phase_flipped"
-            self.runJob("xmipp_ctf_correct_wiener2d", args,
-                        numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
-            fnImgs=fnImgsCorrected
-
-        fnImgsResized = self._getTmpPath("imagesResized")
-        cropSize = int(self.volDiameter/self.inputParticles.get().getSamplingRate())
-        self.runJob("xmipp_transform_window", "-i %s.xmd -o %s.mrcs --save_metadata_stack %s.xmd --keep_input_columns --size %d"%(
-                    fnImgs,fnImgsResized,fnImgsResized, cropSize),
-                    numberOfMpi=1)
-        self.runJob("xmipp_image_resize", "-i %s.mrcs --fourier %d"%(fnImgsResized, self.Xdim),
-                    numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
-        row = getFirstRow(fnImgs+".xmd")
-        hasShift = row.containsLabel(xmippLib.MDL_SHIFT_X)
-        if hasShift:
-            XdimOrig, _, _, _, _ = xmippLib.MetaDataInfo(fnImgs+".xmd")
-            K=float(self.Xdim)/float(cropSize)
-            self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftX=%f*shiftX"' %
-                        (fnImgsResized, K), numberOfMpi=1)
-            self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftY=%f*shiftY"' %
-                        (fnImgsResized, K), numberOfMpi=1)
-        if self.correctCTF:
-            cleanPattern(fnImgsCorrected+"*")
 
     def predict(self, gpuId):
         fnImgs = self._getTmpPath("images.xmd")
