@@ -28,6 +28,7 @@
 # ******************************************************************************
 
 from os.path import join, exists
+import numpy as np
 
 import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
@@ -245,7 +246,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
             if self.doApplyDoseFilter:
                 doseFrame = inputSet.getAcquisition().getDosePerFrame()
 
-                if doseFrame == 0.0 or doseFrame is None:
+                if np.isclose(doseFrame, 0.0) or doseFrame is None:
                     errors.append('Dose per frame for input movies is 0 or not '
                                   'set. You cannot apply dose filter.')
 

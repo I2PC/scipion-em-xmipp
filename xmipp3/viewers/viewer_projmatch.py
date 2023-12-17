@@ -783,7 +783,7 @@ Examples:
 #===============================================================================
 # Utils Functions
 #===============================================================================
-    def createScipionPartView(self, partSet, viewParams={}):
+    def createScipionPartView(self, partSet):
         inputParticlesId = self.protocol.inputParticles.get().strId()
         filename = partSet.getFileName()
         
