@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-import os
+import os, shutil, gzip
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import (PointerParam, BooleanParam,
                                         IntParam, FileParam, FloatParam)
@@ -47,7 +47,6 @@ BLOCRES_AVG_FILE = 'blocresAvg'
 BLOCRES_HALF_FILE = 'blocresHalf'
 RESTA_FILE = 'diferencia.vol'
 RESTA_FILE_MRC = 'diferencia.map'
-PDB_VALUE_FILE = 'pdb_fsc-q.pdb'
 MASK_FILE_MRC = 'mask.map'
 MASK_FILE = 'mask.vol'
 FN_VOL = 'vol.map'
@@ -56,7 +55,6 @@ FN_HALF2 = 'half2.map'
 MD_MEANS = 'params.xmd'
 MD2_MEANS = 'params2.xmd'
 RESTA_FILE_NORM = 'diferencia_norm.map'
-PDB_NORM_FILE = 'pdb_fsc-q_norm.pdb'
 OUTPUT_CIF = 'fscq_struct.cif'
 
 
@@ -138,8 +136,6 @@ class XmippProtValFit(ProtAnalysis3D):
                  RESTA_FILE: self._getTmpPath('diferencia.vol'),
                  RESTA_FILE_MRC: self._getExtraPath('diferencia.map'),
                  RESTA_FILE_NORM: self._getExtraPath('diferencia_norm.map'),
-                 PDB_VALUE_FILE:  self._getExtraPath('pdb_fsc-q.pdb'),
-                 PDB_NORM_FILE: self._getExtraPath('pdb_fsc-q_norm.pdb'),
                  MASK_FILE_MRC : self._getExtraPath('mask.map'),
                  MASK_FILE: self._getTmpPath('mask.vol'),
                  FN_VOL: self._getTmpPath("vol.map"),
@@ -165,13 +161,15 @@ class XmippProtValFit(ProtAnalysis3D):
     def convertInputStep(self):
         """ Convert inputs to desired format."""
         #Convert Input to pdb
-        if (self.getInputStructFile().endswith('.pdb') or 
-            self.getInputStructFile().endswith('.ent') or 
-            self.getInputStructFile().endswith('.cif') or
-            self.getInputStructFile().endswith('.cif.gz')):
-            os.symlink(os.path.abspath(self.getInputStructFile()), self.getPDBFile())
+        ext = self.getInputExt()
+        if ext in ['.pdb', '.ent']:
+            os.symlink(os.path.abspath(self.getInputStructFile()), self.getStructFile('.pdb'))
+        elif ext in ['.cif', '.mmcif']:
+            os.symlink(os.path.abspath(self.getInputStructFile()), self.getStructFile('.cif'))
+        elif ext == '.cif.gz':
+            os.symlink(os.path.abspath(self.getInputStructFile()), self.getStructFile('.cif.gz'))
         else:
-            toPdb(self.getInputStructFile(), self.getPDBFile())
+            toPdb(self.getInputStructFile(), self.getStructFile('.pdb'))
 
         """ Read the input volume."""
         self.volume = self.inputVolume.get()
@@ -224,7 +222,7 @@ class XmippProtValFit(ProtAnalysis3D):
             params += ' -v 0 '
             params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()
             params += ' --size %d' % self.inputVolume.get().getXDim()
-            params += ' -i %s' % self.getPDBFile()
+            params += ' -i %s' % self.getStructFile()
             params += ' -o %s' % self._getFileName(OUTPUT_PDBVOL_FILE)
             self.runJob('xmipp_volume_from_pdb', params)
 
@@ -366,10 +364,10 @@ class XmippProtValFit(ProtAnalysis3D):
 
     def assignPdbStep(self):
 
-        params = ' --pdb %s ' % self.getPDBFile()
+        params = ' --pdb %s ' % self.getStructFile()
         params += ' --vol %s ' % self._getFileName(RESTA_FILE_MRC)
         params += ' --mask %s ' % self.mask_xmipp
-        params += ' -o %s ' % self._getFileName(PDB_VALUE_FILE)
+        params += ' -o %s ' % self.getFSCQ_file()
         params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()
         params += ' --origin %f %f %f' %(self.x, self.y, self.z)
         params += ' --radius 0.8'
@@ -377,10 +375,10 @@ class XmippProtValFit(ProtAnalysis3D):
         self.runJob('xmipp_pdb_label_from_volume', params)
 
         """Diveded by resolution"""
-        params = ' --pdb %s ' % self.getPDBFile()
+        params = ' --pdb %s ' % self.getStructFile()
         params += ' --vol %s ' % self._getFileName(RESTA_FILE_NORM)
         params += ' --mask %s ' % self.mask_xmipp
-        params += ' -o %s ' % self._getFileName(PDB_NORM_FILE)
+        params += ' -o %s ' % self.getNormFSCQ_file()
         params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()
         params += ' --origin %f %f %f' %(self.x, self.y, self.z)
         params += ' --radius 0.8'
@@ -409,20 +407,18 @@ class XmippProtValFit(ProtAnalysis3D):
         total_atom = 0
         fscq_greater = 0
         fscq_less = 0
-        with open(self._getFileName(PDB_VALUE_FILE)) as f:
-            lines_data = f.readlines()
-            for j, lin in enumerate(lines_data):
 
-                if (lin.startswith('ATOM') or lin.startswith('HETATM')):
+        ASH = AtomicStructHandler()
+        ASH.read(self.getFSCQ_file())
+        for model in ASH.structure:
+            for atom in model.get_atoms():
+                total_atom = total_atom + 1
+                fscq_atom = atom.get_occupancy()
 
-                    total_atom = total_atom + 1
-                    fscq_atom = float(lin[54:60])
-
-                    if (fscq_atom > 0.5):
-                        fscq_greater = fscq_greater + 1
-
-                    if (fscq_atom < -0.5):
-                        fscq_less = fscq_less + 1
+                if (fscq_atom > 0.5):
+                    fscq_greater = fscq_greater + 1
+                elif (fscq_atom < -0.5):
+                    fscq_less = fscq_less + 1
 
         porc_greater = (fscq_greater * 100) / total_atom
         porc_less = (fscq_less * 100) / total_atom
@@ -440,24 +436,27 @@ class XmippProtValFit(ProtAnalysis3D):
 
     def getFscqAttrDic(self):
         fscqDic = {}
-        with open(self._getFileName(PDB_VALUE_FILE)) as f:
-            lines_data = f.readlines()
-            for j, lin in enumerate(lines_data):
-                if (lin.startswith('ATOM') or lin.startswith('HETATM')):
-                    resNumber, resChain, atomName = lin[22:26].strip(), lin[21].strip(), lin[12:16].strip()
-                    resId = '{}:{}@{}'.format(resChain, resNumber, atomName)
-                    fscq_atom = lin[54:60].strip()
-                    fscqDic[resId] = fscq_atom
+        ASH = AtomicStructHandler()
+        ASH.read(self.getFSCQ_file())
+        for model in ASH.structure:
+            for atom in model.get_atoms():
+                fId = atom.get_full_id()
+                chainName, resNumber, atomName = fId[2], fId[3][1], fId[4][0]
+                resId = '{}:{}@{}'.format(chainName, resNumber, atomName)
+                fscq_atom = atom.get_occupancy()
+                fscqDic[resId] = fscq_atom
+
         return fscqDic
 
     def createOutputStep(self):
         self._setMetrics()
         fscqDic = self.getFscqAttrDic()
 
-        AS = self.getInputStruct()
+        AS, ASFile = self.getInputStruct(), self.getInputStructFile()
+        ASCIF = self.getInputStructCIF()
+
         ASH = AtomicStructHandler()
-        inpAS = toCIF(AS.getFileName(), self._getTmpPath('inputStruct.cif'))
-        cifDic = ASH.readLowLevel(inpAS)
+        cifDic = ASH.readLowLevel(ASCIF)
         cifDic = addScipionAttribute(cifDic, fscqDic, self._ATTRNAME, recipient='atoms')
         ASH._writeLowLevel(self._getPath(OUTPUT_CIF), cifDic)
 
@@ -542,12 +541,45 @@ class XmippProtValFit(ProtAnalysis3D):
         else:
             return self.inputPDBObj.get().getFileName()
 
-    def getPDBFile(self):
-        return self._getExtraPath('inputPDB.pdb')
+    def getInputStructCIF(self):
+        ASFile = self.getInputStructFile()
+        if not '.cif' in ASFile:
+            ASFile = toCIF(ASFile, self._getTmpPath('inputStruct.cif'))
+        elif ASFile.endswith('.cif.gz'):
+            oFile = self._getTmpPath('inputStruct.cif')
+            with gzip.open(ASFile, 'rb') as f_in:
+                with open(oFile, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            ASFile = oFile
+        return ASFile
+
+    def getStructFile(self, ext=''):
+        # Search existing file
+        for file in os.listdir(self._getExtraPath()):
+            if 'inputStruct' in file and ext in file:
+                return self._getExtraPath(file)
+        # Return a non-existent file
+        ext = '.pdb' if not ext else ext
+        return self._getExtraPath(f'inputStruct{ext}')
 
     def getInputStruct(self):
         if self.fromFile:
             return AtomStruct(filename=self.inputPDB.get())
         else:
             return self.inputPDBObj.get()
+
+    def getInputExt(self):
+        fName, ext = os.path.splitext(self.getInputStructFile())
+        if ext == '.gz' and os.path.splitext(fName)[1]:
+            ext = os.path.splitext(fName)[1] + ext
+        return ext
+
+    def getFSCQ_file(self):
+        ext = self.getInputExt()
+        return self._getExtraPath(f'pdb_fsc-q{ext}')
+
+    def getNormFSCQ_file(self):
+        ext = self.getInputExt()
+        return self._getExtraPath(f'pdb_fsc-q_norm{ext}')
+
 

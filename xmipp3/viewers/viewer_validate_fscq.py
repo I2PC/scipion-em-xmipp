@@ -42,9 +42,7 @@ from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from xmipp3.protocols.protocol_validate_fscq import (XmippProtValFit, 
                                                      RESTA_FILE_MRC, 
                                                      OUTPUT_PDBMRC_FILE, 
-                                                     PDB_VALUE_FILE,
-                                                     RESTA_FILE_NORM,
-                                                     PDB_NORM_FILE)
+                                                     RESTA_FILE_NORM)
 
 
 class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
@@ -66,7 +64,6 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
     def _defineParams(self, form):
         self._env = os.environ.copy()
         form.addSection(label='FSC-Q results')
-        
         group = form.addGroup('Chimera visualization')
         
         group.addParam('displayVolume', LabelParam,
@@ -211,7 +208,7 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
-        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_VALUE_FILE))
+        f.write("run(session, 'open %s')\n" % self.protocol.getFSCQ_file())
          
         if self.displayPDB == self.RESIDUE:
             f.write("run(session, 'cartoon')\n")
@@ -239,7 +236,7 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
-        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_NORM_FILE))
+        f.write("run(session, 'open %s')\n" % self.protocol.getNormFSCQ_file())
          
         if self.displayNormPDB == self.RESIDUE:
             f.write("run(session, 'cartoon')\n")
@@ -262,11 +259,11 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
  
     def _calculate_fscq(self, obj, **args):
 
-        fnRoot = os.path.abspath(self.protocol._getExtraPath())
         bool = 0
         overfitting_list = []
         poorfitting_list = []
-        with open(fnRoot + '/' + PDB_VALUE_FILE) as f:
+        fscqFile = os.path.abspath(self.protocol.getFSCQ_file())
+        with open(fscqFile) as f:
 
             lines_data = f.readlines()
             for j, lin in enumerate(lines_data):
