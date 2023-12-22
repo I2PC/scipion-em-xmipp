@@ -124,8 +124,9 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     def _insertAllSteps(self):
             # Convert input into xmipp Metadata format
-        
-        updateEnviron(self.gpuList.get())    
+
+        if not self.useQueueForSteps() and not self.useQueue():
+            updateEnviron(self.gpuList.get())
             
         self._createFilenameTemplates() 
         self._insertFunctionStep('convertInputStep')
