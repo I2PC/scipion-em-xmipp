@@ -163,9 +163,10 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                       label="Max. Shift (px)",
                       default=3)
 
-        form.addParam('angPrec', FloatParam,
-                      label="Desired precision (degrees)",
-                      default=3)
+        form.addParam('precision', FloatParam,
+                      label="Desired precision (%)",
+                      default=0.02,
+                      help="Alignment precision at the border of the image measured as a percentage of the image size")
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -225,7 +226,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         args = "%s %s %f %d %d %s %d %f %s %f %d %f" % (
             fnReference, self._getExtraPath("model"), self.maxShift,
             self.trainSetSize, self.batchSize, gpuId, self.numModels, self.learningRate, self.symmetry,
-            snr, self.modelSize.get(), self.angPrec)
+            snr, self.modelSize.get(), self.precision)
         self.runJob(f"xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
