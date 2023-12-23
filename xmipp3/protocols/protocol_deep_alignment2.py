@@ -144,8 +144,8 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         form.addParam('trainSetSize', IntParam, label="Train set size", default=100000,
                       help='How many particles should be used in the training')
 
-        form.addParam('modelSize', EnumParam, label="Model size", choices=['Small', 'Medium', 'Large'], default=0,
-                      help='Model size (1M, ..., 19M) parameters')
+        form.addParam('modelSize', EnumParam, label="Model size", choices=['Small', 'Medium', 'Large', 'Extra large'],
+                      default=3, help='Model size (256k, 1M, 5M, 19M) parameters')
 
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
@@ -161,8 +161,11 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
         form.addParam('maxShift', FloatParam,
                       label="Max. Shift (px)",
-                      default=3,
-                      expertLevel=LEVEL_ADVANCED)
+                      default=3)
+
+        form.addParam('angPrec', FloatParam,
+                      label="Desired precision (degrees)",
+                      default=3)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -191,10 +194,10 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
     data_block1
     _dimensions2D   '%d %d'
     _projRotRange    '0 360 %d'
-    _projRotRandomness   even 
+    _projRotRandomness   even
     _projTiltRange    '0 180 %d'
     _projTiltRandomness   even 
-    _projPsiRange    '0 0 1'
+    _projPsiRange    '0 360 1'
     _projPsiRandomness   even 
     _noiseCoord '0 0'
             """ % (self.Xdim, self.Xdim, math.ceil(360/self.angSample.get()), math.ceil(180/self.angSample.get()))
@@ -219,10 +222,10 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
     def train(self, gpuId):
         fnReference = self._getTmpPath("reference.xmd")
         snr = self.SNR.get() if self.inputType==0 else 0.0
-        args = "%s %s %f %d %d %s %d %f %s %f %d" % (
+        args = "%s %s %f %d %d %s %d %f %s %f %d %f" % (
             fnReference, self._getExtraPath("model"), self.maxShift,
             self.trainSetSize, self.batchSize, gpuId, self.numModels, self.learningRate, self.symmetry,
-            snr, self.modelSize.get())
+            snr, self.modelSize.get(), self.angPrec)
         self.runJob(f"xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
