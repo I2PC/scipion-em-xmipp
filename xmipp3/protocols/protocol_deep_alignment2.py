@@ -69,12 +69,10 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
             cropSize = int(self.volDiameter.get() / self.inputParticles.get().getSamplingRate())
         else:
             cropSize = int(self.volDiameter / self.inputParticles.get().getSamplingRate())
-        self.runJob("xmipp_transform_window",
-                    "-i %s.xmd -o %s.mrcs --save_metadata_stack %s.xmd --keep_input_columns --size %d" % (
-                        fnImgs, fnImgsResized, fnImgsResized, cropSize),
-                    numberOfMpi=1)
-        self.runJob("xmipp_image_resize", "-i %s.mrcs --fourier %d" % (fnImgsResized, self.Xdim),
-                    numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
+        self.runJob("xmipp_transform_crop_resize_gpu",
+                    "-i %s.xmd --oroot %s --cropSize %d --finalSize %d" % (
+                        fnImgs, fnImgsResized, cropSize, self.Xdim), numberOfMpi=1, env=self.getCondaEnv())
+
         row = getFirstRow(fnImgs + ".xmd")
         hasShift = row.containsLabel(xmippLib.MDL_SHIFT_X)
         if hasShift:
