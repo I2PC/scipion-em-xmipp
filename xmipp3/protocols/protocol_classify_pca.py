@@ -204,7 +204,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         
         
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        args = ' -i %s -s %s -c %s -n 11 -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
+        args = ' -i %s -s %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
                 (inputIm, self.sampling, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
                  stfile)
         if mask:
