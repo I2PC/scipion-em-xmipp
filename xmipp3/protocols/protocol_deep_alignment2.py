@@ -113,9 +113,6 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         form.addParam('angSample', FloatParam, label="Angular sampling", default=5, condition='inputType==0',
                       help="Angular sampling of the projection sphere in degrees")
 
-        form.addParam('SNR', FloatParam, label="SNR", default=-1, condition='inputType==0',
-                      help="SNR of the simulated images. -1 for no noise")
-
         form.addParam('inputParticles', PointerParam, label="Input particles", condition='inputType==1',
                       pointerClass='SetOfParticles', allowsNull=True, pointerCondition='hasAlignmentProj')
         form.addParam('correctCTF', BooleanParam, label='Correct CTF', condition='inputType==1', default=True,
@@ -139,11 +136,11 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                       label="Number of models", default=5,
                       help="Multiple models will be trained independently")
 
-        form.addParam('trainSetSize', IntParam, label="Train set size", default=100000,
+        form.addParam('maxEpochs', IntParam, label="Max. Epochs", default=3000, expertLevel=LEVEL_ADVANCED,
                       help='How many particles should be used in the training')
 
         form.addParam('modelSize', EnumParam, label="Model size", choices=['Small', 'Medium', 'Large', 'Extra large'],
-                      default=3, help='Model size (256k, 1M, 5M, 19M) parameters')
+                      default=0, help='Model size (256k, 1M, 5M, 19M) parameters')
 
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
@@ -153,17 +150,13 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
         form.addParam('learningRate', FloatParam,
                       label="Learning rate",
-                      default=0.001,
+                      default=0.0001,
                       expertLevel=LEVEL_ADVANCED,
                       help="Learning rate for training.")
 
-        form.addParam('maxShift', FloatParam,
-                      label="Max. Shift (px)",
-                      default=3)
-
         form.addParam('precision', FloatParam,
                       label="Desired precision (%)",
-                      default=0.02,
+                      default=0.06,
                       help="Alignment precision at the border of the image measured as a percentage of the image size")
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -220,12 +213,11 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
     def train(self, gpuId):
         fnReference = self._getTmpPath("reference.xmd")
-        snr = self.SNR.get() if self.inputType==0 else 0.0
-        args = "%s %s %f %d %d %s %d %f %s %f %d %f" % (
-            fnReference, self._getExtraPath("model"), self.maxShift,
-            self.trainSetSize, self.batchSize, gpuId, self.numModels, self.learningRate, self.symmetry,
-            snr, self.modelSize.get(), self.precision)
-        self.runJob(f"xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
+        args = "--isim %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f --sym %s "\
+               "--modelSize %d --precision %f" % (
+            fnReference, self._getExtraPath("model"), self.maxEpochs, self.batchSize, gpuId, self.numModels,
+            self.learningRate, self.symmetry, self.modelSize, self.precision)
+        self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
     def _methods(self):
