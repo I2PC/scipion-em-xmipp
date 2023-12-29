@@ -25,7 +25,7 @@
 # **************************************************************************
 from pwem.emlib.image import ImageHandler
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol import PointerParam, StringParam, FloatParam
+from pyworkflow.protocol import PointerParam, StringParam, FloatParam, EnumParam, IntParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 from pwem.protocols import ProtAnalysis3D
@@ -34,6 +34,8 @@ from pwem.protocols import ProtAnalysis3D
 from pwem.emlib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
 from xmipp3.convert import readSetOfParticles
 
+MODE_UNIFORM = 0
+MODE_RANDOM = 1
 
 class XmippProtCreateGallery(ProtAnalysis3D):
     """
@@ -55,25 +57,28 @@ class XmippProtCreateGallery(ProtAnalysis3D):
                            'for a description of the symmetry groups format. '
                            'If no symmetry is present, give c1')
 
+        form.addParam('mode', EnumParam, choices=['Uniform','Random'], default=0,
+                      label="Angular distribution")
+        form.addParam('Nprojs', IntParam, default=10000, label='Number of projections',
+                      condition='mode==1')
+
         rot = form.addLine('Rotational angle',
                            help='Minimum, maximum and step values for '
                                 'rotational angle range, all in degrees.')
         rot.addParam('rot0', FloatParam, default=0, label='Min')
         rot.addParam('rotF', FloatParam, default=360, label='Max')
-        rot.addParam('rotStep', FloatParam, default=5, label='Step')
+        rot.addParam('rotStep', FloatParam, default=5, label='Step', condition='mode==0')
 
         tilt = form.addLine('Tilt angle',
                             help='In degrees. tilt=0 is a top view, '
                                  'while tilt=90 is a side view"')
         tilt.addParam('tilt0', FloatParam, default=0, label='Min')
         tilt.addParam('tiltF', FloatParam, default=180, label='Max')
-        tilt.addParam('tiltStep', FloatParam, default=5, label='Step')
+        tilt.addParam('tiltStep', FloatParam, default=5, label='Step', condition='mode==0')
 
-        form.addParam('maxFreq',FloatParam, default=0.25,
-                      expertLevel=LEVEL_ADVANCED,
+        form.addParam('maxFreq',FloatParam, default=0.5,
                       label='Maximum frequency', help="Normalized to 0.5")
         form.addParam('shiftSigma',FloatParam, default=0.0,
-                      expertLevel=LEVEL_ADVANCED,
                       label='Shift sigma', help="In pixels")
 
     #--------------------------- INSERT steps functions ------------------------
@@ -89,10 +94,11 @@ class XmippProtCreateGallery(ProtAnalysis3D):
                         
     def createGallery(self):
         xdim = self.inputVolume.get().getXDim()
-        rotN = round((self.rotF.get()-self.rot0.get())/self.rotStep.get())
-        tiltN = round((self.tiltF.get()-self.tilt0.get())/self.tiltStep.get())
+        if self.mode==MODE_UNIFORM:
+            rotN = round((self.rotF.get()-self.rot0.get())/self.rotStep.get())
+            tiltN = round((self.tiltF.get()-self.tilt0.get())/self.tiltStep.get())
 
-        paramContent ="""# XMIPP_STAR_1 *
+            paramContent ="""# XMIPP_STAR_1 *
 data_block1
 _dimensions2D   '%d %d'
 _projRotRange    '%f %f %d'
@@ -103,6 +109,19 @@ _projPsiRange    '0 0 1'
 _projPsiRandomness   even 
 _noiseCoord '%f 0'
 """ % (xdim, xdim, self.rot0, self.rotF,rotN, self.tilt0, self.tiltF, tiltN, self.shiftSigma)
+        else:
+            paramContent = """# XMIPP_STAR_1 *
+data_block1
+_dimensions2D   '%d %d'
+_projRotRange    '%f %f %d'
+_projRotRandomness   random 
+_projTiltRange    '%f %f 1'
+_projTiltRandomness   random 
+_projPsiRange    '0 360 1'
+_projPsiRandomness   random 
+_noiseCoord '%f 0'
+""" % (xdim, xdim, self.rot0, self.rotF, self.Nprojs, self.tilt0, self.tiltF, self.shiftSigma)
+
         fhParam = open(self._getExtraPath("projectionParameters.xmd"), 'w')
         fhParam.write(paramContent)
         fhParam.close()
