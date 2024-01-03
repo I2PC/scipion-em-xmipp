@@ -361,7 +361,7 @@ class XmippProtValFit(ProtAnalysis3D):
         params = ' --pdb %s ' % self.getStructFile()
         params += ' --vol %s ' % self._getFileName(RESTA_FILE_MRC)
         params += ' --mask %s ' % self.mask_xmipp
-        params += ' -o %s ' % self._getFileName(self.getFSCQFile())
+        params += ' -o %s ' % self.getFSCQFile()
         params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()
         params += ' --origin %f %f %f' %(self.x, self.y, self.z)
         params += ' --radius 0.8'
@@ -372,7 +372,7 @@ class XmippProtValFit(ProtAnalysis3D):
         params = ' --pdb %s ' % self.getStructFile()
         params += ' --vol %s ' % self._getFileName(RESTA_FILE_NORM)
         params += ' --mask %s ' % self.mask_xmipp
-        params += ' -o %s ' % self._getFileName(self.getNormFSCQFile())
+        params += ' -o %s ' % self.getNormFSCQFile()
         params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()
         params += ' --origin %f %f %f' %(self.x, self.y, self.z)
         params += ' --radius 0.8'
