@@ -29,13 +29,8 @@ import os
 from tkinter import Tk, CENTER, Scrollbar, TOP, BOTH, Y
 
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import cm
-import matplotlib.colors as mcolors
-from pyworkflow.utils import getExt, removeExt
-from os.path import abspath
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
-                          DataView, ChimeraAttributeViewer)
+                          ChimeraAttributeViewer)
 from pyworkflow.gui import *
 from pyworkflow.protocol.params import (LabelParam, EnumParam)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
