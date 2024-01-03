@@ -42,10 +42,7 @@ from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from xmipp3.protocols.protocol_validate_fscq import (XmippProtValFit, 
                                                      RESTA_FILE_MRC, 
                                                      OUTPUT_PDBMRC_FILE, 
-                                                     PDB_VALUE_FILE,
-                                                     RESTA_FILE_NORM,
-                                                     PDB_NORM_FILE)
-
+                                                     RESTA_FILE_NORM)
 
 class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
     """
@@ -76,7 +73,6 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
         group.addParam('displayNormVolume', LabelParam,
                important=True,
                label='Display FSC-Qr Volume Output')
-
 
         group.addParam('displayPDB', EnumParam,
                       choices=['by residue', 'by atom'],
@@ -160,7 +156,7 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
 
     def _visualize_vol(self, obj, **args):
         
-        self._create_legend(3);
+        self._create_legend(3)
         
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
@@ -183,7 +179,7 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
     
     def _visualize_norm_vol(self, obj, **args):
         
-        self._create_legend(1.5);
+        self._create_legend(1.5)
         
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
@@ -206,12 +202,12 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
     
     def _visualize_pdb(self, obj, **args):
         
-        self._create_legend(3);
+        self._create_legend(3)
         
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
-        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_VALUE_FILE))
+        f.write("run(session, 'open %s')\n" % self.protocol.getFSCQFile())
          
         if self.displayPDB == self.RESIDUE:
             f.write("run(session, 'cartoon')\n")
@@ -234,12 +230,12 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
     
     def _visualize_norm_pdb(self, obj, **args):
         
-        self._create_legend(1.5);
+        self._create_legend(1.5)
         
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
-        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_NORM_FILE))
+        f.write("run(session, 'open %s')\n" % self.protocol.getNormFSCQFile())
          
         if self.displayNormPDB == self.RESIDUE:
             f.write("run(session, 'cartoon')\n")
@@ -262,62 +258,56 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
  
     def _calculate_fscq(self, obj, **args):
 
-        fnRoot = os.path.abspath(self.protocol._getExtraPath())
-        bool = 0
-        overfitting_list = []
-        poorfitting_list = []
-        with open(fnRoot + '/' + PDB_VALUE_FILE) as f:
-
-            lines_data = f.readlines()
-            for j, lin in enumerate(lines_data):
+        status = False
+        overfittingList = []
+        poorfittingList = []
+        with open(os.path.abspath(self.protocol.getFSCQFile())) as f:
+            linesData = f.readlines()
+            for j, lin in enumerate(linesData):
                 if lin.startswith('ATOM') or lin.startswith('HETATM'):
                     resnumber = int(lin[22:26])
 
-                    if bool == 1 and resnumber == resnumber_ctl:
-                        resatomname = lin[12:16].strip()
+                    if status and resnumber == resnumberCtl:
                         resname = lin[17:20].strip()
                         chain = lin[21]
                         fscq = float(lin[54:60])
-                        current_frag.append(fscq)
+                        currentFrag.append(fscq)
 
-                    elif bool == 1 and resnumber != resnumber_ctl:
-                        meanFscq = np.mean(current_frag)
-                        current_frag.sort()
+                    elif status and resnumber != resnumberCtl:
+                        meanFscq = np.mean(currentFrag)
+                        currentFrag.sort()
 
-                        if current_frag[0] <= -1:
-                            overfitting_list.append((resname, resnumber_ctl, chain,
-                                                     current_frag[0], meanFscq))
+                        if currentFrag[0] <= -1:
+                            overfittingList.append((resname, resnumberCtl, chain,
+                                                     currentFrag[0], meanFscq))
 
-                        if current_frag[-1] >= 1:
-                            poorfitting_list.append((resname, resnumber_ctl, chain,
-                                                     current_frag[-1],
+                        if currentFrag[-1] >= 1:
+                            poorfittingList.append((resname, resnumberCtl, chain,
+                                                     currentFrag[-1],
                                                      meanFscq))
                      
-                        current_frag = []
-                        resnumber_ctl = resnumber
-                        resatomname = lin[12:16].strip()
+                        currentFrag = []
+                        resnumberCtl = resnumber
                         resname = lin[17:20].strip()
                         chain = lin[21]
                         fscq = float(lin[54:60])
 
-                        current_frag.append(fscq)
+                        currentFrag.append(fscq)
 
                     else:
-                        bool = 1
-                        current_frag = []
-                        lines_aa = []
-                        resnumber_ctl = resnumber
-                        resatomname = lin[12:16].strip()
+                        status = True
+                        currentFrag = []
+                        resnumberCtl = resnumber
                         resname = lin[17:20].strip()
                         chain = lin[21]
                         fscq = float(lin[54:60])
 
-                        current_frag.append(fscq)
+                        currentFrag.append(fscq)
                         
         if obj == 'calculateFscqNeg':
-            return overfitting_list
+            return overfittingList
         else:
-            return poorfitting_list
+            return poorfittingList
 
     def _statistics(self, obj, **args):
         mainFrame = Tk()
