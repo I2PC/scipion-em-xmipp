@@ -140,7 +140,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                       help='How many particles should be used in the training')
 
         form.addParam('modelSize', EnumParam, label="Model size", choices=['Small', 'Medium', 'Large', 'Extra large'],
-                      default=0, help='Model size (256k, 1M, 5M, 19M) parameters')
+                      default=2, help='Model size (256k, 1M, 5M, 19M) parameters')
 
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
