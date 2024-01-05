@@ -142,6 +142,18 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         form.addParam('modelSize', EnumParam, label="Model size", choices=['Small', 'Medium', 'Large', 'Extra large'],
                       default=2, help='Model size (256k, 1M, 5M, 19M) parameters')
 
+        form.addParam('learnVAE', BooleanParam, label="Include VAE", default=False,
+                      help='Include a Variational Autoencoder as a way to capture image information better')
+
+        form.addParam('vaePrecision', FloatParam, label="VAE Precision", default=0.1, condition='learnVAE',
+                      help='The VAE precision is a fraction of the input images standard deviation')
+
+        form.addParam('learnCenter', BooleanParam, label="Include Center model", default=False,
+                      help='Include a model to center particles')
+
+        form.addParam('learnApproximate', BooleanParam, label="Include approximate model", default=False,
+                      help='Include a model to approximately locate the particles in the angular space')
+
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
                       default=8,
@@ -217,6 +229,12 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                "--modelSize %d --precision %f" % (
             fnReference, self._getExtraPath("model"), self.maxEpochs, self.batchSize, gpuId, self.numModels,
             self.learningRate, self.symmetry, self.modelSize, self.precision)
+        if self.learnVAE:
+            args+=" --vae %f"%self.vaePrecision
+        if self.learnCenter:
+            args+=" --centerParticles"
+        if self.learnApproximate:
+            args+=" --approximateFirst"
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
