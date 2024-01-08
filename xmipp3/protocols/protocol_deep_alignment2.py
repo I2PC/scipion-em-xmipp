@@ -87,7 +87,10 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
 
 
 class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
-    """Learn neural network models to align particles"""
+    """Learn neural network models to align particles.
+
+    If the loss function starts diverging or does not converge to a high precision,
+    consider lowering the learning rate"""
     _label = 'deep global training'
 
     # --------------------------- DEFINE param functions --------------------------------------------
@@ -136,23 +139,30 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                       label="Number of models", default=5,
                       help="Multiple models will be trained independently")
 
-        form.addParam('maxEpochs', IntParam, label="Max. Epochs", default=3000, expertLevel=LEVEL_ADVANCED,
+        form.addParam('maxEpochs', IntParam, label="Max. Epochs", default=100, expertLevel=LEVEL_ADVANCED,
                       help='How many particles should be used in the training')
 
         form.addParam('modelSize', EnumParam, label="Model size", choices=['Small', 'Medium', 'Large', 'Extra large'],
                       default=2, help='Model size (256k, 1M, 5M, 19M) parameters')
 
-        form.addParam('learnVAE', BooleanParam, label="Include VAE", default=False,
+        form.addParam('learnVAE', BooleanParam, label="Include VAE", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Include a Variational Autoencoder as a way to capture image information better')
 
-        form.addParam('vaePrecision', FloatParam, label="VAE Precision", default=0.1, condition='learnVAE',
+        form.addParam('vaePrecision', FloatParam, label="VAE Precision", default=0.7, condition='learnVAE',
                       help='The VAE precision is a fraction of the input images standard deviation')
 
-        form.addParam('learnCenter', BooleanParam, label="Include Center model", default=False,
+        form.addParam('learnCenter', BooleanParam, label="Include Center model", default=True,
                       help='Include a model to center particles')
 
-        form.addParam('learnApproximate', BooleanParam, label="Include approximate model", default=False,
+        form.addParam('learnApproximate', BooleanParam, label="Include approximate model", default=True,
                       help='Include a model to approximately locate the particles in the angular space')
+
+        form.addParam('firstBatch', IntParam,
+                      label="First batch size",
+                      default=32,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Size of the first batch to learn. Sometimes starting with a few images and growing helps"
+                           " to converge")
 
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
@@ -168,7 +178,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
         form.addParam('precision', FloatParam,
                       label="Desired precision (%)",
-                      default=0.06,
+                      default=0.05,
                       help="Alignment precision at the border of the image measured as a percentage of the image size")
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -226,9 +236,9 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
     def train(self, gpuId):
         fnReference = self._getTmpPath("reference.xmd")
         args = "--isim %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f --sym %s "\
-               "--modelSize %d --precision %f" % (
+               "--modelSize %d --firstBatch %d --precision %f" % (
             fnReference, self._getExtraPath("model"), self.maxEpochs, self.batchSize, gpuId, self.numModels,
-            self.learningRate, self.symmetry, self.modelSize, self.precision)
+            self.learningRate, self.symmetry, self.modelSize, self.firstBatch, self.precision)
         if self.learnVAE:
             args+=" --vae %f"%self.vaePrecision
         if self.learnCenter:
@@ -303,8 +313,8 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
     def predict(self, gpuId):
         fnImgs = self._getTmpPath("images.xmd")
         fnImgsResized = self._getTmpPath("imagesResized.xmd")
-        args = "%s %s %s %s %s %s" % (fnImgs, fnImgsResized, gpuId, self.fnModelDir, self.symmetry,
-                                      self._getExtraPath('particles.xmd'))
+        args = "--iexp %s --iexpResized %s --gpu %s --modelDir %s --sym %s -o %s" %\
+               (fnImgs, fnImgsResized, gpuId, self.fnModelDir, self.symmetry, self._getExtraPath('particles.xmd'))
         self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
 
     def createOutputStep(self):
