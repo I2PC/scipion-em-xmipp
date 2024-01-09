@@ -48,11 +48,13 @@ import xmippLib
 import os.path
 import pickle
 import itertools
+import collections
 import random
 import numpy as np
 import scipy.sparse
 import scipy.stats
 import sklearn.mixture
+
 class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_CLASSES_NAME = 'classes'
     OUTPUT_VOLUMES_NAME = 'volumes'
@@ -498,7 +500,8 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
         # Accumulate all the likelihood values for a given particle
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
-        logLikelihoods = {}
+        count = collections.Counter()
+        sum = collections.Counter()
         for objId in directionMd:
             if directionMd.getValue(emlib.MDL_CLASS_COUNT, objId) == 2:
                 # Read the classification of this direction
@@ -509,10 +512,8 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
                     itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId2)
                     logLikelihood = directionalClassificationMd.getValue(emlib.MDL_LL, objId2)
                     
-                    if itemId in logLikelihoods:
-                        logLikelihoods[itemId] += logLikelihood
-                    else:
-                        logLikelihoods[itemId] = logLikelihood
+                    count[itemId] += 1
+                    sum[itemId] += logLikelihood
         
         # Write likelihoods to the output metadata
         result = emlib.MetaData(self._getWienerParticleMdFilename())
@@ -520,7 +521,7 @@ class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
             
             # Write LL value
-            logLikelihood = logLikelihoods.get(itemId, 0.0)
+            logLikelihood = sum[itemId] / count.get(itemId, 1)
             result.setValue(emlib.MDL_LL, logLikelihood, objId)
 
             # Write 3D class
