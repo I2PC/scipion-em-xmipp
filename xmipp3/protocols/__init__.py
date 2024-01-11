@@ -117,7 +117,6 @@ from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
-from .protocol_deep_denoising import XmippProtDeepDenoising  # deepDenoising has to be after XmippProtGenerateReprojections and XmippProtCompareReprojections
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_volume_deform_zernike3d import XmippProtVolumeDeformZernike3D
 from .protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
