@@ -132,10 +132,14 @@ class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
         f = open(fnCmd, 'w')
         f.write("from chimerax.core.commands import run\n")
         f.write("from chimerax.graphics.windowsize import window_size\n")
-        f.write("from PyQt5.QtGui import QFontMetrics\n")
-        f.write("from PyQt5.QtGui import QFont\n")
+        f.write("try:\n")
+        f.write("    from PyQt5.QtGui import QFontMetrics\n")
+        f.write("    from PyQt5.QtGui import QFont\n")
+        f.write("except ModuleNotFoundError:\n")
+        f.write("    from PyQt6.QtGui import QFontMetrics\n")
+        f.write("    from PyQt6.QtGui import QFont\n")
+
         f.write("run(session, 'set bgColor white')\n")
-                
         # get window size so we can place labels properly
         f.write("v = session.main_view\n")
         f.write("vx,vy=v.window_size\n")
