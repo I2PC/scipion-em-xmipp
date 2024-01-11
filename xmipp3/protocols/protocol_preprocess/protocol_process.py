@@ -157,7 +157,7 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             vol.copyInfo(volInput)
             vol.setLocation(self.outputStk)
             if self.outputStk.endswith(".mrc"):
-                if hasattr(self, 'resizeOption') and self.resizeOption==0: # RESIZE_SAMPLINGRATE
+                if hasattr(self, 'resizeOption') and self.doResize:
                     samplingRate = self.resizeSamplingRate.get()
                 else:
                     samplingRate = volInput.getSamplingRate()
