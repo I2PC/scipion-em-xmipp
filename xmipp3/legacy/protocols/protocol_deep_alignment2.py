@@ -141,6 +141,28 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         form.addParam('maxEpochs', IntParam, label="Max. Epochs", default=100, expertLevel=LEVEL_ADVANCED,
                       help='How many particles should be used in the training')
 
+        form.addParam('modelSize', EnumParam, label="Model size", choices=['Small', 'Medium', 'Large', 'Extra large'],
+                      default=2, help='Model size (256k, 1M, 5M, 19M) parameters')
+
+        form.addParam('learnVAE', BooleanParam, label="Include VAE", default=False, expertLevel=LEVEL_ADVANCED,
+                      help='Include a Variational Autoencoder as a way to capture image information better')
+
+        form.addParam('vaePrecision', FloatParam, label="VAE Precision", default=0.7, condition='learnVAE',
+                      help='The VAE precision is a fraction of the input images standard deviation')
+
+        form.addParam('learnCenter', BooleanParam, label="Include Center model", default=True,
+                      help='Include a model to center particles')
+
+        form.addParam('learnApproximate', BooleanParam, label="Include approximate model", default=True,
+                      help='Include a model to approximately locate the particles in the angular space')
+
+        form.addParam('firstBatch', IntParam,
+                      label="First batch size",
+                      default=32,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Size of the first batch to learn. Sometimes starting with a few images and growing helps"
+                           " to converge")
+
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
                       default=8,
@@ -154,9 +176,9 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                       help="Learning rate for training.")
 
         form.addParam('precision', FloatParam,
-                      label="Desired precision (px)",
-                      default=0.1,
-                      help="Alignment precision at the border of the image")
+                      label="Desired precision (%)",
+                      default=0.05,
+                      help="Alignment precision at the border of the image measured as a percentage of the image size")
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -212,10 +234,16 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
     def train(self, gpuId):
         fnReference = self._getTmpPath("reference.xmd")
-        args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f --sym %s "\
-               "--precision %f" % (
+        args = "--isim %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f --sym %s "\
+               "--modelSize %d --firstBatch %d --precision %f" % (
             fnReference, self._getExtraPath("model"), self.maxEpochs, self.batchSize, gpuId, self.numModels,
-            self.learningRate, self.symmetry, self.precision)
+            self.learningRate, self.symmetry, self.modelSize, self.firstBatch, self.precision)
+        if self.learnVAE:
+            args+=" --vae %f"%self.vaePrecision
+        if self.learnCenter:
+            args+=" --centerParticles"
+        if self.learnApproximate:
+            args+=" --approximateFirst"
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
