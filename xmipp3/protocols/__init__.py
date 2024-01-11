@@ -103,7 +103,6 @@ from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_shift_particles import XmippProtShiftParticles
 from .protocol_shift_volume import XmippProtShiftVolume
 from .protocol_simulate_ctf import XmippProtSimulateCTF
-from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_subtract_projection import XmippProtBoostParticles
 from .protocol_tilt_analysis import XmippProtTiltAnalysis
