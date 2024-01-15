@@ -55,7 +55,7 @@ import scipy.sparse
 import scipy.stats
 import sklearn.mixture
 
-class XmippProtAligned3dClassification(ProtClassify3D, xmipp3.XmippProtocol):
+class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_CLASSES_NAME = 'classes'
     OUTPUT_VOLUMES_NAME = 'volumes'
     

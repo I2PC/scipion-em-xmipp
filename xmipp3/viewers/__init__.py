@@ -27,7 +27,6 @@
 from .viewer import XmippViewer
 from .plotter import XmippPlotter
 
-from .viewer_aligned_3d_classification import XmippViewerAligned3dClassification
 from .viewer_angular_resolution_alignment import XmippProtAngResAlignViewer
 from .viewer_cl2d import XmippCL2DViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
@@ -49,7 +48,6 @@ from .viewer_split_volume import XmippViewerSplitVolume
 from .viewer_validate_overfitting import XmippValidateOverfittingViewer
 from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
-from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_consensus_classes import XmippConsensusClassesViewer
 from .viewer_extract_asymmetric_unit import viewerXmippProtExtractUnit
 from .viewer_deepEMHancer import viewerXmippProtDeepVolPostProc
