@@ -157,7 +157,11 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             vol.copyInfo(volInput)
             vol.setLocation(self.outputStk)
             if self.outputStk.endswith(".mrc"):
-                self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk,volInput.getSamplingRate()))
+                if hasattr(self, 'resizeOption') and self.doResize:
+                    samplingRate = self.resizeSamplingRate.get()
+                else:
+                    samplingRate = volInput.getSamplingRate()
+                self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk, samplingRate))
             if volInput.hasOrigin():
                 vol.setOrigin(volInput.getOrigin())
             self._postprocessOutput(vol)
