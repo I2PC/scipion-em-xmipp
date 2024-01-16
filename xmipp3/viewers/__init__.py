@@ -44,11 +44,9 @@ from .viewer_resolution_monogenic_signal import XmippMonoResViewer
 from .viewer_resolution_deepres import XmippResDeepResViewer
 from .viewer_validate_nontilt import XmippValidateNonTiltViewer
 from .viewer_validate_fscq import XmippProtValFitViewer
-from .viewer_split_volume import XmippViewerSplitVolume
 from .viewer_validate_overfitting import XmippValidateOverfittingViewer
 from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
-from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_consensus_classes import XmippConsensusClassesViewer
 from .viewer_extract_asymmetric_unit import viewerXmippProtExtractUnit
 from .viewer_deepEMHancer import viewerXmippProtDeepVolPostProc
