@@ -233,39 +233,3 @@ class XmippProtDeepCenter(XmippProtDeepCenterAssignmentPredictBase):
         super().predict(gpuId, predictImgsFn, mode="center",
                                                            inputModel=self._getExtraPath("model"),
                                                            trainedModel=self.trainModels.get())
-
-class XmippProtDeepGlobalAssignment(XmippProtDeepCenterAssignmentPredictBase):
-    """Predict Euler Angles using deep learning."""
-    _label = 'deep global assignment'
-    _devStatus = BETA
-
-    # --------------------------- DEFINE param functions --------------------------------------------
-    def _defineParams(self, form):
-        # Calling parent form
-        super()._defineParams(form)
-
-        # Adding extra conditions
-        trainModels = form.getParam('trainModels')
-        trainModels.condition = String('False')
-
-        # Always show training parameters group in this protocol
-        trainingGroup = form.getParam('Training_parameters')
-        trainingGroup.condition = String('True')
-
-        section = form.getSection(label=Message.LABEL_INPUT)
-        section.addParam('symmetry', StringParam,
-                      label="Symmetry", default="c1",
-                      help="Symmetry of the molecule")
-    
-    # --------------------------- INSERT steps functions --------------------------------------------
-    def _insertAllSteps(self):
-        self.insertTrainSteps()
-        super()._insertAllSteps()
-
-    # --------------------------- STEPS functions ---------------------------------------------------
-    def train(self, gpuId, mode="", symmetry=None):
-        super().train(gpuId, mode="global_assignment", symmetry=self.symmetry.get())
-
-    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True, symmetry=None):
-        super().predict(gpuId, predictImgsFn, mode="global_assignment", inputModel=self._getExtraPath("model"),
-                        symmetry=self.symmetry.get())
