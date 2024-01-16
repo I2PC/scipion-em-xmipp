@@ -103,8 +103,6 @@ from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_shift_particles import XmippProtShiftParticles
 from .protocol_shift_volume import XmippProtShiftVolume
 from .protocol_simulate_ctf import XmippProtSimulateCTF
-from .protocol_solid_angles import XmippProtSolidAngles
-from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_subtract_projection import XmippProtBoostParticles
 from .protocol_tilt_analysis import XmippProtTiltAnalysis
@@ -117,8 +115,6 @@ from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
-from .protocol_deep_denoising import XmippProtDeepDenoising  # deepDenoising has to be after XmippProtGenerateReprojections and XmippProtCompareReprojections
-from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_volume_deform_zernike3d import XmippProtVolumeDeformZernike3D
 from .protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
@@ -126,7 +122,6 @@ from .protocol_local_ctf import XmippProtLocalCTF
 from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
-from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 # from .protocol_apply_deformation_zernike3d import XmippProtApplyZernike3D
 # from .protocol_kmeans_clustering import XmippProtKmeansSPH
 from .protocol_structure_map import XmippProtStructureMap
@@ -136,4 +131,4 @@ from .protocol_volume_consensus import XmippProtVolConsensus
 from .protocol_volume_local_adjust import XmippProtLocalVolAdj
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
-from .protocol_deep_center_assignment import XmippProtDeepCenter, XmippProtDeepGlobalAssignment
+from .protocol_deep_center import XmippProtDeepCenter
