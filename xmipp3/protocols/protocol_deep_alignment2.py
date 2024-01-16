@@ -49,6 +49,13 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
     def __init__(self, **args):
         ProtRefine3D.__init__(self, **args)
 
+    def getCropSize(self):
+        if isinstance(self.volDiameter,Integer):
+            cropSize = int(self.volDiameter.get() / self.inputParticles.get().getSamplingRate())
+        else:
+            cropSize = int(self.volDiameter / self.inputParticles.get().getSamplingRate())
+        return cropSize
+
     def prepareImages(self):
         fnImgs = self._getTmpPath("images")
         writeSetOfParticles(self.inputParticles.get(), fnImgs + ".xmd")
@@ -64,11 +71,8 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
                         numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
             fnImgs = fnImgsCorrected
 
+        cropSize = self.getCropSize()
         fnImgsResized = self._getTmpPath("imagesResized")
-        if isinstance(self.volDiameter,Integer):
-            cropSize = int(self.volDiameter.get() / self.inputParticles.get().getSamplingRate())
-        else:
-            cropSize = int(self.volDiameter / self.inputParticles.get().getSamplingRate())
         self.runJob("xmipp_transform_crop_resize_gpu",
                     "-i %s.xmd --oroot %s --cropSize %d --finalSize %d" % (
                         fnImgs, fnImgsResized, cropSize, self.Xdim), numberOfMpi=1, env=self.getCondaEnv())
@@ -287,6 +291,13 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
         args = "--iexp %s --iexpResized %s --gpu %s --modelDir %s --sym %s -o %s" %\
                (fnImgs, fnImgsResized, gpuId, self.fnModelDir, self.symmetry, self._getExtraPath('particles.xmd'))
         self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
+
+        K = float(self.getCropSize()) / float(self.Xdim)
+        fnPredict = self._getExtraPath("particles.xmd")
+        self.runJob('xmipp_metadata_utilities', '-i %s --operate modify_values "shiftX=%f*shiftX"' %
+                    (fnPredict, K), numberOfMpi=1)
+        self.runJob('xmipp_metadata_utilities', '-i %s --operate modify_values "shiftY=%f*shiftY"' %
+                    (fnPredict, K), numberOfMpi=1)
 
     def createOutputStep(self):
         fnPredict = self._getExtraPath("particles.xmd")
