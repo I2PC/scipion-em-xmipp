@@ -482,7 +482,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
             result.setValue(emlib.MDL_REF3D, ref3d, objId)
         
         # Store
-        result.write(self._getClassificationMdFilename(-1))
+        result.write(self._getClassificationMdFilename())
     
     def reconstructStep(self, cls):
         # Select particles
