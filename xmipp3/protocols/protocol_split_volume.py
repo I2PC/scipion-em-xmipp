@@ -100,10 +100,10 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
 
         form.addSection(label='Initial partition')
         form.addParam('angularSampling', FloatParam, label='Angular sampling',
-                      default=5.0, validators=[Range(0,180)],
+                      default=7.5, validators=[Range(0,180)],
                       help='Angular sampling interval in degrees')
         form.addParam('angularDistance', FloatParam, label='Angular distance',
-                      default=5.0, validators=[Range(0,180)],
+                      default=7.5, validators=[Range(0,180)],
                       help='Maximum angular distance in degrees')
         form.addParam('checkMirrors', BooleanParam, label='Check mirrors',
                       default=True)
