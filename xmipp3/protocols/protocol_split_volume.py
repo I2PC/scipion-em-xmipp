@@ -563,7 +563,6 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         def updateItem(item: Particle, row: emlib.metadata.Row):
             assert(item.getObjId() == row.getValue(emlib.MDL_ITEM_ID))
             item.setClassId(row.getValue(emlib.MDL_REF3D))
-            # TODO add classification data
             
         def updateClass(cls: Class3D):
             clsId = cls.getObjId()
