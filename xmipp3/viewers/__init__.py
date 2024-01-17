@@ -62,7 +62,6 @@ from .viewer_projmatch import XmippProjMatchViewer
 from .viewer_volume_deform_zernike3d import XmippVolumeDeformZernike3DViewer
 from .viewer_structure_map import XmippProtStructureMapViewer
 from .viewer_pdb_deform_zernike3d import XmippPDBDeformViewer
-from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
 
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer
