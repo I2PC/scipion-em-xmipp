@@ -45,7 +45,7 @@ import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d as mpl3d
 
 class XmippViewerSplitVolume(ProtocolViewer):
-    _label = 'viewer aligned 3d classification'
+    _label = 'viewer split volume'
     _targets = [XmippProtSplitVolume]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     
