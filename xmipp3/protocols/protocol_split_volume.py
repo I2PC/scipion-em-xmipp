@@ -59,7 +59,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_CLASSES_NAME = 'classes'
     OUTPUT_VOLUMES_NAME = 'volumes'
     
-    _label = 'aligned 3d classification'
+    _label = 'solid angles'
     _conda_env = 'xmipp_swiftalign'
     _devStatus = BETA
     _possibleOutputs = {
