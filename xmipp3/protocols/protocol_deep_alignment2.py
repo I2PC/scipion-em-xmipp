@@ -320,8 +320,8 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
     def _validate(self):
         errors = []
         if self.modelSource==1:
-            if len(glob.glob(os.path.join(self.modelDir.get(),"model*.h5")))==0:
-                errors.append('The given directory does not have network model*.h5')
+            if len(glob.glob(os.path.join(self.modelDir.get(),"model*.tf")))==0:
+                errors.append('The given directory does not have network model*.tf')
             if len(glob.glob(os.path.join(self.modelDir.get(), "info.txt"))) == 0:
                 errors.append('The given directory does not have info.txt')
         return errors
