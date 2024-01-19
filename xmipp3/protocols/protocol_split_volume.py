@@ -37,8 +37,7 @@ from pyworkflow.utils import makePath, createLink
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
                                         StringParam, BooleanParam,
-                                        MultiPointerParam, EnumParam,
-                                        GT, GE, Range,
+                                        GE, Range,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 
 import xmipp3
