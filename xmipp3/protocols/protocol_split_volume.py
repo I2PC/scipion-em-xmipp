@@ -98,7 +98,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
                       default=True,
                       help='Consider the CTF of the particles')
 
-        form.addSection(label='Initial partition')
+        form.addSection(label='Angular sampling')
         form.addParam('angularSampling', FloatParam, label='Angular sampling',
                       default=7.5, validators=[Range(0,180)],
                       help='Angular sampling interval in degrees')
