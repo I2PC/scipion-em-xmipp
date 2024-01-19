@@ -56,7 +56,7 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
             cropSize = int(self.volDiameter / self.inputParticles.get().getSamplingRate())
         return cropSize
 
-    def prepareImages(self):
+    def prepareImages(self, gpuId):
         fnImgs = self._getTmpPath("images")
         writeSetOfParticles(self.inputParticles.get(), fnImgs + ".xmd")
 
@@ -74,8 +74,8 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
         cropSize = self.getCropSize()
         fnImgsResized = self._getTmpPath("imagesResized")
         self.runJob("xmipp_transform_crop_resize_gpu",
-                    "-i %s.xmd --oroot %s --cropSize %d --finalSize %d" % (
-                        fnImgs, fnImgsResized, cropSize, self.Xdim), numberOfMpi=1, env=self.getCondaEnv())
+                    "-i %s.xmd --oroot %s --cropSize %d --finalSize %d --gpu %s" % (
+                        fnImgs, fnImgsResized, cropSize, self.Xdim, gpuId), numberOfMpi=1, env=self.getCondaEnv())
 
         row = getFirstRow(fnImgs + ".xmd")
         hasShift = row.containsLabel(xmippLib.MDL_SHIFT_X)
@@ -171,11 +171,11 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
             myStr = self.gpuList.get()
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
-        self._insertFunctionStep("prepareData")
+        self._insertFunctionStep("prepareData", numGPU[0])
         self._insertFunctionStep("train", numGPU[0])
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def prepareData(self):
+    def prepareData(self, gpuId):
         if self.inputType.get()==0:
             fnVol = self._getTmpPath("reference.mrc")
             ImageHandler().convert(self.inputVol.get(), fnVol)
@@ -205,7 +205,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                         "-i %s -o %s --method fourier 2 0.5 --params %s --sym %s" %
                         (fnVol, self._getTmpPath("reference.mrcs"), fnParam, self.symmetry), numberOfMpi=1)
         else:
-            self.prepareImages()
+            self.prepareImages(gpuId)
             createLink(self._getTmpPath('imagesResized.xmd'), self._getTmpPath('reference.xmd'))
 
         fhInfo = open(self._getExtraPath("info.txt"),'w')
@@ -268,7 +268,7 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
         self._insertFunctionStep("getInfo")
-        self._insertFunctionStep("prepareImages")
+        self._insertFunctionStep("prepareImages", numGPU[0])
         self._insertFunctionStep("predict", numGPU[0])
         self._insertFunctionStep("createOutputStep")
 
