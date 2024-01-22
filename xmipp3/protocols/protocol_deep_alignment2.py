@@ -73,9 +73,15 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
 
         cropSize = self.getCropSize()
         fnImgsResized = self._getTmpPath("imagesResized")
+        # Only for cropping
         self.runJob("xmipp_transform_crop_resize_gpu",
                     "-i %s.xmd --oroot %s --cropSize %d --finalSize %d --gpu %s" % (
-                        fnImgs, fnImgsResized, cropSize, self.Xdim, gpuId), numberOfMpi=1, env=self.getCondaEnv())
+                        fnImgs, fnImgsResized, cropSize, cropSize, gpuId), numberOfMpi=1, env=self.getCondaEnv())
+        # Downsampling in Fourier, which is much more precise
+        self.runJob("xmipp_image_resize",
+                    "-i %s.mrcs --fourier %d" % (fnImgsResized, self.Xdim),
+                    numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
+
 
         row = getFirstRow(fnImgs + ".xmd")
         hasShift = row.containsLabel(xmippLib.MDL_SHIFT_X)
@@ -159,7 +165,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
         form.addParam('precision', FloatParam,
                       label="Desired precision (px)",
-                      default=0.1,
+                      default=1,
                       help="Alignment precision at the border of the image")
 
     # --------------------------- INSERT steps functions --------------------------------------------
