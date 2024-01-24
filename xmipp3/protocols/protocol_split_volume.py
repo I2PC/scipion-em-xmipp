@@ -30,7 +30,6 @@ from pwem.protocols import ProtClassify3D
 from pwem.objects import (VolumeMask, Class3D, 
                           SetOfParticles, SetOfClasses3D, Particle,
                           Volume, SetOfVolumes )
-from pwem.constants import ALIGN_PROJ
 
 from pyworkflow import BETA
 from pyworkflow.utils import makePath, createLink
@@ -59,7 +58,6 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_VOLUMES_NAME = 'volumes'
     
     _label = 'split volume'
-    _conda_env = 'xmipp_swiftalign'
     _devStatus = BETA
     _possibleOutputs = {
         OUTPUT_CLASSES_NAME: SetOfClasses3D,
@@ -194,25 +192,16 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     
     def correctCtfStep(self):
         particles: SetOfParticles = self.inputParticles.get()
-        acquisition = particles.getAcquisition()
         
         # Perform a CTF correction using Wiener Filtering
         args = []
         args += ['-i', self._getInputParticleMdFilename()]
         args += ['-o', self._getWienerParticleMdFilename()]
-        args += ['--pixel_size', self._getSamplingRate()]
-        args += ['--spherical_aberration', acquisition.getSphericalAberration()]
-        args += ['--voltage', acquisition.getVoltage()]
+        args += ['--sampling_rate', self._getSamplingRate()]
         if particles.isPhaseFlipped():
             args +=  ['--phase_flipped']
 
-        args += ['--batch', self.batchSize]
-        if self.useGpu:
-            args += ['--device'] + self._getDeviceList()
-
-        env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = '' # Torch does not like it
-        self.runJob('xmipp_swiftalign_wiener_2d', args, numberOfMpi=1, env=env)
+        self.runJob('xmipp_ctf_correct_wiener2d', args)
 
     def projectMaskStep(self):
         args = []
