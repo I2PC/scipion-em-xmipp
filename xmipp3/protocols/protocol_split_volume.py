@@ -317,7 +317,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
             # Compute The likelihood ratio between classes
             logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
             logLikelihoodRatios = logLikelihoods[:,1] - logLikelihoods[:,0]
-            logLikelihoodRatios /= abs(logLikelihoodRatios).max()
+            logLikelihoodRatios /= np.linalg.norm(logLikelihoodRatios)
 
             # Store the log likelihood ratio
             directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatios))
