@@ -284,7 +284,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
             if self.useGpu:
                 args += ['--device'] + self._getDeviceList()
 
-            env = self.getCondaEnv()
+            env = self.getCondaEnv(_conda_env='xmipp_pyTorch')
             env['LD_LIBRARY_PATH'] = '' # Torch does not like it
             self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
             
@@ -396,8 +396,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-i', self._getGraphFilename()]
         args += ['-o', self._getGraphCutFilename()]
         args += ['--sdp']
-        #env = self.getCondaEnv(_conda_env='scipion3')
-        env = self.getCondaEnv() # TODO
+        env = self.getCondaEnv(_conda_env='xmipp_pyTorch')
         self.runJob('xmipp_graph_max_cut', args, env=env, numberOfMpi=1)
         
         # Load the cut
