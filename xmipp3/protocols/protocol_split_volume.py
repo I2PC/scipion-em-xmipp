@@ -397,7 +397,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-i', self._getGraphFilename()]
         args += ['-o', self._getGraphCutFilename()]
         args += ['--sdp']
-        env = self.getCondaEnv(_conda_env='xmipp_pyTorch')
+        env = self.getCondaEnv(_conda_env='xmipp_graph')
         self.runJob('xmipp_graph_max_cut', args, env=env, numberOfMpi=1)
         
         # Load the cut
