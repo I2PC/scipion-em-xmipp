@@ -72,16 +72,18 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
             fnImgs = fnImgsCorrected
 
         cropSize = self.getCropSize()
-        fnImgsResized = self._getTmpPath("imagesResized")
+        fnImgsCropped= self._getTmpPath("imagesCropped")
         # Only for cropping
         self.runJob("xmipp_transform_crop_resize_gpu",
                     "-i %s.xmd --oroot %s --cropSize %d --finalSize %d --gpu %s" % (
-                        fnImgs, fnImgsResized, cropSize, cropSize, gpuId), numberOfMpi=1, env=self.getCondaEnv())
-        # Downsampling in Fourier, which is much more precise
-        self.runJob("xmipp_image_resize",
-                    "-i %s.mrcs --fourier %d" % (fnImgsResized, self.Xdim),
-                    numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
+                        fnImgs, fnImgsCropped, cropSize, cropSize, gpuId), numberOfMpi=1, env=self.getCondaEnv())
 
+        # Downsampling in Fourier, which is much more precise
+        fnImgsResized=self._getTmpPath("imagesCroppedResized")
+        self.runJob("xmipp_image_resize",
+                    "-i %s.xmd -o %s.mrcs --fourier %d --save_metadata_stack --keep_input_columns"%\
+                        (fnImgsCropped, fnImgsResized, self.Xdim),
+                    numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
 
         row = getFirstRow(fnImgs + ".xmd")
         hasShift = row.containsLabel(xmippLib.MDL_SHIFT_X)
@@ -115,19 +117,9 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
         form.addSection(label=Message.LABEL_INPUT)
 
-        form.addParam('inputType', EnumParam, label="Reference", choices=['Volume', 'Particles'], default=0,
-                      help='If volume, projections are generated from this volume. If particles, they must have '
-                           'a previous and reliable angular assignment')
-
-        form.addParam('inputVol', PointerParam, label="Reference volume", condition='inputType==0',
-                      pointerClass='Volume', allowsNull=True)
-
-        form.addParam('angSample', FloatParam, label="Angular sampling", default=5, condition='inputType==0',
-                      help="Angular sampling of the projection sphere in degrees")
-
-        form.addParam('inputParticles', PointerParam, label="Input particles", condition='inputType==1',
+        form.addParam('inputParticles', PointerParam, label="Input particles",
                       pointerClass='SetOfParticles', allowsNull=True, pointerCondition='hasAlignmentProj')
-        form.addParam('correctCTF', BooleanParam, label='Correct CTF', condition='inputType==1', default=True,
+        form.addParam('correctCTF', BooleanParam, label='Correct CTF', default=True,
                       help='Correct the CTF through a Wiener filter')
 
         form.addParam('volDiameter', IntParam, label="Protein diameter (A)",
@@ -182,37 +174,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def prepareData(self, gpuId):
-        if self.inputType.get()==0:
-            fnVol = self._getTmpPath("reference.mrc")
-            ImageHandler().convert(self.inputVol.get(), fnVol)
-            self.runJob("xmipp_transform_window", "-i %s --size %d"%(fnVol,
-                        int(self.volDiameter.get()/self.inputVol.get().getSamplingRate())),
-                        numberOfMpi=1)
-            self.runJob("xmipp_image_resize", "-i %s --dim %d"%(fnVol, self.Xdim),
-                        numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
-
-            paramContent = """# XMIPP_STAR_1 *
-    data_block1
-    _dimensions2D   '%d %d'
-    _projRotRange    '0 360 %d'
-    _projRotRandomness   even
-    _projTiltRange    '0 180 %d'
-    _projTiltRandomness   even 
-    _projPsiRange    '0 360 1'
-    _projPsiRandomness   even 
-    _noiseCoord '0 0'
-            """ % (self.Xdim, self.Xdim, math.ceil(360/self.angSample.get()), math.ceil(180/self.angSample.get()))
-            fnParam = self._getTmpPath("projectionParameters.xmd")
-            fhParam = open(fnParam, 'w')
-            fhParam.write(paramContent)
-            fhParam.close()
-
-            self.runJob("xmipp_phantom_project",
-                        "-i %s -o %s --method fourier 2 0.5 --params %s --sym %s" %
-                        (fnVol, self._getTmpPath("reference.mrcs"), fnParam, self.symmetry), numberOfMpi=1)
-        else:
-            self.prepareImages(gpuId)
-            createLink(self._getTmpPath('imagesResized.xmd'), self._getTmpPath('reference.xmd'))
+        self.prepareImages(gpuId)
 
         fhInfo = open(self._getExtraPath("info.txt"),'w')
         fhInfo.write("Xdim=%d\n"%self.Xdim)
@@ -221,11 +183,10 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         fhInfo.close()
 
     def train(self, gpuId):
-        fnReference = self._getTmpPath("reference.xmd")
-        args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f --sym %s "\
-               "--precision %f" % (
-            fnReference, self._getExtraPath("model"), self.maxEpochs, self.batchSize, gpuId, self.numModels,
-            self.learningRate, self.symmetry, self.precision)
+        fnReference = self._getTmpPath("imagesCropped.xmd")
+        args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f "\
+               "--precision %f --onlyShift" % (
+            fnReference, self._getExtraPath("modelShift"), 300, 128, gpuId, 1,0.0001, 1)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
