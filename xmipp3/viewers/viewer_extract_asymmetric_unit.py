@@ -141,8 +141,6 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
         if innerRadius < 0:
            innerRadius = 0
         d['innerRadius'] = innerRadius * sampling
-
-        d['innerRadius'] = self.protocol.innerRadius.get() * sampling
         d['symmetry'] = Chimera.getSymmetry(XMIPP_TO_SCIPION[self.protocol.symmetryGroup.get()])
 
         if self.protocol.symmetryGroup >= XMIPP_I222:

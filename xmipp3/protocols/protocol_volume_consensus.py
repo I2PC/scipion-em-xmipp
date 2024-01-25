@@ -25,10 +25,12 @@
 # *
 # **************************************************************************
 
+from os.path import exists
 from pyworkflow.protocol.params import MultiPointerParam
 from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
 
+CITE = 'Fernandez-Gimenez2021'
 
 class XmippProtVolConsensus(ProtInitialVolume):
     """ This protocol performs a fusion of all the input volumes, which should be preprocessed with protocol 'volume
@@ -40,7 +42,6 @@ class XmippProtVolConsensus(ProtInitialVolume):
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-
         form.addSection(label='Input')
         form.addParam('vols', MultiPointerParam, pointerClass='Volume', label="Volumes",
                       help='Select the volumes for the consensus.')
@@ -69,11 +70,15 @@ class XmippProtVolConsensus(ProtInitialVolume):
         outVol = Volume()
         outVol.setSamplingRate(self.vols[0].get().getSamplingRate())
         outVol.setFileName(self._getExtraPath("consensus_volume.mrc"))
-        outVol2 = Volume()
-        outVol2.setSamplingRate(self.vols[0].get().getSamplingRate())
-        outVol2.setFileName(self._getExtraPath("consensus_volume_diff.mrc"))
-        self._defineOutputs(outputVolume=outVol)
-        self._defineOutputs(outputVolumeDiff=outVol2)
+        if not exists(self._getExtraPath("consensus_volume.mrc")):
+            raise NoOutputGenerated("Consensus volume NOT generated, please check input volumes to ensure they have "
+                                    "equal box size, voxel size and origin.")
+        else:
+            outVol2 = Volume()
+            outVol2.setSamplingRate(self.vols[0].get().getSamplingRate())
+            outVol2.setFileName(self._getExtraPath("consensus_volume_diff.mrc"))
+            self._defineOutputs(outputVolume=outVol)
+            self._defineOutputs(outputVolumeDiff=outVol2)
 
     def createChimeraScript(self):
         fnRoot = "extra/"
@@ -104,5 +109,20 @@ class XmippProtVolConsensus(ProtInitialVolume):
                            (self.vols.getSize(), self.vols[0].get().getSamplingRate()))
         return methods
 
+    def _validate(self):
+        errors = []
+        voxel_size = []
+        for i, vol in enumerate(self.vols):
+            voxel_size.append(round(vol.get().getSamplingRate(), 2))
+        result = all(element == voxel_size[0] for element in voxel_size)
+        if not result:
+            errors.append('Pixel size should be the same for all input volumes.')
+        return errors
+
     def _citations(self):
         return ['Fernandez-Gimenez2021']
+
+
+class NoOutputGenerated(Exception):
+    """No output generation error"""
+    pass

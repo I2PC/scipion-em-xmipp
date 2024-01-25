@@ -40,6 +40,7 @@ except ImportError:
 import numpy as np
 
 from pyworkflow.utils import replaceBaseExt
+from pyworkflow.utils.path import cleanPath
 from pyworkflow.object import ObjectWrap, String, Float, Integer, Object
 from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
                             ALIGN_3D)
@@ -829,30 +830,35 @@ def writeSetOfCoordinatesWithState(posDir, coordSet, state, scale=1):
 
     f = None
     lastMicId = None
-    c = 0
 
-    for coord in coordSet.iterItems(orderBy='_micId'):
-        micId = coord.getMicId()
+    try:
+        for coord in coordSet.iterItems(orderBy='_micId'):
+            micId = coord.getMicId()
 
-        if micId != lastMicId:
-            # we need to close previous opened file
-            if f:
-                f.close()
-                c = 0
-            f = openMd(posDict[micId], state)
-            lastMicId = micId
-        c += 1
-        if scale != 1:
-            x = coord.getX() * scale
-            y = coord.getY() * scale
-        else:
-            x = coord.getX()
-            y = coord.getY()
-        f.write(" %06d   1   %d  %d  %d   %06d\n"
-                % (coord.getObjId(), x, y, 1, micId))
+            if micId != lastMicId:
+                # we need to close previous opened file
+                if f:
+                    f.close()
+                f = openMd(posDict[micId], state)
+                lastMicId = micId
 
-    if f:
-        f.close()
+            if scale != 1:
+                x = coord.getX() * scale
+                y = coord.getY() * scale
+            else:
+                x = coord.getX()
+                y = coord.getY()
+
+            f.write(" %06d   1   %d  %d  %d   %06d\n"
+                    % (coord.getObjId(), x, y, 1, micId))
+
+    except (FileNotFoundError, PermissionError) as error:
+        print(f"Error occurred: {error}")
+    except Exception as e:
+        print(f"Unexpected error occurred: {e}")
+    finally:
+        if f:
+            f.close()
 
     # Write config.xmd metadata
     configFn = join(posDir, 'config.xmd')
@@ -1385,7 +1391,7 @@ def rowToAlignment(alignmentRow, alignType):
         else:
             psi = alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)
             rot = alignmentRow.getValue(emlib.MDL_ANGLE_ROT, 0.)
-            if rot != 0. and psi != 0:
+            if not np.isclose(rot, 0., atol=1e-6 ) and not np.isclose(psi, 0., atol=1e-6):
                 print("HORROR rot and psi are different from zero in 2D case")
             angles[0] = \
                 alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)\
@@ -1710,3 +1716,11 @@ def createParamPhantomFile(filename, dimX, partSetMd, phFlip=False,
     str += "_applyShift 1\n_noisePixelLevel    '0 0'\n"
     f.write(str)
     f.close()
+
+def convertToMrc(self, fnVol, Ts, deleteVol=False):
+    fnMrc = fnVol.replace(".vol",".mrc")
+    self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnVol, fnMrc), numberOfMpi=1)
+    self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, Ts), numberOfMpi=1)
+    if deleteVol:
+        cleanPath(fnVol)
+    return fnMrc

@@ -62,9 +62,25 @@ class XmippProtSimulateCTF(Prot2D):
                       label="Fraction inelastic scattering",
                       help="Between 0 and 1")
         form.addParam('Defocus0', params.FloatParam, default=5000,
-                      label="Lower defocus (A)")
+                      label="Lower defocus (A)",
+                      help="Negative value is overfocus")
         form.addParam('DefocusF', params.FloatParam, default=25000,
-                      label="Upper defocus (A)")
+                      label="Upper defocus (A)",
+                      help="Negative value is overfocus")
+        form.addParam('astig', params.BooleanParam, default=False,
+                      label="Simulate astigmatic CTF?",
+                      help="If yes, defocusU and defocusV will have different values with a difference determined by"
+                           " the user, and there will be a value for angle")
+        form.addParam('angle0', params.FloatParam, default=40, condition='astig',
+                      label="Lower defocus angle (degrees)",
+                      help="Between 0 and 90")
+        form.addParam('angleF', params.FloatParam, default=50, condition='astig',
+                      label="Upper defocus angle (degrees)",
+                      help="Between 0 and 90")
+        form.addParam('Defocus0diff', params.FloatParam, default=-500, condition='astig',
+                      label="Lower defocus difference between defocusU and defocusV (A)")
+        form.addParam('DefocusFdiff', params.FloatParam, default=500, condition='astig',
+                      label="Upper defocus difference between defocusU and defocusV(A)")
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -75,11 +91,11 @@ class XmippProtSimulateCTF(Prot2D):
     def convertInputStep(self):
         x, y, _ = self.inputParticles.get().getDimensions()
         n = self.inputParticles.get().getSize()
-        createEmptyFile(self._getPath("images.stk"), x, y, 1, n)
+        createEmptyFile(self._getPath("images.mrc"), x, y, 1, n)
 
     def simulateStep(self):
         n = 1
-        fnStk = self._getPath("images.stk")
+        fnStk = self._getPath("images.mrc")
         Ts = self.inputParticles.get().getSamplingRate()
 
         imgSetOut = self._createSetOfParticles()
@@ -95,17 +111,26 @@ class XmippProtSimulateCTF(Prot2D):
             location = particle.getLocation()
             fnIn = str(location[0]) + "@" + location[1]
             fnOut = str(n) + "@" + fnStk
-            defocus = random.uniform(self.Defocus0.get(), self.DefocusF.get())
+            defocusU = random.uniform(self.Defocus0.get(), self.DefocusF.get())
             args = "-i %s -o %s" % (fnIn, fnOut)
-            args += " --fourier ctfdef %f %f %f %f --sampling %f -v 0" % (self.voltage, self.cs, self.Q0, defocus, Ts)
+            if self.astig:
+                defocusV = defocusU + random.uniform(self.Defocus0diff.get(), self.DefocusFdiff.get())
+                defocusAngle = random.uniform(self.angle0.get(), self.angleF.get())
+                args += " --fourier ctfdefastig %f %f %f %f %f %f --sampling %f -v 0" % \
+                        (self.voltage, self.cs, self.Q0, defocusU, defocusV, defocusAngle, Ts)
+            else:
+                defocusV = defocusU
+                defocusAngle = 0
+                args += " --fourier ctfdef %f %f %f %f  --sampling %f -v 0" % \
+                        (self.voltage, self.cs, self.Q0, defocusU, Ts)
             self.runJob("xmipp_transform_filter", args)
 
             newCTF = CTFModel()
-            newCTF.setDefocusU(defocus)
-            newCTF.setDefocusV(defocus)
-            newCTF.setDefocusAngle(0.0)
+            newCTF.setDefocusU(defocusU)
+            newCTF.setDefocusV(defocusV)
+            newCTF.setDefocusAngle(defocusAngle)
             newParticle = particle.clone()
-            newParticle.setLocation(fnOut)
+            newParticle.setLocation((n, fnStk))
             acquisition = newParticle.getAcquisition()
             acquisition.setVoltage(self.voltage.get())
             acquisition.setAmplitudeContrast(self.Q0.get())

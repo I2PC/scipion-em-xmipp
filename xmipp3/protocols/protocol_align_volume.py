@@ -32,6 +32,7 @@ from pwem.protocols import ProtAlignVolume
 from pwem.objects import Volume, Transform, SetOfVolumes
 
 from xmipp3.convert import getImageLocation
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 ALIGN_MASK_CIRCULAR = 0
@@ -51,6 +52,8 @@ class XmippProtAlignVolume(ProtAlignVolume):
      """
     _label = 'align volume'
     nVols = 0
+    _devStatus = PROD
+
     
     def __init__(self, **args):
         ProtAlignVolume.__init__(self, **args)
@@ -82,7 +85,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
                       help='Select the volume mask object')
         
         form.addSection(label='Search strategy')
-        form.addParam('alignmentAlgorithm', params.EnumParam, default=ALIGN_ALGORITHM_EXHAUSTIVE, 
+        form.addParam('alignmentAlgorithm', params.EnumParam, default=ALIGN_ALGORITHM_FAST_FOURIER,
                       choices=['exhaustive',
                                'local', 
                                'exhaustive + local', 
@@ -191,13 +194,18 @@ class XmippProtAlignVolume(ProtAlignVolume):
             self.runJob("xmipp_volume_align", args)
     
     def createOutputStep(self):        
+        Ts = self.inputReference.get().getSamplingRate()
+
         vols = []
         idx=1
         for vol in self._iterInputVolumes():
             outVol = Volume()
-            outVol.setLocation(self._getExtraPath("vol%02d.mrc"%idx))
+            fnOutVol = self._getExtraPath("vol%02d.mrc"%idx)
+            outVol.setLocation(fnOutVol)
             outVol.setObjComment(vol.getObjComment())
-            #set transformation matrix             
+            outVol.setObjLabel(vol.getObjLabel())
+
+            #set transformation matrix
             fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%idx)
             transMatFromFile = np.loadtxt(fhInputTranMat)
             transformationMat = np.reshape(transMatFromFile,(4,4))
@@ -205,16 +213,20 @@ class XmippProtAlignVolume(ProtAlignVolume):
             transform.setMatrix(transformationMat)
             outVol.setTransform(transform)            
             vols.append(outVol)
+
+            # Set the sampling rate in the mrc header
+            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f"%(fnOutVol, Ts))
+
             idx+=1
-                        
+
         if len(vols) > 1:
             volSet = self._createSetOfVolumes()
-            volSet.setSamplingRate(self.inputReference.get().getSamplingRate())
+            volSet.setSamplingRate(Ts)
             for vol in vols:
                 volSet.append(vol)
             outputArgs = {'outputVolumes': volSet}
         else:
-            vols[0].setSamplingRate(self.inputReference.get().getSamplingRate())
+            vols[0].setSamplingRate(Ts)
             outputArgs = {'outputVolume': vols[0]}
             
         self._defineOutputs(**outputArgs)
@@ -283,7 +295,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
                 break
             itemId = item.getObjId()
             if isinstance(item, Volume):
-                item.outputName = self._getExtraPath('output_vol%06d.vol' % itemId)
+                item.outputName = self._getExtraPath('output_vol%06d.mrc' % itemId)
                 # If item is a Volume and label is empty
                 if not item.getObjLabel():
                     # Volume part of a set
@@ -294,7 +306,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
                 yield item
             elif isinstance(item, SetOfVolumes):
                 for vol in item:
-                    vol.outputName = self._getExtraPath('output_vol%06d_%03d.vol' % (itemId, vol.getObjId()))
+                    vol.outputName = self._getExtraPath('output_vol%06d_%03d.mrc' % (itemId, vol.getObjId()))
                     # If set item label is empty
                     if not vol.getObjLabel():
                         # if set label is not empty use it
@@ -322,7 +334,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
         return maskArgs
     
     def _getAlignArgs(self):
-        alignArgs = ''
+        alignArgs = ' --dontWrap'
         
         if self.alignmentAlgorithm == ALIGN_ALGORITHM_FAST_FOURIER:
             alignArgs += " --frm"

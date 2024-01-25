@@ -29,7 +29,7 @@ Consensus picking protocol
 """
 
 import os
-
+import enum
 from math import sqrt
 import numpy as np
 
@@ -43,6 +43,13 @@ from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 
 PICK_MODE_LARGER = 0
 PICK_MODE_EQUAL = 1
+
+
+class ProtPickingConsensusOutput(enum.Enum):
+    """ Possible outputs for particle picking protocols
+    """
+    consensusCoordinates = SetOfCoordinates
+
 
 class XmippProtConsensusPicking(ProtParticlePicking):
     """
@@ -65,7 +72,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     """
 
     _label = 'picking consensus'
-    outputName = 'consensusCoordinates'
+    _possibleOutputs = ProtPickingConsensusOutput
+    outputName = ProtPickingConsensusOutput.consensusCoordinates.name
     FN_PREFIX = 'consensusCoords_'
 
     def __init__(self, **args):
@@ -79,7 +87,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                       label="Input coordinates", important=True,
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius', params.IntParam, default=10,
-                      label="Radius",
+                      label="Radius",  allowsPointers=True, allowsNull=True,
                       help="All coordinates within this radius (in pixels) "
                            "are presumed to correspond to the same particle")
         form.addParam('consensus', params.IntParam, default=-1,
@@ -166,7 +174,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             # for non streaming do all and in the last iteration of streaming do the rest
             newMicIds = allMics.difference(self.checkedMics)
         else:  # for streaming processing, only go for the ready mics in all pickers
-            newMicIds = readyMics.difference(self.checkedMics)
+            if readyMics is not None:
+                newMicIds = readyMics.difference(self.checkedMics)
 
         if newMicIds:
             self.checkedMics.update(newMicIds)
@@ -228,12 +237,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             outputSet.setStreamState(outputSet.STREAM_OPEN)
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
-        # FIXME: The commented line below should work but it fails in streaming
-        #        when extracting particles. The line below it fixs that error..
-        # inMicsPointer = self.getMainInput().getMicrographs()
-        inMicsPointer = Pointer(self.getMapper().getParent(
-                                           self.getMainInput().getMicrographs()),
-                                           extended='outputMicrographs')
+        inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)
 
         return outputSet
