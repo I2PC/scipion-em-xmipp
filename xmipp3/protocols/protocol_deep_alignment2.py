@@ -219,6 +219,7 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
                       pointerClass='SetOfParticles', allowsNull=False)
         form.addParam('correctCTF', BooleanParam, label='Correct CTF', default=True,
                       help='Correct the CTF through a Wiener filter')
+        form.addParam('symmetry', StringParam, label="Symmetry", default="c1")
 
         form.addParam('modelSource', EnumParam, label='Model source', choices=['Protocol', 'Directory'], default=0)
         form.addParam('modelProtocol', PointerParam, label='Protocol', condition='modelSource==0',
@@ -269,8 +270,8 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
         mdResized.setColumnValues(xmippLib.MDL_SHIFT_Y, [K*y for y in shiftY])
         mdResized.write(fnImgsResized)
 
-        args = "-i %s --gpu %s --modelDir %s --mode angles" %\
-               (fnImgsResized, gpuId, os.path.join(self.fnModelDir,"modelAngles"))
+        args = "-i %s --gpu %s --modelDir %s --mode angles --sym %s" %\
+               (fnImgsResized, gpuId, os.path.join(self.fnModelDir,"modelAngles"), self.symmetry)
         self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
         mdResized = xmippLib.MetaData(fnImgsResized)
         rot = mdResized.getColumnValues(xmippLib.MDL_ANGLE_ROT)
