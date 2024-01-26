@@ -125,11 +125,6 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         form.addParam('volDiameter', IntParam, label="Protein diameter (A)",
                       help="The diameter should be relatively tight")
 
-        form.addParam('symmetry', StringParam,
-                      label="Symmetry", default="c1",
-                      help="Symmetry of the molecule")
-
-
         form.addSection(label="Training")
 
         form.addParam('Xdim', IntParam,
@@ -179,14 +174,20 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         fhInfo = open(self._getExtraPath("info.txt"),'w')
         fhInfo.write("Xdim=%d\n"%self.Xdim)
         fhInfo.write("Diameter=%d\n"%self.volDiameter)
-        fhInfo.write("Symmetry=%s\n"%self.symmetry)
         fhInfo.close()
 
     def train(self, gpuId):
         fnReference = self._getTmpPath("imagesCropped.xmd")
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f "\
-               "--precision %f --onlyShift" % (
+               "--precision %f --mode shift" % (
             fnReference, self._getExtraPath("modelShift"), 300, 128, gpuId, 1,0.0001, 1)
+        self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
+
+        fnReference = self._getTmpPath("imagesCroppedResized.xmd")
+        args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f " \
+               "--precision %f --mode angles" % (
+                   fnReference, self._getExtraPath("modelAngles"), self.maxEpochs, self.batchSize, gpuId,
+                   self.numModels, self.learningRate, self.precision)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
@@ -249,22 +250,41 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
         fhInfo = open(os.path.join(self.fnModelDir,"info.txt"))
         self.Xdim = int(fhInfo.readline().split('=')[1])
         self.volDiameter = int(fhInfo.readline().split('=')[1])
-        self.symmetry = fhInfo.readline().split('=')[1].strip()
         fhInfo.close()
 
     def predict(self, gpuId):
-        fnImgs = self._getTmpPath("images.xmd")
-        fnImgsResized = self._getTmpPath("imagesResized.xmd")
-        args = "--iexp %s --iexpResized %s --gpu %s --modelDir %s --sym %s -o %s" %\
-               (fnImgs, fnImgsResized, gpuId, self.fnModelDir, self.symmetry, self._getExtraPath('particles.xmd'))
-        self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
-
         K = float(self.getCropSize()) / float(self.Xdim)
-        fnPredict = self._getExtraPath("particles.xmd")
-        self.runJob('xmipp_metadata_utilities', '-i %s --operate modify_values "shiftX=%f*shiftX"' %
-                    (fnPredict, K), numberOfMpi=1)
-        self.runJob('xmipp_metadata_utilities', '-i %s --operate modify_values "shiftY=%f*shiftY"' %
-                    (fnPredict, K), numberOfMpi=1)
+
+        fnImages = self._getTmpPath("imagesCropped.xmd")
+        args = "-i %s --gpu %s --modelDir %s --mode shift" %\
+               (fnImages, gpuId, os.path.join(self.fnModelDir,"modelShift"))
+        self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
+        md = xmippLib.MetaData(fnImages)
+        shiftX = md.getColumnValues(xmippLib.MDL_SHIFT_X)
+        shiftY = md.getColumnValues(xmippLib.MDL_SHIFT_Y)
+
+        fnImgsResized = self._getTmpPath("imagesCroppedResized.xmd")
+        mdResized = xmippLib.MetaData(fnImgsResized)
+        mdResized.setColumnValues(xmippLib.MDL_SHIFT_X, [K*x for x in shiftX])
+        mdResized.setColumnValues(xmippLib.MDL_SHIFT_Y, [K*y for y in shiftY])
+        mdResized.write(fnImgsResized)
+
+        args = "-i %s --gpu %s --modelDir %s --mode angles" %\
+               (fnImgsResized, gpuId, os.path.join(self.fnModelDir,"modelAngles"))
+        self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
+        mdResized = xmippLib.MetaData(fnImgsResized)
+        rot = mdResized.getColumnValues(xmippLib.MDL_ANGLE_ROT)
+        tilt = mdResized.getColumnValues(xmippLib.MDL_ANGLE_TILT)
+        psi = mdResized.getColumnValues(xmippLib.MDL_ANGLE_PSI)
+
+        fnImages = self._getTmpPath("images.xmd")
+        md = xmippLib.MetaData(fnImages)
+        md.setColumnValues(xmippLib.MDL_SHIFT_X, shiftX)
+        md.setColumnValues(xmippLib.MDL_SHIFT_Y, shiftY)
+        md.setColumnValues(xmippLib.MDL_ANGLE_ROT, rot)
+        md.setColumnValues(xmippLib.MDL_ANGLE_TILT, tilt)
+        md.setColumnValues(xmippLib.MDL_ANGLE_PSI, psi)
+        md.write(self._getExtraPath('particles.xmd'))
 
     def createOutputStep(self):
         fnPredict = self._getExtraPath("particles.xmd")
