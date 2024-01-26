@@ -120,6 +120,7 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
             self._insertFunctionStep('splitInputStep')
             self._insertReconstructStep('half1')
             self._insertReconstructStep('half2')
+            self._insertFunctionStep('averageStep')
         else:
             self._insertReconstructStep()
         self._insertFunctionStep('createOutputStep')
