@@ -1658,31 +1658,37 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
     globalShiftsMD.write(xmdFn)
 
 
-def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
+def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
     movieMd = md.MetaData()
     frame = movie.clone()
+    isEer = next(iter(movie.getFiles())).endswith('.eer')
     # get some info about the movie
     # problem is, that it can come from a movie set, and some
     # values might refer to different movie, e.g. no of frames :(
     firstFrame, _, frameIndex = movie.getFramesRange() # info from the movie set
     _, _ , lastFrame = movie.getDim() # actual no. of frame in the current movie
-    lastFrame += 1 # (convert no. of frames to index, one-initiated)
+    #lastFrame += 1 # (convert no. of frames to index, one-initiated)
     if lastFrame == 0:
         # this condition is for old SetOfMovies, that has lastFrame = 0.
         frames = movie.getNumberOfFrames()
         if frames is not None:
             lastFrame = frames
 
+    if isEer:
+        firstFrame = 1 # TODO determine
+        lastFrame = eerFrames
+        frameIndex = 1 # TODO determine
+
     if f1 < firstFrame or fN > lastFrame:
-        raise Exception("Frame range could not be greater"
-                        " than the movie one.")
+        raise Exception(f"Frame range [{f1}-{fN}] could not be greater"
+                        f" than the movie one [{firstFrame}-{lastFrame}].")
 
     ih = ImageHandler()
 
     if useAlignment:
         alignment = movie.getAlignment()
         if alignment is None:
-            raise Exception("Can not write alignment for movie. ")
+            raise Exception("Can not write alignment for movie.")
         a0, aN = alignment.getRange()
         if a0 < firstFrame or aN > lastFrame:
             raise Exception("Trying to write frames which have not been aligned.")
@@ -1693,7 +1699,10 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
 
     for i in range(f1, fN+1):
         frame.setIndex(stackIndex)
-        row.setValue(md.MDL_IMAGE, ih.locationToXmipp(frame))
+        frameFilename = ih.locationToXmipp(frame)
+        if os.path.splitext(frameFilename)[-1] == '.eer':
+            frameFilename += f'#{eerFrames},4K,uint8'
+        row.setValue(md.MDL_IMAGE, frameFilename)
 
         if useAlignment:
             shiftIndex = i - firstFrame

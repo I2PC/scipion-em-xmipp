@@ -38,7 +38,7 @@ import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pwem.emlib.metadata as md
 from pwem import emlib
-from pwem.objects import Image
+from pwem.objects import Image, SetOfMovies
 from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
 from pwem.protocols import ProtAlignMovies
@@ -66,6 +66,12 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
     def _defineAlignmentParams(self, form):
         ProtAlignMovies._defineAlignmentParams(self, form)
+
+        EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and next(iter(inputMovies.getFiles())).endswith(".eer")'
+
+        form.addParam('nFrames', params.IntParam, label='Number of EER frames',
+                      condition=EER_CONDITION, default=40, validators=[params.GT(0, "Number of EER frames must be a positive integer (> 0).")],
+                      help='Number of frames to be generated. EER files contain subframes, that will be grouped into the selected number of frames.')
 
         # FlexAlign does not support cropping
         form._paramsDict['Alignment']._paramList.remove('Crop_offsets__px_')
@@ -188,12 +194,15 @@ class XmippProtFlexAlign(ProtAlignMovies):
     def tryProcessMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
 
-        _, _, n = movie.getDim()
+        if next(iter(self.inputMovies.get().getFiles())).endswith('.eer'):
+            n = self.nFrames.get()
+        else:
+            _, _, n = movie.getDim()
         a0, aN = self._getFrameRange(n, 'align')
         s0, sN = self._getFrameRange(n, 'sum')
 
         inputMd = os.path.join(movieFolder, 'input_movie.xmd')
-        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False)
+        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False, eerFrames=self.nFrames.get())
 
         args = '-i "%s" ' % inputMd
         args += ' -o "%s"' % self._getShiftsFile(movie)
@@ -418,7 +427,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
         if (self.binFactor.get() < 1):
             errors.append("Bin factor must be >= 1")
-
+        
         return errors
 
     def _citations(self):
