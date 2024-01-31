@@ -85,14 +85,6 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
                         (fnImgsCropped, fnImgsResized, self.Xdim),
                     numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
 
-        row = getFirstRow(fnImgs + ".xmd")
-        hasShift = row.containsLabel(xmippLib.MDL_SHIFT_X)
-        if hasShift:
-            K = float(self.Xdim) / float(cropSize)
-            self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftX=%f*shiftX"' %
-                        (fnImgsResized, K), numberOfMpi=1)
-            self.runJob('xmipp_metadata_utilities', '-i %s.xmd --operate modify_values "shiftY=%f*shiftY"' %
-                        (fnImgsResized, K), numberOfMpi=1)
         if self.correctCTF:
             cleanPattern(fnImgsCorrected + "*")
 
@@ -150,10 +142,13 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                       expertLevel=LEVEL_ADVANCED,
                       help="Learning rate for training.")
 
-        form.addParam('precision', FloatParam,
-                      label="Desired precision (px)",
-                      default=1,
-                      help="Alignment precision at the border of the image")
+        form.addParam('shiftPrecision', FloatParam,
+                      label="Shift precision (px)",
+                      default=0.5)
+
+        form.addParam('anglePrecision', FloatParam,
+                      label="Angular precision (deg)",
+                      default=3)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -180,14 +175,27 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         fnReference = self._getTmpPath("imagesCropped.xmd")
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f "\
                "--precision %f --mode shift" % (
-            fnReference, self._getExtraPath("modelShift"), 300, 128, gpuId, 1,0.0001, 1)
+            fnReference, self._getExtraPath("modelShift"), 300, 128, gpuId, 1, 0.0001, self.shiftPrecision)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
+        args = "-i %s --gpu %s --modelDir %s --mode shift" %\
+               (fnReference, gpuId, self._getExtraPath("modelShift"))
+        self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
+        md = xmippLib.MetaData(fnReference)
+        shiftX = md.getColumnValues(xmippLib.MDL_SHIFT_X)
+        shiftY = md.getColumnValues(xmippLib.MDL_SHIFT_Y)
+
+        K = float(self.Xdim) / float(self.getCropSize())
         fnReference = self._getTmpPath("imagesCroppedResized.xmd")
+        mdResized = xmippLib.MetaData(fnReference)
+        mdResized.setColumnValues(xmippLib.MDL_SHIFT_X, [K*x for x in shiftX])
+        mdResized.setColumnValues(xmippLib.MDL_SHIFT_Y, [K*y for y in shiftY])
+        mdResized.write(fnReference)
+
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f " \
                "--precision %f --mode angles" % (
                    fnReference, self._getExtraPath("modelAngles"), self.maxEpochs, self.batchSize, gpuId,
-                   self.numModels, self.learningRate, self.precision)
+                   self.numModels, self.learningRate, self.anglePrecision)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
@@ -254,7 +262,7 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
         fhInfo.close()
 
     def predict(self, gpuId):
-        K = float(self.getCropSize()) / float(self.Xdim)
+        K = float(self.Xdim) / float(self.getCropSize())
 
         fnImages = self._getTmpPath("imagesCropped.xmd")
         args = "-i %s --gpu %s --modelDir %s --mode shift" %\
