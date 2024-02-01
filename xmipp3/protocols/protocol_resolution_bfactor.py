@@ -137,8 +137,13 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
     def convertInputStep(self):
         """ Read the input volume and check the file extension to convert to mrc is it is the case.
         """
-        self.vol = self.mrc_convert(self.localResolutionMap.get().getFileName(),
-                                    self._getTmpPath('localResolutionMap.mrc'))
+        if self.normalizeResolution.get():
+            self.inputMap = self.localResolutionMap
+        else:
+            self.inputMap = self.normalizedMap
+
+        self.vol = self.mrc_convert(self.inputMap.get().getFileName(),
+                                    self._getTmpPath('localResolutionMap.mrc'))        
 
     def matchingBfactorLocalResolution(self):
         """ The local resolution map and the pdb are taken and analyzed to match the
@@ -151,7 +156,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         params += ' --vol %s' % self.vol
         if self.normalizeResolution.get():
             params += ' --fscResolution %s' % self.fscResolution.get()
-        params += ' --sampling %f' % self.localResolutionMap.get().getSamplingRate()
+        params += ' --sampling %f' % self.inputMap.get().getSamplingRate()
         if self.medianEstimation.get():
             params += ' --useMedian '
         if self.centered.get():
