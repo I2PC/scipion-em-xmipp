@@ -70,13 +70,13 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
 
         form.addParam('normalizeResolution', BooleanParam, default=True,
                       label="Normalize Resolution",
-                      help='The normalizedlocal resolution map is defined as'
-                           '(LR - FSC)/FSC, where LR is the local resolution of a'
+                      help='The normalizedlocal resolution map is defined as '
+                           '(LR - FSC)/FSC, where LR is the local resolution of a '
                            'given voxel, and FSC is the FSC resolution in A. This '
-                           'map provides information about whether the local resolution is'
+                           'map provides information about whether the local resolution is '
                            'greater or lesser than the FSC. The local resolution '
-                           'normalized map is used to carry out the matching with the local'
-                           'bfactor per residue. Yes means that the local resolution will be'
+                           'normalized map is used to carry out the matching with the local '
+                           'bfactor per residue. Yes means that the local resolution will be '
                            'normalized by the algorithm. No means that the input local '
                            'resolution map is already a normalized local resolution map.')
 
@@ -85,7 +85,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
                       condition='normalizeResolution',
                       help='Select a local resolution map. Alternatively, the input.'
                            ' can be a normalized local resolution map, in this case'
-                           'set the Normalize resolution to No')
+                           ' set the Normalize resolution to No')
 
         form.addParam('normalizedMap', PointerParam, pointerClass='Volume',
                       label="Normalized Local Resolution Map", important=True,
@@ -93,7 +93,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
                       help='Select a normalized local resolution map. The local'
                            ' resolution normalized map is defined as '
                            '(LR - FSC)/FSC, where LR is the local resolution of a'
-                           'given voxel, and FSC is the FSC resolution in A')
+                           ' given voxel, and FSC is the FSC resolution in A')
 
         form.addParam('fscResolution', FloatParam,
                       condition = 'normalizeResolution',
@@ -102,7 +102,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
 
         form.addParam('medianEstimation', BooleanParam, default=True,
                       label="Use median",
-                      help='The local resolution per residue can be estimated using'
+                      help='The local resolution per residue can be estimated using '
                            'the mean (by default - No) or the median (yes)')
 
         form.addParam('centered', BooleanParam, default=True,
