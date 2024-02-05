@@ -127,8 +127,18 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
                       label="Number of models", default=5,
                       help="Multiple models will be trained independently")
 
-        form.addParam('maxEpochs', IntParam, label="Max. Epochs", default=100, expertLevel=LEVEL_ADVANCED,
-                      help='How many particles should be used in the training')
+        form.addParam('maxEpochsShift', IntParam, label="Max. Epochs Shift", default=300, expertLevel=LEVEL_ADVANCED,
+                      help='Number of epochs for the shift models')
+
+        form.addParam('maxEpochsAngle', IntParam, label="Max. Epochs Angle", default=300, expertLevel=LEVEL_ADVANCED,
+                      help='Number of epochs for the angular models')
+
+        form.addParam('NImgs', IntParam,
+                      label="Number of images for training",
+                      default=1000,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Each model is trained on a random subset of images of this size. If the input set is "
+                           "smaller, then each model is trained on all images.")
 
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
@@ -174,8 +184,9 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
     def train(self, gpuId):
         fnReference = self._getTmpPath("imagesCropped.xmd")
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f "\
-               "--precision %f --mode shift" % (
-            fnReference, self._getExtraPath("modelShift"), 300, 128, gpuId, 1, 0.0001, self.shiftPrecision)
+               "--precision %f --Nimgs %d --mode shift" % (
+            fnReference, self._getExtraPath("modelShift"), self.maxEpochsShift, 128, gpuId, self.numModels, 0.0001,
+            self.shiftPrecision, self.NImgs)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
         args = "-i %s --gpu %s --modelDir %s --mode shift" %\
@@ -193,9 +204,9 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         mdResized.write(fnReference)
 
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f " \
-               "--precision %f --mode angles" % (
-                   fnReference, self._getExtraPath("modelAngles"), self.maxEpochs, self.batchSize, gpuId,
-                   self.numModels, self.learningRate, self.anglePrecision)
+               "--precision %f --Nimgs %d --mode angles" % (
+                   fnReference, self._getExtraPath("modelAngles"), self.maxEpochsAngle, self.batchSize, gpuId,
+                   self.numModels, self.learningRate, self.anglePrecision, self.NImgs)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
