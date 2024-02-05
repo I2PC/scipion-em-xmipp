@@ -44,11 +44,9 @@ from .viewer_resolution_monogenic_signal import XmippMonoResViewer
 from .viewer_resolution_deepres import XmippResDeepResViewer
 from .viewer_validate_nontilt import XmippValidateNonTiltViewer
 from .viewer_validate_fscq import XmippProtValFitViewer
-from .viewer_split_volume import XmippViewerSplitVolume
 from .viewer_validate_overfitting import XmippValidateOverfittingViewer
 from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
-from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_consensus_classes import XmippConsensusClassesViewer
 from .viewer_extract_asymmetric_unit import viewerXmippProtExtractUnit
 from .viewer_deepEMHancer import viewerXmippProtDeepVolPostProc
@@ -64,7 +62,6 @@ from .viewer_projmatch import XmippProjMatchViewer
 from .viewer_volume_deform_zernike3d import XmippVolumeDeformZernike3DViewer
 from .viewer_structure_map import XmippProtStructureMapViewer
 from .viewer_pdb_deform_zernike3d import XmippPDBDeformViewer
-from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
 
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer
