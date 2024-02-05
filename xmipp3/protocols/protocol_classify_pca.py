@@ -122,7 +122,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         form.addParam('coef' ,FloatParam, label="% variance", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training',IntParam, default=40000,
+        form.addParam('training',IntParam, default=80000,
                       label="particles for training",
                       help='Number of particles for PCA training')
     
@@ -148,13 +148,16 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         if sigma == -1:
             sigma = self.inputParticles.get().getDimensions()[0]/3
         self.numTrain = min(self.training.get(), self.inputParticles.get().getSize())
+        resolution = self.resolution.get()
+        if resolution < 2 * self.sampling:
+            resolution = (2 * self.sampling) + 0.5
 
     
         self._insertFunctionStep('convertInputStep', 
                                 # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener oier
                                 self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
         
-        self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get(), self.training.get())
+        self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, self.training.get())
         
         self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma )
     
@@ -230,6 +233,14 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
 
         self._defineOutputs(outputClasses=classes2DSet)
         self._defineSourceRelation(self.inputParticles, classes2DSet)
+        
+        
+        # classes2DSetContrast = self._createSetOfClasses2D(inputParticles)
+        # self._fillClasses(classes2DSetContrast)
+        # self._defineOutputs(outputClasses2=classes2DSetContrast)
+        # self._defineSourceRelation(self.inputParticles, classes2DSetContrast)
+        
+        
     
     #--------------------------- INFO functions --------------------------------
     
@@ -338,7 +349,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     
     def _fillClassesFromLevel(self, clsSet):
         """ Create the SetOfClasses2D from a given iteration. """
-        self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
+        self._loadClassesInfo(self._getExtraPath('classes_contrast_classes.star'))
     
         xmpMd = self._getExtraPath('classes_images.star')
     
@@ -348,6 +359,15 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     
         clsSet.classifyItems(updateItemCallback=iterator.updateItem,
                              updateClassCallback=self._updateClass)
+        
+    def _fillClasses(self, clsSet):
+
+        self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
+        
+        clsSet.classifyItems(updateItemCallback=self._updateClass,
+                             updateClassCallback=self._updateClass)
+    
+        # clsSet.classifyItems(updateClassCallback=self._updateClass)
 
 
 
