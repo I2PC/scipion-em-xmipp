@@ -147,7 +147,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         sigma = self.sigma.get()
         if sigma == -1:
             sigma = self.inputParticles.get().getDimensions()[0]/3
-        self.numTrain = min(self.training.get(), self.inputParticles.get().getSize())
+        particlesTrain = min(self.training.get(), self.inputParticles.get().getSize())
         resolution = self.resolution.get()
         if resolution < 2 * self.sampling:
             resolution = (2 * self.sampling) + 0.5
@@ -157,7 +157,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                                 # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener oier
                                 self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
         
-        self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, self.training.get())
+        self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, particlesTrain)
         
         self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma )
     
