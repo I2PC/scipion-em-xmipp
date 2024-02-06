@@ -33,7 +33,6 @@ from datetime import datetime
 from pyworkflow.gui.plotter import Plotter
 import numpy as np
 from math import ceil
-import re
 try:
     from itertools import izip
 except ImportError:
@@ -41,6 +40,7 @@ except ImportError:
 from pwem.objects import SetOfMovies, SetOfMicrographs, MovieAlignment, Image
 from pyworkflow.object import Set
 import pyworkflow.protocol.params as params
+from pyworkflow.protocol import STEPS_PARALLEL, Protocol
 import pyworkflow.utils as pwutils
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.protocol.constants import (STATUS_NEW)
@@ -51,7 +51,7 @@ ACCEPTED = 'Accepted'
 DISCARDED = 'Discarded'
 
 
-class XmippProtConsensusMovieAlignment(ProtAlignMovies):
+class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
     Protocol to estimate the agreement between different movie alignment
     algorithms in the Global Shifts).
@@ -62,8 +62,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
     def __init__(self, **args):
         ProtAlignMovies.__init__(self, **args)
-        self._freqResol = {}
-        self.stepsExecutionMode = params.STEPS_PARALLEL
+        self.stepsExecutionMode = STEPS_PARALLEL
 
     def _defineParams(self, form):
         form.addSection(label='Input Consensus')
@@ -100,7 +99,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                                  prerequisites=movieSteps, wait=True)
 
     def createOutputStep(self):
-        pass
+        self._closeOutputSet()
 
     def initializeParams(self):
         self.finished = False
@@ -179,6 +178,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
+
             self.updateSteps()
 
 
@@ -199,10 +199,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
     def alignmentCorrelationMovieStep(self, movieId):
         movie1 = self.allMovies1.get(movieId)
         movie2 = self.allMovies2.get(movieId)
-        fn1 = movie1.getFileName()
-        fn2 = movie1.getFileName()
-        movieID1 = movie1.getObjId()
-        movieID2 = movie2.getObjId()
         doneFn = self._getMovieDone(movieId)
 
         if self.isContinued() and self._isMovieDone(movieId):
@@ -213,13 +209,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         pwutils.cleanPath(doneFn)
 
         if (movie1 is None) or (movie2 is None):
-            print('AlignmentCorrelationMovieStep movie1 or movie2 are None')
+            self.info('AlignmentCorrelationMovieStep movie1 or movie2 are None')
             return
-
-        print(fn1)
-        print(fn2)
-        print(movieID1)
-        print(movieID2)
 
         alignment1 = movie1.getAlignment()
         alignment2 = movie2.getAlignment()
@@ -246,30 +237,27 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         corrY_cart = np.corrcoef(S1_cart[1, :], S2_p_cart[1, :])[0, 1]
         corr_cart = np.min([corrY_cart, corrX_cart])
 
-        print('Root Mean Squared Error %f' %rmse_cart)
-        print('Max Error %f' %maxe_cart)
-        print('Correlation X %f' %corrX_cart)
-        print('Correlation Y %f' %corrY_cart)
-        print('General Corr (min X&Y) %f' %corr_cart)
+        self.info('Root Mean Squared Error %f' % rmse_cart)
+        self.info('General Corr min(corrX, corrY) %f' % corr_cart)
 
         if corr_cart >= self.minConsCorrelation.get():
-            print('Alignment shift trajectory correlated')
+            self.info('Movie with id %d has a correlated alignment shift trajectory' %movieId)
             fn = self._getMovieSelecFileAccepted()
             with open(fn, 'a') as f:
-                f.write('%d T\n' % movieID1)
+                f.write('%d T\n' % movieId)
 
         elif corr_cart < self.minConsCorrelation.get():
-            print('Discrepancy in the alignment with correlation %f' %corr_cart)
+            self.info('Movie with id %d has discrepancy in the alignment with correlation %f' % (movieId, corr_cart))
             fn = self._getMovieSelecFileDiscarded()
             with open(fn, 'a') as f:
-                f.write('%d F\n' % movieID1)
+                f.write('%d F\n' % movieId)
 
         stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
                      'max_error': maxe_cart, 'rmse_error': rmse_cart, 'S1_cart': S1_cart, 'S2_p_cart': S2_p_cart}
 
-        self.stats[movieID1] = stats_loc
+        self.stats[movieId] = stats_loc
         self._store()
-        # Mark this ctf as finished
+        # Mark this movie as finished
         open(doneFn, 'w').close()
 
     def _checkNewOutput(self):
@@ -300,14 +288,15 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
         def readOrCreateOutputs(doneList, newDone, label=''):
             if len(doneList) > 0 or len(newDone) > 0:
-                movSet = self._loadOutputSet(SetOfMovies, 'movies'+label+'.sqlite')
-                micSet = self._loadOutputSet(SetOfMicrographs, 'micrographs'+label+'.sqlite')
-                label = ACCEPTED if label == '' else DISCARDED
-                self.fillOutput(movSet, micSet, newDone, label)
-                movSet.setSamplingRate(self.samplingRate)
-                micSet.setSamplingRate(self.samplingRate)
-                micSet.setAcquisition(self.acquisition.clone())
-                movSet.setAcquisition(self.acquisition.clone())
+                with self._lock:
+                    movSet = self._loadOutputSet(SetOfMovies, 'movies'+label+'.sqlite')
+                    micSet = self._loadOutputSet(SetOfMicrographs, 'micrographs'+label+'.sqlite')
+                    label = ACCEPTED if label == '' else DISCARDED
+                    self.fillOutput(movSet, micSet, newDone, label)
+                    movSet.setSamplingRate(self.samplingRate)
+                    micSet.setSamplingRate(self.samplingRate)
+                    micSet.setAcquisition(self.acquisition.clone())
+                    movSet.setAcquisition(self.acquisition.clone())
 
                 return movSet, micSet
             return None, None
@@ -367,7 +356,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 self._writeCertainDoneList(movieId, label)
 
                 if self.trajectoryPlot.get():
-                    self._createAndSaveTrajectoriesPlot(movieId)
+                    firstFrame, _, _ = self.inputMovies1.get().getFramesRange()
+                    self._createAndSaveTrajectoriesPlot(movieId, firstFrame, self.samplingRate)
                     mic.plotCart = Image()
                     mic.plotCart.setFileName(self._getTrajectoriesPlot(movieId))
 
@@ -377,16 +367,13 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             inputMovieSet.close()
             inputMicSet.close()
 
-    def _loadOutputSet(self, SetClass, baseName):
+    def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
         """
         Load the output set if it exists or create a new one.
         """
         setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            if (outputSet.__len__() == 0):
-                pwutils.path.cleanPath(setFile)
-        if os.path.exists(setFile):
+
+        if os.path.exists(setFile) and os.path.getsize(setFile) > 0:
             outputSet = SetClass(filename=setFile)
             outputSet.loadAllProperties()
             outputSet.enableAppend()
@@ -394,18 +381,29 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
+            inputMovies = self.inputMovies1.get()
+            outputSet.copyInfo(inputMovies)
+
+            if fixSampling:
+                newSampling = inputMovies.getSamplingRate() * self._getBinFactor()
+                outputSet.setSamplingRate(newSampling)
+
         return outputSet
 
     def _loadInputMovieSet(self, moviesFn):
         self.debug("Loading input db: %s" % moviesFn)
         movieSet = SetOfMovies(filename=moviesFn)
         movieSet.loadAllProperties()
+        movieSet.close()
+        self.debug("Closed db.")
         return movieSet
 
     def _loadInputMicrographSet(self, micsFn):
         self.debug("Loading input db: %s" % micsFn)
         micSet = SetOfMicrographs(filename=micsFn)
         micSet.loadAllProperties()
+        micSet.close()
+        self.debug("Closed db.")
         return micSet
 
     def _summary(self):
@@ -484,7 +482,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         with open(doneFile, 'a') as f:
             f.write('%d\n' % movieId)
 
-    def _createAndSaveTrajectoriesPlot(self, movieId):
+    def _createAndSaveTrajectoriesPlot(self, movieId, first, pixSize):
         """ Write to a text file the items that have been done. """
         stats = self.stats[movieId]
         fn = self._getExtraPath('global_trajectories_%d' %movieId+'_plot_cart.png')
@@ -493,34 +491,67 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         shift_X2 = stats['S2_p_cart'][0, :]
         shift_Y2 = stats['S2_p_cart'][1, :]
         # ---------------- PLOT -----------------------
-        figureSize = (8, 6)
+        sumMeanX1 = []
+        sumMeanY1= []
+        sumMeanX2 = []
+        sumMeanY2 = []
+
+        def px_to_ang(px):
+            y1, y2 = px.get_ylim()
+            x1, x2 = px.get_xlim()
+            ax_ang2.set_ylim(y1 * pixSize, y2 * pixSize)
+            ax_ang.set_xlim(x1 * pixSize, x2 * pixSize)
+            ax_ang.figure.canvas.draw()
+            ax_ang2.figure.canvas.draw()
+
+        figureSize = (6, 4)
         plotter = Plotter(*figureSize)
         figure = plotter.getFigure()
-        ax = figure.add_subplot(111)
-        ax.grid()
-        ax.axis('equal')
-        ax.set_title('Global Alignment Trajectories')
-        ax.set_xlabel('X-axis (CorrX:%.3f)' %stats['shift_corr_X'])
-        ax.set_ylabel('Y-axis (CorrX:%.3f)' %stats['shift_corr_Y'])
-        # Max range of the plot of the two coordinates
-        plotRange = max(max(shift_X1) - min(shift_X1),
-                        max(shift_Y1) - min(shift_Y1))
-        i = 1
+        ax_px = figure.add_subplot(111)
+        ax_px.grid()
+
+        ax_px.set_xlabel('Shift x (px)')
+        ax_px.set_ylabel('Shift y (px)')
+
+        ax_px.set_xlabel('Shift x (px) (CorrX:%.3f)' % stats['shift_corr_X'])
+        ax_px.set_ylabel('Shift y (px) (CorrX:%.3f)' % stats['shift_corr_Y'])
+
+        ax_ang = ax_px.twiny()
+        ax_ang.set_xlabel('Shift x (A)')
+        ax_ang2 = ax_px.twinx()
+        ax_ang2.set_ylabel('Shift y (A)')
+
+        i = first
+        # The output and log files list the shifts relative to the first frame.
+        # ROB unit seems to be pixels since sampling rate is only asked
+        # by the program if dose filtering is required
         skipLabels = ceil(len(shift_X1) / 10.0)
-        for x, y in izip(shift_X1, shift_Y1):
-            if i % skipLabels == 0:
-                ax.text(x - 0.02 * plotRange, y + 0.02 * plotRange, str(i))
+        labelTick = 1
+
+        for x1, y1, x2, y2 in zip(shift_X1, shift_Y1, shift_X2, shift_Y2):
+            sumMeanX1.append(x1)
+            sumMeanY1.append(y1)
+            sumMeanX2.append(x2)
+            sumMeanY2.append(y2)
+
+            if labelTick == 1:
+                ax_px.text(x1 - 0.02, y1 + 0.02, str(i))
+                labelTick = skipLabels
+            else:
+                labelTick -= 1
             i += 1
 
-        ax.plot(shift_X1, shift_Y1, color='b', label='reference shifts')
-        ax.plot(shift_X2, shift_Y2, color='r', label='target shifts')
-        ax.plot(shift_X1, shift_Y1, 'yo')
+        # automatically update lim of ax_ang when lim of ax_px changes.
+        ax_px.callbacks.connect("ylim_changed", px_to_ang)
+        ax_px.callbacks.connect("xlim_changed", px_to_ang)
 
-        # setting the plot windows to properly see the data
-        ax.axis([min(shift_X1) - 0.1 * plotRange, max(shift_X1) + 0.1 * plotRange,
-                 min(shift_Y1) - 0.1 * plotRange, max(shift_Y1) + 0.1 * plotRange])
+        ax_px.plot(sumMeanX1, sumMeanY1, color='b', label='reference shifts')
+        ax_px.plot(sumMeanX2, sumMeanY2, color='r', label='target shifts')
+        ax_px.plot(sumMeanX1, sumMeanY1, 'yo')
+        ax_px.plot(sumMeanX1[0], sumMeanY1[0], 'ro', markersize=10, linewidth=0.5)
+        ax_px.set_title('Global frame alignment')
 
-        ax.legend()
+        ax_px.legend()
         plotter.tightLayout()
         plotter.savefig(fn)
         plotter.close()

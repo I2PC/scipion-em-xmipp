@@ -60,31 +60,6 @@ class XmippMovieAlignViewer(Viewer):
         return views
 
 
-class XmippMovieAlignConsensusViewer(Viewer):
-    _targets = [XmippProtConsensusMovieAlignment]
-    _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-
-    _label = 'viewer Global Alignment Consensus'
-
-    def _visualize(self, obj, **kwargs):
-        views = []
-
-        if obj.hasAttribute('outputMicrographsDiscarded'):
-            views.append(ObjectView(self._project, obj.strId(),
-                                    obj.outputMicrographsDiscarded.getFileName(),
-                                    viewParams=getViewParamsConsensus()))
-        if obj.hasAttribute('outputMicrographs'):
-            views.append(ObjectView(self._project, obj.strId(),
-                                    obj.outputMicrographs.getFileName(),
-                                    viewParams=getViewParamsConsensus()))
-
-        if not(obj.hasAttribute('outputMicrographs')) and not(obj.hasAttribute('outputMicrographsDiscarded')):
-            views.append(self.infoMessage("Output (micrographs or movies) has "
-                                          "not been produced yet."))
-
-        return views
-
-
 class XmippMovieMaxShiftViewer(EmProtocolViewer):
     """ This viewer is intendet to visualize the selection made by
         the Xmipp - Movie max shift protocol.
@@ -148,15 +123,42 @@ def getViewParams():
 
     return viewParams
 
+
+class XmippMovieAlignConsensusViewer(Viewer):
+    _targets = [XmippProtConsensusMovieAlignment]
+    _environments = [DESKTOP_TKINTER, WEB_DJANGO]
+
+    _label = 'viewer Global Alignment Consensus'
+
+    def _visualize(self, obj, **kwargs):
+        views = []
+
+        if obj.hasAttribute('outputMicrographsDiscarded'):
+            views.append(ObjectView(self._project, obj.strId(),
+                                    obj.outputMicrographsDiscarded.getFileName(),
+                                    viewParams=getViewParamsConsensus()))
+        if obj.hasAttribute('outputMicrographs'):
+            views.append(ObjectView(self._project, obj.strId(),
+                                    obj.outputMicrographs.getFileName(),
+                                    viewParams=getViewParamsConsensus()))
+
+        if not(obj.hasAttribute('outputMicrographs')) and not(obj.hasAttribute('outputMicrographsDiscarded')):
+            views.append(self.infoMessage("Output (micrographs or movies) has "
+                                          "not been produced yet."))
+
+        return views
+
+
 def getViewParamsConsensus():
     plotLabels = ('psdCorr._filename plotPolar._filename '
                   'plotCart._filename plotGlobal._filename')
-    labels = plotLabels + ' _filename ' + '_alignment_corr ' + '_alignment_rmse_error ' + '_alignment_max_error '
+
+    labels = plotLabels + ' _filename ' + '_alignment_corr ' + '_alignment_rmse_error '
     viewParams = {showj.MODE: showj.MODE_MD,
                   showj.ORDER: 'id ' + labels,
                   showj.VISIBLE: 'id ' + labels,
                   showj.RENDER: plotLabels,
-                  showj.ZOOM: 20,
+                  showj.ZOOM: 10,
                   showj.OBJCMDS: "'%s'" % OBJCMD_MOVIE_ALIGNCARTESIAN
                   }
 
