@@ -289,14 +289,6 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
             sys.stderr.write("xmipp_ctf_estimate_from_micrograph has " \
                              "failed with micrograph %s" % finalName)
 
-    def _reEstimateCTF(self, mic, ctfModel):
-        """ Run the estimate CTF program """
-        self._prepareRecalCommand(ctfModel)
-        # CTF estimation with Xmipp
-        self.runJob(self._program, self._args % self._params)
-        mic = ctfModel.getMicrograph()
-        self.evaluateSingleMicrograph(mic)
-
     def _createOutputStep(self):
         pass
 

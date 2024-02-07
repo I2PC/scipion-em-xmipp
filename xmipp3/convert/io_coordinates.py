@@ -17,9 +17,10 @@ def readSetOfCoordsFromPosFnames(posDir, setOfInputCoords, sqliteOutName,
     """
 
     inputMics = setOfInputCoords.getMicrographs()
+    inputMicsPointer = setOfInputCoords.getMicrographs(asPointer=True)
     cleanPath(sqliteOutName)
     setOfOutputCoordinates= SetOfCoordinates(filename= sqliteOutName)
-    setOfOutputCoordinates.setMicrographs(inputMics)
+    setOfOutputCoordinates.setMicrographs(inputMicsPointer)
     setOfOutputCoordinates.setBoxSize(setOfInputCoords.getBoxSize())
     readSetOfCoordinates(posDir, micSet=inputMics,
                            coordSet=setOfOutputCoordinates,

@@ -41,10 +41,11 @@ type_of_version = 'devel' #'release'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
-_currentBinVersion = '3.23.07.0'
+_currentBinVersion = '3.23.11.0'
 __version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
-
+# Requirement version variables
+NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
 class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
@@ -211,12 +212,12 @@ def installDeepLearningToolkit(plugin, env):
                                                env=plugin.getEnviron(),
                                                stdout=subprocess.PIPE
                                                ).stdout.read().decode('utf-8').split(".")[0]
-            if int(nvidiaDriverVer) < 390:
+            if int(nvidiaDriverVer) < NVIDIA_DRIVERS_MINIMUM_VERSION:
                 preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
-                cudaMsgs.append("Your NVIDIA drivers are too old (<390). "
+                cudaMsgs.append(f"Your NVIDIA drivers are too old (<{NVIDIA_DRIVERS_MINIMUM_VERSION}). "
                                 "Tensorflow was installed without GPU support. "
                                 "Just CPU computations enabled (slow computations)."
-                                "To enable CUDA (drivers>390 needed), "
+                                f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
                                 "set CUDA=True in 'scipion.conf' file")
                 nvidiaDriverVer = None
         except (ValueError, TypeError):
@@ -241,7 +242,7 @@ def installDeepLearningToolkit(plugin, env):
     cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))
 
     now = datetime.now()
-    installDLvars = {'modelsUrl': "http://scipion.cnb.csic.es/downloads/scipion/software/em",
+    installDLvars = {'modelsUrl': "https://scipion.cnb.csic.es/downloads/scipion/software/em",
                      'syncBin': plugin.getHome('bin/xmipp_sync_data'),
                      'modelsDir': plugin.getHome('models'),
                      'modelsPrefix': "models_UPDATED_on",

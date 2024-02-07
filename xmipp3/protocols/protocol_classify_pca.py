@@ -105,6 +105,9 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                       condition="mode",
                       pointerClass='SetOfClasses2D, SetOfAverages',
                       help='Set of initial classes to start the classification')
+        form.addParam('correctCtf', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
+              label='Correct CTF?',
+              help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
         form.addParam('mask', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
               label='Use Gaussian Mask?',
               help='If you set to *Yes*, a gaussian mask is applied to the images.')
@@ -119,7 +122,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         form.addParam('coef' ,FloatParam, label="% variance", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training',IntParam, default=40000,
+        form.addParam('training',IntParam, default=80000,
                       label="particles for training",
                       help='Number of particles for PCA training')
     
@@ -144,14 +147,17 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         sigma = self.sigma.get()
         if sigma == -1:
             sigma = self.inputParticles.get().getDimensions()[0]/3
-        self.numTrain = min(self.training.get(), self.inputParticles.get().getSize())
+        particlesTrain = min(self.training.get(), self.inputParticles.get().getSize())
+        resolution = self.resolution.get()
+        if resolution < 2 * self.sampling:
+            resolution = (2 * self.sampling) + 0.5
 
     
         self._insertFunctionStep('convertInputStep', 
-                                # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
+                                # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener oier
                                 self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
         
-        self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get(), self.training.get())
+        self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, particlesTrain)
         
         self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma )
     
@@ -174,16 +180,21 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
             args = ' -i  %s -o %s  '%(self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
             
-        #WIENER
-        # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
-        #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
-        #
-        # env = self.getCondaEnv()
-        # env['LD_LIBRARY_PATH'] = ''
-        # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
         
-        args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
-        self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
+        if self.correctCtf: 
+            args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
+            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
+            
+                    #WIENER Oier
+            # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
+            #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
+            
+            # env = self.getCondaEnv()
+            # env['LD_LIBRARY_PATH'] = ''
+            # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
+        else:      
+            args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
+            self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
         
         
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
@@ -196,7 +207,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         
         
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        args = ' -i %s -s %s -c %s -n 15 -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
+        args = ' -i %s -s %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
                 (inputIm, self.sampling, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
                  stfile)
         if mask:
@@ -222,6 +233,14 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
 
         self._defineOutputs(outputClasses=classes2DSet)
         self._defineSourceRelation(self.inputParticles, classes2DSet)
+        
+        
+        # classes2DSetContrast = self._createSetOfClasses2D(inputParticles)
+        # self._fillClasses(classes2DSetContrast)
+        # self._defineOutputs(outputClasses2=classes2DSetContrast)
+        # self._defineSourceRelation(self.inputParticles, classes2DSetContrast)
+        
+        
     
     #--------------------------- INFO functions --------------------------------
     
@@ -232,29 +251,26 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        error=self.validateDLtoolkit()
-        return error
-    # def _validate(self):
-    #     validateMsgs = []
-    #     if self.numberOfMpi <= 1:
-    #         validateMsgs.append('Mpi needs to be greater than 1.')
-    #     if self.numberOfInitialClasses > self.numberOfClasses:
-    #         validateMsgs.append('The number of final classes cannot be smaller'
-    #                             ' than the number of initial classes')
-    #     if isinstance(self.initialClasses.get(), SetOfClasses2D):
-    #         if not self.initialClasses.get().hasRepresentatives():
-    #             validateMsgs.append("The input classes should have "
-    #                                 "representatives.")
-    #     return validateMsgs
-    #
-    # def _warnings(self):
-    #     validateMsgs = []
-    #     if self.inputParticles.get().getSamplingRate() < 3:
-    #         validateMsgs.append("The sampling rate is smaller than 3 A/pix, "
-    #                             "consider downsampling the input images to "
-    #                             "speed-up the process. Probably you don't want"
-    #                             " such a precise 2D classification.")
-    #     return validateMsgs
+        
+        errors = []
+        if self.inputParticles.get().getDimensions()[0] > 256:
+            errors.append("You should resize the particles."
+                                " Sizes smaller than 128 pixels are recommended.")
+        er = self.validateDLtoolkit()
+        if er:
+            errors.append(er)
+        return errors
+
+
+    def _warnings(self):
+        validateMsgs = []
+        if  self.inputParticles.get().getDimensions()[0] > 128:
+            validateMsgs.append("Particle sizes equal to or less"
+                                " than 128 pixels are recommended.")
+        elif self.inputParticles.get().getDimensions()[0] > 256:
+            validateMsgs.append("Particle sizes equal to or less"
+                                " than 128 pixels are recommended.")
+        return validateMsgs
     #
     # def _citations(self):
     #     citations=['Sorzano2010a']
@@ -333,7 +349,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     
     def _fillClassesFromLevel(self, clsSet):
         """ Create the SetOfClasses2D from a given iteration. """
-        self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
+        self._loadClassesInfo(self._getExtraPath('classes_contrast_classes.star'))
     
         xmpMd = self._getExtraPath('classes_images.star')
     
@@ -343,6 +359,15 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     
         clsSet.classifyItems(updateItemCallback=iterator.updateItem,
                              updateClassCallback=self._updateClass)
+        
+    def _fillClasses(self, clsSet):
+
+        self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
+        
+        clsSet.classifyItems(updateItemCallback=self._updateClass,
+                             updateClassCallback=self._updateClass)
+    
+        # clsSet.classifyItems(updateClassCallback=self._updateClass)
 
 
 

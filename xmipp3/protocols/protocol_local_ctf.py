@@ -35,6 +35,8 @@ from pwem import emlib
 
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 
+CITE ='Fernandez-Gimenez2023b'
+
 
 class XmippProtLocalCTF(ProtAnalysis3D):
     """Compares a set of particles with the corresponding projections of a reference volume.
