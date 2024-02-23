@@ -515,6 +515,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, xmipp3.Xm
                                  updateClassCallback=self._updateClass,
                                  itemDataIterator=mdIter, # relion style
                                  iterParams=params)
+                                # Todo: raiseOnNextFailure = False new scipion implementation
 
     def _loadOutputSet(self, outputName):
         """
