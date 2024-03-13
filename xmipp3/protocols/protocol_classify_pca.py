@@ -27,7 +27,7 @@
 from os.path import join, dirname, exists
 import os
 
-# import emtable
+import emtable
 
 # from emtable import Table
 from pyworkflow import VERSION_2_0
@@ -38,15 +38,58 @@ from pyworkflow.utils.path import cleanPath, makePath
 
 import pwem.emlib.metadata as md
 from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D
-from pwem.constants import ALIGN_NONE, ALIGN_2D
+from pwem.objects import SetOfClasses2D, Set, Transform
+from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ
 import xmipp3
+import enum
+import numpy as np
 
 
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
                             writeSetOfClasses2D, xmippToLocation,
-                            rowToAlignment)
+                            rowToAlignment, readSetOfParticles, matrixFromGeometry)
 
+
+class XMIPPCOLUMNS(enum.Enum):
+    # PARTICLES CONSTANTS
+    ctfVoltage = "ctfVoltage"  # 1
+    ctfDefocusU = "ctfDefocusU"  # 2
+    ctfDefocusV = "ctfDefocusV"  # 3
+    ctfDefocusAngle = "ctfDefocusAngle"  # 4
+    ctfSphericalAberration = "ctfSphericalAberration"  # 5
+    ctfQ0 = "ctfQ0"  # 6
+    ctfCritMaxFreq = "ctfCritMaxFreq"  # 7
+    ctfCritFitting = "ctfCritFitting"  # 8
+    enabled = "enabled"  # 9
+    image = "image"  # 10
+    itemId = "itemId"  # 11
+    micrograph = "micrograph"  # 12
+    micrographId = "micrographId"  # 13
+    scoreByVariance = "scoreByVariance"  # 14
+    scoreByGiniCoeff = "scoreByGiniCoeff"  # 15
+    xcoor = "xcoor"  # 16
+    ycoor = "ycoor"  # 17
+    ref = "ref"  # 18
+    anglePsi = "anglePsi"  # 19
+    angleRot = "angleRot"  # 20
+    angleTilt = "angleTilt"  # 21
+    shiftX = "shiftX"  # 22
+    shiftY = "shiftY"  # 23
+    shiftZ = "shiftZ"  # 24
+    flip = "flip"
+
+    # CLASSES CONSTANTS
+    classCount = "classCount"  # 3
+
+
+ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
+                  "shiftY":XMIPPCOLUMNS.shiftY.value,
+                  "shiftZ":XMIPPCOLUMNS.shiftZ.value,
+                  "flip":XMIPPCOLUMNS.flip.value,
+                  "anglePsi":XMIPPCOLUMNS.anglePsi.value,
+                  "angleRot":XMIPPCOLUMNS.angleRot.value,
+                  "angleTilt":XMIPPCOLUMNS.angleTilt.value
+                 }
 
 
 
@@ -234,13 +277,24 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         self._defineOutputs(outputClasses=classes2DSet)
         self._defineSourceRelation(self.inputParticles, classes2DSet)
         
+        self.createOutputAverages(classes2DSet)
+        
         
         # classes2DSetContrast = self._createSetOfClasses2D(inputParticles)
         # self._fillClasses(classes2DSetContrast)
         # self._defineOutputs(outputClasses2=classes2DSetContrast)
         # self._defineSourceRelation(self.inputParticles, classes2DSetContrast)
         
-        
+    def createOutputAverages(self, outputClasses):
+        classes = self._getExtraPath('classes.mrcs')
+        outRefs = self._createSetOfAverages()
+        outRefs.copyInfo(self.inputParticles.get())
+        outRefs.setSamplingRate(self.sampling)
+        readSetOfParticles(classes, outRefs)
+
+        outRefs.setAlignment(ALIGN_2D)
+        self._defineOutputs(outputAverages=outRefs)
+        self._defineSourceRelation(self.inputParticles, outRefs)    
     
     #--------------------------- INFO functions --------------------------------
     
@@ -283,23 +337,19 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     #         levels = [i for i in range(self._lastLevel()+1)]
     #         summary.append('Computed classes%s, levels: %s' % (subset, levels))
     #
-    # def _summary(self):
-    #     self._defineFileNames()
-    #     summary = []
-    #     levelFiles = self._getAllLevelMdFiles()
-    #
-    #     if not hasattr(self, 'outputClasses'):
-    #         summary.append("Output classes not ready yet.")
-    #     elif levelFiles:
-    #         self._summaryLevelFiles(summary, levelFiles, CLASSES)
-    #         self._summaryLevelFiles(summary, self._getAllLevelMdFiles(CLASSES_CORE), CLASSES_CORE)
-    #         self._summaryLevelFiles(summary, self._getAllLevelMdFiles(CLASSES_STABLE_CORE), CLASSES_STABLE_CORE)
-    #     else:
-    #         summary.append("Input Particles: *%d*\nClassified into *%d* classes\n"
-    #                        % (self.inputParticles.get().getSize(),
-    #                           self.numberOfClasses.get()))
-    #         # summary.append('- Used a _clustering_ algorithm to subdivide the original dataset into the given number of classes')
-    #     return summary
+    def _summary(self):
+        summary = []
+    
+        if not hasattr(self, 'outputClasses'):
+            summary.append("Output classes not ready yet.")
+
+        else:
+            summary.append('-  Two output sets are obtained. ')
+            summary.append('The first one corresponds to the classes and should be used to select '
+                        ' the particles corresponding to each class. In this case, the classes are '
+                        ' displayed applying a contrast variation.')
+            summary.append('The second one corresponds solely to the representative classes (outputAverages)')
+        return summary
     #
     # def _methods(self):
     #     strline = ''
@@ -319,55 +369,202 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     #
     # #--------------------------- UTILS functions -------------------------------
         
-    def _updateParticle(self, item, row):
-        item.setClassId(row.getValue(md.MDL_REF))
-        item.setTransform(rowToAlignment(row, ALIGN_2D))
+    # def _updateParticle(self, item, row):
+    #     item.setClassId(row.getValue(md.MDL_REF))
+    #     item.setTransform(rowToAlignment(row, ALIGN_2D))
+    #
+    # def _updateClass(self, item):
+    #     classId = item.getObjId()
+    #
+    #     if classId in self._classesInfo:
+    #         index, fn, _ = self._classesInfo[classId]
+    #         item.setAlignment2D()
+    #         rep = item.getRepresentative()
+    #         rep.setLocation(index, fn)
+    #         rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
+    #
+    # def _loadClassesInfo(self, filename):
+    #     """ Read some information about the produced 2D classes
+    #     from the metadata file.
+    #     """
+    #     self._classesInfo = {}  # store classes info, indexed by class id
+    #
+    #     mdClasses = md.MetaData(filename)
+    #
+    #     for classNumber, row in enumerate(md.iterRows(mdClasses)):
+    #         index, fn = xmippToLocation(row.getValue(md.MDL_IMAGE))
+    #         # Store info indexed by id, we need to store the row.clone() since
+    #         # the same reference is used for iteration
+    #         self._classesInfo[classNumber + 1] = (index, fn, row.clone())
+    #
+    # def _fillClassesFromLevel(self, clsSet):
+    #     """ Create the SetOfClasses2D from a given iteration. """
+    #     self._loadClassesInfo(self._getExtraPath('classes_contrast_classes.star'))
+    #
+    #     xmpMd = self._getExtraPath('classes_images.star')
+    #
+    #     iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
+    #                                 updateItemCallback=self._updateParticle,
+    #                                 skipDisabled=True)
+    #
+    #     clsSet.classifyItems(updateItemCallback=iterator.updateItem,
+    #                          updateClassCallback=self._updateClass)
+    #
+    # def _fillClasses(self, clsSet):
+    #
+    #     self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
+    #
+    #     clsSet.classifyItems(updateItemCallback=self._updateClass,
+    #                          updateClassCallback=self._updateClass)
+    #
+    #     # clsSet.classifyItems(updateClassCallback=self._updateClass)
+        
+        
+        
+    #EMTABLE IMPLEMENTATION
     
+    def _updateParticle(self, item, row):
+        # Todo revisar una vez este cambiado lo del core de scipion
+        if row is None:
+            setattr(item, "_appendItem", False)
+        else:
+            if item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value):
+                item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
+                item.setTransform(rowToAlignment_emtable(row, ALIGN_2D))
+            else:
+                setattr(item, "_appendItem", False)
+
     def _updateClass(self, item):
         classId = item.getObjId()
-    
         if classId in self._classesInfo:
-            index, fn, _ = self._classesInfo[classId]
+            index, fn, row = self._classesInfo[classId]
             item.setAlignment2D()
             rep = item.getRepresentative()
             rep.setLocation(index, fn)
             rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
-    
+
+    def _createModelFile(self):
+        with open(self._getExtraPath('classes_contrast_classes.star'), 'r') as file:
+            # Read the lines of the file
+            lines = file.readlines()
+        # Open the file for writing
+        with open(self._getExtraPath('classes_contrast_classes.star'), "w") as file:
+            # Iterate through the lines
+            for line in lines:
+                # Replace "data_" with "data_particles" if found
+                modified_line = line.replace("data_", "data_particles")
+                # Write the modified line to the file
+                file.write(modified_line)
+
+        with open(self._getExtraPath('classes_images.star'), 'r') as file:
+            lines = file.readlines()
+
+            # Find the index of the last non-empty line
+        last_non_empty_index = len(lines) - 1
+        while last_non_empty_index >= 0 and lines[last_non_empty_index].strip() == "":
+            last_non_empty_index -= 1
+
+        # Modify the lines
+        modified_lines = []
+        for line in lines[:last_non_empty_index + 1]:
+            # Replace "data_" with "data_particles" if found
+            modified_line = line.replace("data_Particles", "data_particles")
+            modified_lines.append(modified_line)
+
+        # Write the modified lines back to the file
+        with open(self._getExtraPath('classes_images.star'), "w") as file:
+            file.writelines(modified_lines)
+
     def _loadClassesInfo(self, filename):
         """ Read some information about the produced 2D classes
         from the metadata file.
         """
         self._classesInfo = {}  # store classes info, indexed by class id
-    
-        mdClasses = md.MetaData(filename)
-    
-        for classNumber, row in enumerate(md.iterRows(mdClasses)):
-            index, fn = xmippToLocation(row.getValue(md.MDL_IMAGE))
+
+        mdFileName = '%s@%s' % ('particles', filename)
+        table = emtable.Table(fileName=filename)
+
+        for classNumber, row in enumerate(table.iterRows(mdFileName)):
+            index, fn = xmippToLocation(row.get(XMIPPCOLUMNS.image.value))
             # Store info indexed by id, we need to store the row.clone() since
             # the same reference is used for iteration
-            self._classesInfo[classNumber + 1] = (index, fn, row.clone())
-    
-    def _fillClassesFromLevel(self, clsSet):
+            self._classesInfo[classNumber + 1] = (index, fn, row)
+        self._numClass = index
+
+    def _fillClassesFromLevel(self, clsSet, update = False):
         """ Create the SetOfClasses2D from a given iteration. """
+        self._createModelFile()
         self._loadClassesInfo(self._getExtraPath('classes_contrast_classes.star'))
-    
-        xmpMd = self._getExtraPath('classes_images.star')
-    
-        iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
-                                    updateItemCallback=self._updateParticle,
-                                    skipDisabled=True)
-    
-        clsSet.classifyItems(updateItemCallback=iterator.updateItem,
-                             updateClassCallback=self._updateClass)
-        
-    def _fillClasses(self, clsSet):
+        # self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
+        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath('classes_images.star'))
 
-        self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
-        
-        clsSet.classifyItems(updateItemCallback=self._updateClass,
-                             updateClassCallback=self._updateClass)
+        params = {}
+        if update:
+            self.info(r'Last particle processed id is %s' % self.lastParticleProcessedId)
+            params = {"where": "id > %s" % self.lastParticleProcessedId}
+
+        # the particle with orientation parameters (all_parameters)
+        with self._lock:
+            clsSet.classifyItems(updateItemCallback=self._updateParticle,
+                                 updateClassCallback=self._updateClass,
+                                 itemDataIterator=mdIter, # relion style
+                                 iterParams=params)
+                                # Todo: raiseOnNextFailure = False new scipion implementation
     
-        # clsSet.classifyItems(updateClassCallback=self._updateClass)
 
+def rowToAlignment_emtable(alignmentRow, alignType):
+    """
+    is2D == True-> matrix is 2D (2D images alignment)
+            otherwise matrix is 3D (3D volume alignment or projection)
+    invTransform == True  -> for xmipp implies projection
+    """
 
+    is2D = alignType == ALIGN_2D
+    inverseTransform = alignType == ALIGN_PROJ
 
+    if alignmentRow.hasAnyColumn(ALIGNMENT_DICT.values()):
+        alignment = Transform()
+        angles = np.zeros(3)
+        shifts = np.zeros(3)
+        flip = alignmentRow.get(XMIPPCOLUMNS.flip.value, default=0.)
+
+        shifts[0] = alignmentRow.get(XMIPPCOLUMNS.shiftX.value, default=0.)
+        shifts[1] = alignmentRow.get(XMIPPCOLUMNS.shiftY.value, default=0.)
+
+        if not is2D:
+            angles[0] = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
+            angles[1] = alignmentRow.get(XMIPPCOLUMNS.angleTilt.value, default=0.)
+            angles[2] = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
+            shifts[2] = alignmentRow.get(XMIPPCOLUMNS.shiftZ.value, default=0.)
+            if flip:
+                angles[1] = angles[1]+180  # tilt + 180
+                angles[2] = - angles[2]    # - psi, COSS: this is mirroring X
+                shifts[0] = -shifts[0]     # -x
+        else:
+            angles[2] = - alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
+            psi = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
+            rot = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
+            if not np.isclose(rot, 0., atol=1e-6 ) and not np.isclose(psi, 0., atol=1e-6):
+                print("HORROR rot and psi are different from zero in 2D case")
+            angles[0] = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)\
+                + alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.) #psi + rot
+
+        M = matrixFromGeometry(shifts, angles, inverseTransform)
+
+        if flip:
+            if alignType == ALIGN_2D:
+                matrix[0, :2] *= -1.  # invert only the first two columns
+                # keep x
+                matrix[2, 2] = -1.  # set 3D rot
+            elif alignType == ALIGN_3D:
+                matrix[0, :3] *= -1.  # now, invert first line excluding x
+                matrix[3, 3] *= -1.
+            elif alignType == ALIGN_PROJ:
+                pass
+
+        alignment.setMatrix(M)
+
+    else:
+        alignment = None
+
+    return alignment
