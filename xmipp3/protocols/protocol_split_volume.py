@@ -122,8 +122,17 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     def _validate(self):
         result = []
         
-        if self.adjustGrey and not self.referenceVolume.get():
-            result.append('Reference volume must be set when grey value adjust is enabled')
+        if self.adjustGrey:
+            referenceVolume = self._getReferenceVolume()
+            
+            if referenceVolume is None:
+                result.append('Reference volume must be set when grey value adjust is enabled')
+
+            else:
+                particles = self._getInputParticles()
+                
+                if referenceVolume.getXDim() != particles.getXDim():
+                    result.append('Particle and reference volume sizes must match')
         
         return result
         
@@ -608,8 +617,11 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     def _getInputParticles(self) -> SetOfParticles:
         return self.inputParticles.get()
 
+    def _getReferenceVolume(self) -> Volume:
+        return self.referenceVolume.get()
+
     def _getReferenceVolumeFilename(self) -> str:
-        return self.referenceVolume.get().getFileName()
+        return self._getReferenceVolume().getFileName()
     
     def _getSamplingRate(self):
         return float(self.inputParticles.get().getSamplingRate())
