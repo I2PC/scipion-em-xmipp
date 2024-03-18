@@ -32,7 +32,7 @@ from pwem.objects import (VolumeMask, Class3D,
                           Volume, SetOfVolumes )
 
 from pyworkflow import BETA
-from pyworkflow.utils import makePath, createLink
+from pyworkflow.utils import makePath, createLink, moveFile, cleanPath
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
                                         StringParam, BooleanParam,
@@ -218,8 +218,6 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-i', self._getInputParticleMdFilename()]
         args += ['-o', self._getGreyCorrectedStackFilename()]
         args += ['--ref', self._getReferenceVolumeFilename()]
-        args += ['--save_metadata_stack', self._getInputParticleMdFilename()]
-        args += ['--keep_input_columns']
         args += ['--optimizeGray']
         args += ['--padding', 2]
         args += ['--sampling', self._getSamplingRate()]
@@ -227,6 +225,10 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
             args += ['--ignoreCTF']
             
         self.runJob('xmipp_angular_continuous_assign2', args)
+        
+        # Overwrite
+        cleanPath(self._getInputParticleMdFilename())
+        moveFile(self._getGreyCorrectedMetadataFilename(), self._getInputParticleMdFilename())
     
     def correctCtfStep(self):
         particles: SetOfParticles = self.inputParticles.get()
@@ -660,6 +662,9 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
 
     def _getGreyCorrectedStackFilename(self):
         return self._getTmpPath('grey_corrected.mrc')
+
+    def _getGreyCorrectedMetadataFilename(self):
+        return self._getTmpPath('grey_corrected.xmd')
 
     def _getClassificationMdFilename(self):
         return self._getExtraPath('classification.xmd')
