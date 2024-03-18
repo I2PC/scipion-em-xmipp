@@ -218,6 +218,8 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-i', self._getInputParticleMdFilename()]
         args += ['-o', self._getGreyCorrectedStackFilename()]
         args += ['--ref', self._getReferenceVolumeFilename()]
+        args += ['--save_metadata_stack', self._getInputParticleMdFilename()]
+        args += ['--keep_input_columns']
         args += ['--optimizeGray']
         args += ['--padding', 2]
         args += ['--sampling', self._getSamplingRate()]
