@@ -25,6 +25,7 @@
 # *
 # **************************************************************************
 
+import numpy as np
 import random
 
 import pyworkflow.protocol.params as params
@@ -32,7 +33,7 @@ from pyworkflow import VERSION_3_0
 from pwem.protocols import Prot2D
 from pwem.objects import CTFModel
 
-from xmippLib import createEmptyFile
+import xmippLib
 
 
 class XmippProtSimulateCTF(Prot2D):
@@ -81,6 +82,8 @@ class XmippProtSimulateCTF(Prot2D):
                       label="Lower defocus difference between defocusU and defocusV (A)")
         form.addParam('DefocusFdiff', params.FloatParam, default=500, condition='astig',
                       label="Upper defocus difference between defocusU and defocusV(A)")
+        form.addParam('noiseBefore', params.FloatParam, default=0, label='Noise before CTF', help='Sigma')
+        form.addParam('noiseAfter', params.FloatParam, default=0, label='Noise after CTF', help='Sigma')
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -91,7 +94,7 @@ class XmippProtSimulateCTF(Prot2D):
     def convertInputStep(self):
         x, y, _ = self.inputParticles.get().getDimensions()
         n = self.inputParticles.get().getSize()
-        createEmptyFile(self._getPath("images.mrc"), x, y, 1, n)
+        xmippLib.createEmptyFile(self._getPath("images.mrc"), x, y, 1, n)
 
     def simulateStep(self):
         n = 1
@@ -111,6 +114,14 @@ class XmippProtSimulateCTF(Prot2D):
             location = particle.getLocation()
             fnIn = str(location[0]) + "@" + location[1]
             fnOut = str(n) + "@" + fnStk
+
+            if self.noiseBefore>0:
+                I=xmippLib.Image(fnIn)
+                Idata = I.getData()
+                I.setData(Idata+self.noiseBefore.get()*np.random.normal(size=Idata.shape))
+                I.write(fnOut)
+                fnIn=fnOut
+
             defocusU = random.uniform(self.Defocus0.get(), self.DefocusF.get())
             args = "-i %s -o %s" % (fnIn, fnOut)
             if self.astig:
@@ -124,6 +135,12 @@ class XmippProtSimulateCTF(Prot2D):
                 args += " --fourier ctfdef %f %f %f %f  --sampling %f -v 0" % \
                         (self.voltage, self.cs, self.Q0, defocusU, Ts)
             self.runJob("xmipp_transform_filter", args)
+
+            if self.noiseAfter>0:
+                I=xmippLib.Image(fnOut)
+                Idata = I.getData()
+                I.setData(Idata+self.noiseAfter.get()*np.random.normal(size=Idata.shape))
+                I.write(fnOut)
 
             newCTF = CTFModel()
             newCTF.setDefocusU(defocusU)
@@ -150,5 +167,7 @@ class XmippProtSimulateCTF(Prot2D):
         summary.append("Cs=%f mm" % self.cs)
         summary.append("Q0=%f" % self.Q0)
         summary.append("Defocus range=[%f,%f] A" % (self.Defocus0, self.DefocusF))
+        summary.append('Noise before=%f' %self.noiseBefore)
+        summary.append('Noise after=%f' %self.noiseAfter)
         return summary
 
