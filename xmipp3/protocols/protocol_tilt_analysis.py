@@ -44,8 +44,8 @@ from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
 from xmipp3 import emlib
 from xmipp3.convert import getScipionObj
-from matplotlib import pyplot as plt
 
+AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
 
 class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
@@ -67,10 +67,17 @@ class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
                       label="Input micrographs", important=True,
                       help='Select the SetOfMicrograph to be preprocessed.')
 
+        form.addParam('autoWindow', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
+                      label='Estimate automatically the window size?',
+                      help='Use this button to decide if you want to estimate the window size'
+                           'based on the movie size. It will select between 512, 1024, 2048 or 4096. '
+                           'Condition:  window_size <= Size/2.5 ')
+
         form.addParam('window_size', IntParam, label='Window size',
+                      condition="not autoWindow",
                       default=1024, expertLevel=LEVEL_ADVANCED, validators=[GE(256, 'Error must be greater than 256')],
-                      help='''By default, the micrograph will be divided into windows of dimensions 512x512, the PSD '''
-                           '''its correlations will be computed in every segment.''')
+                      help=''' By default, the micrograph will be divided into windows of dimensions 1024x1024, '''
+                           ''' the PSD its correlations will be computed in every segment.''')
 
         form.addParam('objective_resolution', FloatParam, label='Objective resolution',
                       default=3, expertLevel=LEVEL_ADVANCED, validators=[GT(0, 'Error must be Positive')],
@@ -118,6 +125,7 @@ class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
         self.streamClosed = self.inputMicrographs.get().isStreamClosed()
         self.micsDict = {mic.getObjId(): mic.clone() for mic in self._loadInputList(self.micsFn).iterItems()}
         pwutils.makePath(self._getExtraPath('DONE'))
+        self.windowSize = self.getWindowSize()
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -337,7 +345,7 @@ class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
         micFolder = self._getOutputMicFolder(mic)
         micImage = ImageHandler().read(mic.getLocation())
         dimx, dimy, z, n = micImage.getDimensions()
-        wind_step = self.window_size.get()
+        wind_step = self.windowSize
         x_steps, y_steps = window_coordinates2D(dimx, dimy, wind_step)
         subWindStep = int(wind_step * (self.samplingRate / self.objective_resolution.get()))
         x_steps_psd, y_steps_psd = window_coordinates2D(subWindStep * 2, subWindStep * 2, subWindStep)
@@ -471,6 +479,23 @@ class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
             newMicName = micName
 
         return newMicName
+
+    def getWindowSize(self):
+        """ Function to get the window size, automatically or the one set by the user. """
+        if self.autoWindow:
+            dimX, dimY, _ = self.getInputMicrographs().getFirstItem().getDimensions()
+            halfMic = int(min(dimX, dimY)/2.5)
+            windowSize = halfMic  # In case there is not a suitable option, very unlikely
+            for sizeAuto in AUTOMATIC_WINDOW_SIZES:
+                if sizeAuto < halfMic:  # Exit in case you found a suitable option
+                    windowSize = sizeAuto
+                    break
+        else:
+            windowSize = self.window_size.get()
+
+        self.info('The window size used is %d' % windowSize)
+
+        return windowSize
 
     def _insertFinalSteps(self, deps):
         """ This should be implemented in subclasses"""

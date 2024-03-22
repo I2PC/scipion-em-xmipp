@@ -1185,7 +1185,7 @@ class TestXmippProtTiltAnalysis(TestXmippBase):
                                                  magnification=56000)
 
     def testTiltAnalysis(self):
-        protTilt = XmippProtTiltAnalysis(window_size=512, objective_resolution=8, objLabel=
+        protTilt = XmippProtTiltAnalysis(autoWindow=False, window_size=512, objective_resolution=8, objLabel=
                                         'Tilt analysis window 512 obj resolution 8A')
         protTilt.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protTilt, wait=True)
@@ -1195,7 +1195,7 @@ class TestXmippProtTiltAnalysis(TestXmippBase):
 
 
     def testTiltAnalysis2(self):
-        protTilt2 = XmippProtTiltAnalysis(window_size=600, objective_resolution=4,
+        protTilt2 = XmippProtTiltAnalysis(autoWindow=False, window_size=600, objective_resolution=4,
                                           meanCorr_threshold=0.9,
                                           objLabel='Tilt analysis window 600 obj resolution 4A and threshold 0.9')
         protTilt2.inputMicrographs.set(self.protImport.outputMicrographs)
