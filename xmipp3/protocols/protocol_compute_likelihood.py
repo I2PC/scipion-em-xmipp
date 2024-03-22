@@ -61,9 +61,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       pointerClass='Volume,SetOfVolumes',
                       help='Volume, set of volumes or set of atomic structures to which the set of '\
                            'particles will be compared to')
-        form.addParam('diameter', IntParam, label="Particle diameter (A): ", default=-1, expertLevel=LEVEL_ADVANCED,
-                      help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
-                           'Value 0 implies no filtering.')
+        form.addParam('particleRadius', IntParam, label="Particle radius (px): ", default=-1)
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=0, expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
                            'Value 0 implies no filtering.')
@@ -129,10 +127,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         Xdim = self.inputParticles.get().getDimensions()[0]
         Y, X = np.ogrid[:Xdim, :Xdim]
         dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
-        D = self.diameter.get()
-        if D<0:
-            D=Xdim
-        mask = dist_from_center <= D/2
+        particleRadius = self.particleRadius.get()
+        if particleRadius<0:
+            particleRadius=Xdim/2
+        mask = dist_from_center <= particleRadius
 
         inputRefs = self.inputRefs.get()
         i=1
@@ -176,6 +174,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         while self.lastRow and particle.getObjId() == self.lastRow.getValue(md.MDL_ITEM_ID):
             count += 1
             if count:
+                particle.setObjId(None)
                 setXmippAttributes(particle, self.lastRow,
                                    emlib.MDL_LL, emlib.MDL_IMAGE_REF)
                 if self.keepResiduals:
