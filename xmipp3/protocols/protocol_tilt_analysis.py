@@ -345,9 +345,9 @@ class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
         micFolder = self._getOutputMicFolder(mic)
         micImage = ImageHandler().read(mic.getLocation())
         dimx, dimy, z, n = micImage.getDimensions()
-        wind_step = self.windowSize
-        x_steps, y_steps = window_coordinates2D(dimx, dimy, wind_step)
-        subWindStep = int(wind_step * (self.samplingRate / self.objective_resolution.get()))
+        windStep = self.windowSize
+        x_steps, y_steps = window_coordinates2D(dimx, dimy, windStep)
+        subWindStep = int(windStep * (self.samplingRate / self.objective_resolution.get()))
         x_steps_psd, y_steps_psd = window_coordinates2D(subWindStep * 2, subWindStep * 2, subWindStep)
         # Extract windows
         window_image = ImageHandler().createImage()
@@ -593,7 +593,7 @@ def rotation(imag, angle, shape, P):
     return transformed, M
 
 
-def window_coordinates2D(x, y, wind_step):
+def window_coordinates2D(x, y, windStep):
     x0 = 0
     xF = x - 1
     y0 = 0
@@ -601,15 +601,15 @@ def window_coordinates2D(x, y, wind_step):
     x_coor = []
     y_coor = []
 
-    if wind_step < x and wind_step < y:
+    if windStep < x and windStep < y:
         x_coor.append(x0)
-        x_coor.append(x0 + wind_step - 1)
-        x_coor.append(xF - wind_step)
+        x_coor.append(x0 + windStep - 1)
+        x_coor.append(xF - windStep)
         x_coor.append(xF)
 
         y_coor.append(y0)
-        y_coor.append(y0 + wind_step - 1)
-        y_coor.append(yF - wind_step)
+        y_coor.append(y0 + windStep - 1)
+        y_coor.append(yF - windStep)
         y_coor.append(yF)
 
         return x_coor, y_coor
