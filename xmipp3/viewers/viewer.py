@@ -49,7 +49,6 @@ from xmipp3.protocols import XmippProtMultiRefAlignability
 from xmipp3.protocols import XmippProtAngularGraphConsistency
 from xmipp3.protocols import XmippProtAssignmentTiltPair
 from xmipp3.protocols import XmippProtMovieGain
-from xmipp3.protocols import XmippProtDeepDenoising
 from .plotter import XmippPlotter
 from xmipp3.protocols import XmippProtTiltAnalysis
 from pwem.viewers.viewers_data import MicrographsView
@@ -76,7 +75,6 @@ class XmippViewer(DataViewer):
                 XmippProtMultiRefAlignability,
                 XmippProtAngularGraphConsistency,
                 XmippProtMovieGain,
-                XmippProtDeepDenoising,
                 XmippProtTiltAnalysis
                 ]
 
@@ -151,26 +149,6 @@ class XmippViewer(DataViewer):
                     self._views.append(xplotter)
 
 
-        elif issubclass(cls, XmippProtDeepDenoising):
-            fn = obj.outputParticles.getFileName()
-            self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
-                                          viewParams={VISIBLE: 'enabled id _filename '
-                                                               '_xmipp_corrDenoisedProjection '
-                                                               '_xmipp_corrDenoisedNoisy '
-                                                               '_xmipp_imageOriginal _xmipp_imageRef',
-                                                      RENDER: '_filename _xmipp_imageOriginal '
-                                                              '_xmipp_imageRef',
-                                                      SORT_BY: 'id',
-                                                      MODE: MODE_MD}))
-
-            md = emlib.MetaData(obj._getExtraPath('particlesDenoised.xmd'))
-            if (md.containsLabel(emlib.MDL_CORR_DENOISED_PROJECTION) and
-                md.containsLabel(emlib.MDL_CORR_DENOISED_NOISY)):
-                xplotter = XmippPlotter(windowTitle="denoised vs proj & denoised vs original")
-                xplotter.createSubPlot("Correlations", "corr_denoised_projection", "corr_denoised_original")
-                xplotter.plotScatterMd(md, mdLabelX=emlib.MDL_CORR_DENOISED_PROJECTION,
-                                mdLabelY=emlib.MDL_CORR_DENOISED_NOISY )
-                self._views.append(xplotter)
 
         elif issubclass(cls, XmippProtMovieGain):
             if obj.hasAttribute('outputGains'):

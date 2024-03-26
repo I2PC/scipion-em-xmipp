@@ -28,7 +28,7 @@ import os, matplotlib, math
 from scipy import ndimage
 from scipy.spatial import KDTree
 import tkinter as tk
-matplotlib.use("TkAgg")
+#matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.widgets import RadioButtons
