@@ -37,13 +37,6 @@ from pyworkflow.utils import getExt
 from pwem.objects import Volume
 import xmipp3
 
-def updateEnviron(gpuNum):
-    """ Create the needed environment for TensorFlow programs. """
-    print("updating environ to select gpu %s" % (gpuNum))
-    if gpuNum == '':
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 
 DEEPRES_METHOD_URL = 'https://github.com/I2PC/scipion/wiki/XmippProtDeepRes'
 RESIZE_MASK = 'binaryMask.vol' 
@@ -69,6 +62,10 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
     #RESOLUTION RANGE
     LOW_RESOL = 0
     HIGH_RESOL = 1
+    MODEL_CONFIG = {
+        LOW_RESOL: {'sampling': 1.0, 'model': ''},
+        HIGH_RESOL: {'sampling': 0.5, 'model': ''},
+    }
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -94,19 +91,18 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         form.addParam('Mask', PointerParam, pointerClass='VolumeMask', 
                       important=True,
                       label="Mask", 
-                      help='Binary mask. The mask determines which points are specimen'
-                      ' and which are not')
+                      help='Binary mask. The mask determines which points are '
+                           'specimen and which are not')
         
-        form.addParam('range', EnumParam, choices=[u'2.5Å - 13.0Å', u'1.5Å - 6.0Å'],
-                      label="Expected resolutions range", default=self.LOW_RESOL,
+        form.addParam('range', EnumParam, default=self.LOW_RESOL,
+                      choices=[u'2.5Å - 13.0Å', u'1.5Å - 6.0Å'],
+                      label="Expected resolutions range",
                       display=EnumParam.DISPLAY_HLIST, 
                       help='The program uses a trained network to determine' 
                       ' resolutions between 2.5Å-13.0Å  or' 
                       ' resolutions between 1.5Å-6.0Å')         
 
-
     # --------------------------- INSERT steps functions --------------------------------------------
-
     def _createFilenameTemplates(self):
         """ Centralize how files are called """
         myDict = {
@@ -122,11 +118,8 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._updateFilenamesDict(myDict)
 
     def _insertAllSteps(self):
-            # Convert input into xmipp Metadata format
-        
-        updateEnviron(self.gpuList.get())    
-            
-        self._createFilenameTemplates() 
+        self.updateEnviron(self.gpuList.get())
+        self._createFilenameTemplates()
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('resolutionStep')
         self._insertFunctionStep('createOutputStep')
@@ -135,27 +128,10 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
     def convertInputStep(self):
         """ Read the input volume.
         """      
-        volFn = self.inputVolume.get().getFileName()
-        maskFn = self.Mask.get().getFileName()
+        volFn = self._fixMrc(self.inputVolume.get().getFileName())
+        maskFn = self._fixMrc(self.Mask.get().getFileName())
 
-        def _isMrc(fn):
-            return getExt(fn) in ['.mrc', '.map']
-
-        def _resize(i, o, factor):
-            self.runJob('xmipp_image_resize',
-                        f' -i {i} -o {o} --factor {factor}')
-
-        def _filter(i, o, factor):
-            self.runJob('xmipp_transform_filter',
-                        f' -i {i} -o {o} --fourier low_pass {factor}')
-
-        if _isMrc(volFn):
-            volFn += ':mrc'
-
-        if _isMrc(maskFn):
-            maskFn += ':mrc'
-
-        # Transform
+        # Transform mask
         maskDilateFn = self._getFileName(MASK_DILATE)
         params = f' -i {maskFn} -o {maskDilateFn}'
         params += '  --binaryOperation dilation --size 1 '
@@ -166,10 +142,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_image_operate', params)
 
         # Resize maps
-        if self.range == self.LOW_RESOL:
-            sampling_new = 1.0
-        else:
-            sampling_new = 0.5               
+        sampling_new = self.getModelConfig('sampling')
         volSampling = self.inputVolume.get().getSamplingRate()
         samplingFactor = volSampling / sampling_new
         fourierValue = samplingFactor / 2
@@ -180,16 +153,16 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         if volSampling > sampling_new:
             # mask with sampling = 1.0
-            _resize(maskFn, maskResizeFn, samplingFactor)
+            self._resize(maskFn, maskResizeFn, samplingFactor)
             # Original volume with sampling = 1.0
-            _resize(volOpFn, volResizeFn, samplingFactor)
+            self._resize(volOpFn, volResizeFn, samplingFactor)
         else:
             # Mask with sampling=1.0
-            _filter(maskFn, maskResizeFn, fourierValue)
-            _resize(maskResizeFn, maskResizeFn, samplingFactor)
+            self._filter(maskFn, maskResizeFn, fourierValue)
+            self._resize(maskResizeFn, maskResizeFn, samplingFactor)
             # Original volume with sampling=1.0
-            _filter(volOpFn, volResizeFn, fourierValue)
-            _resize(volResizeFn, volResizeFn, samplingFactor)
+            self._filter(volOpFn, volResizeFn, fourierValue)
+            self._resize(volResizeFn, volResizeFn, samplingFactor)
 
         params = f' -i {maskResizeFn} -o {maskResizeFn}'
         params += ' --select below %f' % 0.15
@@ -231,49 +204,33 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
     def getMinMax(self, imageFile):
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
-        imgData = imgData[imgData!=0]
+        imgData = imgData[imgData != 0]
         min_res = round(np.amin(imgData) * 100) / 100
         max_res = round(np.amax(imgData) * 100) / 100
         median_res = round(np.median(imgData) * 100) / 100
         return min_res, max_res, median_res
     
     def createChimeraOutput(self, vol, value):
-        Vx = xmipp3.Image(vol)
-        V = Vx.getData()
-        Zdim, Ydim, Xdim = V.shape
-        for z in range(0,Zdim):
-            for y in range(0,Ydim):
-                for x in range(0,Xdim):
-                    if V[z,y,x]==0:
-                        V[z,y,x]=value    
-        Vx.setData(V)                   
-        return Vx
+        img = xmipp3.Image(vol)
+        imgData = img.getData()
+        imgData[imgData == 0] = value
+        img.setData(imgData)
+        return img
                                                         
     def createOutputStep(self):
-        if self.range == self.LOW_RESOL:
-            sampling_new = 1.0
-        else:
-            sampling_new = 0.5
-            
-        #convert size of output volume
-        
-        samplingFactor = sampling_new/float(self.inputVolume.get().getSamplingRate())
-        fourierValue = sampling_new/(2*float(self.inputVolume.get().getSamplingRate()))
+        # Convert back to input volume size
+        sampling_new = self.getModelConfig('sampling')
+        volSampling = self.inputVolume.get().getSamplingRate()
+        samplingFactor = volSampling / sampling_new
+        fourierValue = samplingFactor / 2
+        outResolutionFn = self._getFileName(OUTPUT_RESOLUTION_FILE)
+        outOriginalFn = self._getFileName(OUTPUT_ORIGINAL_SIZE)
              
-        if sampling_new > self.inputVolume.get().getSamplingRate():
-            paramsResizeVol = ' -i %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
-            paramsResizeVol += ' -o %s' % self._getFileName(OUTPUT_ORIGINAL_SIZE)        
-            paramsResizeVol += ' --factor %s' % samplingFactor
-            self.runJob('xmipp_image_resize', paramsResizeVol )             
-        else:   
-            paramsFilterVol = ' -i %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
-            paramsFilterVol += ' -o %s' % self._getFileName(OUTPUT_ORIGINAL_SIZE)
-            paramsFilterVol += ' --fourier low_pass %s' % fourierValue            
-            paramsResizeVol = ' -i %s' % self._getFileName(OUTPUT_ORIGINAL_SIZE)  
-            paramsResizeVol += ' -o %s' % self._getFileName(OUTPUT_ORIGINAL_SIZE)           
-            paramsResizeVol += ' --factor %s' % samplingFactor            
-            self.runJob('xmipp_transform_filter', paramsFilterVol )
-            self.runJob('xmipp_image_resize', paramsResizeVol )
+        if sampling_new > volSampling:
+            self._resize(outResolutionFn, outOriginalFn, samplingFactor)
+        else:
+            self._filter(outResolutionFn, outOriginalFn, fourierValue)
+            self._resize(outOriginalFn, outOriginalFn, samplingFactor)
 
         volume = Volume()
         volume.setFileName(self._getFileName(OUTPUT_ORIGINAL_SIZE))
@@ -294,9 +251,35 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         vol_chimera = self.createChimeraOutput(imageFile, self.median_res_init)
         vol_chimera.write(self._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA))
 
-                
-    # --------------------------- INFO functions ------------------------------
+        # Convert back volumes from .mrc to .vol, as expected by viewers
+        self._mrc2vol(self._getExtraPath('originalVolume.mrc'))
+        self._mrc2vol(outResolutionFn)
 
+    # --------------------------- HELPER functions ------------------------------
+    def _fixMrc(self, fn):
+        return f'{fn}:mrc' if getExt(fn) in ['.mrc', '.map'] else fn
+
+    def _resize(self, i, o, factor):
+        self.runJob('xmipp_image_resize',
+                    f' -i {i} -o {o} --factor {factor}')
+
+    def _filter(self, i, o, factor):
+        self.runJob('xmipp_transform_filter',
+                    f' -i {i} -o {o} --fourier low_pass {factor}')
+
+    def _mrc2vol(self, fn):
+        fnVol = fn.replace('.mrc', '.vol')
+        self.runJob('xmipp_image_convert', f'-i {fn} -o {fnVol}')
+
+    def getModelConfig(self, key):
+        return self.MODEL_CONFIG[self.range.get()][key]
+
+    def updateEnviron(self, gpuNum):
+        """ Create the needed environment for TensorFlow programs. """
+        print("Updating environ to select GPU %s" % gpuNum)
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum) if gpuNum else '0'
+
+    # --------------------------- INFO functions ------------------------------
     def _methods(self):
         messages = []
         if hasattr(self, 'resolution_Volume'):
@@ -305,12 +288,10 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         return messages
     
     def _summary(self):
-        summary = []
-        summary.append("Median resolution %.2f Å." % (self.median_res_init))        
-        summary.append("Highest resolution %.2f Å,   "
-                       "Lowest resolution %.2f Å. \n" % (self.min_res_init,
-                                                         self.max_res_init))        
-        return summary
+        return ["Median resolution %.2f Å." % self.median_res_init,
+                "Highest resolution %.2f Å,   ",
+                "Lowest resolution %.2f Å. \n" % (self.min_res_init, self.max_res_init)
+                ]
 
     def _validate(self):
         """ Check if the installation of this protocol is correct.
@@ -319,8 +300,8 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        error=self.validateDLtoolkit(model="deepRes")
-        return error
+        errors = self.validateDLtoolkit(model="deepRes")
+        return errors
     
     def _citations(self):
         return ['Ramirez-Aportela et al., IUCrJ, 2019']
