@@ -71,6 +71,9 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
                         numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
             fnImgs = fnImgsCorrected
 
+        self.runJob("xmipp_metadata_angles",
+                    "-i %s.xmd --bringToAsymmetricUnit %s" % (fnImgs, self.symmetry), numberOfMpi=1)
+
         cropSize = self.getCropSize()
         fnImgsCropped= self._getTmpPath("imagesCropped")
         # Only for cropping
@@ -114,6 +117,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         form.addParam('correctCTF', BooleanParam, label='Correct CTF', default=True,
                       help='Correct the CTF through a Wiener filter')
 
+        form.addParam('symmetry', StringParam, label="Symmetry", default="c1")
         form.addParam('volDiameter', IntParam, label="Protein diameter (A)",
                       help="The diameter should be relatively tight")
 
