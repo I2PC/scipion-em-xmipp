@@ -713,15 +713,14 @@ def rowToAlignment_emtable(alignmentRow, alignType):
             if flip:
                 angles[1] = angles[1] + 180  # tilt + 180
                 angles[2] = - angles[2]  # - psi, COSS: this is mirroring X
-                shifts[0] = -shifts[0]  # -x
+                shifts[0] = - shifts[0]  # -x
         else:
-            angles[2] = - alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             psi = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             rot = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
             if not np.isclose(rot, 0., atol=1e-6) and not np.isclose(psi, 0., atol=1e-6):
                 print("HORROR rot and psi are different from zero in 2D case")
-            angles[0] = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.) \
-                        + alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)  # psi + rot
+
+            angles[0] = psi + rot
 
         M = matrixFromGeometry(shifts, angles, inverseTransform)
 
