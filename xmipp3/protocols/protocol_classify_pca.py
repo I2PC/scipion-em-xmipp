@@ -541,7 +541,7 @@ def rowToAlignment_emtable(alignmentRow, alignType):
                 angles[2] = - angles[2]    # - psi, COSS: this is mirroring X
                 shifts[0] = -shifts[0]     # -x
         else:
-            angles[2] = - alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
+            #angles[2] = - alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             psi = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             rot = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
             if not np.isclose(rot, 0., atol=1e-6 ) and not np.isclose(psi, 0., atol=1e-6):
@@ -553,12 +553,12 @@ def rowToAlignment_emtable(alignmentRow, alignType):
 
         if flip:
             if alignType == ALIGN_2D:
-                matrix[0, :2] *= -1.  # invert only the first two columns
+                M[0, :2] *= -1.  # invert only the first two columns
                 # keep x
-                matrix[2, 2] = -1.  # set 3D rot
+                M[2, 2] = -1.  # set 3D rot
             elif alignType == ALIGN_3D:
-                matrix[0, :3] *= -1.  # now, invert first line excluding x
-                matrix[3, 3] *= -1.
+                M[0, :3] *= -1.  # now, invert first line excluding x
+                M[3, 3] *= -1.
             elif alignType == ALIGN_PROJ:
                 pass
 
