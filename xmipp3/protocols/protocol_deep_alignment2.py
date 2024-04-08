@@ -208,10 +208,9 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         mdResized.write(fnReference)
 
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f " \
-               "--precision %f --Nimgs %d --mode angles --numThreads %d" % (
+               "--precision %f --Nimgs %d --mode angles" % (
                    fnReference, self._getExtraPath("modelAngles"), self.maxEpochsAngle, self.batchSize, gpuId,
-                   self.numModels, self.learningRate, self.anglePrecision, self.NImgs,
-                   self.numberOfThreads.get() * self.numberOfMpi.get())
+                   self.numModels, self.learningRate, self.anglePrecision, self.NImgs)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
