@@ -174,7 +174,9 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
         self._insertFunctionStep("prepareData", numGPU[0])
-        self._insertFunctionStep("train", numGPU[0])
+        self._insertFunctionStep("trainShift", numGPU[0])
+        self._insertFunctionStep("predictShift", numGPU[0])
+        self._insertFunctionStep("trainAngle", numGPU[0])
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def prepareData(self, gpuId):
@@ -185,7 +187,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         fhInfo.write("Diameter=%d\n"%self.volDiameter)
         fhInfo.close()
 
-    def train(self, gpuId):
+    def trainShift(self, gpuId):
         fnReference = self._getTmpPath("imagesCropped.xmd")
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f "\
                "--precision %f --Nimgs %d --mode shift" % (
@@ -193,6 +195,8 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
             self.shiftPrecision, self.NImgs)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
+    def predictShift(self, gpuId):
+        fnReference = self._getTmpPath("imagesCropped.xmd")
         args = "-i %s --gpu %s --modelDir %s --mode shift" %\
                (fnReference, gpuId, self._getExtraPath("modelShift"))
         self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
@@ -207,6 +211,8 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         mdResized.setColumnValues(xmippLib.MDL_SHIFT_Y, [K*y for y in shiftY])
         mdResized.write(fnReference)
 
+    def trainAngle(self, gpuId):
+        fnReference = self._getTmpPath("imagesCroppedResized.xmd")
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f " \
                "--precision %f --Nimgs %d --mode angles" % (
                    fnReference, self._getExtraPath("modelAngles"), self.maxEpochsAngle, self.batchSize, gpuId,
