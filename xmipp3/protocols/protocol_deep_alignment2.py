@@ -137,12 +137,12 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         form.addParam('maxEpochsAngle', IntParam, label="Max. Epochs Angle", default=300, expertLevel=LEVEL_ADVANCED,
                       help='Number of epochs for the angular models')
 
-        form.addParam('NImgs', IntParam,
-                      label="Number of images for training",
-                      default=1000,
+        form.addParam('Nchunks', IntParam,
+                      label="Number of chunks for training",
+                      default=100,
                       expertLevel=LEVEL_ADVANCED,
-                      help="Each model is trained on a random subset of images of this size. If the input set is "
-                           "smaller, then each model is trained on all images.")
+                      help="Each model is trained on a random subset that goes progressively from 100 to the total "
+                           "number of images in this number of chunks")
 
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
@@ -158,7 +158,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
         form.addParam('shiftPrecision', FloatParam,
                       label="Shift precision (px)",
-                      default=0.5)
+                      default=1.0)
 
         form.addParam('anglePrecision', FloatParam,
                       label="Angular precision (deg)",
@@ -166,7 +166,6 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self.predictImgsFn = self._getExtraPath('predict_input_imgs.xmd')
         if self.useQueueForSteps() or self.useQueue():
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
         else:
@@ -174,9 +173,22 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
         self._insertFunctionStep("prepareData", numGPU[0])
-        self._insertFunctionStep("trainShift", numGPU[0])
+
+        Nimgs = len(self.inputParticles.get())
+        N0 = min(100, Nimgs)
+        if self.Nchunks.get()==1:
+            self._insertFunctionStep("trainShift", numGPU[0], Nimgs)
+        else:
+            chunkSize = int((Nimgs - N0) / self.Nchunks.get())
+            for trainSize in range(N0, Nimgs, chunkSize):
+                self._insertFunctionStep("trainShift", numGPU[0], trainSize)
         self._insertFunctionStep("predictShift", numGPU[0])
-        self._insertFunctionStep("trainAngle", numGPU[0])
+        if self.Nchunks.get()==1:
+            self._insertFunctionStep("trainAngle", numGPU[0], Nimgs)
+        else:
+            chunkSize = int((Nimgs - N0) / self.Nchunks.get())
+            for trainSize in range(N0, Nimgs, chunkSize):
+                self._insertFunctionStep("trainAngle", numGPU[0], trainSize)
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def prepareData(self, gpuId):
@@ -187,12 +199,12 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         fhInfo.write("Diameter=%d\n"%self.volDiameter)
         fhInfo.close()
 
-    def trainShift(self, gpuId):
+    def trainShift(self, gpuId, Nimgs):
         fnReference = self._getTmpPath("imagesCropped.xmd")
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f "\
                "--precision %f --Nimgs %d --mode shift" % (
             fnReference, self._getExtraPath("modelShift"), self.maxEpochsShift, 128, gpuId, self.numModels, 0.0001,
-            self.shiftPrecision, self.NImgs)
+            self.shiftPrecision, Nimgs)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     def predictShift(self, gpuId):
@@ -211,12 +223,12 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         mdResized.setColumnValues(xmippLib.MDL_SHIFT_Y, [K*y for y in shiftY])
         mdResized.write(fnReference)
 
-    def trainAngle(self, gpuId):
+    def trainAngle(self, gpuId, Nimgs):
         fnReference = self._getTmpPath("imagesCroppedResized.xmd")
         args = "-i %s --oroot %s --maxEpochs %d --batchSize %d --gpu %s --Nmodels %d --learningRate %f " \
                "--precision %f --Nimgs %d --mode angles" % (
                    fnReference, self._getExtraPath("modelAngles"), self.maxEpochsAngle, self.batchSize, gpuId,
-                   self.numModels, self.learningRate, self.anglePrecision, self.NImgs)
+                   self.numModels, self.learningRate, self.anglePrecision, Nimgs)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
     # --------------------------- INFO functions --------------------------------
