@@ -35,7 +35,7 @@ import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
-from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN
 
 type_of_version = 'devel' #'release'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
@@ -57,6 +57,7 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._addVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
+        cls._addVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
