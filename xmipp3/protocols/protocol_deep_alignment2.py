@@ -179,14 +179,14 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
         if self.Nchunks.get()==1:
             self._insertFunctionStep("trainShift", numGPU[0], Nimgs)
         else:
-            chunkSize = int((Nimgs - N0) / self.Nchunks.get())
+            chunkSize = max(1,int((Nimgs - N0) / self.Nchunks.get()))
             for trainSize in range(N0, Nimgs, chunkSize):
                 self._insertFunctionStep("trainShift", numGPU[0], trainSize)
         self._insertFunctionStep("predictShift", numGPU[0])
         if self.Nchunks.get()==1:
             self._insertFunctionStep("trainAngle", numGPU[0], Nimgs)
         else:
-            chunkSize = int((Nimgs - N0) / self.Nchunks.get())
+            chunkSize = max(1,int((Nimgs - N0) / self.Nchunks.get()))
             for trainSize in range(N0, Nimgs, chunkSize):
                 self._insertFunctionStep("trainAngle", numGPU[0], trainSize)
 
