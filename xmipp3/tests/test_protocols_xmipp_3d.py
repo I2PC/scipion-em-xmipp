@@ -2754,6 +2754,14 @@ class TestXmippResolutionBfactor(TestXmippBase):
                                                  fscResolution=8.35)
         self.launchProtocol(protbfactorResolution)
 
+        # Protocol local resolution/local bfactor with assuming already normalized
+        print("Protocol local resolution/local bfactor")
+        protbfactorResolution = self.newProtocol(XmippProtbfactorResolution,
+                                                 normalizeResolution=False,
+                                                 pdbfile=protImportPdb.outputPdb,
+                                                 normalizedMap=protCreateMap.resolution_Volume)
+        self.launchProtocol(protbfactorResolution)
+
 class TestXmippLocalVolAdjust(TestXmippBase):
 
     @classmethod
