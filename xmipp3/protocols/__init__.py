@@ -133,4 +133,5 @@ from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
 from .protocol_deep_alignment2 import XmippProtDeepAlign2, XmippProtDeepAlign2Predict
 from .protocol_deep_center import XmippProtDeepCenter
+from .protocol_make_symmetry import XmippProtAngMakeSymmetry
 
