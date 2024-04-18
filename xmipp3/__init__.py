@@ -35,12 +35,13 @@ import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
-from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_GIT_URL
 
 type_of_version = 'devel' #'release'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
+_current_xmipp_tag = 'ms_olz_cmake' # TODO
 _currentBinVersion = '3.23.11.0'
 __version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
@@ -118,88 +119,60 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-
-        ## XMIPP SOFTWARE ##
-        xmippDeps = []  # Deps should be at requirements.txt (old: scons, joblib, scikit_learn)
-
-        # Installation vars for commands formating
-        verToken = getXmippPath('v%s' % _currentBinVersion)
-        confToken = getXmippPath("xmipp.conf")
-        installVars = {'installedToken': "installation_finished",
-                       'bindingsToken': "bindings_linked",
-                       'verToken': verToken,
-                       'nProcessors': env.getProcessors(),
-                       'xmippHome': getXmippPath(),
-                       'bindingsSrc': getXmippPath('bindings', 'python'),
-                       'bindingsDst': Config.getBindingsFolder(),
-                       'xmippLib': getXmippPath('lib', 'libXmipp.so'),
-                       'coreLib': getXmippPath('lib', 'libXmippCore.so'),
-                       'libsDst': Config.getLibFolder(),
-                       'confToken': confToken,
-                       'strPlaceHolder': '%s',  # to be replaced in the future
-                       'currVersion': _currentBinVersion
-                       }
-
-        ## Installation commands (removing bindingsToken)
-        installCmd = ("cd {cwd} && {configCmd} && {compileCmd} N={nProcessors:d} && "
-                      "ln -srfn build {xmippHome} && cd - && "
-                      "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
-        installTgt = [getXmippPath('bin', 'xmipp_reconstruct_significant'),
-                      getXmippPath("lib/libXmippJNI.so"),
-                      installVars['installedToken']]
-
-        ## Linking bindings (removing installationToken)
-        bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
-                              r"! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
-                              "ln -srfn {coreLib} {libsDst} && "
-                              "touch {bindingsToken} && "
-                              "rm {installedToken} 2> /dev/null")
-        bindingsAndLibsTgt = [os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
-                              os.path.join(Config.getBindingsFolder(), 'xmippLib.so'),
-                              os.path.join(Config.getLibFolder(), 'libXmipp.so'),
-                              installVars['bindingsToken']]
-
-        sourceTgt = [getXmippPath('xmipp.bashrc')]  # Target for xmippSrc and xmippDev
-        ## Allowing xmippDev if devel mode detected
-        # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
-        pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # bundle  = xmipp-bundle  <-  src   <-  scipion-em-xmipp
-        bundleDir = os.path.dirname(os.path.dirname(pluginDir))
-
-        isPypiDev = os.path.isfile(os.path.join(pluginDir, 'setup.py'))
-        isXmippBu = (os.path.isdir(os.path.join(bundleDir, 'src')) and
-                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
-        develMode = isPypiDev and isXmippBu
+        
+        # Determine if we are on a development 
+        bundleDir = cls.__getBundleDirectory()
+        develMode = bundleDir is not None
+        
+        nproc = env.getProcessors()
+        COMPILE_TARGETS = [
+            'dist/bin/xmipp_image_header', 
+            'dist/xmipp.basrc'
+        ]
+        
         if develMode:
-            env.addPackage('xmippDev', tar='void.tgz',
-                           commands=[(installCmd.format(**installVars,
-                                                        cwd=bundleDir,
-                                                        configCmd='pwd',
-                                                        compileCmd='./xmipp all'),
-                                      installTgt+sourceTgt),
-                                     (bindingsAndLibsCmd.format(**installVars),
-                                      bindingsAndLibsTgt)],
-                           deps=xmippDeps, default=False)
-
-        avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
-        alreadyCompiled = os.path.isfile(getXmippPath('v' + _currentBinVersion))  # compilation token (see the xmipp script)
-        configSrc = ('./xmipp check_config' if avoidConfig
-                     else './xmipp config noAsk && ./xmipp check_config')
-        env.addPackage('xmippSrc', version=_currentBinVersion,
-                       # adding 'v' before version to fix a package target (post-link)
-                       tar='xmippSrc-v' + _currentBinVersion + '.tgz',
-                       commands=[(installCmd.format(**installVars, cwd='.',
-                                                    configCmd=configSrc,
-                                                    compileCmd='./xmipp compileAndInstall'),
-                                  installTgt + sourceTgt),
-                                 (bindingsAndLibsCmd.format(**installVars),
-                                  bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=not (develMode or alreadyCompiled))
+            env.addPackage(
+                'xmippDev',
+                tar='void.tgz',
+                commands=[(f'cd {bundleDir} && ./xmipp -j {nproc}', COMPILE_TARGETS)],
+                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+                updateCuda=True,
+                default=False
+            )
+        
+        tag = _current_xmipp_tag # TODO
+        xmippSrc = f'xmippSrc-{tag}'
+        installCommands = [
+            (f'cd .. && rm -rf {xmippSrc} && '
+            f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
+            f'cd {xmippSrc} && '
+            f'./xmipp -b {tag} -j {nproc}', COMPILE_TARGETS)   
+        ]
+        env.addPackage(
+            'xmippSrc', version=tag,
+            tar='void.tgz',
+            commands=installCommands,
+            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+            updateCuda=True,
+            default=not develMode
+        )
 
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
 
 
+    @classmethod
+    def __getBundleDirectory(cls):
+        # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
+        pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # bundle  = xmipp-bundle  <-  src   <-  scipion-em-xmipp
+        bundleDir = os.path.dirname(os.path.dirname(pluginDir))
+
+        isBundle = (os.path.isdir(os.path.join(bundleDir, 'src')) and
+                    os.path.isfile(os.path.join(bundleDir, 'xmipp')))
+        
+        return bundleDir if isBundle else None
+    
 def installDeepLearningToolkit(plugin, env):
 
     preMsgs = []
