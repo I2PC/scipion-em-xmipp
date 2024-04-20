@@ -56,7 +56,7 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
             cropSize = int(self.volDiameter / self.inputParticles.get().getSamplingRate())
         return cropSize
 
-    def prepareImages(self, gpuId):
+    def prepareImages(self, gpuId, train):
         fnImgs = self._getTmpPath("images")
         writeSetOfParticles(self.inputParticles.get(), fnImgs + ".xmd")
 
@@ -71,8 +71,9 @@ class XmippProtDeepAlign2Base(ProtRefine3D, xmipp3.XmippProtocol):
                         numberOfMpi=min(self.numberOfThreads.get() * self.numberOfMpi.get(), 24))
             fnImgs = fnImgsCorrected
 
-        self.runJob("xmipp_metadata_angles",
-                    "-i %s.xmd --bringToAsymmetricUnit %s" % (fnImgs, self.symmetry), numberOfMpi=1)
+        if train:
+            self.runJob("xmipp_metadata_angles",
+                        "-i %s.xmd --bringToAsymmetricUnit %s" % (fnImgs, self.symmetry), numberOfMpi=1)
 
         cropSize = self.getCropSize()
         fnImgsCropped= self._getTmpPath("imagesCropped")
@@ -158,11 +159,11 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
         form.addParam('shiftPrecision', FloatParam,
                       label="Shift precision (px)",
-                      default=1.0)
+                      default=0.25)
 
         form.addParam('anglePrecision', FloatParam,
                       label="Angular precision (deg)",
-                      default=3)
+                      default=1.0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -192,7 +193,7 @@ class XmippProtDeepAlign2(XmippProtDeepAlign2Base):
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def prepareData(self, gpuId):
-        self.prepareImages(gpuId)
+        self.prepareImages(gpuId, train=True)
 
         fhInfo = open(self._getExtraPath("info.txt"),'w')
         fhInfo.write("Xdim=%d\n"%self.Xdim)
@@ -278,7 +279,7 @@ class XmippProtDeepAlign2Predict(XmippProtDeepAlign2Base):
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
         self._insertFunctionStep("getInfo")
-        self._insertFunctionStep("prepareImages", numGPU[0])
+        self._insertFunctionStep("prepareImages", numGPU[0], False)
         self._insertFunctionStep("predict", numGPU[0])
         self._insertFunctionStep("createOutputStep")
 
