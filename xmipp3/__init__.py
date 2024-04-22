@@ -127,7 +127,7 @@ class Plugin(pwem.Plugin):
         nproc = env.getProcessors()
         COMPILE_TARGETS = [
             'dist/bin/xmipp_image_header', 
-            'dist/xmipp.basrc'
+            'dist/xmipp.bashrc'
         ]
         
         if develMode:
