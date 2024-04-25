@@ -423,12 +423,13 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
     def _getDownFactor(self):
         downFactor = 1
-        if self.resizeOption == self.RESIZE_FACTOR:
-            downFactor = self.downFactor.get()
-        elif self.resizeOption == self.RESIZE_SAMPLINGRATE:
-            downFactor = self.resizeSamplingRate.get()/self.getCoordSampling()
-        elif self.resizeOption == self.RESIZE_DIMENSIONS:
-            downFactor = self.boxSize.get()/self.resizeDim.get()
+        if self.doResize:
+            if self.resizeOption == self.RESIZE_FACTOR:
+                downFactor = self.downFactor.get()
+            elif self.resizeOption == self.RESIZE_SAMPLINGRATE:
+                downFactor = self.resizeSamplingRate.get()/self.getCoordSampling()
+            elif self.resizeOption == self.RESIZE_DIMENSIONS:
+                downFactor = self.boxSize.get()/self.resizeDim.get()
 
         return float(downFactor)
 
