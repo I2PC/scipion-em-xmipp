@@ -5,5 +5,5 @@ scipy<=1.10.0
 joblib
 peppercorn
 plotter
-scons
+cmake>=3.17
 PyWavelets
