@@ -201,16 +201,17 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
             if not self._newParticlesToProcess():
                 self.info('No new particles')
             else:
-                particlesSet = self._loadInputParticleSet()
-                self.streamState = particlesSet.getStreamState()
+                with self._lock:  # This lock needs to be here since the classifyItems access the inputSet
+                    # and can create a race condition
+                    particlesSet = self._loadInputParticleSet()
+                    self.streamState = particlesSet.getStreamState()
+                    where = None
+                    if self.lastCreationTime:
+                        where = 'creation>"' + str(self.lastCreationTime) + '"'
 
-                where = None
-                if self.lastCreationTime:
-                    where = 'creation>"' + str(self.lastCreationTime) + '"'
-
-                for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
-                    tmp = particle.getObjCreation()
-                    newParticlesSet.append(particle.clone())
+                    for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
+                        tmp = particle.getObjCreation()
+                        newParticlesSet.append(particle.clone())
 
                 self.lastCreationTime = tmp
                 self.info(f'%d new particles' % len(newParticlesSet))
@@ -233,12 +234,16 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                 if len(newParticlesSet):
                     self.info(f'Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
+                    continue  # To avoid waiting 1 min
                 else:
                     self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps)
                     self.finish = True
+                    continue  # To avoid waiting 1 min
 
             sys.stdout.flush()
-            time.sleep(40)
+            time.sleep(60)
+
+        sys.stdout.flush()  # One last flush
 
     # --------------------------- STEPS functions -------------------------------
     def _initialStep(self):
@@ -292,14 +297,14 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
     def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
         self._updateFnClassification()
         classStep = self._insertFunctionStep(self.runClassificationSteps,
-                                                  newParticlesSet, prerequisites=self.pcaStep)
-        self.updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses, lastCreationTime,
-                                                   Set.STREAM_OPEN, prerequisites=classStep)
-        self.newDeps.append(self.updateStep)
+                                             newParticlesSet, prerequisites=self.pcaStep)
+        updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
+                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep)
+        self.newDeps.append(updateStep)
 
     def runClassificationSteps(self, newParticlesSet):
         self.classificationLaunch = True
-        self.convertInputStep(  # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener
+        self.convertInputStep(  # newParticlesSet, self.imgsOrigXmd, self.imgsFn) #wiener
             newParticlesSet, self.imgsOrigXmd, self.imgsFn)
         self.classification(self.imgsFn, self.numberClasses,
                             self.imgsOrigXmd, self.mask.get(), self.sigmaProt)
@@ -314,12 +319,13 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
 
             if self.correctCtf:
                 args = ' -i  %s -o %s --sampling_rate %s ' % (outputOrig, outputMRC, self.sampling)
-                self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=4) #numberOfMpi=self.numberOfMpi.get())
+                self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=8) #numberOfMpi=self.numberOfMpi.get())
                 # WIENER Oier
                 # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
                 #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
                 # env = self.getCondaEnv()
                 # env['LD_LIBRARY_PATH'] = ''
+                # Todo: meters las variables del env que me dijo Oier y meter la gpu que ponga el programa
                 # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
             else:
                 args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
@@ -369,10 +375,10 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
 
         self._fillClassesFromLevel(outputClasses, update)
         self._updateOutputSet(outputName, outputClasses, streamMode)
+        self._updateOutputAverages(update)
 
         if not update:  # First time
             self._defineSourceRelation(self._getInputPointer(), outputClasses)
-            self._updateOutputAverages(update)
             self._setClassificationDone()
 
         self.lastCreationTimeProcessed = lastCreationTime
@@ -384,10 +390,9 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
         self.classificationRound += 1
 
     def _updateOutputAverages(self, update):
-        outputName = OUTPUT_AVERAGES
-        outRefs = self._loadOutputAverageSet(outputName)
+        outRefs = self._loadOutputAverageSet()
         readSetOfParticles(self.ref, outRefs)
-        self._updateOutputSet(outputName, outRefs, Set.STREAM_CLOSED)
+        self._updateOutputSet(OUTPUT_AVERAGES, outRefs, Set.STREAM_CLOSED)
         if not update:  # First Time
             self._defineSourceRelation(self._getInputPointer(), outRefs)
 
@@ -543,14 +548,14 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
 
         return outputSet, update
 
-    def _loadOutputAverageSet(self, outputName):
-        outputRefs = getattr(self, outputName, None)
-
-        if outputRefs is None:
-            outputRefs = self._createSetOfAverages()
-            outputRefs.copyInfo(self.inputParticles.get())
-            outputRefs.setSamplingRate(self.sampling)
-            outputRefs.setAlignment(ALIGN_2D)
+    def _loadOutputAverageSet(self):
+        """
+        Load an empty output setOfAverages
+        """
+        outputRefs = self._createSetOfAverages()  # We need to create always an empty set since we need to rebuild it
+        outputRefs.copyInfo(self.inputParticles.get())
+        outputRefs.setSamplingRate(self.sampling)
+        outputRefs.setAlignment(ALIGN_2D)
 
         return outputRefs
 
@@ -612,12 +617,11 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
             return int(content)
 
     def _writeLastDone(self, creationTime):
-        """ Write to a text file the last item done. """
+        """ Write to a text file the last item creation time done. """
         with open(self._getExtraPath(LAST_DONE_FILE), 'w') as file:
             file.write('%s' % creationTime)
 
     def _getLastDone(self):
-        """ Todo: use this function for the continue """
         # Open the file in read mode and read the number
         with open(self._getExtraPath(LAST_DONE_FILE), "r") as file:
             content = file.read()
