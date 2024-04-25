@@ -35,7 +35,7 @@ import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
-from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_GIT_URL
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
 
 type_of_version = 'devel' #'release'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
@@ -57,8 +57,9 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._addVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
-        cls._addVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
+        cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
+        cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
+        cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -67,8 +68,8 @@ class Plugin(pwem.Plugin):
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
 
         environ.update({
-            'PATH': pwem.Config.CUDA_BIN,
-            'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
+            'PATH': cls.getVar(XMIPP_CUDA_BIN),
+            'LD_LIBRARY_PATH': cls.getVar(XMIPP_CUDA_LIB)
         }, position=pwutils.Environ.END)
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):

@@ -34,6 +34,7 @@ XMIPP_HOME = 'XMIPP_HOME'
 NMA_HOME = 'NMA_HOME'
 XMIPP_DLTK_NAME = 'deepLearningToolkit'  # consider to change it to xmipp_DLTK to make short it
 XMIPP_CUDA_BIN = 'XMIPP_CUDA_BIN'
+XMIPP_CUDA_LIB = 'XMIPP_CUDA_LIB'
 
 MASK_FILL_VALUE = 0
 MASK_FILL_MIN = 1
