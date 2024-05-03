@@ -197,8 +197,8 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
 
     
         self._insertFunctionStep('convertInputStep', 
-                                self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener oier
-                                # self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
+                                # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener oier
+                                self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
         
         self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, particlesTrain)
         
@@ -225,15 +225,15 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
             
         
         if self.correctCtf: 
-            # args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
-            # self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
+            args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
+            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
             
                     #WIENER Oier
-            args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --q0 %s --batch 512 --padding 2 --device cuda:0'% \
-                    (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast())            
-            env = self.getCondaEnv()
-            env['LD_LIBRARY_PATH'] = ''
-            self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
+            # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --q0 %s --batch 512 --padding 2 --device cuda:0'% \
+            #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast())            
+            # env = self.getCondaEnv()
+            # env['LD_LIBRARY_PATH'] = ''
+            # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
         else:      
             args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
