@@ -89,9 +89,6 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('symmetryGroup', StringParam, label='Symmetry group', default='c1')
         form.addParam('resize', IntParam, label='Resize', default=0,
                       validators=[GE(0)])
-        form.addParam('adjustGrey', BooleanParam, label='Adjust greyscale', default=True)
-        form.addParam('referenceVolume', PointerParam, label='Reference volume', important=True,
-                      pointerClass=Volume, condition='adjustGrey', allowsNull=True)
 
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
@@ -118,30 +115,9 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
                       help='Copy input particles to scratch directory. Note that if input file format is '
                       'incompatible the particles will be converted into scratch anyway')
         
-        
-    def _validate(self):
-        result = []
-        
-        if self.adjustGrey:
-            referenceVolume = self._getReferenceVolume()
-            
-            if referenceVolume is None:
-                result.append('Reference volume must be set when grey value adjust is enabled')
-
-            else:
-                particles = self._getInputParticles()
-                
-                if referenceVolume.getXDim() != particles.getXDim():
-                    result.append('Particle and reference volume sizes must match')
-        
-        return result
-        
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep')
-        
-        if self.adjustGrey:
-            self._insertFunctionStep('adjustGreyStep')
         
         if self.considerInputCtf:
             self._insertFunctionStep('correctCtfStep')
@@ -212,23 +188,6 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
                     
             else:
                 createLink(inputMask.getFileName(), self._getInputMaskFilename())
-    
-    def adjustGreyStep(self):
-        args = []
-        args += ['-i', self._getInputParticleMdFilename()]
-        args += ['-o', self._getGreyCorrectedStackFilename()]
-        args += ['--ref', self._getReferenceVolumeFilename()]
-        args += ['--optimizeGray']
-        args += ['--padding', 2]
-        args += ['--sampling', self._getSamplingRate()]
-        if not self.considerInputCtf:
-            args += ['--ignoreCTF']
-            
-        self.runJob('xmipp_angular_continuous_assign2', args)
-        
-        # Overwrite
-        cleanPath(self._getInputParticleMdFilename())
-        moveFile(self._getGreyCorrectedMetadataFilename(), self._getInputParticleMdFilename())
     
     def correctCtfStep(self):
         particles: SetOfParticles = self.inputParticles.get()
@@ -659,12 +618,6 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
 
     def _getWienerParticleStackFilename(self):
         return self._getTmpPath('particles_wiener.mrc')
-
-    def _getGreyCorrectedStackFilename(self):
-        return self._getTmpPath('grey_corrected.mrc')
-
-    def _getGreyCorrectedMetadataFilename(self):
-        return self._getTmpPath('grey_corrected.xmd')
 
     def _getClassificationMdFilename(self):
         return self._getExtraPath('classification.xmd')
