@@ -29,6 +29,7 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         IntParam, BooleanParam, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils import Message
+from pyworkflow.utils.path import createLink
 from pwem.protocols import ProtAlign2D
 from pwem.objects import String
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
@@ -39,11 +40,11 @@ from xmipp_base import XmippScript
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
-    """Center a set of particles with a neural network."""
-    _label = 'deep center'
-    _devStatus = BETA
+    """Center a set of particles in 2D using a neural network. The particles remain the same, but their alignment
+       includes an approximate shift to place them in the center."""
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
+    _label = 'deep center'
 
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
@@ -61,32 +62,28 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
 
         form.addSection(label=Message.LABEL_INPUT)
 
-        form.addParam('inputImageSet', PointerParam, label="Input Image set",
+        form.addParam('inputParticles', PointerParam, label="Input images",
                       pointerClass='SetOfParticles',
-                      help='The set of particles to center')
+                      help='The set does not need to be centered or have alignment parameters')
+
         form.addParam('sigma', FloatParam,
                       label="Shift sigma",
                       default=5,
-                      expertLevel=LEVEL_ADVANCED,
-                      help="Sigma for the training of the shift")
-        form.addParam('Xdim', IntParam,
-                      label="Image size",
-                      default=128,
-                      expertLevel=LEVEL_ADVANCED,
-                      help="Image size during the processing")
+                      help="In pixels. This is used to generate artificially shifted particles.")
 
-        form.addSection('Training parameters')
+        form.addParam('precision', FloatParam,
+                      label="Precision",
+                      default=0.5,
+                      help="In pixels.")
 
-        form.addParam('numModels', IntParam,
-                      label="Number of models", default=5,
-                      help="The maximum number of model available in xmipp is 5.")
+        form.addSection(label="Training")
 
         form.addParam('trainSetSize', IntParam, label="Train set size", default=5000,
-                      help='How many particles from the training')
+                      help='How many particles to use for training. Set to -1 for all of them')
 
         form.addParam('numEpochs', IntParam,
                       label="Number of epochs",
-                      default=10,
+                      default=100,
                       expertLevel=LEVEL_ADVANCED,
                       help="Number of epochs for training.")
 
@@ -104,58 +101,47 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+        self.fnImgs = self._getTmpPath('imgs.xmd')
+        self.fnImgsTrain = self._getTmpPath('imgsTrain.xmd')
         if self.useQueueForSteps() or self.useQueue():
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
         else:
             myStr = self.gpuList.get()
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
-
+        self._insertFunctionStep("convertInputStep", self.inputParticles.get())
         self._insertFunctionStep("train", numGPU[0])
         self._insertFunctionStep("predict", numGPU[0])
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep("createOutputStep")
 
     # --------------------------- STEPS functions ---------------------------------------------------
+    def convertInputStep(self, inputSet):
+        writeSetOfParticles(inputSet, self.fnImgs)
+        if self.trainSetSize.get()>0:
+            self.runJob("xmipp_metadata_utilities","-i %s --operate random_subset %d -o %s"%\
+                        (self.fnImgs,self.trainSetSize, self.fnImgsTrain), numberOfMpi=1)
+        else:
+            createLink(self.fnImgs, self.fnImgsTrain)
+
     def train(self, gpuId):
-        fnTrain = self._getTmpPath("trainingImages")
-        writeSetOfParticles(self.inputImageSet.get(), fnTrain+".xmd")
-        self.runJob("xmipp_metadata_utilities","-i %s.xmd --operate random_subset %d"%\
-                    (fnTrain,self.trainSetSize), numberOfMpi=1)
-        self.runJob("xmipp_image_resize",
-                    "-i %s.xmd -o %s.stk --save_metadata_stack %s.xmd --fourier %d" %
-                    (fnTrain, fnTrain, fnTrain, self.Xdim),
-                    numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
-        args = "%s %s %f %d %d %s %d %f" %\
-               (fnTrain+".xmd", self._getExtraPath("model"), self.sigma,
-                self.numEpochs, self.batchSize, gpuId, self.numModels, self.learningRate)
+        args = "-i %s --omodel %s --sigma %f --maxEpochs %d --batchSize %d --gpu %s --learningRate %f --precision %f"%\
+                (self.fnImgsTrain, self._getExtraPath("model.h5"), self.sigma, self.numEpochs, self.batchSize, gpuId,
+                 self.learningRate, self.precision)
         self.runJob(f"xmipp_deep_center", args, numberOfMpi=1, env=self.getCondaEnv())
 
     def predict(self, gpuId):
-        fnPredict = self._getExtraPath("predictImages")
-        fnPredictResized = self._getTmpPath("predictImages")
-        writeSetOfParticles(self.inputImageSet.get(), fnPredict+".xmd")
-        self.runJob("xmipp_image_resize",
-                    "-i %s.xmd -o %s.stk --save_metadata_stack %s.xmd --fourier %d" %
-                    (fnPredict, fnPredictResized, fnPredictResized, self.Xdim),
-                    numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
-        args = "%s %s %s %s" % (
-            fnPredict+".xmd", gpuId, fnPredictResized+".xmd", self._getExtraPath("model"))
+        fnModel = self._getExtraPath("model.h5")
+        args = "-i %s --gpu %s --model %s -o %s" % (self.fnImgs, gpuId, fnModel, self._getExtraPath('particles.xmd'))
         self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())
 
     def createOutputStep(self):
-        fnPredict = self._getExtraPath("predictImages.xmd")
+        fnPredict = self._getExtraPath("particles.xmd")
         outputSet = self._createSetOfParticles()
         readSetOfParticles(fnPredict, outputSet)
-        outputSet.copyInfo(self.inputImageSet.get())
-        outputSet.setAlignmentProj()
+        outputSet.copyInfo(self.inputParticles.get())
+        outputSet.setAlignment2D()
         self._defineOutputs(outputParticles=outputSet)
         self._store(outputSet)
-        self._defineSourceRelation(self.inputImageSet.get(), outputSet)
+        self._defineSourceRelation(self.inputParticles.get(), outputSet)
 
-    # --------------------------- INFO functions --------------------------------
-    def _methods(self):
-        methods = []
-        if hasattr(self, 'outputParticles'):
-            methods.append("We learned a model to center particles from %i input images (%s)." \
-                           % (self.inputSet.get().getSize(), self.getObjectTag('inputSet')))
-        return methods
+

@@ -30,8 +30,7 @@ from glob import glob
 
 
 import pyworkflow.protocol.params as param
-import pyworkflow.protocol.constants as const
-from pyworkflow.utils.path import cleanPath, makePath
+from pyworkflow.utils.path import makePath
 
 import pwem.emlib.metadata as md
 from pwem.protocols import ProtClassify2D
@@ -91,11 +90,11 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         inputMdName = join(fnLevel, 'level_classes.xmd')
         writeSetOfClasses2D(self.inputClasses.get(), inputMdName, writeParticles=True)
 
-        args = " --dir %s --root level --computeCore %f %f"%(self._getExtraPath(),
-                                                            self.thZscore, self.thPCAZscore)
+        args = " --dir %s --root level --computeCore %f %f" % (self._getExtraPath(),
+                                                               self.thZscore, self.thPCAZscore)
         self.runJob('xmipp_classify_CL2D_core_analysis', args)
         self.runJob("xmipp_classify_evaluate_classes", "-i %s"%\
-                    self._getExtraPath(join("level_00","level_classes_core.xmd")), numberOfMpi=1)
+                    self._getExtraPath(join("level_00", "level_classes_core.xmd")), numberOfMpi=1)
 
     #--------------------------- STEPS functions -------------------------------
     def _defineFileNames(self):
@@ -104,8 +103,8 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         myDict = {
                   'final_classes': self._getPath('classes2D%(sub)s.sqlite'),
                   'output_particles': self._getExtraPath('images.xmd'),
-                  'level_classes' : self.levelPath + 'level_classes%(sub)s.xmd',
-                  'level_images' : self.levelPath + 'level_images%(sub)s.xmd',
+                  'level_classes': self.levelPath + 'level_classes%(sub)s.xmd',
+                  'level_images': self.levelPath + 'level_images%(sub)s.xmd',
                   'classes_scipion': (self.levelPath + 'classes_scipion_level_'
                                                    '%(level)02d%(sub)s.sqlite'),
                   }
@@ -115,7 +114,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         """ Store the SetOfClasses2D object
         resulting from the protocol execution.
         """
-        inputParticles = self.inputClasses.get().getImages()
+        inputParticles = self.inputClasses.get().getImagesPointer()
         level = self._getLastLevel()
         subset = CLASSES_CORE
 
@@ -143,7 +142,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         strline ='We calculated the class cores %s. [Sorzano2014]' % self.getObjectTag('outputClasses_core')
         return [strline]
     
-    #--------------------------- UTILS functions -------------------------------
+    # --------------------------- UTILS functions -------------------------------
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.MDL_REF))
         item.setTransform(rowToAlignment(row, ALIGN_2D))
