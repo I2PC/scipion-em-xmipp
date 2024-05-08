@@ -423,12 +423,13 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
     def _getDownFactor(self):
         downFactor = 1
-        if self.resizeOption == self.RESIZE_FACTOR:
-            downFactor = self.downFactor.get()
-        elif self.resizeOption == self.RESIZE_SAMPLINGRATE:
-            downFactor = self.resizeSamplingRate.get()/self.getCoordSampling()
-        elif self.resizeOption == self.RESIZE_DIMENSIONS:
-            downFactor = self.boxSize.get()/self.resizeDim.get()
+        if self.doResize:
+            if self.resizeOption == self.RESIZE_FACTOR:
+                downFactor = self.downFactor.get()
+            elif self.resizeOption == self.RESIZE_SAMPLINGRATE:
+                downFactor = self.resizeSamplingRate.get()/self.getCoordSampling()
+            elif self.resizeOption == self.RESIZE_DIMENSIONS:
+                downFactor = self.boxSize.get()/self.resizeDim.get()
 
         return float(downFactor)
 
@@ -569,6 +570,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                         # adding the variance and Gini coeff. value of the mic zone
                         setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
                         setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                        setXmippAttributes(p, row, md.MDL_LOCAL_AVERAGE)
                         if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
                             setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
