@@ -73,6 +73,7 @@ jobs:
       working-directory: ${{ github.workspace }}/../xmipp
       env:
         BUILD_TESTS: True
+        BRANCH_NAME: ${{ github.head_ref }}
       run: ../scipion/scipion3 run ./xmipp -b $BRANCH_NAME || (cat compilation.log && false)
     
     # Check out the repository in the pull request
