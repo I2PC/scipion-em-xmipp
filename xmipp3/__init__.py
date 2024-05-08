@@ -141,7 +141,7 @@ class Plugin(pwem.Plugin):
                 default=False
             )
         
-        tag = _current_xmipp_tag # TODO
+        tag = _current_xmipp_tag
         xmippSrc = f'xmippSrc-{tag}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
