@@ -73,10 +73,7 @@ jobs:
       working-directory: ${{ github.workspace }}/../xmipp
       env:
         BUILD_TESTS: True
-      run: |
-        ../scipion/scipion3 run ./xmipp || (cat compileLOG.txt && false)
-        cat compileLOG.txt
-    #TODO: Remove last "cat compileLOG.txt" once there is a new Scipion release 
+      run: ../scipion/scipion3 run ./xmipp || (cat compilation.log && false)
     
     # Check out the repository in the pull request
     - name: Checkout repository
