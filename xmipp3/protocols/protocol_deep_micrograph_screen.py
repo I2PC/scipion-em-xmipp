@@ -426,8 +426,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         """ Return the micrographs pointer associated to the SetOfCoordinates or
         Other micrographs. """
         if not self._micsOther():
-            inMicsPointer = Pointer(self.getMapper().getParent(self.inputCoordinates.get().getMicrographs()),
-                                    extended='outputMicrographs')
+            inMicsPointer = self.getCoords().getMicrographs(asPointer=True)
             return inMicsPointer
         else:
             return self.inputMicrographs

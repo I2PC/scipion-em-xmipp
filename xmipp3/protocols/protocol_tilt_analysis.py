@@ -32,7 +32,7 @@ import math
 from datetime import datetime
 from collections import OrderedDict
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol import STEPS_PARALLEL, Protocol
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED, FloatParam, GE, GT, Range)
 import pyworkflow.utils as pwutils
@@ -44,10 +44,10 @@ from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
 from xmipp3 import emlib
 from xmipp3.convert import getScipionObj
-from matplotlib import pyplot as plt
 
+AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
 
-class XmippProtTiltAnalysis(ProtMicrographs):
+class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
     """
     _label = 'tilt analysis'
@@ -67,10 +67,17 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                       label="Input micrographs", important=True,
                       help='Select the SetOfMicrograph to be preprocessed.')
 
+        form.addParam('autoWindow', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
+                      label='Estimate automatically the window size?',
+                      help='Use this button to decide if you want to estimate the window size'
+                           'based on the movie size. It will select between 512, 1024, 2048 or 4096. '
+                           'Condition:  window_size <= Size/2.5 ')
+
         form.addParam('window_size', IntParam, label='Window size',
+                      condition="not autoWindow",
                       default=1024, expertLevel=LEVEL_ADVANCED, validators=[GE(256, 'Error must be greater than 256')],
-                      help='''By default, the micrograph will be divided into windows of dimensions 512x512, the PSD '''
-                           '''its correlations will be computed in every segment.''')
+                      help=''' By default, the micrograph will be divided into windows of dimensions 1024x1024, '''
+                           ''' the PSD its correlations will be computed in every segment.''')
 
         form.addParam('objective_resolution', FloatParam, label='Objective resolution',
                       default=3, expertLevel=LEVEL_ADVANCED, validators=[GT(0, 'Error must be Positive')],
@@ -118,6 +125,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.streamClosed = self.inputMicrographs.get().isStreamClosed()
         self.micsDict = {mic.getObjId(): mic.clone() for mic in self._loadInputList(self.micsFn).iterItems()}
         pwutils.makePath(self._getExtraPath('DONE'))
+        self.windowSize = self.getWindowSize()
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -337,15 +345,15 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         micFolder = self._getOutputMicFolder(mic)
         micImage = ImageHandler().read(mic.getLocation())
         dimx, dimy, z, n = micImage.getDimensions()
-        wind_step = self.window_size.get()
-        x_steps, y_steps = window_coordinates2D(dimx, dimy, wind_step)
-        subWindStep = int(wind_step * (self.samplingRate / self.objective_resolution.get()))
+        windStep = self.windowSize
+        x_steps, y_steps = window_coordinates2D(dimx, dimy, windStep)
+        subWindStep = int(windStep * (self.samplingRate / self.objective_resolution.get()))
         x_steps_psd, y_steps_psd = window_coordinates2D(subWindStep * 2, subWindStep * 2, subWindStep)
         # Extract windows
         window_image = ImageHandler().createImage()
         rotatedWind_psd = ImageHandler().createImage()
         output_image = ImageHandler().createImage()
-        output_array = np.zeros((subWindStep * 2, subWindStep * 2))
+        output_array = np.zeros(((subWindStep * 2)-1, (subWindStep * 2)-1))
         ih = ImageHandler()
 
         for i in range(0, 3, 2):
@@ -440,22 +448,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         return outputSet
 
-    def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
-        outputSet.setStreamState(state)
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protocol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            # Here the defineOutputs function will call the write() method
-            self._defineOutputs(**{outputName: outputSet})
-            self._store(outputSet)
-        # Close set databaset to avoid locking it
-        outputSet.close()
-
     # ------------------------- UTILS functions --------------------------------
     def _correctFormat(self, micName, micFn, micFolderTmp):
         if micName.endswith('bz2'):
@@ -487,6 +479,23 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             newMicName = micName
 
         return newMicName
+
+    def getWindowSize(self):
+        """ Function to get the window size, automatically or the one set by the user. """
+        if self.autoWindow:
+            dimX, dimY, _ = self.getInputMicrographs().getFirstItem().getDimensions()
+            halfMic = int(min(dimX, dimY)/2.5)
+            windowSize = halfMic  # In case there is not a suitable option, very unlikely
+            for sizeAuto in AUTOMATIC_WINDOW_SIZES:
+                if sizeAuto < halfMic:  # Exit in case you found a suitable option
+                    windowSize = sizeAuto
+                    break
+        else:
+            windowSize = self.window_size.get()
+
+        self.info('The window size used is %d' % windowSize)
+
+        return windowSize
 
     def _insertFinalSteps(self, deps):
         """ This should be implemented in subclasses"""
@@ -584,7 +593,7 @@ def rotation(imag, angle, shape, P):
     return transformed, M
 
 
-def window_coordinates2D(x, y, wind_step):
+def window_coordinates2D(x, y, windStep):
     x0 = 0
     xF = x - 1
     y0 = 0
@@ -592,15 +601,15 @@ def window_coordinates2D(x, y, wind_step):
     x_coor = []
     y_coor = []
 
-    if wind_step < x and wind_step < y:
+    if windStep < x and windStep < y:
         x_coor.append(x0)
-        x_coor.append(x0 + wind_step - 1)
-        x_coor.append(xF - wind_step)
+        x_coor.append(x0 + windStep - 1)
+        x_coor.append(xF - windStep)
         x_coor.append(xF)
 
         y_coor.append(y0)
-        y_coor.append(y0 + wind_step - 1)
-        y_coor.append(yF - wind_step)
+        y_coor.append(y0 + windStep - 1)
+        y_coor.append(yF - windStep)
         y_coor.append(yF)
 
         return x_coor, y_coor

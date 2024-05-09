@@ -45,7 +45,7 @@ def updateEnviron(gpuNum):
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 
-DEEPRES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtDeepRes'
+DEEPRES_METHOD_URL = 'https://github.com/I2PC/scipion/wiki/XmippProtDeepRes'
 RESIZE_MASK = 'binaryMask.vol' 
 MASK_DILATE = 'Mask_dilate.vol'  
 RESIZE_VOL = 'originalVolume.vol'
@@ -124,8 +124,9 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     def _insertAllSteps(self):
             # Convert input into xmipp Metadata format
-        
-        updateEnviron(self.gpuList.get())    
+
+        if not self.useQueueForSteps() and not self.useQueue():
+            updateEnviron(self.gpuList.get())
             
         self._createFilenameTemplates() 
         self._insertFunctionStep('convertInputStep')

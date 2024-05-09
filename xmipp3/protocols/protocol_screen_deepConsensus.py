@@ -1106,9 +1106,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
 
-        if posTestDict and posTestDict:
+        if posTestDict and negTestDict:
           fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTestDict)
-          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(posTestDict)
+          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTestDict)
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
 
         if not gpuToUse is None:
@@ -1189,7 +1189,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def getPreCoordinatesOutput(self):
       print('Creating new preliminarOutputCoordinates set')
-      self.preliminarOutputCoordinates = self._createSetOfCoordinates(self.coordinatesDict['OR'].getMicrographs())
+      self.preliminarOutputCoordinates = \
+          self._createSetOfCoordinates(self.coordinatesDict['OR'].getMicrographs(asPointer=True))
       self.preliminarOutputCoordinates.copyInfo(self.coordinatesDict['OR'])
       self.preliminarOutputCoordinates.setBoxSize(self._getBoxSize())
       self.preliminarOutputCoordinates.setStreamState(SetOfParticles.STREAM_OPEN)
@@ -1203,7 +1204,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def getCoordinatesOutput(self):
       if not hasattr(self, "outputCoordinates"):
         print('Creating new outputCoordinates set')
-        self.outputCoordinates = self._createSetOfCoordinates(self.coordinatesDict['OR'].getMicrographs())
+        self.outputCoordinates = self._createSetOfCoordinates(self.coordinatesDict['OR'].getMicrographs(asPointer=True))
         self.outputCoordinates.copyInfo(self.coordinatesDict['OR'])
         self.outputCoordinates.setBoxSize(self._getBoxSize())
         self.outputCoordinates.setStreamState(SetOfParticles.STREAM_OPEN)
@@ -1214,7 +1215,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.USING_INPUT_COORDS = False
       else:
         # Micrographs of the set removed because there might be new ones in streaming
-        self.outputCoordinates.setMicrographs(self.coordinatesDict['OR'].getMicrographs())
+        self.outputCoordinates.setMicrographs(self.coordinatesDict['OR'].getMicrographs(asPointer=True))
       return self.outputCoordinates
 
     def getPreParticlesOutput(self, partSet):

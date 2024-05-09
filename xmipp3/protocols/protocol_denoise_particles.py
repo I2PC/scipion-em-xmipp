@@ -80,25 +80,26 @@ class XmippProtDenoiseParticles(ProtProcessParticles):
         """ Insert every step of the protocol"""
         
         # Convert input images if necessary
-        self._insertFunctionStep('denoiseImages', self.inputParticles.getObjId(), self.inputClasses.getObjId()) 
+        self._insertFunctionStep('denoiseImages')
         
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions --------------------------------------------
-    def denoiseImages(self, inputId, inputClassesId):
+    def denoiseImages(self):
         # We start preparing writing those elements we're using as input to keep them untouched
         imagesMd = self._getPath('images.xmd')
         writeSetOfParticles(self.inputParticles.get(), imagesMd)
         classesMd = self._getPath('classes.xmd')
         if isinstance(self.inputClasses.get(), SetOfAverages):
-            writeSetOfClasses2D(self.inputClasses.get(), classesMd)
+            writeSetOfParticles(self.inputClasses.get(), classesMd)
         else:
             writeSetOfClasses2D(self.inputClasses.get(), classesMd)
 
         fnRoot = self._getExtraPath('pca')
         fnRootDenoised = self._getExtraPath('imagesDenoised')
 
-        args = '-i Particles@%s --oroot %s --eigenvectors %d --maxImages %d' % (imagesMd, fnRoot, self.maxPCABases.get(), self.maxClasses.get())
+        args = ('-i Particles@%s --oroot %s --eigenvectors %d --maxImages %d'
+                % (imagesMd, fnRoot, self.maxPCABases.get(), self.maxClasses.get()))
         self.runJob("xmipp_image_rotational_pca", args)
 
         N=min(self.maxPCABases.get(), self.PCABases2Project.get())

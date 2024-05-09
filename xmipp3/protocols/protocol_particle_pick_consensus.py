@@ -174,7 +174,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             # for non streaming do all and in the last iteration of streaming do the rest
             newMicIds = allMics.difference(self.checkedMics)
         else:  # for streaming processing, only go for the ready mics in all pickers
-            newMicIds = readyMics.difference(self.checkedMics)
+            if readyMics is not None:
+                newMicIds = readyMics.difference(self.checkedMics)
 
         if newMicIds:
             self.checkedMics.update(newMicIds)
@@ -236,12 +237,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             outputSet.setStreamState(outputSet.STREAM_OPEN)
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
-        # FIXME: The commented line below should work but it fails in streaming
-        #        when extracting particles. The line below it fixs that error..
-        # inMicsPointer = self.getMainInput().getMicrographs()
-        inMicsPointer = Pointer(self.getMapper().getParent(
-                                           self.getMainInput().getMicrographs()),
-                                           extended='outputMicrographs')
+        inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)
 
         return outputSet

@@ -30,6 +30,7 @@ from pyworkflow.protocol.params import MultiPointerParam
 from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
 
+CITE = 'Fernandez-Gimenez2021'
 
 class XmippProtVolConsensus(ProtInitialVolume):
     """ This protocol performs a fusion of all the input volumes, which should be preprocessed with protocol 'volume

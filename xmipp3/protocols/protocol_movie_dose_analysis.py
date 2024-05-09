@@ -27,9 +27,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from pyworkflow import VERSION_3_0, NEW
+from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
-from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol import Protocol
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
@@ -37,17 +37,16 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies
 from pwem.protocols import ProtProcessMovies
 from xmipp3.convert import getScipionObj
-import statistics as stat
-from pyworkflow import BETA, UPDATED, NEW, PROD
+from pyworkflow import NEW, PROD
 
 THRESHOLD = 2
 OUTPUT_ACCEPTED = 'outputMovies'
 OUTPUT_DISCARDED = 'outputMoviesDiscarded'
 
-class XmippProtMovieDoseAnalysis(ProtProcessMovies):
+class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
     """ Protocol for the dose analysis """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
-    _devStatus = NEW
+    _devStatus = PROD
 
     _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0
@@ -310,24 +309,6 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
-
-    def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
-        outputSet.setStreamState(state)
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protocol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            # Here the defineOutputs function will call the write() method
-            self._defineOutputs(**{outputName: outputSet})
-            self._store(outputSet)
-
-        # Close set databaset to avoid locking it
-        outputSet.close()
-
 
 # ------------------------- UTILS functions --------------------------------
     def getLimitIntervals(self):
