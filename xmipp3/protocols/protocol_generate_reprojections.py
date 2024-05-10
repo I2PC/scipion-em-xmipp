@@ -28,7 +28,7 @@
 import os
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam
+from pyworkflow.protocol.params import PointerParam, BooleanParam
 from pyworkflow.utils.path import cleanPath
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Image
@@ -60,6 +60,9 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
         form.addParam('inputVolume', PointerParam, label="Volume to compare images to", important=True,
                       pointerClass='Volume',
                       help='Volume to be used for class comparison')
+        form.addParam('ignoreCTF', BooleanParam, default=True, label='Ignore CTF',
+                      help='By ignoring the CTF you will create projections more similar to what a person expects, '
+                           'while by using the CTF you will create projections more similar to what the microscope sees')
         form.addParallelSection(threads=0, mpi=8)
     
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -96,9 +99,10 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
         fnVol = self._getTmpPath("volume.vol")
         anglesOutFn = self._getExtraPath("anglesCont.stk")
         projectionsOutFn = self._getExtraPath("projections.stk")
-        args = "-i %s -o %s --ref %s --oprojections %s --sampling %f " \
-             "--max_angular_change 90" % (fnAngles, anglesOutFn, fnVol,
-                                          projectionsOutFn, Ts)
+        args = "-i %s -o %s --ref %s --oprojections %s --sampling %f " %\
+             (fnAngles, anglesOutFn, fnVol, projectionsOutFn, Ts)
+        if self.ignoreCTF:
+            args += " --ignoreCTF "
         self.runJob("xmipp_angular_continuous_assign2", args)
         fnNewParticles = self._getExtraPath("images.stk")
         if os.path.exists(fnNewParticles):
