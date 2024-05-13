@@ -54,7 +54,7 @@ DISCARDED = 'Discarded'
 class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
     Protocol to estimate the agreement between different movie alignment
-    algorithms in the Global Shifts).
+    algorithms in the Global Shifts.
     """
 
     _label = 'movie alignment consensus'
@@ -78,9 +78,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         form.addParam('minConsCorrelation', params.FloatParam, default=-1,
                       label='Minimum consensus shifts correlation',
                       help="Minimum value for the consensus correlations between shifts trajectories."
-                           "\nIf there are noticeable discrepancies "
-                           "between the two estimations below this correlation, "
-                           "it will be discarded.")
+                           "\nIf there are noticeable discrepancies between the two estimations below this correlation,"
+                           " it will be discarded. If this value is set to -1 no movies will be discarded.")
 
         form.addParam('trajectoryPlot', params.BooleanParam, default=False,
                       label='Global Alignment Trajectory Plot',
