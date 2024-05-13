@@ -70,7 +70,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         This definition is also used to generate automatically the GUI.
         """
         # Defining condition string for x, y, z coords
-        coordsCondition = 'setSize and not vol'
+        coordsCondition = 'setSize and not vol and not isinstance(pdbObj, SetOfAtomStructs)'
 
         # Defining parallel arguments
         form.addParallelSection(threads=4, mpi=1)
@@ -253,6 +253,9 @@ class XmippProtConvertPdb(ProtInitialVolume):
         # Checking if MPI is selected (only threads are allowed)
         if self.numberOfMpi > 1:
             errors.append('MPI cannot be selected, because Scipion is going to drop support for it. Select threads instead.')
+
+        if isinstance(self.pdbObj.get(), SetOfAtomStructs) and not self.size.hasValue():
+            errors.append('Please set size when using SetOfAtomStructs as input')
 
         return errors
     
