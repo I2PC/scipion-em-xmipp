@@ -47,6 +47,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
     _label = 'compute likelihood'
     _lastUpdateVersion = VERSION_1_1
+    _possibleOutputs = {"reprojections": SetOfParticles}
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
