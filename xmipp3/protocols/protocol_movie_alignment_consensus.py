@@ -79,7 +79,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       label='Minimum consensus shifts correlation',
                       help="Minimum value for the consensus correlations between shifts trajectories."
                            "\nIf there are noticeable discrepancies between the two estimations below this correlation,"
-                           " it will be discarded. If this value is set to -1 no movies will be discarded.")
+                           " it will be discarded. If this value is set to -1 no movies will be discarded."
+                           "\n Reasonable values are from 0.5 to 1 meaning consistency between estimations.")
 
         form.addParam('trajectoryPlot', params.BooleanParam, default=False,
                       label='Global Alignment Trajectory Plot',
