@@ -670,12 +670,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-n', 2]
         
         self.runJob('xmipp_metadata_split', args, numberOfMpi=1)
-        
-        for half in (1, 2):
-            moveFile(
-                self._getClassPath(iteration, cls, 'aligned%6d.xmd' % half),
-                self._getReconstructionHalfMdFilename(iteration, cls, half)
-            )
     
     def reconstructStep(self, iteration: int, cls: int, half: int):
         args = []
@@ -994,7 +988,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return self._getClassPath(iteration, cls, 'well_aligned.xmd')
     
     def _getReconstructionHalfMdFilename(self, iteration: int, cls: int, half: int):
-        return self._getClassPath(iteration, cls, 'aligned_half%01d.xmd' % half)
+        return self._getClassPath(iteration, cls, 'aligned%06d.xmd' % half)
 
     def _getReconstructionHalfVolumeFilename(self, iteration: int, cls: int, half: int):
         return self._getClassPath(iteration, cls, 'reconstruction_half%01d.mrc' % half)
