@@ -79,8 +79,6 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         form.addSection(label='Input')
         form.addParam('inputSet2D', PointerParam, label="Input images", important=True,
                       pointerClass='SetOfClasses2D, SetOfClasses3D, SetOfAverages, SetOfParticles')
-        # form.addParam('inputSet3D', PointerParam, label="Volume to compare images to", important=True,
-        #              pointerClass='Volume', help='Volume to be used for class comparison')
         form.addParam('inputSet3D', PointerParam, label="Volume to compare images to", important=True,
                       pointerClass='Volume, SetOfVolumes, SetOfClasses3D',
                       help='Volume to be used for class comparison')
