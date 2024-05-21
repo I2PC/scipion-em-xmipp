@@ -31,7 +31,7 @@ import os
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, BooleanParam, IntParam)
-from pyworkflow.utils.path import cleanPath
+from pyworkflow.utils.path import cleanPath, cleanPattern
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import (SetOfClasses2D, Image, SetOfAverages, SetOfParticles)
 import pwem.emlib.metadata as md
@@ -133,7 +133,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         xdim = self._getDimensions()
         args = "-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oprojections %s --sampling %f" \
                % (fnAngles, anglesOutFn, fnVol, floor(xdim*0.05), projectionsOutFn, Ts)
-        self.fnResiduals = self._getExtraPath("residuals.stk")
+        self.fnResiduals = self._getExtraPath("residuals.mrcs")
         if self.doEvaluateResiduals:
             args += " --oresiduals %s" % self.fnResiduals
 
@@ -143,13 +143,13 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             args += "--optimizeGray --max_gray_scale 0.95 "
         self.runJob("xmipp_angular_continuous_assign2", args)
 
-        if self.doEvaluateResiduals:
-            self._computeResiduals(fnVol)
+#        if self.doEvaluateResiduals:
+#            self._computeResiduals(fnVol)
 
     def evaluateResiduals(self):
         # Evaluate each image
         fnAutoCorrelations = self._getExtraPath("autocorrelations.xmd")
-        stkAutoCorrelations = self._getExtraPath("autocorrelations.stk")
+        stkAutoCorrelations = self._getExtraPath("autocorrelations.mrcs")
         stkResiduals = self.fnResiduals
         anglesOutFn = self._getExtraPath("anglesCont.xmd")
         self.runJob("xmipp_image_residuals", " -i %s -o %s --save_metadata_stack %s"
@@ -277,6 +277,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             cleanPath(fnNewParticles)
         if os.path.exists(mrcsresiduals):
             cleanPath(mrcsresiduals)
+        cleanPattern(self._getExtraPath("residual_part*.stk"))
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
