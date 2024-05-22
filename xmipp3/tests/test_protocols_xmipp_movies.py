@@ -870,3 +870,112 @@ class TestMovieDoseAnalysis(BaseTest):
         sizeDiscarded = protPoisson.outputMoviesDiscarded.getSize()
         self.assertEqual(sizeDiscarded, 5, 'Number of accepted movies must be 5 and its '
                                             '%d' % sizeDiscarded)
+
+
+class TestMovieAlignmentConsensus(BaseTest):
+    @classmethod
+    def setData(cls):
+        cls.ds = DataSet.getDataSet('movies')
+
+    @classmethod
+    def runImportMovies(cls, pattern, **kwargs):
+        """ Run an Import movies protocol. """
+        # We have two options: passes the SamplingRate or
+        # the ScannedPixelSize + microscope magnification
+        params = {'samplingRate': 1.14,
+                  'voltage': 300,
+                  'sphericalAberration': 2.7,
+                  'magnification': 50000,
+                  'scannedPixelSize': None,
+                  'filesPattern': pattern,
+                  'dosePerFrame': 123
+                  }
+        if 'samplingRate' not in kwargs:
+            del params['samplingRate']
+            params['samplingRateMode'] = 0
+        else:
+            params['samplingRateMode'] = 1
+
+        params.update(kwargs)
+
+        protImport = cls.newProtocol(ProtImportMovies, **params)
+        cls.launchProtocol(protImport)
+        return protImport
+
+    @classmethod
+    def runAlignMovies1(cls):
+        protAlign = cls.newProtocol(XmippProtFlexAlign,
+                                    alignFrame0=1, alignFrameN=0,
+                                    doLocalAlignment=False, useGpu=False,
+                                    objLabel='Reference movie alignment',
+                                    doSaveAveMic=True)
+
+        protAlign.inputMovies.set(cls.protImport.outputMovies)
+        cls.launchProtocol(protAlign)
+        return protAlign
+
+    @classmethod
+    def runAlignMovies2(cls):
+        protAlign2 = cls.newProtocol(XmippProtFlexAlign,
+                                    alignFrame0=1, alignFrameN=0,
+                                    maxResForCorrelation=20,
+                                    doLocalAlignment=False, useGpu=False,
+                                    objLabel='Target movie alignment',
+                                    doSaveAveMic=True)
+
+        protAlign2.inputMovies.set(cls.protImport.outputMovies)
+        cls.launchProtocol(protAlign2)
+        return protAlign2
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.setData()
+        fn = 'Falcon_2012_06_12-*0_movie.mrcs'
+        cls.protImport = cls.runImportMovies(cls.ds.getFile(fn))
+        cls.align1 = cls.runAlignMovies1()
+        cls.align2 = cls.runAlignMovies2()
+
+    def testMovieAlignmentConsensusFiltering1(self):
+        """ This must discard movies by movie alignment consensus.
+        """
+        label = 'Alignment consensus 0.5 correlation limit'
+        protConsensus1 = self.newProtocol(XmippProtConsensusMovieAlignment,
+                                          objLabel=label,
+                                          minConsCorrelation=0.5,
+                                          trajectoryPlot=True
+                                          )
+
+        protConsensus1.inputMovies1.set(self.align1)
+        protConsensus1.inputMovies1.setExtended("outputMovies")
+
+        protConsensus1.inputMovies2.set(self.align2)
+        protConsensus1.inputMovies2.setExtended("outputMovies")
+
+        self.launchProtocol(protConsensus1)
+
+        sizeAccepted = protConsensus1.outputMovies.getSize()
+        self.assertEqual(sizeAccepted, 2, 'Number of accepted movies must be 2 and its '
+                                           '%d' % sizeAccepted)
+
+    def testMovieAlignmentConsensusFiltering2(self):
+        """ This must discard movies by movie alignment consensus.
+        """
+        label = 'Alignment consensus 0.9 correlation limit'
+        protConsensus2 = self.newProtocol(XmippProtConsensusMovieAlignment,
+                                          objLabel=label,
+                                          minConsCorrelation=0.9,
+                                          trajectoryPlot=True
+                                          )
+
+        protConsensus2.inputMovies1.set(self.align1)
+        protConsensus2.inputMovies1.setExtended("outputMovies")
+
+        protConsensus2.inputMovies2.set(self.align2)
+        protConsensus2.inputMovies2.setExtended("outputMovies")
+
+        self.launchProtocol(protConsensus2)
+
+        sizeDiscarded = protConsensus2.outputMoviesDiscarded.getSize()
+        self.assertEqual(sizeDiscarded, 2, 'Number of accepted movies must be 2 and its '
+                                           '%d' % sizeDiscarded)
