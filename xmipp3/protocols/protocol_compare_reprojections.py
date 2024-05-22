@@ -355,9 +355,6 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             name = self.outputNamesDict[volId]
             self._possibleOutputs[name] = outputSet
             self._defineOutputs(**{name: outputSet})
-            # Todo ask Pablo if this are really necessary
-            # outputSet.write()  # No changes if comment
-            # self._store(outputSet)
             self._defineSourceRelation(self.inputSet2D, outputSet)
 
         if self.doRanking:
@@ -368,14 +365,12 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                 if outputParticles:
                     particlesName = "particles_vol%d" % bestVolId
                     self._defineOutputs(**{particlesName: outputParticles})
-                    # outputParticles.write() # No changes if comment
-                    # self._store(outputParticles) # No changes if comment
-                    self._defineSourceRelation(self.inputSet3D, outputParticles)  # Todo: Check with Pablo relations
+                    self._defineSourceRelation(self.inputSet3D, outputParticles)
 
                 if outputVol:
                     volName = "bestVolume_%d" % bestVolId
                     self._defineOutputs(**{volName: outputVol})
-                    self._store(outputVol) # No changes if comment
+                    self._store(outputVol)
                     self._defineSourceRelation(self.inputSet3D, outputVol)
 
         self.writeOutputDict()  # For visualization purpose
