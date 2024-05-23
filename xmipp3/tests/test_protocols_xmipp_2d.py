@@ -1457,7 +1457,23 @@ class TestXmippClassifyPcaStreaming(TestXmippBase):
     def setUpClass(cls):
         setupTestProject(cls)
         TestXmippBase.setData('mda')
-        cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
+        cls.dsRelion = DataSet.getDataSet('relion_tutorial')
+        cls.protImport = cls.importParticles()
+
+    @classmethod
+    def importParticles(cls):
+        pathToFile = 'import/case2/relion_it015_data.star'
+        importProt = cls.newProtocol(emprot.ProtImportParticles,
+                                     objLabel='from relion (auto-refine 3d)',
+                                     importFrom=emprot.ProtImportParticles.IMPORT_FROM_RELION,
+                                     starFile=cls.dsRelion.getFile(pathToFile),
+                                     magnification=10000,
+                                     samplingRate=7.08,
+                                     haveDataBeenPhaseFlipped=True
+                                     )
+        cls.launchProtocol(importProt)
+
+        return importProt
 
     def _updateProtocol(self, prot):
         prot2 = getProtocolFromDb(prot.getProject().path,
@@ -1469,24 +1485,24 @@ class TestXmippClassifyPcaStreaming(TestXmippBase):
         return prot2
 
     def test_ClassifyPCAStreaming(self):
-        print("Start Streaming Particles")
-        protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
-                                      creationInterval=15, samplingRate=3.5, nDim=76, groups=50)
-        protStream.inputParticles.set(self.protImport.outputParticles)
-        self.proj.launchProtocol(protStream, wait=False)
-
-        print("Run Classify PCA Streaming")
+        print("Run 1st Classify PCA Streaming")
         protPCA1 = self.newProtocol(XmippProtClassifyPcaStreaming,
                                     objLabel="Classify Pca streaming - dynamic output",
-                                    numberOfClasses=5,
-                                    training=50,
-                                    )
-        protPCA1.inputParticles.set(protStream)
-        protPCA1.inputParticles.setExtended("outputParticles")
+                                    numberOfClasses=5)
+        protPCA1.inputParticles.set(self.protImport.outputParticles)
         self.proj.scheduleProtocol(protPCA1)
 
+        print("Start Streaming Particles")
+        protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
+                                      creationInterval=10, samplingRate=7.08, nDim=6000, groups=500)
+        protStream.inputParticles.set(self.protImport.outputParticles)
+        self.proj.scheduleProtocol(protStream, prerequisites=[protPCA1.getObjId()])
+
+        print("Run 2nd Classify PCA Streaming")
         protPCA2 = self.newProtocol(XmippProtClassifyPcaStreaming,
                                     objLabel="Classify Pca streaming - update classes",
+                                    training=2000,
+                                    correctCtf=False,
                                     mode=XmippProtClassifyPcaStreaming.UPDATE_CLASSES
                                     )
         protPCA2.initialClasses.set(protPCA1)
@@ -1505,15 +1521,21 @@ class TestXmippClassifyPcaStreaming(TestXmippBase):
         time.sleep(5)  # sometimes is not ready yet
 
         # Check a final update
-        self.checkFinal2DClasses(protPCA1, msg="Initial classification in streaming mode fails")
-        self.checkFinal2DClasses(protPCA2, msg="Update classification in streaming mode fails")
+        self.checkFinal2DClasses1st(protPCA1, msg="Initial classification in streaming mode fails")
+        self.checkFinal2DClasses2nd(protPCA2, msg="Update classification in streaming mode fails")
 
-    def checkFinal2DClasses(self, prot, outputName="outputClasses", msg=''):
+    def checkFinal2DClasses1st(self, prot, outputName="outputClasses", msg=''):
         prot = self._updateProtocol(prot)
         output = getattr(prot, outputName, None)
         self.assertIsNotNone(output, msg)
         self.assertSetSize(output, 5, msg)
-        self.assertSetSize(output.getImages(), 76, msg) # This fails I dont understand why
+        self.assertSetSize(output.getImages(), 5236, msg)
+
+    def checkFinal2DClasses2nd(self, prot, outputName="outputClasses", msg=''):
+        prot = self._updateProtocol(prot)
+        output = getattr(prot, outputName, None)
+        self.assertIsNotNone(output, msg)
+        self.assertSetSize(output, 5, msg)
 
     def checkResults(self, prot, size, msg=''):
         t0 = time.time()

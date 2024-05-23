@@ -39,6 +39,7 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, EnumParam, IntParam, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
+from pyworkflow.constants import BETA
 
 from pwem.protocols import ProtClassify2D
 from pwem.objects import SetOfClasses2D, SetOfAverages, Transform
@@ -112,6 +113,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
     _label = '2D classification pca streaming'
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
+    _devStatus = BETA
 
     # Mode
     CREATE_CLASSES = 0
@@ -180,7 +182,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                       label="particles for initial classification",
                       help='Number of particles for an initial classification to compute the 2D references')
 
-        form.addParallelSection(threads=3, mpi=1)
+        form.addParallelSection(threads=3, mpi=4)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -234,7 +236,6 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                 if len(newParticlesSet):
                     self.info(f'Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
-                    continue  # To avoid waiting 1 min
                 else:
                     self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps)
                     self.finish = True
@@ -263,6 +264,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
     def _initFnStep(self):
         updateEnviron(self.gpuList.get())
         self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
+        self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd') # Wiener Oier
         self.imgsPcaFn = self._getTmpPath('images_pca.mrc')
         self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
         self.imgsXmd = self._getTmpPath('images_.xmd')
@@ -288,6 +290,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
     def runPCASteps(self, newParticlesSet):
         # Run PCA steps
         self.pcaLaunch = True
+        #self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaXmdOut)  # Oier Wiener filter
         self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
         numTrain = min(len(newParticlesSet), self.training.get())
         self.pcaTraining(self.imgsPcaFn, self.resolutionPca, numTrain)
@@ -304,8 +307,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
 
     def runClassificationSteps(self, newParticlesSet):
         self.classificationLaunch = True
-        self.convertInputStep(  # newParticlesSet, self.imgsOrigXmd, self.imgsFn) #wiener
-            newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+        self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
         self.classification(self.imgsFn, self.numberClasses,
                             self.imgsOrigXmd, self.mask.get(), self.sigmaProt)
         self.classificationLaunch = False
@@ -319,14 +321,15 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
 
             if self.correctCtf:
                 args = ' -i  %s -o %s --sampling_rate %s ' % (outputOrig, outputMRC, self.sampling)
-                self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=8) #numberOfMpi=self.numberOfMpi.get())
-                # WIENER Oier
-                # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
-                #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
-                # env = self.getCondaEnv()
-                # env['LD_LIBRARY_PATH'] = ''
-                # Todo: meters las variables del env que me dijo Oier y meter la gpu que ponga el programa
-                # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
+                self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=4)
+                # ------------ WIENER Oier -----------------------
+                #args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
+                #        '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
+                #       (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
+                #        self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), int(self.gpuList.get()))
+                #env = self.getCondaEnv()
+                #env = self._setEnvVariables(env)
+                #self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
             else:
                 args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
                 self.runJob("xmipp_image_convert", args, numberOfMpi=1)
@@ -352,7 +355,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath())
 
         env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = ''
+        env = self._setEnvVariables(env)
         self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
 
     def classification(self, inputIm, numClass, stfile, mask, sigma):
@@ -366,7 +369,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
             args += ' -r %s ' % self.ref
 
         env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = ''
+        env = self._setEnvVariables(env)
         self.runJob("xmipp_classify_pca", args, numberOfMpi=1, env=env)
 
     def updateOutputSetOfClasses(self, lastCreationTime, streamMode):
@@ -380,6 +383,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
         if not update:  # First time
             self._defineSourceRelation(self._getInputPointer(), outputClasses)
             self._setClassificationDone()
+            self.numberClasses = len(outputClasses)  # In case the original number of classes is not reached
 
         self.lastCreationTimeProcessed = lastCreationTime
         self.info(r'Last creation time processed UPDATED is %s' % str(self.lastCreationTimeProcessed))
@@ -420,6 +424,14 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
         copyPartSet.setAcquisition(self.acquisition)
 
         return copyPartSet
+
+    def _setEnvVariables(self, env):
+        """ Method to set all the environment variables needed to run PCA program """
+        env['LD_LIBRARY_PATH'] = ''
+        # Limit the number of threads
+        env['OMP_NUM_THREADS'] = '8'
+        env['MKL_NUM_THREADS'] = '8'
+        return env
 
     def _updateFnClassification(self):
         """Update input based on the iteration it is"""
@@ -570,9 +582,10 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
         """ Three cases for launching Classification
             - First round of classification: enough particles and PCA done
             - Update classification: classification done, PCA done and enough batch size
-            - First or update classification with a smaller batch: last round of particles and not classification launch"""
-        return (len(newParticlesSet) >= self.classificationBatch.get() and self._isPcaDone() and not self._isClassificationDone()
-                    and not self.classificationLaunch) \
+            - First or update classification with a smaller batch: last round of particles and not classification launch
+        """
+        return (len(newParticlesSet) >= self.classificationBatch.get() and self._isPcaDone()
+                and not self._isClassificationDone() and not self.classificationLaunch) \
             or (len(newParticlesSet) >= BATCH_UPDATE and self._isClassificationDone() and self._isPcaDone()
                 and not self.classificationLaunch) \
             or (self.lastRound and not self.classificationLaunch)
@@ -630,7 +643,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
     def _updateVarsToContinue(self):
         """ Method to if needed and the protocol is set to continue then it will see in which state it was stopped """
 
-        self.pcaStep = [] #self._getPcaStep()
+        self.pcaStep = []
 
         if self._isClassificationDone():
             self.lastCreationTime = self._getLastDone()
