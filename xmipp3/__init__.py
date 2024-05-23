@@ -204,6 +204,7 @@ def installDeepLearningToolkit(plugin, env):
     preMsgs = []
     cudaMsgs = []
     nvidiaDriverVer = None
+    useGpu = False
     if os.environ.get('CUDA', 'True') == 'True':
         try:
             nvidiaDriverVer = subprocess.Popen(["nvidia-smi",
