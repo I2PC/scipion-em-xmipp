@@ -42,7 +42,7 @@ _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.pn
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _currentBinVersion = '3.23.11.0'
-__version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
+__version__ = _currentBinVersion[2:] + ".1"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
@@ -204,6 +204,7 @@ def installDeepLearningToolkit(plugin, env):
     preMsgs = []
     cudaMsgs = []
     nvidiaDriverVer = None
+    useGpu = False
     if os.environ.get('CUDA', 'True') == 'True':
         try:
             nvidiaDriverVer = subprocess.Popen(["nvidia-smi",
