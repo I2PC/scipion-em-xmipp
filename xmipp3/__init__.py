@@ -204,6 +204,7 @@ def installDeepLearningToolkit(plugin, env):
     preMsgs = []
     cudaMsgs = []
     nvidiaDriverVer = None
+    useGpu = False
     if os.environ.get('CUDA', 'True') == 'True':
         try:
             nvidiaDriverVer = subprocess.Popen(["nvidia-smi",
@@ -220,7 +221,6 @@ def installDeepLearningToolkit(plugin, env):
                                 f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
                                 "set CUDA=True in 'scipion.conf' file")
                 nvidiaDriverVer = None
-                useGpu = False
         except (ValueError, TypeError):
             nvidiaDriverVer = None
             preMsgs.append("Not nvidia driver found. Type: "
@@ -230,7 +230,6 @@ def installDeepLearningToolkit(plugin, env):
             msg = ("Tensorflow installed without GPU. Just CPU computations "
                    "enabled (slow computations).")
             cudaMsgs.append(msg)
-            useGpu = False
 
     if nvidiaDriverVer is not None:
         preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
