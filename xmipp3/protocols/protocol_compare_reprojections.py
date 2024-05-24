@@ -336,6 +336,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                 outputSet = self._createSetOfClasses2D(imgSet.getImages(), suffix="_vol%d" % volId)
                 outputSet.copyInfo(imgSet)
                 outputSet.appendFromClasses(imgSet, updateClassCallback=lambda clazz: self._updateClass(clazz, imgFn))
+                self._classesInfo = dict()  # For every output you need to reset this value so the _updateClass works
             # Particles or Averages
             else:
                 if isinstance(imgSet, SetOfAverages):
@@ -363,12 +364,12 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                 volCl = self.inputSet3D.get().getItem("id", bestVolId)  # It may be a Volume or a 3D Class
                 outputParticles, outputVol = self._extractElementsFrom3D(volCl)
                 if outputParticles:
-                    particlesName = "particles_vol%d" % bestVolId
+                    particlesName = "particles_bestVol"
                     self._defineOutputs(**{particlesName: outputParticles})
                     self._defineSourceRelation(self.inputSet3D, outputParticles)
 
                 if outputVol:
-                    volName = "bestVolume_%d" % bestVolId
+                    volName = "bestVolume"
                     self._defineOutputs(**{volName: outputVol})
                     self._store(outputVol)
                     self._defineSourceRelation(self.inputSet3D, outputVol)
