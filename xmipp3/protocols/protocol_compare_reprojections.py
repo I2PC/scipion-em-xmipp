@@ -141,8 +141,8 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             self._insertFunctionStep(self.insertProjMatchStep, self.fnVolDict, self.angularSampling.get(),
                                      self.symmetryGroup.get(), self.anglesDict, self.galleryDict)
         else:
-            tmp_dict = self.anglesDict
-            self.anglesDict = {volId: self.imgsFn for volId in tmp_dict}
+            tmpDict = self.anglesDict
+            self.anglesDict = {volId: self.imgsFn for volId in tmpDict}
 
         self._insertFunctionStep(self.produceResiduals, self.anglesDict,
                                  NEW_SAMPLING_RATE if self.doDownSample else self.inputSet3D.get().getSamplingRate())
@@ -183,7 +183,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             self.galleryDict[vid] = self._getExtraPath('gallery_%d.stk' % vid)
             self.outputNamesDict[vid] = "reprojections_vol%d" % vid
 
-        with open(self._getExtraPath(OUTPUTS_FN), 'w') as file:
+        with open(self._getExtraPath(OUTPUTS_FN), 'w'):
             pass  # Creates output file for visualizations warnings
 
 
@@ -249,15 +249,15 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       % (newSamplingRate, self.samplingRateVol))
 
     def insertProjMatchStep(self, volumesDict, angularSampling, symmetryGroup, fnAnglesDict, galleryDict):
-        Xdim = self.xDim
+        xDim = self.xDim
         images = self.imgsFn
         for volId, fnVol in volumesDict.items():
             self.info('Generating a gallery of projections for volume %s' % fnVol)
             fnAngles = fnAnglesDict[volId]
             fnGallery = galleryDict[volId]
-            self.projMatchStepAdapted(fnVol, angularSampling, symmetryGroup, images, fnAngles, fnGallery, Xdim, volId)
+            self.projMatchStepAdapted(fnVol, angularSampling, symmetryGroup, images, fnAngles, fnGallery, xDim, volId)
 
-    def projMatchStepAdapted(self, volume, angularSampling, symmetryGroup, images, fnAngles, fnGallery, Xdim, volId):
+    def projMatchStepAdapted(self, volume, angularSampling, symmetryGroup, images, fnAngles, fnGallery, xDim, volId):
         # Generate gallery of projections
         if volume.endswith('.mrc'):
             volume += ":mrc"
@@ -271,8 +271,8 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         self.runJob("xmipp_angular_projection_matching",
                     "-i %s -o %s --ref %s --Ri 0 --Ro %s --max_shift 1000 "
                     "--search5d_shift %s --search5d_step  %s --append"
-                    % (images, fnAngles, fnGallery, str(Xdim / 2),
-                       str(int(Xdim / 10)), str(int(Xdim / 25))))
+                    % (images, fnAngles, fnGallery, str(xDim / 2),
+                       str(int(xDim / 10)), str(int(xDim / 25))))
 
         cleanPath(self._getExtraPath('gallery_%d_sampling.xmd' % volId))
         cleanPath(self._getExtraPath('gallery_%d_angles.doc' % volId))
@@ -285,15 +285,15 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             MD.setValue(emlib.MDL_IMAGE_REF, "%05d@%s" % (galleryReference + 1, fnGallery), id)
         MD.write(fnAngles)
 
-    def produceResiduals(self, anglesDict, Ts):
+    def produceResiduals(self, anglesDict, tS):
         self.fnResidualsDict = {}
         for volId, fnAngles in anglesDict.items():
             anglesOutFn = self._getExtraPath("anglesCont_%d.stk" % volId)
             projectionsOutFn = self._getExtraPath("projections_%d.stk" % volId)
             fnVol = self.fnVolDict[volId]
-            xdim = self.xDim
+            xDim = self.xDim
             args = "-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oprojections %s --sampling %f" \
-                   % (fnAngles, anglesOutFn, fnVol, floor(xdim*0.05), projectionsOutFn, Ts)
+                   % (fnAngles, anglesOutFn, fnVol, floor(xDim*0.05), projectionsOutFn, tS)
 
             fnResiduals = self._getExtraPath("residuals_%d.mrcs" % volId)
             self.fnResidualsDict[volId] = fnResiduals
@@ -475,15 +475,15 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             meanCostDict[outname] = np.mean(list(xmippCostValues.values()))
 
         # Find the key-value pair with the maximum value
-        best_volume, best_score = max(meanCostDict.items(), key=lambda item: item[1])
-        best_volume = best_volume.split('_')[-1]
-        volume_id = int(best_volume[3:])
+        bestVolume, bestScore = max(meanCostDict.items(), key=lambda item: item[1])
+        bestVolume = bestVolume.split('_')[-1]
+        volumeId = int(bestVolume[3:])
         self.info(meanCostDict)
-        msg = "The volume with the best score has id %d and score %f" % (volume_id, best_score)
+        msg = "The volume with the best score has id %d and score %f" % (volumeId, bestScore)
         self.info(msg)
         self._storeSummaryInfo(msg)
 
-        return volume_id
+        return volumeId
 
     def _extractElementsFrom3D(self, volCl):
         """ Extract the elements (particles and/or volume) from the 3D class and create the output """
@@ -535,14 +535,14 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
     def writeOutputDict(self):
         """Write a dictionary to a text file."""
         dictionary = self.getOutputNamesDict()
-        file_path = self._getExtraPath(OUTPUTS_FN)
-        with open(file_path, 'w') as file:
+        filePath = self._getExtraPath(OUTPUTS_FN)
+        with open(filePath, 'w') as file:
             json.dump(dictionary, file)
 
     def readOutputDict(self):
         """Read a dictionary from a text file."""
-        file_path = self._getExtraPath(OUTPUTS_FN)
-        with open(file_path, 'r') as file:
+        filePath = self._getExtraPath(OUTPUTS_FN)
+        with open(filePath, 'r') as file:
             dictionary = json.load(file)
         return dictionary
 
