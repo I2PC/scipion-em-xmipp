@@ -141,7 +141,8 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             self._insertFunctionStep(self.insertProjMatchStep, self.fnVolDict, self.angularSampling.get(),
                                      self.symmetryGroup.get(), self.anglesDict, self.galleryDict)
         else:
-            self.anglesDict = {1: self.imgsFn}
+            tmp_dict = self.anglesDict
+            self.anglesDict = {volId: self.imgsFn for volId in tmp_dict}
 
         self._insertFunctionStep(self.produceResiduals, self.anglesDict,
                                  NEW_SAMPLING_RATE if self.doDownSample else self.inputSet3D.get().getSamplingRate())
