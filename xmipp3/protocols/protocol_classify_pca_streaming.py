@@ -264,7 +264,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
     def _initFnStep(self):
         updateEnviron(self.gpuList.get())
         self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
-        self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd') # Wiener Oier
+        self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd')  # Wiener
         self.imgsPcaFn = self._getTmpPath('images_pca.mrc')
         self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
         self.imgsXmd = self._getTmpPath('images_.xmd')
@@ -321,8 +321,8 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
 
             if self.correctCtf:
                 args = ' -i  %s -o %s --sampling_rate %s ' % (outputOrig, outputMRC, self.sampling)
-                self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=4)
-                # ------------ WIENER Oier -----------------------
+                self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=8)
+                # ------------ WIENER -----------------------
                 #args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
                 #        '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
                 #       (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
@@ -429,8 +429,8 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
         """ Method to set all the environment variables needed to run PCA program """
         env['LD_LIBRARY_PATH'] = ''
         # Limit the number of threads
-        env['OMP_NUM_THREADS'] = '8'
-        env['MKL_NUM_THREADS'] = '8'
+        env['OMP_NUM_THREADS'] = '12'
+        env['MKL_NUM_THREADS'] = '12'
         return env
 
     def _updateFnClassification(self):
