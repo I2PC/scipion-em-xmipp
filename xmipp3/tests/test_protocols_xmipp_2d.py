@@ -28,6 +28,8 @@
 
 from __future__ import print_function
 
+import os.path
+
 from pyworkflow.tests.test_utils import wait
 from pyworkflow.utils import greenStr, magentaStr
 from pyworkflow.plugin import Domain
@@ -917,7 +919,8 @@ class TestXmippCL2D(TestXmippBase):
         setupTestProject(cls)
         TestXmippBase.setData('mda')
         cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
-        cls.protImportAvgs = cls.runImportAverages(cls.particlesDir + '/img00007[1-4].spi', 3.5)
+        cls.protImportAvgs = cls.runImportAverages(os.path.dirname(cls.particlesFn) +
+                                                   '/img00007[1-4].spi', 3.5)
     
     def test_cl2d(self):
         print("Run CL2D")
