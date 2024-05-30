@@ -52,6 +52,7 @@ CL_CLASSICAL = 0
 CL_ROBUST = 1
 
 # Classes keys
+OUTPUTCLASSES = 'outputClasses'
 CLASSES = ''
 CLASSES_CORE = '_core'
 CLASSES_STABLE_CORE = '_stable_core'
@@ -65,6 +66,9 @@ class XmippProtCL2D(ProtClassify2D):
     the original dataset into a given number of classes. """
     
     _label = 'cl2d'
+    _possibleOutputs = {OUTPUTCLASSES: SetOfClasses2D,
+                        OUTPUTCLASSES+CLASSES_CORE: SetOfClasses2D,
+                        OUTPUTCLASSES+CLASSES_STABLE_CORE: SetOfClasses2D}
     
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
@@ -195,7 +199,7 @@ class XmippProtCL2D(ProtClassify2D):
         else:
             initialClassesId = None
         
-        self._insertFunctionStep('convertInputStep',
+        self._insertFunctionStep(self.convertInputStep,
                                  self.inputParticles.get().getObjId(),
                                  initialClassesId)
 
@@ -229,7 +233,7 @@ class XmippProtCL2D(ProtClassify2D):
             args = self._defArgsCoreAnalisys()
             self._insertClassifySteps(program, args, subset=CLASSES_CORE)
             if self.analyzeRejected:
-                self._insertFunctionStep('analyzeOutOfCores', CLASSES_CORE)
+                self._insertFunctionStep(self.analyzeOutOfCores, CLASSES_CORE)
 
             if (self.numberOfClasses > (2 * self.numberOfInitialClasses.get())
                 and self.doStableCore): # Number of levels should be > 2
@@ -239,7 +243,7 @@ class XmippProtCL2D(ProtClassify2D):
                 self._insertClassifySteps(program, args,
                                           subset=CLASSES_STABLE_CORE)
                 if self.analyzeRejected:
-                    self._insertFunctionStep('analyzeOutOfCores',
+                    self._insertFunctionStep(self.analyzeOutOfCores,
                                              CLASSES_STABLE_CORE)
 
     def _insertClassifySteps(self, program, args, subset=CLASSES):
@@ -250,9 +254,9 @@ class XmippProtCL2D(ProtClassify2D):
         4. And create output
         """
         self._insertRunJobStep(program, args % self._params)
-        self._insertFunctionStep('evaluateClassesStep', subset)
-        self._insertFunctionStep('sortClassesStep', subset)
-        self._insertFunctionStep('createOutputStep', subset)
+        self._insertFunctionStep(self.evaluateClassesStep, subset)
+        self._insertFunctionStep(self.sortClassesStep, subset)
+        self._insertFunctionStep(self.createOutputStep, subset)
     
     #--------------------------- STEPS functions -------------------------------
     def convertInputStep(self, particlesId, classesId):
@@ -309,16 +313,15 @@ class XmippProtCL2D(ProtClassify2D):
         resulting from the protocol execution.
         """
        
-        inputParticles = self.inputParticles.get()
         level = self._lastLevel()
         
         subsetFn = self._getFileName("level_classes", level=level, sub=subset)
         
         if exists(subsetFn):
-            classes2DSet = self._createSetOfClasses2D(inputParticles, subset)
+            classes2DSet = self._createSetOfClasses2D(self.inputParticles, subset)
             self._fillClassesFromLevel(classes2DSet, "last", subset)
     
-            result = {'outputClasses' + subset: classes2DSet}
+            result = {OUTPUTCLASSES + subset: classes2DSet}
             self._defineOutputs(**result)
             self._defineSourceRelation(self.inputParticles, classes2DSet)
     
