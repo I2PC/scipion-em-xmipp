@@ -322,7 +322,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             self.boxSize.set(self.getEven(self.boxSize))
 
         if self.doNormalize:
-            if self.backRadius > int(self.boxSize.get() / 2):
+            if self.backRadius >= int(self.boxSize.get() / 2):
                 errors.append("Background radius for normalization should be "
                               "equal or less than half of the box size.")
 

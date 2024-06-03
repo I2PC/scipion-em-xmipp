@@ -29,7 +29,6 @@ import os
 
 import emtable
 
-# from emtable import Table
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, EnumParam, IntParam, GPU_LIST)
@@ -115,8 +114,6 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
-        # if self.numberOfMpi.get() < 2:
-        #     self.numberOfMpi.set(2)
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -134,7 +131,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                       label="Input images",
                       important=True, pointerClass='SetOfParticles',
                       help='Select the input images to be classified.')
-        form.addParam('numberOfClasses', IntParam, default=50,
+        form.addParam('numberOfClasses', IntParam, default=100,
                       label='Number of classes:',
                       help='Number of classes (or references) to be generated.')
         form.addParam('mode', EnumParam, choices=['create_classes', 'update_classes'],
@@ -162,15 +159,15 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     
         form.addParam('resolution',FloatParam, label="max resolution", default=8,
                       help='Maximum resolution to be consider for alignment')
-        form.addParam('coef' ,FloatParam, label="% variance", default=0.5, expertLevel=LEVEL_ADVANCED,
+        form.addParam('coef' ,FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training',IntParam, default=80000,
+        form.addParam('training',IntParam, default=150000,
                       label="particles for training",
                       help='Number of particles for PCA training')
     
     
-        form.addParallelSection(threads=1, mpi=4)
+        form.addParallelSection(threads=1, mpi=8)
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -197,7 +194,6 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
 
     
         self._insertFunctionStep('convertInputStep', 
-                                # self.inputParticles.get(), self.imgsOrigXmd, self.imgsXmd) #wiener oier
                                 self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
         
         self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, particlesTrain)
@@ -228,13 +224,6 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
             args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
             self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
             
-                    #WIENER Oier
-            # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
-            #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
-            
-            # env = self.getCondaEnv()
-            # env['LD_LIBRARY_PATH'] = ''
-            # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
         else:      
             args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
@@ -278,12 +267,6 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         self._defineSourceRelation(self.inputParticles, classes2DSet)
         
         self.createOutputAverages(classes2DSet)
-        
-        
-        # classes2DSetContrast = self._createSetOfClasses2D(inputParticles)
-        # self._fillClasses(classes2DSetContrast)
-        # self._defineOutputs(outputClasses2=classes2DSetContrast)
-        # self._defineSourceRelation(self.inputParticles, classes2DSetContrast)
         
     def createOutputAverages(self, outputClasses):
         classes = self._getExtraPath('classes.mrcs')
@@ -331,12 +314,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     #     if self.doCore:
     #         citations.append('Sorzano2014')
     #     return citations
-    #
-    # def _summaryLevelFiles(self, summary, levelFiles, subset):
-    #     if levelFiles:
-    #         levels = [i for i in range(self._lastLevel()+1)]
-    #         summary.append('Computed classes%s, levels: %s' % (subset, levels))
-    #
+
     def _summary(self):
         summary = []
     
@@ -350,81 +328,12 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                         ' displayed applying a contrast variation.')
             summary.append('The second one corresponds solely to the representative classes (outputAverages)')
         return summary
-    #
-    # def _methods(self):
-    #     strline = ''
-    #     if hasattr(self, 'outputClasses'):
-    #         strline += 'We classified %d particles from %s ' % (self.inputParticles.get().getSize(),
-    #                                                             self.getObjectTag('inputParticles'))
-    #         strline += 'into %d classes %s using CL2D [Sorzano2010a]. ' % (self.numberOfClasses,
-    #                                                                        self.getObjectTag('outputClasses'))
-    #         strline += '%s method was used to compare images and %s clustering criterion. '%\
-    #                        (self.getEnumText('comparisonMethod'), self.getEnumText('clusteringMethod'))
-    #         if self.numberOfClasses > self.numberOfInitialClasses and self.doCore:
-    #             strline+='We also calculated the class cores %s' % self.getObjectTag('outputClasses_core')
-    #             if self.numberOfClasses > (2 * self.numberOfInitialClasses.get()) and self.doStableCore: # Number of levels should be > 2
-    #                 strline += ' and the class stable cores %s' % self.getObjectTag('outputClasses_stable_core')
-    #             strline+=' [Sorzano2014].'
-    #     return [strline]
-    #
+
     # #--------------------------- UTILS functions -------------------------------
-        
-    # def _updateParticle(self, item, row):
-    #     item.setClassId(row.getValue(md.MDL_REF))
-    #     item.setTransform(rowToAlignment(row, ALIGN_2D))
-    #
-    # def _updateClass(self, item):
-    #     classId = item.getObjId()
-    #
-    #     if classId in self._classesInfo:
-    #         index, fn, _ = self._classesInfo[classId]
-    #         item.setAlignment2D()
-    #         rep = item.getRepresentative()
-    #         rep.setLocation(index, fn)
-    #         rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
-    #
-    # def _loadClassesInfo(self, filename):
-    #     """ Read some information about the produced 2D classes
-    #     from the metadata file.
-    #     """
-    #     self._classesInfo = {}  # store classes info, indexed by class id
-    #
-    #     mdClasses = md.MetaData(filename)
-    #
-    #     for classNumber, row in enumerate(md.iterRows(mdClasses)):
-    #         index, fn = xmippToLocation(row.getValue(md.MDL_IMAGE))
-    #         # Store info indexed by id, we need to store the row.clone() since
-    #         # the same reference is used for iteration
-    #         self._classesInfo[classNumber + 1] = (index, fn, row.clone())
-    #
-    # def _fillClassesFromLevel(self, clsSet):
-    #     """ Create the SetOfClasses2D from a given iteration. """
-    #     self._loadClassesInfo(self._getExtraPath('classes_contrast_classes.star'))
-    #
-    #     xmpMd = self._getExtraPath('classes_images.star')
-    #
-    #     iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
-    #                                 updateItemCallback=self._updateParticle,
-    #                                 skipDisabled=True)
-    #
-    #     clsSet.classifyItems(updateItemCallback=iterator.updateItem,
-    #                          updateClassCallback=self._updateClass)
-    #
-    # def _fillClasses(self, clsSet):
-    #
-    #     self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
-    #
-    #     clsSet.classifyItems(updateItemCallback=self._updateClass,
-    #                          updateClassCallback=self._updateClass)
-    #
-    #     # clsSet.classifyItems(updateClassCallback=self._updateClass)
-        
-        
         
     #EMTABLE IMPLEMENTATION
     
     def _updateParticle(self, item, row):
-        # Todo revisar una vez este cambiado lo del core de scipion
         if row is None:
             setattr(item, "_appendItem", False)
         else:
@@ -509,7 +418,6 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                                  updateClassCallback=self._updateClass,
                                  itemDataIterator=mdIter, # relion style
                                  iterParams=params)
-                                # Todo: raiseOnNextFailure = False new scipion implementation
     
 
 def rowToAlignment_emtable(alignmentRow, alignType):
@@ -541,7 +449,7 @@ def rowToAlignment_emtable(alignmentRow, alignType):
                 angles[2] = - angles[2]    # - psi, COSS: this is mirroring X
                 shifts[0] = -shifts[0]     # -x
         else:
-            angles[2] = - alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
+            #angles[2] = - alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             psi = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             rot = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
             if not np.isclose(rot, 0., atol=1e-6 ) and not np.isclose(psi, 0., atol=1e-6):
@@ -553,12 +461,12 @@ def rowToAlignment_emtable(alignmentRow, alignType):
 
         if flip:
             if alignType == ALIGN_2D:
-                matrix[0, :2] *= -1.  # invert only the first two columns
+                M[0, :2] *= -1.  # invert only the first two columns
                 # keep x
-                matrix[2, 2] = -1.  # set 3D rot
+                M[2, 2] = -1.  # set 3D rot
             elif alignType == ALIGN_3D:
-                matrix[0, :3] *= -1.  # now, invert first line excluding x
-                matrix[3, 3] *= -1.
+                M[0, :3] *= -1.  # now, invert first line excluding x
+                M[3, 3] *= -1.
             elif alignType == ALIGN_PROJ:
                 pass
 
