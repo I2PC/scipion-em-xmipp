@@ -112,28 +112,32 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
+        form = self._defineCommonParams(form)
+        form.addParallelSection(threads=1, mpi=8)
+
+    def _defineCommonParams(self, form):
         form.addHidden(GPU_LIST, StringParam, default='0',
                        label="Choose GPU ID",
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on.")
-    
+
         form.addSection(label='Input')
 
         form.addParam('inputParticles', PointerParam,
                       label="Input images",
                       important=True, pointerClass='SetOfParticles',
                       help='Select the input images to be classified.')
-        form.addParam('numberOfClasses', IntParam, default=100,
-                      label='Number of classes:',
-                      help='Number of classes (or references) to be generated.')
         form.addParam('mode', EnumParam, choices=['create_classes', 'update_classes'],
                       label="Create or update 2D classes?", default=self.CREATE_CLASSES,
-                      display=EnumParam.DISPLAY_HLIST, 
+                      display=EnumParam.DISPLAY_HLIST,
                       help='This option allows for either global refinement from an initial volume '
                            ' or just alignment of particles. If the reference volume is at a high resolution, '
-                           ' it is advisable to only align the particles and reconstruct '
-                           'at the end of the iterative process.')
+                           ' it is advisable to only align the particles and reconstruct at the end of the iterative process.')
+        form.addParam('numberOfClasses', IntParam, default=50,
+                      condition="not mode",
+                      label='Number of classes:',
+                      help='Number of classes (or references) to be generated.')
         form.addParam('initialClasses', PointerParam,
                       label="Initial classes",
                       condition="mode",
@@ -148,18 +152,18 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         form.addParam('sigma', IntParam, default=-1, expertLevel=LEVEL_ADVANCED,
                       label='sigma:', condition="mask",
                       help='Sigma is the parameter that controls the dispersion or "width" of the curve..')
-    
+
         form.addSection(label='Pca training')
         form.addParam('resolution', FloatParam, label="max resolution", default=8,
                       help='Maximum resolution to be consider for alignment')
         form.addParam('coef', FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
-                      ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training', IntParam, default=150000,
+                           ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
+        form.addParam('training', IntParam, default=40000,
                       label="particles for training",
                       help='Number of particles for PCA training')
 
-        form.addParallelSection(threads=1, mpi=8)
+        return form
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
