@@ -33,9 +33,7 @@ import time
 from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
-                                        BooleanParam, EnumParam, IntParam, GPU_LIST)
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.protocol.params import IntParam
 from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
 from pyworkflow.constants import BETA
 

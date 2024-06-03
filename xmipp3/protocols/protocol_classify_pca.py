@@ -327,7 +327,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         else:
             if item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value):
                 item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
-                item.setTransform(rowToAlignment_emtable(row, ALIGN_2D))
+                item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
             else:
                 self.error('The particles ids are not synchronized')
                 setattr(item, "_appendItem", False)
@@ -350,9 +350,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             # Iterate through the lines
             for line in lines:
                 # Replace "data_" with "data_particles" if found
-                modified_line = line.replace("data_", "data_particles")
+                modifiedLine = line.replace("data_", "data_particles")
                 # Write the modified line to the file
-                file.write(modified_line)
+                file.write(modifiedLine)
 
         with open(self._getExtraPath(AVERAGES_IMAGES_FILE), 'r') as file:
             lines = file.readlines()
@@ -366,8 +366,8 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         modifiedLines = []
         for line in lines[:lastNonEmptyInd + 1]:
             # Replace "data_" with "data_particles" if found
-            modified_line = line.replace("data_Particles", "data_particles")
-            modifiedLines.append(modified_line)
+            modifiedLine = line.replace("data_Particles", "data_particles")
+            modifiedLines.append(modifiedLine)
 
         # Write the modified lines back to the file
         with open(self._getExtraPath(AVERAGES_IMAGES_FILE), "w") as file:
@@ -409,7 +409,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
                                  iterParams=params)
     
 # --------------------------- Static functions --------------------------------
-def rowToAlignment_emtable(alignmentRow, alignType):
+def rowToAlignmentEmtable(alignmentRow, alignType):
     """
     is2D == True-> matrix is 2D (2D images alignment)
             otherwise matrix is 3D (3D volume alignment or projection)
