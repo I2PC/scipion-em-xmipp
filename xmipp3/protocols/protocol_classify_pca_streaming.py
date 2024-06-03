@@ -290,8 +290,8 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
     def runPCASteps(self, newParticlesSet):
         # Run PCA steps
         self.pcaLaunch = True
-        #self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaXmdOut)  # Oier Wiener filter
-        self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
+        self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaXmdOut)  # Wiener filter
+        # self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
         numTrain = min(len(newParticlesSet), self.training.get())
         self.pcaTraining(self.imgsPcaFn, self.resolutionPca, numTrain)
         self.pcaLaunch = False
@@ -320,16 +320,16 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
             writeSetOfParticles(input, outputOrig)
 
             if self.correctCtf:
-                args = ' -i  %s -o %s --sampling_rate %s ' % (outputOrig, outputMRC, self.sampling)
-                self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=8)
+                # args = ' -i  %s -o %s --sampling_rate %s ' % (outputOrig, outputMRC, self.sampling)
+                # self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=8)
                 # ------------ WIENER -----------------------
-                #args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
-                #        '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
-                #       (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
-                #        self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), int(self.gpuList.get()))
-                #env = self.getCondaEnv()
-                #env = self._setEnvVariables(env)
-                #self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
+                args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
+                       '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
+                      (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
+                       self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), int(self.gpuList.get()))
+                env = self.getCondaEnv()
+                env = self._setEnvVariables(env)
+                self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
             else:
                 args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
                 self.runJob("xmipp_image_convert", args, numberOfMpi=1)
