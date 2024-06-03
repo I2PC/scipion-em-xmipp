@@ -93,7 +93,9 @@ def updateEnviron(gpuNum):
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
-        
+
+CONTRAST_AVERAGES_FILE = 'classes_contrast_classes.star'
+AVERAGES_IMAGES_FILE = 'classes_images.star'
         
 class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     """ Classifies a set of images. """
@@ -275,8 +277,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         self._defineOutputs(outputAverages=outRefs)
         self._defineSourceRelation(self.inputParticles, outRefs)    
     
-    #--------------------------- INFO functions --------------------------------
-    
+    # --------------------------- INFO functions --------------------------------
     def _validate(self):
         """ Check if the installation of this protocol is correct.
         Can't rely on package function since this is a "multi package" package
@@ -296,19 +297,13 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
 
     def _warnings(self):
         validateMsgs = []
-        if  self.inputParticles.get().getDimensions()[0] > 128:
+        if self.inputParticles.get().getDimensions()[0] > 128:
             validateMsgs.append("Particle sizes equal to or less"
                                 " than 128 pixels are recommended.")
-        elif self.inputParticles.get().getDimensions()[0] > 256:
-            validateMsgs.append("Particle sizes equal to or less"
-                                " than 128 pixels are recommended.")
+        if self.inputParticles.get().getDimensions()[0] > 256:
+            validateMsgs.append("Particle sizes bigger than 256 may"
+                                " saturate the GPU memory.")
         return validateMsgs
-    #
-    # def _citations(self):
-    #     citations=['Sorzano2010a']
-    #     if self.doCore:
-    #         citations.append('Sorzano2014')
-    #     return citations
 
     def _summary(self):
         summary = []
@@ -340,18 +335,18 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     def _updateClass(self, item):
         classId = item.getObjId()
         if classId in self._classesInfo:
-            index, fn, row = self._classesInfo[classId]
+            index, fn, _ = self._classesInfo[classId]
             item.setAlignment2D()
             rep = item.getRepresentative()
             rep.setLocation(index, fn)
             rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
 
     def _createModelFile(self):
-        with open(self._getExtraPath('classes_contrast_classes.star'), 'r') as file:
+        with open(self._getExtraPath(CONTRAST_AVERAGES_FILE), 'r') as file:
             # Read the lines of the file
             lines = file.readlines()
         # Open the file for writing
-        with open(self._getExtraPath('classes_contrast_classes.star'), "w") as file:
+        with open(self._getExtraPath(CONTRAST_AVERAGES_FILE), "w") as file:
             # Iterate through the lines
             for line in lines:
                 # Replace "data_" with "data_particles" if found
@@ -359,24 +354,24 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
                 # Write the modified line to the file
                 file.write(modified_line)
 
-        with open(self._getExtraPath('classes_images.star'), 'r') as file:
+        with open(self._getExtraPath(AVERAGES_IMAGES_FILE), 'r') as file:
             lines = file.readlines()
 
             # Find the index of the last non-empty line
-        last_non_empty_index = len(lines) - 1
-        while last_non_empty_index >= 0 and lines[last_non_empty_index].strip() == "":
-            last_non_empty_index -= 1
+        lastNonEmptyInd = len(lines) - 1
+        while lastNonEmptyInd >= 0 and lines[lastNonEmptyInd].strip() == "":
+            lastNonEmptyInd -= 1
 
         # Modify the lines
-        modified_lines = []
-        for line in lines[:last_non_empty_index + 1]:
+        modifiedLines = []
+        for line in lines[:lastNonEmptyInd + 1]:
             # Replace "data_" with "data_particles" if found
             modified_line = line.replace("data_Particles", "data_particles")
-            modified_lines.append(modified_line)
+            modifiedLines.append(modified_line)
 
         # Write the modified lines back to the file
-        with open(self._getExtraPath('classes_images.star'), "w") as file:
-            file.writelines(modified_lines)
+        with open(self._getExtraPath(AVERAGES_IMAGES_FILE), "w") as file:
+            file.writelines(modifiedLines)
 
     def _loadClassesInfo(self, filename):
         """ Read some information about the produced 2D classes
@@ -397,9 +392,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     def _fillClassesFromLevel(self, clsSet, update=False):
         """ Create the SetOfClasses2D from a given iteration. """
         self._createModelFile()
-        self._loadClassesInfo(self._getExtraPath('classes_contrast_classes.star'))
+        self._loadClassesInfo(self._getExtraPath(CONTRAST_AVERAGES_FILE))
         # self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
-        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath('classes_images.star'))
+        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE))
 
         params = {}
         if update:
