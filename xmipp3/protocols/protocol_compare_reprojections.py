@@ -40,6 +40,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem import emlib
 from xmipp3.base import ProjMatcher
 from xmipp3.convert import setXmippAttributes, xmippToLocation
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
         
 class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
@@ -53,7 +54,8 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
 
     _label = 'compare reprojections'
     _lastUpdateVersion = VERSION_1_1
-    
+    _devStatus = UPDATED
+
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
         self._classesInfo = dict()

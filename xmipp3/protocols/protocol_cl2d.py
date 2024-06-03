@@ -36,6 +36,7 @@ import pwem.emlib.metadata as md
 from pwem.protocols import ProtClassify2D
 from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_NONE, ALIGN_2D
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
@@ -66,6 +67,8 @@ class XmippProtCL2D(ProtClassify2D):
     the original dataset into a given number of classes. """
     
     _label = 'cl2d'
+    _devStatus = UPDATED
+
     _possibleOutputs = {OUTPUTCLASSES: SetOfClasses2D,
                         OUTPUTCLASSES+CLASSES_CORE: SetOfClasses2D,
                         OUTPUTCLASSES+CLASSES_STABLE_CORE: SetOfClasses2D}
