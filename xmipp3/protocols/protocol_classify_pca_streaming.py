@@ -26,13 +26,11 @@
 # ******************************************************************************
 import sys
 import emtable
-import enum
 import os
 from datetime import datetime
 import time
-import numpy as np
-from pyworkflow.utils import prettyTime
 
+from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
@@ -41,13 +39,12 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
 from pyworkflow.constants import BETA
 
-from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D, SetOfAverages, Transform
-from xmipp3 import XmippProtocol
-from pwem.constants import ALIGN_NONE, ALIGN_PROJ, ALIGN_2D, ALIGN_3D
+from pwem.objects import SetOfClasses2D, SetOfAverages
+from pwem.constants import ALIGN_NONE, ALIGN_2D
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
-                            writeSetOfClasses2D, xmippToLocation, matrixFromGeometry)
+                            writeSetOfClasses2D)
+from xmipp3.protocols.protocol_classify_pca import updateEnviron, XmippProtClassifyPca
 
 OUTPUT_CLASSES = "outputClasses"
 OUTPUT_AVERAGES = "outputAverages"
@@ -56,58 +53,8 @@ CLASSIFICATION_FILE = "classification_done.txt"
 LAST_DONE_FILE = "last_done.txt"
 BATCH_UPDATE = 5000
 
-class XMIPPCOLUMNS(enum.Enum):
-    # PARTICLES CONSTANTS
-    ctfVoltage = "ctfVoltage"  # 1
-    ctfDefocusU = "ctfDefocusU"  # 2
-    ctfDefocusV = "ctfDefocusV"  # 3
-    ctfDefocusAngle = "ctfDefocusAngle"  # 4
-    ctfSphericalAberration = "ctfSphericalAberration"  # 5
-    ctfQ0 = "ctfQ0"  # 6
-    ctfCritMaxFreq = "ctfCritMaxFreq"  # 7
-    ctfCritFitting = "ctfCritFitting"  # 8
-    enabled = "enabled"  # 9
-    image = "image"  # 10
-    itemId = "itemId"  # 11
-    micrograph = "micrograph"  # 12
-    micrographId = "micrographId"  # 13
-    scoreByVariance = "scoreByVariance"  # 14
-    scoreByGiniCoeff = "scoreByGiniCoeff"  # 15
-    xcoor = "xcoor"  # 16
-    ycoor = "ycoor"  # 17
-    ref = "ref"  # 18
-    anglePsi = "anglePsi"  # 19
-    angleRot = "angleRot"  # 20
-    angleTilt = "angleTilt"  # 21
-    shiftX = "shiftX"  # 22
-    shiftY = "shiftY"  # 23
-    shiftZ = "shiftZ"  # 24
-    flip = "flip"
 
-    # CLASSES CONSTANTS
-    classCount = "classCount"  # 3
-
-
-ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
-                  "shiftY": XMIPPCOLUMNS.shiftY.value,
-                  "shiftZ": XMIPPCOLUMNS.shiftZ.value,
-                  "flip": XMIPPCOLUMNS.flip.value,
-                  "anglePsi": XMIPPCOLUMNS.anglePsi.value,
-                  "angleRot": XMIPPCOLUMNS.angleRot.value,
-                  "angleTilt": XMIPPCOLUMNS.angleTilt.value
-                  }
-
-
-def updateEnviron(gpuNum):
-    """ Create the needed environment for pytorch programs. """
-    print("updating environ to select gpu %s" % (gpuNum))
-    if gpuNum == '':
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
-
-
-class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProtocol):
+class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     """ Classifies a set of images. """
 
     _label = '2D classification pca streaming'
@@ -123,7 +70,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                         OUTPUT_AVERAGES: SetOfAverages}
 
     def __init__(self, **args):
-        ProtClassify2D.__init__(self, **args)
+        XmippProtClassifyPca.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
 
     # --------------------------- DEFINE param functions ------------------------
@@ -215,7 +162,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                         newParticlesSet.append(particle.clone())
 
                 self.lastCreationTime = tmp
-                self.info(f'%d new particles' % len(newParticlesSet))
+                self.info('%d new particles' % len(newParticlesSet))
                 self.info('Last creation time REGISTER %s' % self.lastCreationTime)
 
                 # ------------------------------------ PCA TRAINING ----------------------------------------------
@@ -233,7 +180,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                 self.info('Stream closed')
                 # Finish everything and close output sets
                 if len(newParticlesSet):
-                    self.info(f'Finish processing with last batch %d' % len(newParticlesSet))
+                    self.info('Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
                 else:
                     self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps)
@@ -459,75 +406,6 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
         self.lastCheck = now
         return newParticlesBool
 
-    def _createModelFile(self):
-        with open(self._getExtraPath('classes_contrast_classes.star'), 'r') as file:
-            # Read the lines of the file
-            lines = file.readlines()
-        # Open the file for writing
-        with open(self._getExtraPath('classes_contrast_classes.star'), "w") as file:
-            # Iterate through the lines
-            for line in lines:
-                # Replace "data_" with "data_particles" if found
-                modified_line = line.replace("data_", "data_particles")
-                # Write the modified line to the file
-                file.write(modified_line)
-
-        with open(self._getExtraPath('classes_images.star'), 'r') as file:
-            lines = file.readlines()
-
-            # Find the index of the last non-empty line
-        last_non_empty_index = len(lines) - 1
-        while last_non_empty_index >= 0 and lines[last_non_empty_index].strip() == "":
-            last_non_empty_index -= 1
-
-        # Modify the lines
-        modified_lines = []
-        for line in lines[:last_non_empty_index + 1]:
-            # Replace "data_" with "data_particles" if found
-            modified_line = line.replace("data_Particles", "data_particles")
-            modified_lines.append(modified_line)
-
-        # Write the modified lines back to the file
-        with open(self._getExtraPath('classes_images.star'), "w") as file:
-            file.writelines(modified_lines)
-
-    def _loadClassesInfo(self, filename):
-        """ Read some information about the produced 2D classes
-        from the metadata file.
-        """
-        self._classesInfo = {}  # store classes info, indexed by class id
-
-        mdFileName = '%s@%s' % ('particles', filename)
-        table = emtable.Table(fileName=filename)
-
-        for classNumber, row in enumerate(table.iterRows(mdFileName)):
-            index, fn = xmippToLocation(row.get(XMIPPCOLUMNS.image.value))
-            # Store info indexed by id, we need to store the row.clone() since
-            # the same reference is used for iteration
-            self._classesInfo[classNumber + 1] = (index, fn, row)
-        self._numClass = index
-
-    def _updateParticle(self, item, row):
-        if row is None:
-            self.info('Row is none finish updating particle')
-            setattr(item, "_appendItem", False)
-        else:
-            if item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value):
-                item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
-                item.setTransform(rowToAlignment_emtable(row, ALIGN_2D))
-            else:
-                self.error('The particles ids are not synchronized')
-                setattr(item, "_appendItem", False)
-
-    def _updateClass(self, item):
-        classId = item.getObjId()
-        if classId in self._classesInfo:
-            index, fn, row = self._classesInfo[classId]
-            item.setAlignment2D()
-            rep = item.getRepresentative()
-            rep.setLocation(index, fn)
-            rep.setSamplingRate(self.sampling)
-
     def _fillClassesFromLevel(self, clsSet, update=False):
         """ Create the SetOfClasses2D from a given iteration. """
         self._createModelFile()
@@ -618,7 +496,7 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
         return done
 
     def _setClassificationDone(self):
-        with open(self._getExtraPath(CLASSIFICATION_FILE), "w") as file:
+        with open(self._getExtraPath(CLASSIFICATION_FILE), "w"):
             pass
 
     def _writeLastClassificationRound(self, classificationRound):
@@ -702,60 +580,5 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
 # --------------------------- Static functions --------------------------------
 def updateFileName(filepath, round):
     filename = os.path.basename(filepath)
-    new_filename = f"{filename[:filename.find('_')]}_{round}{filename[filename.rfind('.'):]}"
-    return os.path.join(os.path.dirname(filepath), new_filename)
-
-def rowToAlignment_emtable(alignmentRow, alignType):
-    """
-    is2D == True-> matrix is 2D (2D images alignment)
-            otherwise matrix is 3D (3D volume alignment or projection)
-    invTransform == True  -> for xmipp implies projection
-    """
-    is2D = alignType == ALIGN_2D
-    inverseTransform = alignType == ALIGN_PROJ
-
-    if alignmentRow.hasAnyColumn(ALIGNMENT_DICT.values()):
-        alignment = Transform()
-        angles = np.zeros(3)
-        shifts = np.zeros(3)
-        flip = alignmentRow.get(XMIPPCOLUMNS.flip.value, default=0.)
-
-        shifts[0] = alignmentRow.get(XMIPPCOLUMNS.shiftX.value, default=0.)
-        shifts[1] = alignmentRow.get(XMIPPCOLUMNS.shiftY.value, default=0.)
-
-        if not is2D:
-            angles[0] = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
-            angles[1] = alignmentRow.get(XMIPPCOLUMNS.angleTilt.value, default=0.)
-            angles[2] = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
-            shifts[2] = alignmentRow.get(XMIPPCOLUMNS.shiftZ.value, default=0.)
-            if flip:
-                angles[1] = angles[1] + 180  # tilt + 180
-                angles[2] = - angles[2]  # - psi, COSS: this is mirroring X
-                shifts[0] = - shifts[0]  # -x
-        else:
-            psi = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
-            rot = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
-            if not np.isclose(rot, 0., atol=1e-6) and not np.isclose(psi, 0., atol=1e-6):
-                print("HORROR rot and psi are different from zero in 2D case")
-
-            angles[0] = psi + rot
-
-        M = matrixFromGeometry(shifts, angles, inverseTransform)
-
-        if flip:
-            if alignType == ALIGN_2D:
-                M[0, :2] *= -1.  # invert only the first two columns
-                # keep x
-                M[2, 2] = -1.  # set 3D rot
-            elif alignType == ALIGN_3D:
-                M[0, :3] *= -1.  # now, invert first line excluding x
-                M[3, 3] *= -1.
-            elif alignType == ALIGN_PROJ:
-                pass
-
-        alignment.setMatrix(M)
-
-    else:
-        alignment = None
-
-    return alignment
+    newFilename = f"{filename[:filename.find('_')]}_{round}{filename[filename.rfind('.'):]}"
+    return os.path.join(os.path.dirname(filepath), newFilename)

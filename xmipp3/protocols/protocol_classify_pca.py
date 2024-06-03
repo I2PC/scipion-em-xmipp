@@ -76,13 +76,13 @@ class XMIPPCOLUMNS(enum.Enum):
 
 
 ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
-                  "shiftY":XMIPPCOLUMNS.shiftY.value,
-                  "shiftZ":XMIPPCOLUMNS.shiftZ.value,
-                  "flip":XMIPPCOLUMNS.flip.value,
-                  "anglePsi":XMIPPCOLUMNS.anglePsi.value,
-                  "angleRot":XMIPPCOLUMNS.angleRot.value,
-                  "angleTilt":XMIPPCOLUMNS.angleTilt.value
-                 }
+                  "shiftY": XMIPPCOLUMNS.shiftY.value,
+                  "shiftZ": XMIPPCOLUMNS.shiftZ.value,
+                  "flip": XMIPPCOLUMNS.flip.value,
+                  "anglePsi": XMIPPCOLUMNS.anglePsi.value,
+                  "angleRot": XMIPPCOLUMNS.angleRot.value,
+                  "angleTilt": XMIPPCOLUMNS.angleTilt.value
+                  }
 
 
 
@@ -161,7 +161,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
 
         form.addParallelSection(threads=1, mpi=8)
 
-    #--------------------------- INSERT steps functions ------------------------
+    # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
 
         """ Mainly prepare the command line for call classification program"""
@@ -325,12 +325,14 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     # EMTABLE IMPLEMENTATION
     def _updateParticle(self, item, row):
         if row is None:
+            self.info('Row is none finish updating particle')
             setattr(item, "_appendItem", False)
         else:
             if item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value):
                 item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
                 item.setTransform(rowToAlignment_emtable(row, ALIGN_2D))
             else:
+                self.error('The particles ids are not synchronized')
                 setattr(item, "_appendItem", False)
 
     def _updateClass(self, item):
@@ -390,7 +392,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             self._classesInfo[classNumber + 1] = (index, fn, row)
         self._numClass = index
 
-    def _fillClassesFromLevel(self, clsSet, update = False):
+    def _fillClassesFromLevel(self, clsSet, update=False):
         """ Create the SetOfClasses2D from a given iteration. """
         self._createModelFile()
         self._loadClassesInfo(self._getExtraPath('classes_contrast_classes.star'))
@@ -435,17 +437,16 @@ def rowToAlignment_emtable(alignmentRow, alignType):
             angles[2] = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             shifts[2] = alignmentRow.get(XMIPPCOLUMNS.shiftZ.value, default=0.)
             if flip:
-                angles[1] = angles[1]+180  # tilt + 180
+                angles[1] = angles[1] + 180  # tilt + 180
                 angles[2] = - angles[2]    # - psi, COSS: this is mirroring X
-                shifts[0] = -shifts[0]     # -x
+                shifts[0] = - shifts[0]     # -x
         else:
-            #angles[2] = - alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             psi = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             rot = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
             if not np.isclose(rot, 0., atol=1e-6 ) and not np.isclose(psi, 0., atol=1e-6):
                 print("HORROR rot and psi are different from zero in 2D case")
-            angles[0] = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)\
-                + alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.) #psi + rot
+
+            angles[0] = psi + rot
 
         M = matrixFromGeometry(shifts, angles, inverseTransform)
 
