@@ -70,6 +70,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
     VOLUME = 1
     BOTH = 2
     
+
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
         self._classesInfo = dict()
