@@ -284,12 +284,11 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         errors = []
         if self.inputParticles.get().getDimensions()[0] > 256:
             errors.append("You should resize the particles."
-                                " Sizes smaller than 128 pixels are recommended.")
+                          " Sizes smaller than 128 pixels are recommended.")
         er = self.validateDLtoolkit()
         if er:
             errors.append(er)
         return errors
-
 
     def _warnings(self):
         validateMsgs = []
@@ -309,16 +308,15 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
 
     def _summary(self):
         summary = []
-    
+
         if not hasattr(self, 'outputClasses'):
             summary.append("Output classes not ready yet.")
-
         else:
-            summary.append('-  Two output sets are obtained. ')
-            summary.append('The first one corresponds to the classes and should be used to select '
-                        ' the particles corresponding to each class. In this case, the classes are '
-                        ' displayed applying a contrast variation.')
-            summary.append('The second one corresponds solely to the representative classes (outputAverages)')
+            summary.append('Two output sets are obtained:')
+            summary.append('- The first one corresponds to the classes and should be used to select '
+                           ' the particles corresponding to each class. In this case, the classes are '
+                           ' displayed applying a contrast variation.')
+            summary.append('- The second one corresponds solely to the representative classes (outputAverages)')
         return summary
 
     # #--------------------------- UTILS functions -------------------------------
@@ -408,10 +406,10 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         with self._lock:
             clsSet.classifyItems(updateItemCallback=self._updateParticle,
                                  updateClassCallback=self._updateClass,
-                                 itemDataIterator=mdIter, # relion style
+                                 itemDataIterator=mdIter,  # relion style
                                  iterParams=params)
     
-
+# --------------------------- Static functions --------------------------------
 def rowToAlignment_emtable(alignmentRow, alignType):
     """
     is2D == True-> matrix is 2D (2D images alignment)

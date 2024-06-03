@@ -497,7 +497,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
     def _setClassificationDone(self):
         with open(self._getExtraPath(CLASSIFICATION_FILE), "w"):
-            pass
+            self.debug("Creating Classification DONE file")
 
     def _writeLastClassificationRound(self, classificationRound):
         with open(self._getExtraPath(CLASSIFICATION_FILE), "w") as file:
@@ -534,48 +534,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self.lastCreationTimeProcessed = self.lastCreationTime
         # Convert the string to a datetime object
         self.lastCheck = datetime.strptime(self.lastCreationTime, '%Y-%m-%d %H:%M:%S')
-
-    # --------------------------- INFO functions --------------------------------
-    def _validate(self):
-        """ Check if the installation of this protocol is correct.
-        Can't rely on package function since this is a "multi package" package
-        Returning an empty list means that the installation is correct
-        and there are not errors. If some errors are found, a list with
-        the error messages will be returned.
-        """
-
-        errors = []
-        if self.inputParticles.get().getDimensions()[0] > 256:
-            errors.append("You should resize the particles."
-                          " Sizes smaller than 128 pixels are recommended.")
-        er = self.validateDLtoolkit()
-        if er:
-            errors.append(er)
-        return errors
-
-    def _warnings(self):
-        validateMsgs = []
-        if self.inputParticles.get().getDimensions()[0] > 128:
-            validateMsgs.append("Particle sizes equal to or less"
-                                " than 128 pixels are recommended.")
-        elif self.inputParticles.get().getDimensions()[0] > 256:
-            validateMsgs.append("Particle sizes equal to or less"
-                                " than 128 pixels are recommended.")
-        return validateMsgs
-
-    def _summary(self):
-        summary = []
-
-        if not hasattr(self, OUTPUT_CLASSES):
-            summary.append("Output classes not ready yet.")
-        else:
-            summary.append('Two output sets are obtained:')
-            summary.append('- The first one corresponds to the classes and should be used to select '
-                           ' the particles corresponding to each class. In this case, the classes are '
-                           ' displayed applying a contrast variation.')
-            summary.append('- The second one corresponds solely to the representative classes (outputAverages)')
-        return summary
-
 
 # --------------------------- Static functions --------------------------------
 def updateFileName(filepath, round):
