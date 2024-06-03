@@ -23,30 +23,24 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
-
-from os.path import join, dirname, exists
 import os
-
 import emtable
-
-from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
-                                        BooleanParam, EnumParam, IntParam, GPU_LIST)
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.utils.path import cleanPath, makePath
-
-import pwem.emlib.metadata as md
-from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D, Set, Transform
-from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ
-import xmipp3
 import enum
 import numpy as np
 
+from pyworkflow import VERSION_3_0
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+                                        BooleanParam, EnumParam, IntParam, GPU_LIST)
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.constants import BETA
 
-from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
-                            writeSetOfClasses2D, xmippToLocation,
-                            rowToAlignment, readSetOfParticles, matrixFromGeometry)
+from pwem.protocols import ProtClassify2D
+from pwem.objects import SetOfClasses2D, Transform
+from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
+
+from xmipp3 import XmippProtocol
+from xmipp3.convert import (writeSetOfParticles, writeSetOfClasses2D, xmippToLocation,
+                            readSetOfParticles, matrixFromGeometry)
 
 
 class XMIPPCOLUMNS(enum.Enum):
@@ -101,32 +95,31 @@ def updateEnviron(gpuNum):
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
         
         
-class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
+class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     """ Classifies a set of images. """
     
     _label = '2D classification pca'
-    _lastUpdateVersion = VERSION_2_0
+    _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
+    _devStatus = BETA
     
-        #Mode 
+    # Mode
     CREATE_CLASSES = 0
     UPDATE_CLASSES = 1
     
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
 
-    #--------------------------- DEFINE param functions ------------------------
+    # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
-    
         form.addHidden(GPU_LIST, StringParam, default='0',
-               label="Choose GPU ID",
-               help="GPU may have several cores. Set it to zero"
-                    " if you do not know what we are talking about."
-                    " First core index is 0, second 1 and so on.")
-    
+                       label="Choose GPU ID",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on.")
     
         form.addSection(label='Input')
-    
+
         form.addParam('inputParticles', PointerParam,
                       label="Input images",
                       important=True, pointerClass='SetOfParticles',
@@ -138,35 +131,34 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                       label="Create or update 2D classes?", default=self.CREATE_CLASSES,
                       display=EnumParam.DISPLAY_HLIST, 
                       help='This option allows for either global refinement from an initial volume '
-                    ' or just alignment of particles. If the reference volume is at a high resolution, '
-                    ' it is advisable to only align the particles and reconstruct at the end of the iterative process.') 
+                           ' or just alignment of particles. If the reference volume is at a high resolution, '
+                           ' it is advisable to only align the particles and reconstruct '
+                           'at the end of the iterative process.')
         form.addParam('initialClasses', PointerParam,
                       label="Initial classes",
                       condition="mode",
                       pointerClass='SetOfClasses2D, SetOfAverages',
                       help='Set of initial classes to start the classification')
         form.addParam('correctCtf', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
-              label='Correct CTF?',
-              help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
+                      label='Correct CTF?',
+                      help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
         form.addParam('mask', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
-              label='Use Gaussian Mask?',
-              help='If you set to *Yes*, a gaussian mask is applied to the images.')
+                      label='Use Gaussian Mask?',
+                      help='If you set to *Yes*, a gaussian mask is applied to the images.')
         form.addParam('sigma', IntParam, default=-1, expertLevel=LEVEL_ADVANCED,
-              label='sigma:', condition="mask",
-              help='Sigma is the parameter that controls the dispersion or "width" of the curve..')
+                      label='sigma:', condition="mask",
+                      help='Sigma is the parameter that controls the dispersion or "width" of the curve..')
     
         form.addSection(label='Pca training')
-    
-        form.addParam('resolution',FloatParam, label="max resolution", default=8,
+        form.addParam('resolution', FloatParam, label="max resolution", default=8,
                       help='Maximum resolution to be consider for alignment')
-        form.addParam('coef' ,FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
+        form.addParam('coef', FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training',IntParam, default=150000,
+        form.addParam('training', IntParam, default=150000,
                       label="particles for training",
                       help='Number of particles for PCA training')
-    
-    
+
         form.addParallelSection(threads=1, mpi=8)
 
     #--------------------------- INSERT steps functions ------------------------
@@ -330,9 +322,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         return summary
 
     # #--------------------------- UTILS functions -------------------------------
-        
-    #EMTABLE IMPLEMENTATION
-    
+    # EMTABLE IMPLEMENTATION
     def _updateParticle(self, item, row):
         if row is None:
             setattr(item, "_appendItem", False)

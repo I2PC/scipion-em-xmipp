@@ -166,10 +166,9 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                       help='Sigma is the parameter that controls the dispersion or "width" of the curve..')
 
         form.addSection(label='Pca training')
-
-        form.addParam('resolution', FloatParam, label="max resolution", default=10,
+        form.addParam('resolution', FloatParam, label="max resolution", default=8,
                       help='Maximum resolution to be consider for alignment')
-        form.addParam('coef', FloatParam, label="% variance", default=0.5, expertLevel=LEVEL_ADVANCED,
+        form.addParam('coef', FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
                            ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
         form.addParam('training', IntParam, default=40000,
@@ -177,12 +176,12 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
                       help='Number of particles for PCA training')
 
         form.addSection(label='Classification')
-        form.addParam('classificationBatch', IntParam, default=20000,
+        form.addParam('classificationBatch', IntParam, default=50000,
                       condition="not mode",
                       label="particles for initial classification",
                       help='Number of particles for an initial classification to compute the 2D references')
 
-        form.addParallelSection(threads=3, mpi=4)
+        form.addParallelSection(threads=3, mpi=1)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -290,8 +289,10 @@ class XmippProtClassifyPcaStreaming(ProtClassify2D, ProtStreamingBase, XmippProt
     def runPCASteps(self, newParticlesSet):
         # Run PCA steps
         self.pcaLaunch = True
-        self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaXmdOut)  # Wiener filter
-        # self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
+        if self.correctCtf:
+            self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaXmdOut)  # Wiener filter
+        else:
+            self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
         numTrain = min(len(newParticlesSet), self.training.get())
         self.pcaTraining(self.imgsPcaFn, self.resolutionPca, numTrain)
         self.pcaLaunch = False

@@ -1450,8 +1450,8 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         # Check the sampling rate of the first particle
         self.assertEqual(protScreenDeepLearning.outputParticles.getFirstItem().getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "particles"))
 
-class TestXmippClassifyPcaStreaming(TestXmippBase):
-    """This class check if the protocol Classify PCA Streaming in Xmipp works properly."""
+class TestXmippClassifyPca(TestXmippBase):
+    """This class check if the protocol Classify PCA (static and in streaming) in Xmipp works properly."""
 
     @classmethod
     def setUpClass(cls):
@@ -1485,16 +1485,16 @@ class TestXmippClassifyPcaStreaming(TestXmippBase):
         return prot2
 
     def test_ClassifyPCAStreaming(self):
-        print("Run 1st Classify PCA Streaming")
-        protPCA1 = self.newProtocol(XmippProtClassifyPcaStreaming,
-                                    objLabel="Classify Pca streaming - dynamic output",
+        print("Run 1st Classify PCA Static")
+        protPCA1 = self.newProtocol(XmippProtClassifyPca,
+                                    objLabel="Classify Pca streaming - static version",
                                     numberOfClasses=5)
         protPCA1.inputParticles.set(self.protImport.outputParticles)
         self.proj.scheduleProtocol(protPCA1)
 
         print("Start Streaming Particles")
         protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
-                                      creationInterval=10, samplingRate=7.08, nDim=6000, groups=500)
+                                      creationInterval=5, samplingRate=7.08, nDim=6000, groups=500)
         protStream.inputParticles.set(self.protImport.outputParticles)
         self.proj.scheduleProtocol(protStream, prerequisites=[protPCA1.getObjId()])
 
@@ -1506,22 +1506,22 @@ class TestXmippClassifyPcaStreaming(TestXmippBase):
                                     mode=XmippProtClassifyPcaStreaming.UPDATE_CLASSES
                                     )
         protPCA2.initialClasses.set(protPCA1)
-        protPCA2.initialClasses.setExtended("outputClasses")
+        protPCA2.initialClasses.setExtended("outputAverages")
 
         protPCA2.inputParticles.set(protStream)
         protPCA2.inputParticles.setExtended("outputParticles")
 
         self.proj.scheduleProtocol(protPCA2)
 
-        # when the first 2D Classification (streaming mode) finishes must have 5 classes.
-        self.checkResults(protPCA1, 5, "Streaming mode classification")
+        # when the first 2D Classification (static mode) finishes must have 5 classes.
+        self.checkResults(protPCA1, 5, "Static mode classification")
         # when the 2D update Classification (streaming mode) finishes must have 5 classes.
         self.checkResults(protPCA2, 5, "Streaming mode update initial classification")
 
         time.sleep(5)  # sometimes is not ready yet
 
         # Check a final update
-        self.checkFinal2DClasses1st(protPCA1, msg="Initial classification in streaming mode fails")
+        self.checkFinal2DClasses1st(protPCA1, msg="Initial classification mode fails")
         self.checkFinal2DClasses2nd(protPCA2, msg="Update classification in streaming mode fails")
 
     def checkFinal2DClasses1st(self, prot, outputName="outputClasses", msg=''):
