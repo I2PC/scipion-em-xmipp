@@ -1487,7 +1487,7 @@ class TestXmippClassifyPca(TestXmippBase):
     def test_ClassifyPCAStreaming(self):
         print("Run 1st Classify PCA Static")
         protPCA1 = self.newProtocol(XmippProtClassifyPca,
-                                    objLabel="Classify Pca streaming - static version",
+                                    objLabel="Classify Pca - static version",
                                     numberOfClasses=5)
         protPCA1.inputParticles.set(self.protImport.outputParticles)
         self.proj.scheduleProtocol(protPCA1)
