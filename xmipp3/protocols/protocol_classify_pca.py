@@ -137,9 +137,8 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         form.addParam('mode', EnumParam, choices=['create_classes', 'update_classes'],
                       label="Create or update 2D classes?", default=self.CREATE_CLASSES,
                       display=EnumParam.DISPLAY_HLIST, 
-                      help='This option allows for either global refinement from an initial volume '
-                    ' or just alignment of particles. If the reference volume is at a high resolution, '
-                    ' it is advisable to only align the particles and reconstruct at the end of the iterative process.') 
+                      help='This option allows for the classification '
+                      ' or simply alignment of particles into previously created classes.') 
         form.addParam('initialClasses', PointerParam,
                       label="Initial classes",
                       condition="mode",
@@ -153,21 +152,22 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
               help='If you set to *Yes*, a gaussian mask is applied to the images.')
         form.addParam('sigma', IntParam, default=-1, expertLevel=LEVEL_ADVANCED,
               label='sigma:', condition="mask",
-              help='Sigma is the parameter that controls the dispersion or "width" of the curve..')
+              help='Sigma is the parameter that controls the dispersion or "width" of the curve.'
+                    ' If the parameter is set to -1, sigma = dim/3.')
     
         form.addSection(label='Pca training')
     
         form.addParam('resolution',FloatParam, label="max resolution", default=8,
                       help='Maximum resolution to be consider for alignment')
         form.addParam('coef' ,FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
-                      help='Percentage of coefficients to be considers (between 0-1).'
+                      help='Percentage of variance to determine the number of PCA components (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
         form.addParam('training',IntParam, default=150000,
                       label="particles for training",
                       help='Number of particles for PCA training')
     
     
-        form.addParallelSection(threads=1, mpi=8)
+        form.addParallelSection(threads=1, mpi=16)
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -239,8 +239,8 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         
         
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        args = ' -i %s -s %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
-                (inputIm, self.sampling, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
+        args = ' -i %s  -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
+                (inputIm, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
                  stfile)
         if mask:
             args += ' --mask --sigma %s '%(sigma) 
