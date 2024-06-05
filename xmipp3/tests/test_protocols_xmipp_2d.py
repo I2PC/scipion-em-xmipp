@@ -28,6 +28,8 @@
 
 from __future__ import print_function
 
+import os.path
+
 from pyworkflow.tests.test_utils import wait
 from pyworkflow.utils import greenStr, magentaStr
 from pyworkflow.plugin import Domain
@@ -917,7 +919,8 @@ class TestXmippCL2D(TestXmippBase):
         setupTestProject(cls)
         TestXmippBase.setData('mda')
         cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
-        cls.protImportAvgs = cls.runImportAverages(cls.particlesDir + '/img00007[1-4].spi', 3.5)
+        cls.protImportAvgs = cls.runImportAverages(os.path.dirname(cls.particlesFn) +
+                                                   '/img00007[1-4].spi', 3.5)
     
     def test_cl2d(self):
         print("Run CL2D")
@@ -1174,9 +1177,12 @@ class TestXmippCompareReprojections(TestXmippBase):
     def setUpClass(cls):
         setupTestProject(cls)
         TestXmippBase.setData('mda')
+        cls.dsRelion = DataSet.getDataSet('relion_tutorial')
         cls.protImportPart = cls.runImportParticles(cls.particlesFn, 3.5)
         cls.protImportAvgs = cls.runImportAverages(cls.particlesFn, 3.5)
         cls.protImportVol = cls.runImportVolume(cls.volumesFn, 3.5)
+        cls.protImport2D = cls.importFromRelion2D()
+        cls.protImport3D = cls.importFromRelionRefine3D()
         cls.protCreateMask = cls.newProtocol(XmippProtCreateMask3D, threshold=0.01)
         cls.protCreateMask.inputVolume.set(cls.protImportVol.outputVolume)
         cls.launchProtocol(cls.protCreateMask)
@@ -1193,74 +1199,120 @@ class TestXmippCompareReprojections(TestXmippBase):
         cls.protProjMatch.inputParticles.set(cls.protImportAvgs.outputAverages)
         cls.protProjMatch.input3DReferences.set(cls.protImportVol.outputVolume)
         cls.launchProtocol(cls.protProjMatch)
-    
+
+    @classmethod
+    def importFromRelionRefine3D(cls):
+        """ Import aligned Particles
+        """
+        protImport3D = cls.newProtocol(emprot.ProtImportParticles,
+                                           objLabel='particles from relion (auto-refine 3d)',
+                                           importFrom=emprot.ProtImportParticles.IMPORT_FROM_RELION,
+                                           starFile=
+                                           cls.dsRelion.getFile('import/classify3d/extra/relion_it015_data.star'),
+                                           magnification=10000,
+                                           samplingRate=7.08,
+                                           haveDataBeenPhaseFlipped=True)
+        cls.launchProtocol(protImport3D)
+        return protImport3D
+
+    @classmethod
+    def importFromRelion2D(cls):
+        """
+        Import an EMX file with Particles and defocus
+        """
+        protImport2D = cls.newProtocol(emprot.ProtImportParticles,
+                                           objLabel='from relion (classify 2d)',
+                                           importFrom=emprot.ProtImportParticles.IMPORT_FROM_RELION,
+                                           starFile=cls.dsRelion.getFile(
+                                             'import/classify2d/extra/relion_it015_data.star'),
+                                           magnification=10000,
+                                           samplingRate=7.08,
+                                           haveDataBeenPhaseFlipped=True)
+        cls.launchProtocol(protImport2D)
+        return protImport2D
+
     def test_particles1(self):
         print("Run Compare Reprojections from classes")
         prot = self.newProtocol(XmippProtCompareReprojections,
-                                        symmetryGroup="d6", numberOfMpi=5)
-        prot.inputSet.set(self.protClassify.outputClasses)
-        prot.inputVolume.set(self.protImportVol.outputVolume)
+                                        symmetryGroup="d6", numberOfMpi=5, doRanking=False)
+        prot.inputSet2D.set(self.protClassify.outputClasses)
+        prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from classes")
+        self.assertIsNotNone(prot.reprojections_vol200, "There was a problem with Compare Reprojections from classes")
 
     def test_particles2(self):
         print("Run Compare Reprojections from averages")
         prot = self.newProtocol(XmippProtCompareReprojections,
-                                        symmetryGroup="d6", numberOfMpi=5)
-        prot.inputSet.set(self.protImportAvgs.outputAverages)
-        prot.inputVolume.set(self.protImportVol.outputVolume)
+                                        symmetryGroup="d6", numberOfMpi=5, doRanking=False)
+        prot.inputSet2D.set(self.protImportAvgs.outputAverages)
+        prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from averages")
+        self.assertIsNotNone(prot.reprojections_vol200, "There was a problem with Compare Reprojections from averages")
 
     def test_particles3(self):
         print("Run Compare Reprojections from projections with angles")
         prot = self.newProtocol(XmippProtCompareReprojections,
-                                        symmetryGroup="d6", numberOfMpi=5)
-        prot.inputSet.set(self.protProjMatch.outputParticles)
-        prot.inputVolume.set(self.protImportVol.outputVolume)
+                                        symmetryGroup="d6", numberOfMpi=5, doRanking=False)
+        prot.inputSet2D.set(self.protProjMatch.outputParticles)
+        prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections,
+        self.assertIsNotNone(prot.reprojections_vol200,
                              "There was a problem with Compare Reprojections from projections with angles")
 
     def test_particles4(self):
         print("Run Compare Reprojections from classes evaluating residuals")
         prot = self.newProtocol(XmippProtCompareReprojections,
-                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
-        prot.inputSet.set(self.protClassify.outputClasses)
-        prot.inputVolume.set(self.protImportVol.outputVolume)
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True, doRanking=False)
+        prot.inputSet2D.set(self.protClassify.outputClasses)
+        prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections,
+        self.assertIsNotNone(prot.reprojections_vol200,
                              "There was a problem with Compare Reprojections from classes evaluating residuals")
 
     def test_particles5(self):
         print("Run Compare Reprojections from averages evaluating residuals")
         prot = self.newProtocol(XmippProtCompareReprojections,
-                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
-        prot.inputSet.set(self.protImportAvgs.outputAverages)
-        prot.inputVolume.set(self.protImportVol.outputVolume)
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True, doRanking=False)
+        prot.inputSet2D.set(self.protImportAvgs.outputAverages)
+        prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections,
+        self.assertIsNotNone(prot.reprojections_vol200,
                              "There was a problem with Compare Reprojections from averages evaluating residuals")
 
     def test_particles6(self):
         print("Run Compare Reprojections from projections with angles evaluating residuals")
         prot = self.newProtocol(XmippProtCompareReprojections,
-                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
-        prot.inputSet.set(self.protProjMatch.outputParticles)
-        prot.inputVolume.set(self.protImportVol.outputVolume)
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True, doRanking=False)
+        prot.inputSet2D.set(self.protProjMatch.outputParticles)
+        prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections"
-                                                 " with angles evaluating residuals")
+        self.assertIsNotNone(prot.reprojections_vol200,
+                             "There was a problem with Compare Reprojections from projections"
+                             " with angles evaluating residuals")
 
     def test_particles7(self):
         print("Run Compare Reprojections from projections with angles evaluating residuals without user mask")
         prot = self.newProtocol(XmippProtCompareReprojections,
-                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
-        prot.inputSet.set(self.protProjMatch.outputParticles)
-        prot.inputVolume.set(self.protImportVol.outputVolume)
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True, doRanking=False)
+        prot.inputSet2D.set(self.protProjMatch.outputParticles)
+        prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections"
-                                                 " with angles evaluating residuals without user mask")
+        self.assertIsNotNone(prot.reprojections_vol200,
+                             "There was a problem with Compare Reprojections from projections"
+                             " with angles evaluating residuals without user mask")
+
+    def test_ranking3D(self):
+        print("Run Compare Reprojections from 3d and 2d classes and then make a ranking with the best volume")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5)
+        prot.inputSet2D.set(self.protImport2D.outputClasses)
+        prot.inputSet3D.set(self.protImport3D.outputClasses)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections_vol1, "There was a problem with Compare Reprojections vol 1")
+        self.assertIsNotNone(prot.reprojections_vol2, "There was a problem with Compare Reprojections vol 2")
+        self.assertIsNotNone(prot.reprojections_vol3, "There was a problem with Compare Reprojections vol 3")
+        self.assertSetSize(prot.particles_bestVol, size=899)
+        self.assertIsNotNone(prot.bestVolume, "There is a problem with the ranking the best volume does not exist")
 
 class TestXmippCreateGallery(TestXmippBase):
     """This class check if the protocol create gallery in Xmipp works properly."""
