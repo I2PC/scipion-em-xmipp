@@ -115,7 +115,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form = self._defineCommonParams(form)
-        form.addParallelSection(threads=1, mpi=16)
+        form.addParallelSection(threads=1, mpi=8)
 
     def _defineCommonParams(self, form):
         form.addHidden(GPU_LIST, StringParam, default='0',
