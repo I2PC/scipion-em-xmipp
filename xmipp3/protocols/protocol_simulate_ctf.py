@@ -32,6 +32,7 @@ import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_3_0
 from pwem.protocols import Prot2D
 from pwem.objects import CTFModel
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 import xmippLib
 
@@ -43,6 +44,8 @@ class XmippProtSimulateCTF(Prot2D):
     """
 
     _label = 'simulate ctf'
+    _devStatus = UPDATED
+
     _lastUpdateVersion = VERSION_3_0
 
     def __init__(self, *args, **kwargs):
