@@ -322,7 +322,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             self.boxSize.set(self.getEven(self.boxSize))
 
         if self.doNormalize:
-            if self.backRadius > int(self.boxSize.get() / 2):
+            if self.backRadius >= int(self.boxSize.get() / 2):
                 errors.append("Background radius for normalization should be "
                               "equal or less than half of the box size.")
 
@@ -570,6 +570,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                         # adding the variance and Gini coeff. value of the mic zone
                         setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
                         setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                        setXmippAttributes(p, row, md.MDL_LOCAL_AVERAGE)
                         if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
                             setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
