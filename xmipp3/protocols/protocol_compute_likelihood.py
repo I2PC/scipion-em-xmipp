@@ -71,8 +71,11 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         form.addParam('maxGrayChange', FloatParam, label="Max. gray change: ", default=0.99, expertLevel=LEVEL_ADVANCED,
                       condition='optimizeGray',
                       help='The actual gray value can be at most as small as 1-change or as large as 1+change')
-        form.addParam('keepResiduals', BooleanParam, label="Keep residuals: ", default=False, expertLevel=LEVEL_ADVANCED,
+        form.addParam('keepResiduals', BooleanParam, label="Keep residuals?", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Keep residuals rather than deleting them after calculation')
+        form.addParam('useVariance', BooleanParam, label="Use variance?", default=False, expertLevel=LEVEL_ADVANCED,
+                      help='Whether to divide by the variance instead of the standard deviation of the noise (residuals). '
+                           'This enhances all matrix elements and seems to work poorly for simulated data')
         form.addParallelSection(threads=0, mpi=8)
     
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -112,6 +115,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             I = xmippLib.Image(fnResidual)
             elements_within_circle = I.getData()[mask]
             std_dev = np.std(elements_within_circle)
+            if self.useVariance.get():
+                std_dev = std_dev**2
             sum_of_squares = np.sum(elements_within_circle ** 2)
             LL = -sum_of_squares/std_dev
 
