@@ -76,6 +76,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         form.addParam('useVariance', BooleanParam, label="Use variance?", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to divide by the variance instead of the standard deviation of the noise (residuals). '
                            'This enhances all matrix elements and seems to work poorly for simulated data')
+        form.addParam('squareSum', BooleanParam, label="Square sum of squares?", default=False, expertLevel=LEVEL_ADVANCED,
+                      help='Whether to take the square of the sum of squares. This seems to work better when using the variance.')
         form.addParallelSection(threads=0, mpi=8)
     
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -118,6 +120,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             if self.useVariance.get():
                 std_dev = std_dev**2
             sum_of_squares = np.sum(elements_within_circle ** 2)
+            if self.squareSum.get():
+                sum_of_squares = sum_of_squares**2
             LL = -sum_of_squares/std_dev
 
             newRow = md.Row()
