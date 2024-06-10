@@ -122,7 +122,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             sum_of_squares = np.sum(elements_within_circle ** 2)
             if self.squareSum.get():
                 sum_of_squares = sum_of_squares**2
-            LL = -sum_of_squares/std_dev
+            LL = -sum_of_squares/(2*std_dev)
 
             newRow = md.Row()
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
