@@ -1,6 +1,8 @@
 ## Release 3.24.06 - Oceanus
    - New protocols
       - movie_alignment_consensus: protocol for the comparison of two global alignments
+      - PCA classification: 2D Classification method that can works in streaming and in static
+
    - Protocols updated
       - deep_center: Deep center calculates an approximate center for the particles.
       - validate_fscq: Added cif support
