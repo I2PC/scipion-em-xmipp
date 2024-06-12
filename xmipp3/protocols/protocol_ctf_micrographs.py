@@ -132,7 +132,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                            'and if it fails, -1.')
         form.addParam('refineAmplitudeContrast', params.BooleanParam, default=False,
                       label='Allow amplitude constrast refinement',
-                      help = 'The amplitude contrast is normally kept fixed, but in'
+                      help = 'The amplitude contrast is normally kept fixed, but in '
                              'some experiments it has been found that refining it '
                              'might result in some improvement in the final FSC. '
                              'This is not a standard practice, and should be used with caution')
@@ -288,14 +288,6 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
         except Exception as ex:
             sys.stderr.write("xmipp_ctf_estimate_from_micrograph has " \
                              "failed with micrograph %s" % finalName)
-
-    def _reEstimateCTF(self, mic, ctfModel):
-        """ Run the estimate CTF program """
-        self._prepareRecalCommand(ctfModel)
-        # CTF estimation with Xmipp
-        self.runJob(self._program, self._args % self._params)
-        mic = ctfModel.getMicrograph()
-        self.evaluateSingleMicrograph(mic)
 
     def _createOutputStep(self):
         pass

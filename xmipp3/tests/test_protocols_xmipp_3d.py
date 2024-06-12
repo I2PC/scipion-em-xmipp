@@ -553,6 +553,45 @@ class TestXmippCropResizeVolumes(TestXmippBase):
         self.assertTrue(outV.equalAttributes(
             inV, ignore=['_index', '_filename', '_samplingRate'], verbose=True))
 
+        outHeader = Ccp4Header(outV.getFileName(), readHeader=True)
+        self.assertAlmostEqual(round(outHeader.getSampling()[0], 3), inV.getSamplingRate() * 2)
+
+    def testSingleResizeSamplingRateAndCrop(self):
+        inV = self.protImport2.outputVolume  # short notation
+        newSR = inV.getSamplingRate() * 2
+        outV = self.launchSingle(doResize=True,
+                                 resizeOption=xrh.RESIZE_SAMPLINGRATE,
+                                 resizeSamplingRate=newSR,
+                                 doWindow=True,
+                                 windowOperation=xrh.WINDOW_OP_CROP)
+
+        self.assertEqual(inV.getDim()[0] * 0.5, outV.getDim()[0])
+        self.assertAlmostEqual(outV.getSamplingRate(), newSR)
+
+        outHeader = Ccp4Header(outV.getFileName(), readHeader=True)
+        self.assertAlmostEqual(round(outHeader.getSampling()[0], 3), newSR)
+        
+        self.assertTrue(outV.equalAttributes(
+            inV, ignore=['_index', '_filename', '_samplingRate'], verbose=True))
+        
+    def testSingleOnlyCropWindow(self):
+        inV = self.protImport2.outputVolume  # short notation
+        newSR = inV.getSamplingRate() # no change
+        newDim = inV.getDim()[0] * 0.5
+        outV = self.launchSingle(doResize=False,
+                                 doWindow=True,
+                                 windowOperation=xrh.WINDOW_OP_WINDOW,
+                                 windowSize=newDim)
+
+        self.assertEqual(newDim, outV.getDim()[0])
+        self.assertAlmostEqual(outV.getSamplingRate(), newSR)
+
+        outHeader = Ccp4Header(outV.getFileName(), readHeader=True)
+        self.assertAlmostEqual(round(outHeader.getSampling()[0], 3), newSR)
+        
+        self.assertTrue(outV.equalAttributes(
+            inV, ignore=['_index', '_filename', '_samplingRate'], verbose=True))
+
     def testSinglePyramid(self):
         inV = self.protImport2.outputVolume  # short notation
         outV = self.launchSingle(doResize=True, resizeOption=xrh.RESIZE_PYRAMID,
@@ -2713,6 +2752,14 @@ class TestXmippResolutionBfactor(TestXmippBase):
                                                  pdbfile=protImportPdb.outputPdb,
                                                  localResolutionMap=protCreateMap.resolution_Volume,
                                                  fscResolution=8.35)
+        self.launchProtocol(protbfactorResolution)
+
+        # Protocol local resolution/local bfactor with assuming already normalized
+        print("Protocol local resolution/local bfactor")
+        protbfactorResolution = self.newProtocol(XmippProtbfactorResolution,
+                                                 normalizeResolution=False,
+                                                 pdbfile=protImportPdb.outputPdb,
+                                                 normalizedMap=protCreateMap.resolution_Volume)
         self.launchProtocol(protbfactorResolution)
 
 class TestXmippLocalVolAdjust(TestXmippBase):

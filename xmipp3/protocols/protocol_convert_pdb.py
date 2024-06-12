@@ -40,12 +40,12 @@ from pwem.protocols import ProtInitialVolume
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt, removeBaseExt
-from pyworkflow import UPDATED
+from pyworkflow import UPDATED, PROD
 
 class XmippProtConvertPdb(ProtInitialVolume):
     """ Convert atomic structure(s) into volume(s) """
     _label = 'convert pdbs to volumes'
-    _devStatus = UPDATED
+    _devStatus = PROD
     OUTPUT_NAME1 = "outputVolume"
     OUTPUT_NAME2 = "outputVolumes"
     OUTPUT_NAME3 = "outputPdb"
@@ -70,7 +70,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         This definition is also used to generate automatically the GUI.
         """
         # Defining condition string for x, y, z coords
-        coordsCondition = 'setSize and not vol'
+        coordsCondition = 'setSize and not vol and not isinstance(pdbObj, SetOfAtomStructs)'
 
         # Defining parallel arguments
         form.addParallelSection(threads=4, mpi=1)
@@ -253,6 +253,9 @@ class XmippProtConvertPdb(ProtInitialVolume):
         # Checking if MPI is selected (only threads are allowed)
         if self.numberOfMpi > 1:
             errors.append('MPI cannot be selected, because Scipion is going to drop support for it. Select threads instead.')
+
+        if isinstance(self.pdbObj.get(), SetOfAtomStructs) and not self.size.hasValue():
+            errors.append('Please set size when using SetOfAtomStructs as input')
 
         return errors
     

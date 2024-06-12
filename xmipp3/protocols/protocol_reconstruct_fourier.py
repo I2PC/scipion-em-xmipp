@@ -26,12 +26,14 @@
 
 from pwem.objects import Volume
 from pwem.protocols import ProtReconstruct3D
+from pwem import emlib
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 from xmipp3.convert import writeSetOfParticles
 from xmipp3.base import isXmippCudaPresent
+from pyworkflow.utils import moveFile
 import os
-
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtReconstructFourier(ProtReconstruct3D):
     """    
@@ -40,7 +42,8 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
     and used as direction projections to reconstruct.
     """
     _label = 'reconstruct fourier'
-    
+    _devStatus = UPDATED
+
     #--------------------------- DEFINE param functions --------------------------------------------   
     def _defineParams(self, form):
 
@@ -68,6 +71,8 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
                       help='Maximum resolution (in Angstrom) to consider \n'
                            'in Fourier space (default Nyquist).\n'
                            'Param *--maxres* in Xmipp.')
+        form.addParam('useHalves', params.BooleanParam, label='Use halves', default=False,
+                      help='Create separate reconstructions from two random subsets. Useful for resolution measurements')
         line = form.addLine('Padding factor',
                              expertLevel=cons.LEVEL_ADVANCED,
                              help='Padding of the input images. Higher number will result in more precise interpolation in Fourier '
@@ -102,21 +107,36 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
         """ Centralize how files are called for iterations and references. """
         myDict = {
             'input_xmd': self._getExtraPath('input_particles.xmd'),
-            'output_volume': self._getPath('output_volume.mrc')
+            'half1_xmd': self._getExtraPath('input_particles000001.xmd'),
+            'half2_xmd': self._getExtraPath('input_particles000002.xmd'),
+            'output_volume': self._getPath('output_volume.mrc'),
+            'half1_volume': self._getPath('half1.mrc'),
+            'half2_volume': self._getPath('half2.mrc')
             }
         self._updateFilenamesDict(myDict)
 
     def _insertAllSteps(self):
         self._createFilenameTemplates()
         self._insertFunctionStep('convertInputStep')
-        self._insertReconstructStep()
+        if self.useHalves.get():
+            self._insertFunctionStep('splitInputStep')
+            self._insertReconstructStep('half1')
+            self._insertReconstructStep('half2')
+            self._insertFunctionStep('averageStep')
+        else:
+            self._insertReconstructStep()
         self._insertFunctionStep('createOutputStep')
         
-    def _insertReconstructStep(self):
+    def _insertReconstructStep(self, half=None):
         #imgSet = self.inputParticles.get()
 
-        params =  '  -i %s' % self._getFileName('input_xmd')
-        params += '  -o %s' % self._getFileName('output_volume')
+        if half is None:
+            params =  '  -i %s' % self._getFileName('input_xmd')
+            params += '  -o %s' % self._getFileName('output_volume')
+        else:
+            params =  '  -i %s' % self._getFileName(half + '_xmd')
+            params += '  -o %s' % self._getFileName(half + '_volume')
+            
         params += ' --sym %s' % self.symmetryGroup.get()
         maxRes = self.maxRes.get()
         if maxRes == -1:
@@ -163,7 +183,14 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
         #TODO: This only writes metadata what about binary file
         #it should
         writeSetOfParticles(imgSet, particlesMd)
+        
+    def splitInputStep(self):
+        args = []
+        args += ['-i', self._getFileName('input_xmd')]
+        args += ['-n', 2]
 
+        self.runJob('xmipp_metadata_split', args, numberOfMpi=1)
+        
     def reconstructStep(self, params):
         """ Create the input file in STAR format as expected by Xmipp.
         If the input particles comes from Xmipp, just link the file. 
@@ -178,16 +205,34 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
                 self.runJob('xmipp_reconstruct_fourier', params)
             else:
                 self.runJob('xmipp_reconstruct_fourier_accel', params)
-
-        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f"%\
-                    (self._getFileName('output_volume'), self.inputParticles.get().getSamplingRate()),
-                    numberOfMpi=1)
             
+    def averageStep(self):
+        # Read
+        half1 = emlib.Image(self._getFileName('half1_volume'))
+        half2 = emlib.Image(self._getFileName('half2_volume'))
+        
+        # Average
+        half1.inplaceAdd(half2)
+        half1.inplaceMultiply(0.5)
+        
+        # Write
+        half1.write(self._getFileName('output_volume'))
+        
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
+
+        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f"%\
+                    (self._getFileName('output_volume'), imgSet.getSamplingRate()),
+                    numberOfMpi=1)
+        
         volume = Volume()
         volume.setFileName(self._getFileName('output_volume'))
         volume.setSamplingRate(imgSet.getSamplingRate())
+        if self.useHalves.get():
+            volume.setHalfMaps([
+                self._getFileName('half1_volume'),
+                self._getFileName('half2_volume')
+            ])
         
         self._defineOutputs(outputVolume=volume)
         self._defineSourceRelation(self.inputParticles, volume)
