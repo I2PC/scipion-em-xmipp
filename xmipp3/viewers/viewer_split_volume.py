@@ -54,179 +54,174 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
-        form.addSection(label='PCA')
+        form.addSection(label='Analysis')
+        form.addParam('displayHistogram1d', IntParam, label='1D histogram',
+                      default=1,
+                      help='Shows the histogram of a principal component')
+        form.addParam('displayHistogram2d', LabelParam, label='2D histogram',
+                      help='Shows the 2D histogram of the first 2 principal components')
+        form.addParam('displayInformationCriterion', LabelParam, label='Information criterion',
+                      help='Shows Akaike and Bayesian information criterions')
+
+        form.addSection(label='Directional data')
         form.addParam('displayDirectionalMd', LabelParam, label='Directional metadata',
                       help='Shows a metadata with the directional averages and eigenimages')
-        form.addParam('displayDirectionClassification', IntParam, label='Directional classification',
+        form.addParam('displayDirectionalHistogram2d', IntParam, label='Directional 2D histogram',
                       default=1,
-                      help='Shows a histogram of the directional classification')
+                      help='Shows the 2D histogram of the first 2 principal components')
         
         form.addSection(label='Graph')
-        form.addParam('display3dGraph', LabelParam, label='Distance graph',
-                      help='Shows a 3D representation of the distance graph')
-        form.addParam('displayCorrected3dGraph', LabelParam, label='Corrected distance graph',
-                      help='Shows a 3D representation of the distance graph')
-
+        form.addParam('displayCrossCorrelations', LabelParam, label='Cross correlations',
+                      help='Shows a block matrix with cross correlations')
+        form.addParam('displayWeights', LabelParam, label='Weights',
+                      help='Shows a block matrix with weights')
+        form.addParam('displayWeightedCrossCorrelation', LabelParam, label='Weighted cross correlation',
+                      help='Shows a block matrix with weighted cross correlations')
 
     #--------------------------- INFO functions ----------------------------------------------------
 
     # --------------------------- DEFINE display functions ----------------------
-    
     def _getVisualizeDict(self):
         return {
+            'displayHistogram1d': self._displayHistogram1d,
+            'displayHistogram2d': self._displayHistogram2d,
+            'displayInformationCriterion': self._displayInformationCriterion,
             'displayDirectionalMd': self._displayDirectionalMd,
-            'displayDirectionClassification': self._displayDirectionClassification,
-            'display3dGraph': self._display3dGraph,
-            'displayCorrected3dGraph': self._displayCorrected3dGraph,
+            'displayDirectionalHistogram2d': self._displayDirectionalHistogram2d,
+            'displayCrossCorrelations': self._displayCrossCorrelations,
+            'displayWeights': self._displayWeights,
+            'displayWeightedCrossCorrelation': self._displayWeightedCrossCorrelations,
         }
+
+    def _displayHistogram1d(self, e):
+        i: int = self.displayHistogram1d.get()
+        md = emlib.MetaData(self.protocol._getClassificationMdFilename())
+        projections = np.array(md.getColumnValues(emlib.MDL_DIMRED))
         
+        v = projections[:,i]
+        vmin, vmax = np.percentile(v, (1, 99))
+
+        fig, ax = plt.subplots()
+        ax.hist(v, bins=64, range=(vmin, vmax))
+        return [fig]
+    
+    def _displayHistogram2d(self, e):
+        md = emlib.MetaData(self.protocol._getClassificationMdFilename())
+        projections = np.array(md.getColumnValues(emlib.MDL_DIMRED))
+        
+        x = projections[:,-1] # TODO
+        y = projections[:,-2] # TODO
+        xmin, xmax = np.percentile(x, (1, 99))
+        ymin, ymax = np.percentile(y, (1, 99))
+        
+        fig, ax = plt.subplots()
+        ax.hist2d(x, y, bins=32, range=((xmin, xmax), (ymin, ymax)))
+        return [fig]
+        
+    def _displayInformationCriterion(self, e):
+        aic = self._readAicArray()
+        bic = self._readBicArray()
+        x = np.arange(1, 1+len(aic))
+        
+        fig, ax = plt.subplots()
+        ax.plot(x, aic, label='BIC')
+        ax.plot(x, bic, label='AIC')
+        ax.legend()
+        return [fig]
+    
     def _displayDirectionalMd(self, e):
         dv = DataView(self._getDirectionalMdFilename())
         return [dv]
+
+    def _displayDirectionalHistogram2d(self, e):
+        directionId = self.displayDirectionalHistogram2d.get()
+        md = emlib.MetaData(self.protocol._getDirectionalClassificationMdFilename(directionId))
+        projections = np.array(md.getColumnValues(emlib.MDL_DIMRED))
+        
+        x = projections[:,-1] # TODO
+        y = projections[:,-2] # TODO
+        xmin, xmax = np.percentile(x, (1, 99))
+        ymin, ymax = np.percentile(y, (1, 99))
+        
+        fig, ax = plt.subplots()
+        ax.hist2d(x, y, bins=32, range=((xmin, xmax), (ymin, ymax)))
+        return [fig]
+
+    def _displayCrossCorrelations(self, e):
+        crossCorrelations = self._readCrossCorrelations()
+        fig, ax = plt.subplots()
+        self._showSparseBlockMatrix(
+            ax, 
+            crossCorrelations, 
+            self._getBlockStride(),
+            vmin=-1.0, vmax=+1.0,
+            cmap=mpl.cm.coolwarm
+        )
+        return [fig]
     
-    def _displayDirectionClassification(self, e):
-        fig = self._showDirectionalClassification(self.displayDirectionClassification.get())
+    def _displayWeights(self, e):
+        weights = self._readWeights()
+        fig, ax = plt.subplots()
+        self._showSparseBlockMatrix(
+            ax, 
+            weights, 
+            self._getBlockStride()
+        )
         return [fig]
-        
-    def _display3dGraph(self, e):
-        fig = self._show3dGraph()
+    
+    def _displayWeightedCrossCorrelations(self, e):
+        crossCorrelations = self._readCrossCorrelations()
+        weights = self._readWeights()
+        fig, ax = plt.subplots()
+        self._showSparseBlockMatrix(
+            ax, 
+            crossCorrelations.multiply(weights), 
+            self._getBlockStride(),
+            vmin=-1.0, vmax=+1.0,
+            cmap=mpl.cm.coolwarm
+        )
         return [fig]
-        
-    def _displayCorrected3dGraph(self, e):
-        fig = self._show3dGraph(True)
-        return [fig]
-
-
+    
     # --------------------------- UTILS functions -----------------------------
-    def _getScalarColorMap(self):
-        return mpl.cm.coolwarm
+    def _getBlockStride(self) -> int:
+        return self.protocol.principalComponents.get()
     
     def _getDirectionalMdFilename(self):
         return self.protocol._getDirectionalMdFilename()
     
-    def _readGraph(self) -> scipy.sparse.csr_matrix:
-        return self.protocol._readGraph()
+    def _readCrossCorrelations(self) -> scipy.sparse.csr_matrix:
+        return self.protocol._readCrossCorrelations()
         
-    def _readCorrectedGraph(self) -> scipy.sparse.csr_matrix:
-        return self.protocol._readCorrectedGraph()
-
-    def _readDirectionalGaussianMixtureModel(self, directionId) -> sklearn.mixture.GaussianMixture:
-        return self.protocol._readDirectionalGaussianMixtureModel(directionId)
-
-    def _readDirectionVectors(self):
-        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
-        objIds = list(directionMd)
-        graph_mask = np.array(directionMd.getColumnValues(emlib.MDL_CLASS_COUNT)) == 2
-        x = directionMd.getColumnValues(emlib.MDL_X)
-        y = directionMd.getColumnValues(emlib.MDL_Y)
-        z = directionMd.getColumnValues(emlib.MDL_Z)
-        return objIds, graph_mask, np.stack((x, y, z), axis=-1)
+    def _readWeights(self) -> scipy.sparse.csr_matrix:
+        return self.protocol._readWeights()
     
-    def _readDirectionRow(self, directionId: int):
-        result = emlib.metadata.Row()
-        md = emlib.MetaData(self._getDirectionalMdFilename())
-        result.readFromMd(md, directionId)
-        return result
-        
-    def _plotGaussianMixture(self, 
-                             ax: plt.Axes, 
-                             xs: np.ndarray,
-                             gmm: sklearn.mixture.GaussianMixture ):
-        # Obtain GMM model parameters
-        weights = gmm.weights_
-        means = gmm.means_[:,0]
-        variances = gmm.covariances_[...,0,0]
-        stddevs = np.sqrt(variances)
-        
-        # Plot individual GMM curves
-        ys = weights*scipy.stats.norm.pdf(xs[:,None], means, stddevs)
-        n = ys.shape[-1]
-        if n > 1:
-            for i in range(n):
-                ax.plot(xs, ys[:,i], linestyle='dashed')
-        
-        # Plot the sum of the GMM curves     
-        ax.plot(xs, ys.sum(axis=-1))
-        
-    def _showDirectionalClassification(self, directionId: int) -> plt.Figure:
-        directionRow = self._readDirectionRow(directionId)
-        projections = emlib.MetaData(directionRow.getValue(emlib.MDL_SELFILE)).getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
-        average = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE)).getData()
-        basis = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE_RESIDUAL)).getData()
-        gmm = self._readDirectionalGaussianMixtureModel(directionId)
-        
-        # Create the figure
-        fig, (ax1, ax2) = plt.subplots(2)
-        fig.suptitle('PCA projection histogram for direction %d' % directionId)
-        
-        # Show histogram
-        _, bins, _ = ax1.hist(projections, bins=64, density=True, color='black', picker=True)
-        x = (bins[1:] + bins[:-1]) / 2
-        
-        # Show gaussian mixuture
-        self._plotGaussianMixture(ax1, x, gmm)
-        
-        # Show image
-        line = ax1.axvline(x=0, color='yellow')
-        ax2.imshow(average)
-        
-        # Setup interactive picking
-        def on_pick(event):
-            projection = event.mouseevent.xdata
-            line.set_xdata([projection, ]*2)
-            image = average + basis*projection
-            ax2.clear()
-            ax2.imshow(image)
-            fig.canvas.draw()
-            
-        fig.canvas.mpl_connect('pick_event', on_pick)
-        
-        return fig
-    
-    def _show3dGraph(self, correct: bool = False) -> plt.Figure:
-        # Read from disk
-        objIds, graph_mask, points = self._readDirectionVectors()
-        graph_vertices = points[graph_mask]
-        if correct:
-            graph = self._readCorrectedGraph()
-        else:
-            graph = self._readGraph()
-        graph = scipy.sparse.tril(graph, format='csr')
-        edges = graph.nonzero()
-        segments = np.stack((graph_vertices[edges[0]], graph_vertices[edges[1]]), axis=1)
-        weights = graph[edges].A1
-        colormap = self._getScalarColorMap()
-        
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
-        
-        # Display de direction vectors
-        colors = np.where(graph_mask, 'black', 'orange')
-        ax.scatter(
-            points[:,0], points[:,1], points[:,2], 
-            c=colors,
-            picker=True
-        )
-        for objId, color, point in zip(objIds, colors, points):
-            ax.text(point[0], point[1], point[2], str(objId), c=color)
-            
-        
-        # Display the graph edges
-        absmax = abs(weights).max()
-        normalize = mpl.colors.Normalize(-absmax, +absmax)
-        lines = mpl3d.art3d.Line3DCollection(segments, linewidths=0.5, colors=colormap(normalize(weights)))
-        ax.add_collection(lines)
-        
-        #  Show colorbar
-        fig.colorbar(mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), label='Edge weights')
-        
-        # Setup interactive picking
-        def on_pick(event):
-            objId = int(objIds[event.ind[0]])
-            fig = self._showDirectionalClassification(objId)
-            fig.show()
-            
-        fig.canvas.mpl_connect('pick_event', on_pick)
-        
-        return fig
+    def _readAicArray(self):
+        return self.protocol._readAicArray()
 
+    def _readBicArray(self):
+        return self.protocol._readBicArray()
+    
+    def _showBlockMatrix(self, 
+                         ax: plt.Axes,
+                         matrix: np.ndarray, 
+                         stride: int,
+                         **kwargs  ):
+        n = len(matrix)
+        start = -0.5 / stride
+        end = (n - 0.5) / stride
+        extent = (start, end, end, start)
+        
+        plt.colorbar(ax.imshow(matrix, extent=extent, **kwargs))
+        
+        # Plot delimiting lines
+        lines = np.linspace(start=start+1, stop=end-1, num=n//stride)
+        ax.vlines(x=lines, ymin=start, ymax=end, colors='k')
+        ax.hlines(y=lines, xmin=start, xmax=end, colors='k')
+        
+    def _showSparseBlockMatrix(self, 
+                               ax: plt.Axes,
+                               matrix: scipy.sparse.spmatrix, 
+                               stride: int,
+                               **kwargs):
+        self._showBlockMatrix(ax, matrix.todense(), stride=stride, **kwargs)
+        
