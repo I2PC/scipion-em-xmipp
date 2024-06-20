@@ -423,6 +423,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-o', self._getBasesFilename()]
         args += ['-k', k]
         args += ['--triangular_upper']
+        args += ['--orthogonal']
         args += ['-v']
 
         env = self.getCondaEnv(_conda_env='xmipp_graph')
