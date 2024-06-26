@@ -116,13 +116,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             fnResidual = mdResults.getValue(emlib.MDL_IMAGE_RESIDUAL,objId)
             I = xmippLib.Image(fnResidual)
             elements_within_circle = I.getData()[mask]
-            std_dev = np.std(elements_within_circle)
-            if self.useVariance.get():
-                std_dev = std_dev**2
+            var = np.var(elements_within_circle)
             sum_of_squares = np.sum(elements_within_circle ** 2)
-            if self.squareSum.get():
-                sum_of_squares = sum_of_squares**2
-            LL = -sum_of_squares/(2*std_dev)
+            Npix = elements_within_circle.size
+            LL = -sum_of_squares/(2*var) - Npix/2 * np.log(2*np.pi*var)
 
             newRow = md.Row()
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
