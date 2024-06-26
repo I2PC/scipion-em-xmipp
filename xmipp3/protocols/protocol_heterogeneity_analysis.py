@@ -404,7 +404,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-o', self._getBasesFilename()]
         args += ['-k', k]
         args += ['--triangular_upper']
-        args += ['--orthogonal']
+        args += ['--norm', 'O']
         args += ['-v']
 
         env = self.getCondaEnv(_conda_env='xmipp_graph')
@@ -414,11 +414,12 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         classificationMd = emlib.MetaData()
         bases = self._readBases()
+        inverseBases = bases.transpose(0, 2, 1)
         for i, directionId in enumerate(directionMd):
             classificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
             
             projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED)).T
-            correctedProjections = bases[i].T @ projections
+            correctedProjections = inverseBases[i] @ projections
             
             classificationMd.setColumnValues(emlib.MDL_DIMRED, correctedProjections.T.tolist())
             classificationMd.write(self._getCorrectedDirectionalClassificationMdFilename(directionId))
