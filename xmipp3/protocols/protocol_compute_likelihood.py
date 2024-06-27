@@ -120,6 +120,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
             newRow.setValue(emlib.MDL_LL, float(LL))
             newRow.setValue(emlib.MDL_IMAGE_REF, fnVol)
+            # newRow.setValue(emlib.MDL_RESIDUAL_VARIANCE, var)
             if self.keepResiduals:
                 newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
             newRow.addToMd(mdOut)
