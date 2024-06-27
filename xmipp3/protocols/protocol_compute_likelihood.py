@@ -73,11 +73,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='The actual gray value can be at most as small as 1-change or as large as 1+change')
         form.addParam('keepResiduals', BooleanParam, label="Keep residuals?", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Keep residuals rather than deleting them after calculation')
-        form.addParam('useVariance', BooleanParam, label="Use variance?", default=True, expertLevel=LEVEL_ADVANCED,
-                      help='Whether to divide by the variance instead of the standard deviation of the noise (residuals). '
-                           'This enhances all matrix elements and seems to work poorly for simulated data')
-        form.addParam('squareSum', BooleanParam, label="Square sum of squares?", default=False, expertLevel=LEVEL_ADVANCED,
-                      help='Whether to take the square of the sum of squares. This seems to work better when using the variance.')
         form.addParallelSection(threads=0, mpi=8)
     
     # --------------------------- INSERT steps functions --------------------------------------------
