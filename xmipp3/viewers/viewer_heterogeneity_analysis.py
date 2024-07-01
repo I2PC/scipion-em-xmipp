@@ -106,14 +106,15 @@ class XmippViewerHetAnalysis(ProtocolViewer):
 
     def _displayInformationCriterion(self, e):
         analysis = self._readGmmAnalysis()
-        
+
         fig, ax = plt.subplots()
         
-        x = np.array(analysis['param_n_components'])
-        y = -np.array(analysis['mean_test_score'])
+        x = np.array(analysis['param_n_components'], dtype=float)
+        y = -np.array(analysis['mean_test_score'], dtype=float)
 
         ax.plot(x, y)
-        ax.set_title('Bayesian Information Criterion')
+        ax.set_ylabel('Bayesian information criterion')
+        ax.set_xlabel('Number of classes')
             
         return [fig]
         

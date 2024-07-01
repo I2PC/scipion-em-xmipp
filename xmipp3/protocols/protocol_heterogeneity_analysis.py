@@ -470,13 +470,10 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
         maxClasses = self.maxClasses.get()
 
-        def bic_to_score(estimator, x):
-            return -estimator.bic(x)
-
         search = sklearn.model_selection.GridSearchCV(
             sklearn.mixture.GaussianMixture(), 
             param_grid={ "n_components": range(1, maxClasses+1) }, 
-            scoring=bic_to_score
+            scoring=lambda estimator, x : -estimator.bic(x)
         )
         search.fit(projections)
     
