@@ -61,6 +61,10 @@ class XmippViewerHetReconstruct(ProtocolViewer):
                       help='Shows the histogram of each principal component')
         form.addParam('displayHistogram2d', LabelParam, label='2D histograms',
                       help='Shows the 2D histogram of pairwise principal components')
+        form.addParam('displayScatter2d', LabelParam, label='2D point scatter',
+                      help='Shows the 2D histogram of pairwise principal components')
+        form.addParam('displayScatter3d', LabelParam, label='3D point scatter',
+                      help='Shows the 2D histogram of pairwise principal components')
     
 
     #--------------------------- INFO functions ----------------------------------------------------
@@ -70,6 +74,8 @@ class XmippViewerHetReconstruct(ProtocolViewer):
         return {
             'displayHistogram1d': self._displayHistogram1d,
             'displayHistogram2d': self._displayHistogram2d,
+            'displayScatter2d': self._displayScatter2d,
+            'displayScatter3d': self._displayScatter3d,
         }
 
     def _displayHistogram1d(self, e):
@@ -82,10 +88,40 @@ class XmippViewerHetReconstruct(ProtocolViewer):
         gmm = self._readGaussianMixtureModel()
         return self._showHistogram2d(projections, gmm)
 
+    def _displayScatter2d(self, e):
+        projections, classes = self._readProjectionsAndClasses()
+        percentiles = np.percentile(projections, q=(1, 99), axis=0)
+    
+        fig, ax = plt.subplots()
+        ax.scatter(projections[:,-1], projections[:,-2], c=classes, s=1, cmap='tab10', marker='.', alpha=0.1)
+        ax.set_xlim(percentiles[0,-1], percentiles[1,-1])
+        ax.set_ylim(percentiles[0,-2], percentiles[1,-2])
+        
+        return[fig]
+
+    def _displayScatter3d(self, e):
+        projections, classes = self._readProjectionsAndClasses()
+        percentiles = np.percentile(projections, q=(1, 99), axis=0)
+    
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+        ax.scatter(projections[:,-1], projections[:,-2], projections[:,-3], c=classes, cmap='tab10', s=1, marker='.', alpha=0.1)
+        ax.set_xlim(percentiles[0,-1], percentiles[1,-1])
+        ax.set_ylim(percentiles[0,-2], percentiles[1,-2])
+        ax.set_zlim(percentiles[0,-3], percentiles[1,-3])
+        
+        return[fig]
+    
     # --------------------------- UTILS functions -----------------------------   
     def _readProjections(self) -> np.ndarray:
         md = emlib.MetaData(self.protocol._getClassificationMdFilename())
         return np.array(md.getColumnValues(emlib.MDL_DIMRED))
+    
+    def _readProjectionsAndClasses(self) -> np.ndarray:
+        md = emlib.MetaData(self.protocol._getClassificationMdFilename())
+        projections = np.array(md.getColumnValues(emlib.MDL_DIMRED))
+        classes = np.array(md.getColumnValues(emlib.MDL_REF3D))
+        return projections, classes
     
     def _readGaussianMixtureModel(self) -> sklearn.mixture.GaussianMixture:
         return self.protocol._readGaussianMixtureModel()

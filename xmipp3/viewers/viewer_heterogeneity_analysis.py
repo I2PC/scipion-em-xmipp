@@ -59,6 +59,10 @@ class XmippViewerHetAnalysis(ProtocolViewer):
                       help='Shows the histogram of each principal component')
         form.addParam('displayHistogram2d', LabelParam, label='2D histograms',
                       help='Shows the 2D histogram of pairwise principal components')
+        form.addParam('displayScatter2d', LabelParam, label='2D point scatter',
+                      help='Shows the 2D histogram of pairwise principal components')
+        form.addParam('displayScatter3d', LabelParam, label='3D point scatter',
+                      help='Shows the 2D histogram of pairwise principal components')
         form.addParam('displayInformationCriterion', LabelParam, label='Information criterion',
                       help='Shows Akaike and Bayesian information criterions')
 
@@ -87,6 +91,8 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         return {
             'displayHistogram1d': self._displayHistogram1d,
             'displayHistogram2d': self._displayHistogram2d,
+            'displayScatter2d': self._displayScatter2d,
+            'displayScatter3d': self._displayScatter3d,
             'displayInformationCriterion': self._displayInformationCriterion,
             'displayDirectionalMd': self._displayDirectionalMd,
             'displayDirectionalHistogram1d': self._displayDirectionalHistogram1d,
@@ -104,6 +110,30 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         projections = self._readProjections()
         return self._showHistogram2d(projections)
 
+    def _displayScatter2d(self, e):
+        projections = self._readProjections()
+        percentiles = np.percentile(projections, q=(1, 99), axis=0)
+    
+        fig, ax = plt.subplots()
+        ax.scatter(projections[:,-1], projections[:,-2], s=1, marker='.', alpha=0.1)
+        ax.set_xlim(percentiles[0,-1], percentiles[1,-1])
+        ax.set_ylim(percentiles[0,-2], percentiles[1,-2])
+            
+        return[fig]
+
+    def _displayScatter3d(self, e):
+        projections = self._readProjections()
+        percentiles = np.percentile(projections, q=(1, 99), axis=0)
+    
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+        ax.scatter(projections[:,-1], projections[:,-2], projections[:,-3], s=1, marker='.', alpha=0.1)
+        ax.set_xlim(percentiles[0,-1], percentiles[1,-1])
+        ax.set_ylim(percentiles[0,-2], percentiles[1,-2])
+        ax.set_zlim(percentiles[0,-3], percentiles[1,-3])
+        
+        return[fig]
+    
     def _displayInformationCriterion(self, e):
         analysis = self._readGmmAnalysis()
 
