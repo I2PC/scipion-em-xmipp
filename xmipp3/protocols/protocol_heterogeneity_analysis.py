@@ -26,9 +26,8 @@
 
 
 from pwem import emlib
-import pwem.convert
 from pwem.protocols import ProtClassify3D
-from pwem.objects import Particle, VolumeMask, SetOfParticles
+from pwem.objects import Particle, VolumeMask, SetOfParticles, Integer
 
 from pyworkflow import BETA
 from pyworkflow.utils import makePath, createLink, moveFile, cleanPath
@@ -39,7 +38,7 @@ from pyworkflow.protocol.params import (Form, PointerParam,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 
 import xmipp3
-from xmipp3.convert import writeSetOfParticles, readSetOfParticles, setXmippAttributes
+from xmipp3.convert import writeSetOfParticles, setXmippAttributes
 import xmippLib
 
 import os.path
@@ -50,6 +49,7 @@ import numpy as np
 import scipy.sparse
 import scipy.stats
 import sklearn.mixture
+import sklearn.model_selection
 
 class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_PARTICLES_NAME = 'Particles'
@@ -90,6 +90,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('principalComponents', IntParam, label='Principal components',
                       default=2, validators=[GT(0)],
                       help='Number of principal components used for classification')
+
+        form.addSection(label='Analysis')
+        form.addParam('maxClasses', IntParam, label='Maximum number of classes',
+                      default=16, validators=[GT(0)],
+                      help='Maximum number of classes considered in the analysis step')
         
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
@@ -131,7 +136,18 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('correctBasisStep')
         self._insertFunctionStep('combineDirectionsStep')
         self._insertFunctionStep('createOutputStep')
-        #self._insertFunctionStep('analysisStep')
+        self._insertFunctionStep('analysisStep')
+
+    def _summary(self):
+        summary = []
+        
+        recommendedNumberOfClasses = getattr(self, 'recommendedNumberOfClasses', None)
+        if recommendedNumberOfClasses is not None:
+            summary.append("Recommended number of classes: %d." % recommendedNumberOfClasses)
+        else:
+            summary.append("Recommended number of classes not ready")
+
+        return summary
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
@@ -245,7 +261,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         directionalMd = emlib.MetaData()
         maskRow = emlib.metadata.Row()
         directionRow = emlib.metadata.Row()
-        k: int = self.principalComponents.get()
+        k = self._getPrincipalComponentsCount()
         
         env = self.getCondaEnv(_conda_env='xmipp_pyTorch')
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
@@ -296,41 +312,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             directionRow.addToMd(directionalMd)
 
         directionalMd.write(self._getDirectionalMdFilename())
-    
-    def combineDirections2Step(self):
-        result = emlib.MetaData(self._getWienerParticleMdFilename())
-        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
-        classificationMd = emlib.MetaData()
-        itemIds = result.getColumnValues(emlib.MDL_ITEM_ID)
-
-        k: int = self.principalComponents.get()
-        nImages = result.size()
-        nDirections = directionMd.size()
-        nFeatures = nDirections*k
-        
-        projections = scipy.sparse.lil_matrix((nImages, nFeatures))       
-        for i, directionId in enumerate(directionMd):
-            start = i*k
-            end = start+k
-            classificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-            for objId in classificationMd:
-                index = itemIds.index(classificationMd.getValue(emlib.MDL_ITEM_ID, objId))
-                projection = classificationMd.getValue(emlib.MDL_DIMRED, objId)
-                projections[index, start:end] = projection
-
-        projections = projections.tocsr()
-        scipy.sparse.save_npz(self._getExtraPath('projections.npz'), projections)
-        
-        _, _, vh = scipy.sparse.linalg.svds(projections.T, k=k, return_singular_vectors='vh')
-        projections = projections @ vh.T # (vh @ projections.T).T
-        
-        result.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
-        result.write(self._getClassificationMdFilename())
-    
+  
     def buildGraphStep(self):
         # Build graph intersecting direction pairs and calculate the similarity
         # between projection values
-        k: int = self.principalComponents.get()
+        k = self._getPrincipalComponentsCount()
         symList = xmippLib.SymList()
         symList.readSymmetryFile(self._getSymmetryGroup())
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
@@ -338,8 +324,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         md1 = emlib.MetaData()
         objIds = list(directionMd)
         nDirections = len(objIds)
-        cross_correlations = scipy.sparse.lil_matrix((nDirections*k, )*2)
-        weights = scipy.sparse.lil_matrix((nDirections*k, )*2)
+        crossCorrelations = scipy.sparse.lil_matrix((nDirections*k, )*2)
+        weights = scipy.sparse.lil_matrix(crossCorrelations.shape)
         for (idx0, directionId0), (idx1, directionId1) in itertools.combinations(enumerate(objIds), r=2):
             # Obtain the projection angles
             rot0 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId0)
@@ -374,7 +360,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                     projections1 /= norm1
                     
                     # Compute the cross correlation and weight matrix
-                    cross_correlation = projections0 @ projections1.T
+                    crossCorrelation = projections0 @ projections1.T
                     weight = norm0 @ norm1.T
 
                     # Write them in symmetric positions
@@ -382,8 +368,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                     end0 = start0+k
                     start1 = idx1*k
                     end1 = start1+k
-                    cross_correlations[start0:end0, start1:end1] = cross_correlation
-                    cross_correlations[start1:end1, start0:end0] = cross_correlation.T
+                    crossCorrelations[start0:end0, start1:end1] = crossCorrelation
+                    crossCorrelations[start1:end1, start0:end0] = crossCorrelation.T
                     weights[start0:end0, start1:end1] = weight
                     weights[start1:end1, start0:end0] = weight.T
                     
@@ -391,11 +377,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         weights /= abs(weights).max()
         
         # Store the matrices
-        self._writeCrossCorrelations(cross_correlations.tocsr())
+        self._writeCrossCorrelations(crossCorrelations.tocsr())
         self._writeWeights(weights.tocsr())
 
     def basisSynchronizationStep(self):
-        k: int = self.principalComponents.get()
+        k = self._getPrincipalComponentsCount()
         
         cmd = 'xmipp_synchronize_transform'
         args = []
@@ -425,7 +411,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             classificationMd.write(self._getCorrectedDirectionalClassificationMdFilename(directionId))
    
     def combineDirectionsStep(self):   
-        k: int = self.principalComponents.get()
+        k = self._getPrincipalComponentsCount()
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
 
@@ -482,31 +468,25 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def analysisStep(self):
         classificationMd = emlib.MetaData(self._getClassificationMdFilename())
         projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
+        maxClasses = self.maxClasses.get()
 
-        aics = []
-        bics = []
-        
-        # Start with one
-        gmm = sklearn.mixture.GaussianMixture(n_components=1)
-        gmm.fit(projections)
-        aics.append(gmm.aic(projections))
-        bics.append(gmm.bic(projections))
-        
-        for i in itertools.count(2):
-            gmm = sklearn.mixture.GaussianMixture(n_components=i)
-            gmm.fit(projections)
-            aics.append(gmm.aic(projections))
-            bics.append(gmm.bic(projections))
-            
-            if aics[-1] > aics[0] and bics[-1] > bics[0]:
-                break
-            
-        result = {
-            'aic': aics,
-            'bic': bics
-        }
-        
-        self._writeInformationCriterions(result)
+        def bic_to_score(estimator, x):
+            return -estimator.bic(x)
+
+        search = sklearn.model_selection.GridSearchCV(
+            sklearn.mixture.GaussianMixture(), 
+            param_grid={ "n_components": range(1, maxClasses+1) }, 
+            scoring=bic_to_score
+        )
+        search.fit(projections)
+    
+        result = search.cv_results_
+        index = np.argmax(result['mean_test_score'])
+        nClasses = result['param_n_components'][index]
+
+        self.recommendedNumberOfClasses = Integer(nClasses)
+        self._store()
+        self._writeGmmAnalysis(result)
         
     # --------------------------- UTILS functions -------------------------------
     def _getDeviceList(self):
@@ -530,6 +510,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getAngularDistance(self):
         return self.angularDistance.get()
+    
+    def _getPrincipalComponentsCount(self) -> int:
+        return self.principalComponents.get()
     
     def _getInputMaskFilename(self):
         return self._getTmpPath('mask.mrc')
@@ -594,8 +577,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getBasesFilename(self):
         return self._getExtraPath('bases.npy')
     
-    def _getInformationCriterionFilename(self):
-        return self._getExtraPath('information_criterion.pkl')
+    def _getGmmAnalysisFilename(self):
+        return self._getExtraPath('analysis.pkl')
 
     def _writeCrossCorrelations(self, correlations: scipy.sparse.csr_matrix) -> str:
         path = self._getCrossCorrelationsFilename()
@@ -616,11 +599,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _readBases(self):
         return np.load(self._getBasesFilename())
 
-    def _writeInformationCriterions(self, ics):
-        with open(self._getInformationCriterionFilename(), 'wb') as f:
-            pickle.dump(ics, f)
+    def _writeGmmAnalysis(self, analysis):
+        with open(self._getGmmAnalysisFilename(), 'wb') as f:
+            pickle.dump(analysis, f)
         
-    def _readInformationCriterions(self):
-        with open(self._getInformationCriterionFilename(), 'rb') as f:
+    def _readGmmAnalysis(self):
+        with open(self._getGmmAnalysisFilename(), 'rb') as f:
             return pickle.load(f)
     

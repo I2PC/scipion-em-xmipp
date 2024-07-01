@@ -105,19 +105,16 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         return self._showHistogram2d(projections)
 
     def _displayInformationCriterion(self, e):
-        ics = self._readInformationCriterions()
+        analysis = self._readGmmAnalysis()
         
         fig, ax = plt.subplots()
         
-        for key, values in ics.items():
-            ax.plot(
-                range(1, len(values)+1),
-                values,
-                label=key
-            )
+        x = np.array(analysis['param_n_components'])
+        y = -np.array(analysis['mean_test_score'])
+
+        ax.plot(x, y)
+        ax.set_title('Bayesian Information Criterion')
             
-        ax.legend()
-        
         return [fig]
         
     def _displayDirectionalMd(self, e):
@@ -173,7 +170,9 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     
     # --------------------------- UTILS functions -----------------------------   
     def _getBlockStride(self) -> int:
-        return self.protocol.principalComponents.get()
+        k = self.protocol.principalComponents.get()
+        k2 = k+2
+        return k2
     
     def _getDirectionalMdFilename(self):
         return self.protocol._getDirectionalMdFilename()
@@ -188,8 +187,8 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         md = emlib.MetaData(self.protocol._getClassificationMdFilename())
         return np.array(md.getColumnValues(emlib.MDL_DIMRED))
     
-    def _readInformationCriterions(self):
-        return self.protocol._readInformationCriterions()
+    def _readGmmAnalysis(self):
+        return self.protocol._readGmmAnalysis()
     
     def _gridLayout(self, n: int) -> Tuple[int, int]:
         cols = math.floor(math.sqrt(n))
