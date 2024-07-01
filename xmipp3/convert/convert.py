@@ -270,6 +270,14 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
         attrName = prefixAttribute(emlib.label2Str(label))
         if label not in attrLabels and hasattr(obj, attrName):
             value = obj.getAttributeValue(attrName)
+            type = emlib.labelType(label)
+
+            # Python stores lists as string. Convert
+            if type == emlib.LABEL_VECTOR_DOUBLE:
+                value = [float(x) for x in value.split(',')]
+            elif type == emlib.LABEL_VECTOR_SIZET:
+                value = [int(x) for x in value.split(',')]
+            
             row.setValue(label, value)
 
 
@@ -476,7 +484,8 @@ def imageToRow(img, imgRow, imgLabel, **kwargs):
         acquisitionToRow(img.getAcquisition(), imgRow)
 
     # Write all extra labels to the row
-    objectToRow(img, imgRow, {}, extraLabels=IMAGE_EXTRA_LABELS)
+    objectToRow(img, imgRow, {}, 
+                extraLabels=IMAGE_EXTRA_LABELS + kwargs.get('extraLabels', []))
 
     # Provide a hook to be used if something is needed to be
     # done for special cases before converting image to row
