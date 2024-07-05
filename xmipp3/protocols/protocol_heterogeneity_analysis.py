@@ -88,8 +88,14 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
         form.addSection(label='Classification')
         form.addParam('principalComponents', IntParam, label='Principal components',
-                      default=2, validators=[GT(0)],
-                      help='Number of principal components used for classification')
+                      default=6, validators=[GT(0)],
+                      help='Number of principal components used for directional classification')
+        form.addParam('secondaryPrincipalComponents', IntParam, label='Secondary principal components',
+                      default=96, validators=[GT(0)],
+                      help='Number of principal components used in decomposition.')
+        form.addParam('outputPrincipalComponents', IntParam, label='Output principal components',
+                      default=4, validators=[GT(0)],
+                      help='Number of principal components represented in the output.')
 
         form.addSection(label='Analysis')
         form.addParam('maxClasses', IntParam, label='Maximum number of classes',
@@ -222,14 +228,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-i', self._getInputMaskFilename()]
         args += ['-o', self._getMaskGalleryStackFilename()]
         args += ['--sampling_rate', self._getAngularSampling()]
-        args += ['--angular_distance', self._getAngularDistance()]
         args += ['--sym', self._getSymmetryGroup()]
         #args += ['--method', 'fourier', 1, 1, 'bspline'] 
         args += ['--method', 'real_space'] 
-        args += ['--compute_neighbors']
-        args += ['--experimental_images', self._getInputParticleMdFilename()]
         if self.checkMirrors:
-            args += ['--max_tilt_angle', 90]
+            args += ['--max_tilt_angle', 90.01] #HACK: .01 to include 90
 
         # Create a gallery of projections of the input volume
         # with the given angular sampling
@@ -255,37 +258,61 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         # different angular neighbourhoods
         self.runJob("xmipp_angular_neighbourhood", args, numberOfMpi=1)
         
-    def classifyDirectionsStep(self):
+        # Create directory structure
         maskGalleryMd = emlib.MetaData(self._getMaskGalleryMdFilename())
-        particles = emlib.MetaData()
-        directionalMd = emlib.MetaData()
         maskRow = emlib.metadata.Row()
+        directionalMd = emlib.MetaData()
         directionRow = emlib.metadata.Row()
+        particles = emlib.MetaData()
+        itemIds = set()
+        for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
+            directionId = int(block.split("_")[1])
+
+            particles.readBlock(self._getNeighborsMdFilename(), block)
+            if particles.size() == 0:
+                print('Direction %d has no particles. Skipping' % directionId)
+                continue
+
+            # Write particles
+            makePath(self._getDirectionPath(directionId))
+            particles.write(self._getDirectionParticlesMdFilename(directionId))
+            
+            # Update particle ids
+            itemIds.update(particles.getColumnValues(emlib.MDL_ITEM_ID))
+            
+            # Read information from the mask metadata
+            maskRow.readFromMd(maskGalleryMd, directionId)
+            maskFilename = maskRow.getValue(emlib.MDL_IMAGE)
+
+            # Ensemble the output row
+            directionRow.copyFromRow(maskRow)
+            directionRow.setValue(emlib.MDL_MASK, maskFilename)
+            directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
+            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImagesFilename(directionId))
+            directionRow.setValue(emlib.MDL_SELFILE, self._getDirectionalClassificationMdFilename(directionId))
+            directionRow.setValue(emlib.MDL_COUNT, particles.size())
+            directionRow.addToMd(directionalMd)
+
+        if len(itemIds) != len(self._getInputParticles()):
+            raise RuntimeError('Not all particles were grouped. Please try '
+                               'increasing "Angular distance" or decreasing '
+                               '"Angular sampling"')
+
+        directionalMd.write(self._getDirectionalMdFilename())
+            
+    def classifyDirectionsStep(self):
         k = self._getPrincipalComponentsCount()
         
         env = self.getCondaEnv(_conda_env='xmipp_pyTorch')
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
 
-        for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
-            directionId = int(block.split("_")[1])
-            
-            # Read the particles
-            particles.readBlock(self._getNeighborsMdFilename(), block)
-            if particles.size() == 0:
-                print('Direction %d has no particles. Skipping' % directionId)
-                continue
-            
-            # Create a working directory for the direction and copy
-            # particles to it
-            makePath(self._getDirectionPath(directionId))
-            particles.write(self._getDirectionParticlesMdFilename(directionId))
-            
+        directionalMd = emlib.MetaData(self._getDirectionalMdFilename())
+        for directionId in directionalMd:
             # Read information from the mask metadata
-            maskRow.readFromMd(maskGalleryMd, directionId)
-            maskFilename = maskRow.getValue(emlib.MDL_IMAGE)
-            rot = maskRow.getValue(emlib.MDL_ANGLE_ROT)
-            tilt = maskRow.getValue(emlib.MDL_ANGLE_TILT)
-            psi = maskRow.getValue(emlib.MDL_ANGLE_PSI)
+            maskFilename = directionalMd.getValue(emlib.MDL_MASK, directionId)
+            rot = directionalMd.getValue(emlib.MDL_ANGLE_ROT, directionId)
+            tilt = directionalMd.getValue(emlib.MDL_ANGLE_TILT, directionId)
+            psi = directionalMd.getValue(emlib.MDL_ANGLE_PSI, directionId)
                 
             # Perform the classification
             args = []
@@ -299,19 +326,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                 args += ['--device'] + self._getDeviceList()
 
             self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
-            
-            directionalClassificationMdFilename = self._getDirectionalClassificationMdFilename(directionId)
-            
-            # Ensemble the output row
-            directionRow.copyFromRow(maskRow)
-            directionRow.setValue(emlib.MDL_MASK, maskFilename)
-            directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
-            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImagesFilename(directionId))
-            directionRow.setValue(emlib.MDL_SELFILE, directionalClassificationMdFilename)
-            directionRow.setValue(emlib.MDL_COUNT, particles.size())
-            directionRow.addToMd(directionalMd)
-
-        directionalMd.write(self._getDirectionalMdFilename())
   
     def buildGraphStep(self):
         # Build graph intersecting direction pairs and calculate the similarity
@@ -382,6 +396,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
     def basisSynchronizationStep(self):
         k = self._getPrincipalComponentsCount()
+        k2 = self._getSecondaryPrincipalComponentsCount()
         
         cmd = 'xmipp_synchronize_transform'
         args = []
@@ -389,29 +404,31 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-w', self._getWeightsFilename()]
         args += ['-o', self._getBasesFilename()]
         args += ['-k', k]
+        args += ['-k2', k2]
+        args += ['-p', self._getPairwiseFilename()]
         args += ['--triangular_upper']
-        args += ['--norm', 'O']
         args += ['-v']
 
         env = self.getCondaEnv(_conda_env='xmipp_graph')
         self.runJob(cmd, args, env=env, numberOfMpi=1)
    
     def correctBasisStep(self):
+        ko = self._getOutputPrincipalComponentsCount()
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         classificationMd = emlib.MetaData()
         bases = self._readBases()
-        inverseBases = bases.transpose(0, 2, 1)
+        inverseBases = np.linalg.pinv(bases)
+
         for i, directionId in enumerate(directionMd):
             classificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
             
-            projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED)).T
-            correctedProjections = inverseBases[i] @ projections
+            projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
+            correctedProjections = projections @ inverseBases[i,-ko:].T
             
-            classificationMd.setColumnValues(emlib.MDL_DIMRED, correctedProjections.T.tolist())
+            classificationMd.setColumnValues(emlib.MDL_DIMRED, correctedProjections.tolist())
             classificationMd.write(self._getCorrectedDirectionalClassificationMdFilename(directionId))
    
     def combineDirectionsStep(self):   
-        k = self._getPrincipalComponentsCount()
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
 
@@ -438,13 +455,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         result = emlib.MetaData(self._getWienerParticleMdFilename())
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-
-            projection = projections.get(itemId, None)
-            if projection is not None:
-                projection = projection / sigmas.get(itemId, 1)
-                result.setValue(emlib.MDL_DIMRED, projection.tolist(), objId)
-            else:
-                result.setValue(emlib.MDL_DIMRED, [0.0]*k, objId)
+            projection = projections[itemId] / sigmas[itemId]
+            result.setValue(emlib.MDL_DIMRED, projection.tolist(), objId)
                 
         # Store
         result.write(self._getClassificationMdFilename())
@@ -511,6 +523,12 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getPrincipalComponentsCount(self) -> int:
         return self.principalComponents.get()
     
+    def _getSecondaryPrincipalComponentsCount(self) -> int:
+        return self.secondaryPrincipalComponents.get()
+    
+    def _getOutputPrincipalComponentsCount(self) -> int:
+        return self.outputPrincipalComponents.get()
+
     def _getInputMaskFilename(self):
         return self._getTmpPath('mask.mrc')
     
@@ -574,6 +592,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getBasesFilename(self):
         return self._getExtraPath('bases.npy')
     
+    def _getPairwiseFilename(self):
+        return self._getExtraPath('pairwise.npy')
+
     def _getGmmAnalysisFilename(self):
         return self._getExtraPath('analysis.pkl')
 

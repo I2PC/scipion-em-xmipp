@@ -201,9 +201,7 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     
     # --------------------------- UTILS functions -----------------------------   
     def _getBlockStride(self) -> int:
-        k = self.protocol.principalComponents.get()
-        k2 = k+2
-        return k2
+        return self.protocol._getPrincipalComponentsCount()
     
     def _getDirectionalMdFilename(self):
         return self.protocol._getDirectionalMdFilename()
