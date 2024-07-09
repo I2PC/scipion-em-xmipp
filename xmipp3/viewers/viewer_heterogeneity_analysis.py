@@ -63,6 +63,7 @@ class XmippViewerHetAnalysis(ProtocolViewer):
                       help='Shows the 2D histogram of pairwise principal components')
         form.addParam('displayInformationCriterion', LabelParam, label='Information criterion',
                       help='Shows Akaike and Bayesian information criterions')
+        form.addParam('displayCrossCorrelation', LabelParam, label='Cross correlation')
 
         form.addSection(label='Directional data')
         form.addParam('displayDirectionalMd', LabelParam, label='Directional metadata',
@@ -78,6 +79,7 @@ class XmippViewerHetAnalysis(ProtocolViewer):
                       help='Shows a block matrix with weights')
         form.addParam('displayWeightedCrossCorrelation', LabelParam, label='Weighted cross correlation',
                       help='Shows a block matrix with weighted cross correlations')
+        form.addParam('display3dGraph', LabelParam, label='3D adjacency graph')
 
     #--------------------------- INFO functions ----------------------------------------------------
 
@@ -88,11 +90,13 @@ class XmippViewerHetAnalysis(ProtocolViewer):
             'displayScatter2d': self._displayScatter2d,
             'displayScatter3d': self._displayScatter3d,
             'displayInformationCriterion': self._displayInformationCriterion,
+            'displayCrossCorrelation': self._displayCrossCorrelation,
             'displayDirectionalMd': self._displayDirectionalMd,
             'displayDirectionalHistograms': self._displayDirectionalHistograms,
             'displayCrossCorrelations': self._displayCrossCorrelations,
             'displayWeights': self._displayWeights,
             'displayWeightedCrossCorrelation': self._displayWeightedCrossCorrelations,
+            'display3dGraph': self._display3dGraph,
         }
 
     def _displayHistograms(self, e):
@@ -135,6 +139,15 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         ax.set_ylabel('Bayesian information criterion')
         ax.set_xlabel('Number of classes')
             
+        return [fig]
+        
+    def _displayCrossCorrelation(self, e):
+        projections = self._readProjections()
+        projections /= np.linalg.norm(projections, axis=0, keepdims=True)
+        crossCorrelation = projections.T @ projections
+
+        fig, ax = plt.subplots()
+        ax.imshow(crossCorrelation)
         return [fig]
         
     def _displayDirectionalMd(self, e):
@@ -181,6 +194,37 @@ class XmippViewerHetAnalysis(ProtocolViewer):
             cmap=mpl.cm.coolwarm
         )
         return [fig]
+   
+    def _display3dGraph(self, e) -> plt.Figure:
+        fig = plt.figure()
+        ax: mpl3d.Axes3D = fig.add_subplot(projection='3d')
+        
+        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        objIds = list(directionMd)
+        xs = directionMd.getColumnValues(emlib.MDL_X)
+        ys = directionMd.getColumnValues(emlib.MDL_Y)
+        zs = directionMd.getColumnValues(emlib.MDL_Z)
+        points = np.column_stack((xs, ys, zs))
+        
+        ax.scatter(xs, ys, zs, color='black')
+        for objId, x, y, z in zip(objIds, xs, ys, zs):
+            ax.text(x, y, z, str(objId))
+        
+        adjacency = self._readAdjacencyGraph()
+        edges = adjacency.nonzero()
+        segments = np.stack((points[edges[0]], points[edges[1]]), axis=1)
+        counts = adjacency[edges].A1
+        
+        # Display the graph edges
+        colormap = mpl.cm.plasma
+        normalize = mpl.colors.LogNorm(1.0, counts.max())
+        lines = mpl3d.art3d.Line3DCollection(segments, linewidths=0.5, colors=colormap(normalize(counts)))
+        ax.add_collection(lines)
+        
+        #  Show colorbar
+        fig.colorbar(mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), label='Particle count')
+        
+        return [fig]
     
     # --------------------------- UTILS functions -----------------------------   
     def _getBlockStride(self) -> int:
@@ -194,6 +238,9 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         
     def _readWeights(self) -> scipy.sparse.csr_matrix:
         return self.protocol._readWeights()
+    
+    def _readAdjacencyGraph(self) -> scipy.sparse.csr_matrix:
+        return self.protocol._readAdjacencyGraph()
     
     def _readProjections(self) -> np.ndarray:
         md = emlib.MetaData(self.protocol._getClassificationMdFilename())
