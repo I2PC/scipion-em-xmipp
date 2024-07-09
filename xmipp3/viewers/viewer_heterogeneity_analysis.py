@@ -55,10 +55,8 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Analysis')
-        form.addParam('displayHistogram1d', LabelParam, label='1D histograms',
-                      help='Shows the histogram of each principal component')
-        form.addParam('displayHistogram2d', LabelParam, label='2D histograms',
-                      help='Shows the 2D histogram of pairwise principal components')
+        form.addParam('displayHistograms', LabelParam, label='Histograms',
+                      help='Shows the 2D histograms of pairwise principal components')
         form.addParam('displayScatter2d', LabelParam, label='2D point scatter',
                       help='Shows the 2D histogram of pairwise principal components')
         form.addParam('displayScatter3d', LabelParam, label='3D point scatter',
@@ -69,12 +67,9 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         form.addSection(label='Directional data')
         form.addParam('displayDirectionalMd', LabelParam, label='Directional metadata',
                       help='Shows a metadata with the directional averages and eigenimages')
-        form.addParam('displayDirectionalHistogram1d', IntParam, label='Directional 1D histograms',
+        form.addParam('displayDirectionalHistograms', IntParam, label='Directional histograms',
                       default=1,
-                      help='Shows the 2D histogram of the first 2 principal components')
-        form.addParam('displayDirectionalHistogram2d', IntParam, label='Directional 2D histograms',
-                      default=1,
-                      help='Shows the 2D histogram of the first 2 principal components')
+                      help='Shows the 2D histograms')
         
         form.addSection(label='Graph')
         form.addParam('displayCrossCorrelations', LabelParam, label='Cross correlations',
@@ -89,26 +84,20 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     # --------------------------- DEFINE display functions ----------------------
     def _getVisualizeDict(self):
         return {
-            'displayHistogram1d': self._displayHistogram1d,
-            'displayHistogram2d': self._displayHistogram2d,
+            'displayHistograms': self._displayHistograms,
             'displayScatter2d': self._displayScatter2d,
             'displayScatter3d': self._displayScatter3d,
             'displayInformationCriterion': self._displayInformationCriterion,
             'displayDirectionalMd': self._displayDirectionalMd,
-            'displayDirectionalHistogram1d': self._displayDirectionalHistogram1d,
-            'displayDirectionalHistogram2d': self._displayDirectionalHistogram2d,
+            'displayDirectionalHistograms': self._displayDirectionalHistograms,
             'displayCrossCorrelations': self._displayCrossCorrelations,
             'displayWeights': self._displayWeights,
             'displayWeightedCrossCorrelation': self._displayWeightedCrossCorrelations,
         }
 
-    def _displayHistogram1d(self, e):
+    def _displayHistograms(self, e):
         projections = self._readProjections()
-        return self._showHistogram1d(projections)
-    
-    def _displayHistogram2d(self, e):
-        projections = self._readProjections()
-        return self._showHistogram2d(projections)
+        return self._showHistograms(projections)
 
     def _displayScatter2d(self, e):
         projections = self._readProjections()
@@ -152,18 +141,12 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         dv = DataView(self._getDirectionalMdFilename())
         return [dv]
 
-    def _displayDirectionalHistogram1d(self, e):
-        directionId = self.displayDirectionalHistogram2d.get()
+    def _displayDirectionalHistograms(self, e):
+        directionId = self.displayDirectionalHistograms.get()
         md = emlib.MetaData(self.protocol._getDirectionalClassificationMdFilename(directionId))
         projections = np.array(md.getColumnValues(emlib.MDL_DIMRED))
-        return self._showHistogram1d(projections)
+        return self._showHistograms(projections)
     
-    def _displayDirectionalHistogram2d(self, e):
-        directionId = self.displayDirectionalHistogram2d.get()
-        md = emlib.MetaData(self.protocol._getDirectionalClassificationMdFilename(directionId))
-        projections = np.array(md.getColumnValues(emlib.MDL_DIMRED))
-        return self._showHistogram2d(projections)
-
     def _displayCrossCorrelations(self, e):
         crossCorrelations = self._readCrossCorrelations()
         fig, ax = plt.subplots()
@@ -248,37 +231,32 @@ class XmippViewerHetAnalysis(ProtocolViewer):
                                **kwargs):
         self._showBlockMatrix(ax, matrix.todense(), stride=stride, **kwargs)
     
-    def _showHistogram1d(self, projections: np.ndarray):
+    def _showHistograms(self, projections: np.ndarray):
+        _, k = projections.shape
         percentiles = np.percentile(projections, q=(1, 99), axis=0)
 
-        k = projections.shape[1]
-        fig, axs = plt.subplots(1, k)
-        for i, ax in enumerate(axs):
+        fig = plt.figure()
+        
+        for i, j in itertools.combinations(range(k), r=2):
+            ax = fig.add_subplot(k, k, k*j+i+1)
+
+            x = projections[:,i]
+            y = projections[:,j]
+            xmin = percentiles[0,i]
+            xmax = percentiles[1,i]
+            ymin = percentiles[0,j]
+            ymax = percentiles[1,j]
+
+            ax.hist2d(x, y, bins=32, range=((xmin, xmax), (ymin, ymax)))
+        
+        for i in range(k):
+            ax = fig.add_subplot(k, k, (k+1)*i+1)
+            
             v = projections[:,i]
             vmin = percentiles[0,i]
             vmax = percentiles[1,i]
-            ax.hist(v, bins=32, range=(vmin, vmax))
-            ax.set_title(f'Principal component {i}')
             
-        return [fig]
+            ax.hist(v, bins=32, range=(vmin, vmax))
     
-    def _showHistogram2d(self, projections: np.ndarray):
-        percentiles = np.percentile(projections, q=(1, 99), axis=0)
+        return [fig]
         
-        k = projections.shape[1]
-        fig, axs = plt.subplots(k-1, k-1)
-        for idx0, idx1 in itertools.combinations(range(k), r=2):
-            if k > 2:
-                ax = axs[idx1-1][idx0]
-            else:
-                ax = axs
-            x = projections[:,idx0]
-            y = projections[:,idx1]
-            xmin = percentiles[0,idx0]
-            xmax = percentiles[1,idx0]
-            ymin = percentiles[0,idx1]
-            ymax = percentiles[1,idx1]
-            ax.hist2d(x, y, bins=32, range=((xmin, xmax), (ymin, ymax)))
-
-        return [fig]
-    
