@@ -41,6 +41,7 @@ import xmipp3
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes
 import xmippLib
 
+import math
 import os.path
 import pickle
 import itertools
@@ -90,9 +91,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('principalComponents', IntParam, label='Principal components',
                       default=6, validators=[GT(0)],
                       help='Number of principal components used for directional classification')
-        form.addParam('secondaryPrincipalComponents', IntParam, label='Secondary principal components',
-                      default=96, validators=[GT(0)],
-                      help='Number of principal components used in decomposition.')
         form.addParam('outputPrincipalComponents', IntParam, label='Output principal components',
                       default=4, validators=[GT(0)],
                       help='Number of principal components represented in the output.')
@@ -224,6 +222,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_ctf_correct_wiener2d', args)
 
     def projectMaskStep(self):
+        EPS = 1e-3
         args = []
         args += ['-i', self._getInputMaskFilename()]
         args += ['-o', self._getMaskGalleryStackFilename()]
@@ -232,15 +231,38 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         #args += ['--method', 'fourier', 1, 1, 'bspline'] 
         args += ['--method', 'real_space'] 
         if self.checkMirrors:
-            args += ['--max_tilt_angle', 90.01] #HACK: .01 to include 90
+            args += ['--max_tilt_angle', 90.0+EPS]
 
         # Create a gallery of projections of the input volume
         # with the given angular sampling
         self.runJob("xmipp_angular_project_library", args)
-        
+         
+        # Remove redundant points
+        if self.checkMirrors:
+            r = np.sin(EPS)
+            z = np.cos(EPS)
+            x = r*z
+            y = r*r
+            direction = np.array((x,y,z))
+            
+            projectionMd = emlib.MetaData(self._getMaskGalleryMdFilename())
+            newProjectionMd = emlib.MetaData()
+            for row in emlib.metadata.iterRows(projectionMd):
+                x = row.getValue(emlib.MDL_X)
+                y = row.getValue(emlib.MDL_Y)
+                z = row.getValue(emlib.MDL_Z)
+                
+                if np.dot(direction, (x, y, z)) >= 0:
+                    row.addToMd(newProjectionMd)
+                    
+            newProjectionMd.write(self._getMaskGalleryMdFilename())
+            
         # Binarize the mask
         args = []
         args += ['-i', self._getMaskGalleryMdFilename()]
+        args += ['-o', self._getBinarizedMaskGalleryStackFilename()]
+        args += ['--save_metadata_stack', self._getMaskGalleryMdFilename()]
+        args += ['--keep_input_columns']
         args += ['--ge', 1]
         self.runJob("xmipp_image_operate", args)
         
@@ -338,6 +360,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         md1 = emlib.MetaData()
         objIds = list(directionMd)
         nDirections = len(objIds)
+        adjacency = scipy.sparse.lil_matrix((nDirections, )*2)
         crossCorrelations = scipy.sparse.lil_matrix((nDirections*k, )*2)
         weights = scipy.sparse.lil_matrix(crossCorrelations.shape)
         for (idx0, directionId0), (idx1, directionId1) in itertools.combinations(enumerate(objIds), r=2):
@@ -360,9 +383,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                 md1.read(directionMd.getValue(emlib.MDL_SELFILE, directionId1))
                 
                 md0.intersection(md1, emlib.MDL_ITEM_ID)
-                if md0.size() > 0:
+                n = md0.size()
+                if n > 0:
                     md1.intersection(md0, emlib.MDL_ITEM_ID)
-
+                    adjacency[idx0,idx1] = adjacency[idx1,idx0] = n
+                    
                     # Get their likelihood values
                     projections0 = np.array(md0.getColumnValues(emlib.MDL_DIMRED)).T
                     projections1 = np.array(md1.getColumnValues(emlib.MDL_DIMRED)).T
@@ -391,12 +416,12 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         weights /= abs(weights).max()
         
         # Store the matrices
+        self._writeAdjacencyGraph(adjacency.tocsr())
         self._writeCrossCorrelations(crossCorrelations.tocsr())
         self._writeWeights(weights.tocsr())
 
     def basisSynchronizationStep(self):
         k = self._getPrincipalComponentsCount()
-        k2 = self._getSecondaryPrincipalComponentsCount()
         
         cmd = 'xmipp_synchronize_transform'
         args = []
@@ -404,7 +429,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-w', self._getWeightsFilename()]
         args += ['-o', self._getBasesFilename()]
         args += ['-k', k]
-        args += ['-k2', k2]
+        args += ['--tolerance', 0.01]
+        args += ['--eigenvalues', self._getEigenvaluesFilename()]
         args += ['-p', self._getPairwiseFilename()]
         args += ['--triangular_upper']
         args += ['-v']
@@ -558,6 +584,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
     def _getMaskGalleryStackFilename(self):
         return self._getExtraPath('mask_gallery.mrcs')
+    
+    def _getBinarizedMaskGalleryStackFilename(self):
+        return self._getExtraPath('mask_gallery_binarized.mrcs')
 
     def _getNeighborsMdFilename(self):
         return self._getExtraPath('neighbors.xmd')
@@ -583,6 +612,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getDirectionalMdFilename(self):
         return self._getExtraPath('directional.xmd')
 
+    def _getAdjacencyGraphFilename(self):
+        return self._getExtraPath('adjacency.npz')
+    
     def _getCrossCorrelationsFilename(self):
         return self._getExtraPath('cross_correlations.npz')
 
@@ -592,12 +624,23 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getBasesFilename(self):
         return self._getExtraPath('bases.npy')
     
+    def _getEigenvaluesFilename(self):
+        return self._getExtraPath('eigenvalues.npy')
+
     def _getPairwiseFilename(self):
         return self._getExtraPath('pairwise.npy')
 
     def _getGmmAnalysisFilename(self):
         return self._getExtraPath('analysis.pkl')
 
+    def _writeAdjacencyGraph(self, adjacency: scipy.sparse.csr_matrix) -> str:
+        path = self._getAdjacencyGraphFilename()
+        scipy.sparse.save_npz(path, adjacency)
+        return path
+    
+    def _readAdjacencyGraph(self) -> scipy.sparse.csr_matrix:
+        return scipy.sparse.load_npz(self._getAdjacencyGraphFilename())
+    
     def _writeCrossCorrelations(self, correlations: scipy.sparse.csr_matrix) -> str:
         path = self._getCrossCorrelationsFilename()
         scipy.sparse.save_npz(path, correlations)
