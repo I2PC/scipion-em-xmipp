@@ -164,6 +164,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         self._defineOutputs(reprojections=outputSet)
         self._defineSourceRelation(self.inputParticles, outputSet)
 
+        matrix = np.array([particle._xmipp_logLikelihood.get() for particle in outputSet])
+        matrix = matrix.reshape((len(self.refs),-1))
+        np.save(self._getExtraPath('matrix.npy'), matrix)
+
     def _getMdRow(self, mdFile, id):
         """ To get a row. Maybe there is way to request a specific row."""
         for row in md.iterRows(mdFile):
