@@ -215,7 +215,7 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                         splitLimIndex = self.outputSize.get() if not self.finished else None
                         numIter = 1 if len(self.splitedImages) < self.outputSize.get() \
                             else int(len(self.splitedImages) / self.outputSize.get())
-                        for i in range(numIter):
+                        for _ in range(numIter):
                             self.outputCount += 1
                             imageSet = self._loadOutputSet(self.getImagesClass(),
                                                            '%s%d.sqlite'
