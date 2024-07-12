@@ -33,6 +33,7 @@ from xmipp3.convert import writeSetOfParticles
 from xmipp3.base import isXmippCudaPresent
 from pyworkflow.utils import moveFile
 import os
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtReconstructFourier(ProtReconstruct3D):
     """    
@@ -41,7 +42,8 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
     and used as direction projections to reconstruct.
     """
     _label = 'reconstruct fourier'
-    
+    _devStatus = UPDATED
+
     #--------------------------- DEFINE param functions --------------------------------------------   
     def _defineParams(self, form):
 

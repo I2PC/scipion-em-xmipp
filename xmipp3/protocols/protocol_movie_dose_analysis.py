@@ -47,10 +47,8 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
     """ Protocol for the dose analysis """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
     _devStatus = PROD
-
     _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0
-    _devStatus = NEW
     _possibleOutputs = {
         OUTPUT_ACCEPTED: SetOfMovies,
         OUTPUT_DISCARDED: SetOfMovies

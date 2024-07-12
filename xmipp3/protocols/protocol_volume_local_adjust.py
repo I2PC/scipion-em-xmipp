@@ -31,12 +31,16 @@ from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
 from pwem.convert import headers
 from pwem.objects import Volume, Transform
 from pwem.protocols import EMProtocol
+from pyworkflow import BETA, UPDATED, NEW, PROD
+
 
 class XmippProtLocalVolAdj(EMProtocol):
     """Protocol to adjust locally volume intensity to a reference volume. Occupancy volume is saved in protocol folder. Based on 
     https://www.sciencedirect.com/science/article/pii/S1047847723000874?via%3Dihub"""
     _label = 'volume local adjustment'
     _possibleOutputs = Volume
+    _devStatus = NEW
+
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):

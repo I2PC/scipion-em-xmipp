@@ -27,8 +27,8 @@
 # **************************************************************************
 
 from pyworkflow.object import Integer
-from pyworkflow.utils import (getFloatListFromValues, getBoolListFromValues,
-                              getStringListFromValues)
+from pyworkflow.utils import (getBoolListFromValues,
+                              getStringListFromValues, getListFromValues)
 from pwem.protocols import ProtRefine3D, ProtClassify3D
 from pwem import emlib
 from .projmatch_initialize import *
@@ -267,7 +267,7 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
         valuesStr = self.getAttributeValue(attributeName)
         if valuesStr is None:
             raise Exception('None value for attribute: %s' % attributeName)
-        return [firstValue] + getFloatListFromValues(valuesStr, length=self.numberOfIterations.get())
+        return [firstValue] + getListFromValues(valuesStr, length=self.numberOfIterations.get(), caster=float)
     
     def itersBoolValues(self, attributeName, firstValue=False):
         """ Take the string of a given attribute and

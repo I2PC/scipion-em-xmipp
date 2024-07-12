@@ -36,6 +36,7 @@ from pyworkflow.utils import getFiles, removeBaseExt
 from .protocol_particle_pick_consensus import (XmippProtConsensusPicking,
                                                consensusWorker, getReadyMics)
 
+FACTOR_RADIUS = 0.6
 
 class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
     """
@@ -53,10 +54,12 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
                       pointerClass='SetOfCoordinates',
                       label="Input coordinates", important=True,
                       help='Select the set of coordinates to compare')
-        form.addParam('consensusRadius', params.IntParam, default=10,
+        form.addParam('consensusRadius', params.IntParam, default=-1,
                       label="Radius",
+                      allowsPointers=True,
                       help="All coordinates within this radius (in pixels) "
-                           "are presumed to correspond to the same particle")
+                           "are presumed to correspond to the same particle.\n "
+                           "If -1 then 0.6 * box size is going to be assigned as radius.")
 
         # FIXME: It's not using more than one since
         #         self.stepsExecutionMode = STEPS_SERIAL
@@ -101,6 +104,13 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
     def getMainInput(self):
         return self.inputCoordinates.get()
 
+    def getConsensusRadius(self):
+        if self.consensusRadius.get() == -1:
+            consensusRadius = int(self.inputCoordinates.get().getBoxSize()*FACTOR_RADIUS)
+        else:
+            consensusRadius = self.consensusRadius.get()
+        return consensusRadius
+
     def defineRelations(self, outputSet):
         self._defineTransformRelation(self.getMainInput(), outputSet)
 
@@ -112,7 +122,7 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
                                  self.getMainInput().iterCoordinates(micId)],
                                 dtype=int)
 
-        consensusWorker([coordArray], 1, self.consensusRadius.get(),
+        consensusWorker([coordArray], 1, self.getConsensusRadius(),
                         self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, micId)))
 
         self.processedMics.update([micId])
@@ -122,4 +132,4 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
         return errors
 
     def _summary(self):
-        return ["Radius = %d" % self.consensusRadius]
+        return ["Radius = %d" % self.getConsensusRadius()]

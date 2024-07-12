@@ -203,19 +203,38 @@ class XmippViewer(DataViewer):
 
 
         elif issubclass(cls, XmippProtCompareReprojections):
-                fn = obj.reprojections.getFileName()
-                labels = ('id enabled _index _xmipp_image._filename _xmipp_imageRef._filename '
-                          '_xmipp_imageResidual._filename _xmipp_imageCovariance._filename '
-                          '_xmipp_cost _xmipp_zScoreResCov _xmipp_zScoreResMean _xmipp_zScoreResVar '
-                          '_xmipp_continuousA _xmipp_continuousB _xmipp_continuousX _xmipp_continuousY')
-                labelRender = ("_xmipp_image._filename _xmipp_imageRef._filename "
-                              "_xmipp_imageResidual._filename _xmipp_imageCovariance._filename")
-                self._views.append(ObjectView(self._project, obj.reprojections.strId(), fn,
-                                              viewParams={ORDER: labels,
-                                                          VISIBLE: labels,
-                                                          SORT_BY: '_xmipp_cost asc',
-                                                          RENDER: labelRender,
-                                                          MODE: MODE_MD}))
+            labels = ('id enabled _index _xmipp_image._filename _xmipp_imageRef._filename '
+                      '_xmipp_imageResidual._filename _xmipp_imageCovariance._filename '
+                      '_xmipp_cost _xmipp_zScoreResCov _xmipp_zScoreResMean _xmipp_zScoreResVar '
+                      '_xmipp_continuousA _xmipp_continuousB _xmipp_continuousX _xmipp_continuousY')
+            labelRender = ("_xmipp_image._filename _xmipp_imageRef._filename "
+                           "_xmipp_imageResidual._filename _xmipp_imageCovariance._filename")
+            try:
+                for outputName in obj.readOutputDict().values():
+                    reprojections = getattr(obj, outputName)
+                    fn = reprojections.getFileName()
+                    self._views.append(ObjectView(self._project, reprojections.strId(), fn,
+                                                  viewParams={ORDER: labels,
+                                                              VISIBLE: labels,
+                                                              SORT_BY: '_xmipp_cost asc',
+                                                              RENDER: labelRender,
+                                                              MODE: MODE_MD}))
+            except FileNotFoundError:
+                self._views.append(self.infoMessage('This may be an old version of this protocol, trying older viewer.'))
+                try:
+                    fn = obj.reprojections.getFileName()
+                    self._views.append(ObjectView(self._project, obj.reprojections.strId(), fn,
+                                                  viewParams={ORDER: labels,
+                                                              VISIBLE: labels,
+                                                              SORT_BY: '_xmipp_cost asc',
+                                                              RENDER: labelRender,
+                                                              MODE: MODE_MD}))
+                except Exception as e:
+                    self._views.append(self.infoMessage("There is a problem with the output: %s" % e))
+
+            except Exception as e:
+                self._views.append(self.infoMessage("There is not an output yet: %s" % e))
+
 
         elif issubclass(cls, XmippProtCompareAngles):
                 fn = obj.outputParticles.getFileName()

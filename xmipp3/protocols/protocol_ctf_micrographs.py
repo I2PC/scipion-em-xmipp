@@ -132,7 +132,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                            'and if it fails, -1.')
         form.addParam('refineAmplitudeContrast', params.BooleanParam, default=False,
                       label='Allow amplitude constrast refinement',
-                      help = 'The amplitude contrast is normally kept fixed, but in'
+                      help = 'The amplitude contrast is normally kept fixed, but in '
                              'some experiments it has been found that refining it '
                              'might result in some improvement in the final FSC. '
                              'This is not a standard practice, and should be used with caution')

@@ -1,3 +1,41 @@
+## Release 3.24.06 - Oceanus
+   - New protocols
+      - movie_alignment_consensus: protocol for the comparison of two global alignments
+      - PCA classification: 2D Classification method that can works in streaming and in static
+
+   - Protocols updated
+      - deep_center: Deep center calculates an approximate center for the particles.
+      - validate_fscq: Added cif support
+      - reconstruct_fourier: Enable reconstructing with halves in the reconstruct fourier
+      - simulate_ctf: Simulate CTF can add noise before and after CTF.
+      - extract_particles: Local average added
+      - compare_reprojections: Downsampling option,autodown sampling, allows input 2D in several formats, allows input 3D in several formats, ranking option available, extraction option available
+      - cl2d: ensuring a save classes creating and adding possible output
+   - Protocols fixed
+      - resolution_deepres:now works with queue system
+      - ProcessVolumes: Fix header for resize voxels
+      - resolution_bfactor:Fix local resolution to local bfactor  
+      - resolution_bfactor: create output for res bfac
+      - extract_particles: Bug fix in the downsampling factor of extract particles
+      - core_analysis: define correctly the particles pointer to have indirect pointer
+      - tilt_analysis: estimate automatically the window size new option
+      - movie_doseanalysis: update correctly the outputSet
+      - extract_particles: Check if resizing is enabled
+      - particle_pick_remove_duplicates: Remove duplicates coordinates 
+   - Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
+      - deep_denoissing
+      - metaprotocol_create_subset
+      - metaprotocol_golden_highres
+      - solid_angle
+      - split_volume
+   - More scipio-em-xmipp
+      - Solve Sonar Cloud reported bugs
+      - Flexible import of pyQT on chimera script
+      - Removing tkAgg matplotlib requirement in viewer_structure_map
+      - DLTK installation bug local variable and Fix use gpu
+      - updated scikit-learn version
+
+
 ## Release 3.23.11 - Nereus
    - New protocols
       - Volume local adjustment

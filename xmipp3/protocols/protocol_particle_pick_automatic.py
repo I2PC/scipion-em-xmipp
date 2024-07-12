@@ -47,7 +47,7 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
     """Protocol to pick particles automatically in a set of
     micrographs using previous training """
     _label = 'auto-picking (step 2)'  
-    _devStatus = UPDATED
+    _devStatus = PROD
     filesToCopy = ['model_svm.txt', 'model_pca_model.stk', 'model_rotpca_model.stk',
                    'model_particle_avg.xmp', 'templates.stk']
     

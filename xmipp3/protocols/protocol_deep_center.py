@@ -45,6 +45,7 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
     _label = 'deep center'
+    _devStatus = BETA
 
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
