@@ -25,9 +25,7 @@
 # **************************************************************************
 
 
-import pwem
 from pwem import emlib
-import pwem.convert
 from pwem.protocols import ProtClassify3D
 from pwem.objects import (VolumeMask, Class3D, 
                           SetOfParticles, SetOfClasses3D, Particle,
@@ -38,7 +36,7 @@ from pyworkflow.utils import makePath, createLink, moveFile, cleanPath
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
                                         StringParam, BooleanParam,
-                                        GE, GT, Range,
+                                        GE, Range,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 
 import xmipp3
@@ -54,8 +52,6 @@ import numpy as np
 import scipy.sparse
 import scipy.stats
 import sklearn.mixture
-
-import matplotlib.pyplot as plt
 
 class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_CLASSES_NAME = 'classes'
@@ -94,14 +90,6 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('resize', IntParam, label='Resize', default=0,
                       validators=[GE(0)])
 
-        form.addSection(label='Classification')
-        form.addParam('principalComponents', IntParam, label='Principal components',
-                      default=2, validators=[GT(0)],
-                      help='Number of principal components used for classification')
-        form.addParam('classCount', IntParam, label='Class count',
-                      default=2, validators=[GT(0)],
-                      help='Number of classes to be reconstructed')
-        
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
                       default=True,
@@ -122,7 +110,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         form.addSection(label='Compute')
         form.addParam('batchSize', IntParam, label='Batch size', 
                       default=1024,
-                      help='It is recommended to use powers of 2. Using numbers around 1024 works well')
+                      help='It is recommended to use powers of 2. Using numbers around 8192 works well')
         form.addParam('copyParticles', BooleanParam, label='Copy particles to scratch', default=False, 
                       help='Copy input particles to scratch directory. Note that if input file format is '
                       'incompatible the particles will be converted into scratch anyway')
@@ -138,13 +126,10 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('angularNeighborhoodStep')
         self._insertFunctionStep('classifyDirectionsStep')
         self._insertFunctionStep('buildGraphStep')
-        self._insertFunctionStep('basisSynchronizationStep')
-        self._insertFunctionStep('correctBasisStep')
-        self._insertFunctionStep('combineDirectionsStep')
-        self._insertFunctionStep('analysisStep')
-        self._insertFunctionStep('classifyStep')
+        self._insertFunctionStep('graphOptimizationStep')
+        self._insertFunctionStep('graphPartitionStep')
     
-        for i in range(self.classCount.get()):
+        for i in range(2):
             self._insertFunctionStep('reconstructStep', i+1)
 
         self._insertFunctionStep('createOutputStep')
@@ -259,9 +244,13 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         maskGalleryMd = emlib.MetaData(self._getMaskGalleryMdFilename())
         particles = emlib.MetaData()
         directionalMd = emlib.MetaData()
+        directionalClassificationMd = emlib.MetaData()
         maskRow = emlib.metadata.Row()
         directionRow = emlib.metadata.Row()
-        k: int = self.principalComponents.get()
+        model = sklearn.mixture.GaussianMixture(
+            n_components=2, 
+            covariance_type='tied'
+        )
         
         env = self.getCondaEnv(_conda_env='xmipp_pyTorch')
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
@@ -293,67 +282,63 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
             args += ['-o', self._getDirectionPath(directionId, '')]
             args += ['--mask', maskFilename]
             args += ['--align_to', rot, tilt, psi]
-            args += ['-k', k]
             args += ['--batch', self.batchSize]
             if self.useGpu:
                 args += ['--device'] + self._getDeviceList()
 
             self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
             
+            # Read the resulting classification
             directionalClassificationMdFilename = self._getDirectionalClassificationMdFilename(directionId)
+            directionalClassificationMd.read(directionalClassificationMdFilename)
             
+            # Obtain PCA projection values
+            projections = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL))
+            projections = projections[:,None]
+            
+            # Fit the GMM to the projection values
+            model.fit(projections)
+            weights = model.weights_
+            means = model.means_[...,0]
+            variances = model.covariances_[...,0,0]
+            stddevs = np.sqrt(variances)
+            
+            # Compute The likelihood ratio between classes
+            logLikelihoods = scipy.stats.norm.logpdf(projections, means, stddevs) + np.log(weights)
+            logLikelihoodRatios = logLikelihoods[:,1] - logLikelihoods[:,0]
+            logLikelihoodRatios /= np.linalg.norm(logLikelihoodRatios)
+
+            # Store the log likelihood ratio
+            directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(logLikelihoodRatios))
+            directionalClassificationMd.write(directionalClassificationMdFilename)
+
+            # Store the gaussian model
+            self._writeDirectionalGaussianMixtureModel(directionId, model)
+
             # Ensemble the output row
             directionRow.copyFromRow(maskRow)
             directionRow.setValue(emlib.MDL_MASK, maskFilename)
             directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
-            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImagesFilename(directionId))
+            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImageFilename(directionId))
             directionRow.setValue(emlib.MDL_SELFILE, directionalClassificationMdFilename)
             directionRow.setValue(emlib.MDL_COUNT, particles.size())
+            directionRow.setValue(emlib.MDL_CLASS_COUNT, model.n_components)
             directionRow.addToMd(directionalMd)
 
         directionalMd.write(self._getDirectionalMdFilename())
-    
-    def combineDirectionsStep(self):
-        result = emlib.MetaData(self._getWienerParticleMdFilename())
-        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
-        classificationMd = emlib.MetaData()
-        itemIds = result.getColumnValues(emlib.MDL_ITEM_ID)
-
-        nImages = len(result)
-        nDirections = len(directionMd)
-        nFeatures = nDirections*k
-        k: int = self.principalComponents.get()
-        
-        projections = scipy.sparse.lil_matrix(nImages, nFeatures)
-        for i, directionId in enumerate(directionMd):
-            start = i*k
-            end = start+k
-            classificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-            for objId in classificationMd:
-                index = itemIds.index(classificationMd.getValue(emlib.MDL_ITEM_ID, objId))
-                projection = classificationMd.getValue(emlib.MDL_DIMRED, objId)
-                projections[index, start:end] = projection
-
-        projections = projections.tocsr()
-        u, s, vh = scipy.sparse.linalg.svds(projections, k=k, return_singular_vectors='vh')
-        projections2 = projections @ vh.T
-        
-        result.setColumnValues(emlib.MLD_DIMRED, projections2.tolist())
-        result.write(self._getClassificationMdFilename())
-    
+                
     def buildGraphStep(self):
         # Build graph intersecting direction pairs and calculate the similarity
         # between projection values
-        k: int = self.principalComponents.get()
         symList = xmippLib.SymList()
         symList.readSymmetryFile(self._getSymmetryGroup())
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        directionMd.removeObjects(emlib.MDValueNE(emlib.MDL_CLASS_COUNT, 2))
         md0 = emlib.MetaData()
         md1 = emlib.MetaData()
         objIds = list(directionMd)
         nDirections = len(objIds)
-        cross_correlations = scipy.sparse.lil_matrix((nDirections*k, )*2)
-        weights = scipy.sparse.lil_matrix((nDirections*k, )*2)
+        adjacency = np.zeros((nDirections, )*2)
         for (idx0, directionId0), (idx1, directionId1) in itertools.combinations(enumerate(objIds), r=2):
             # Obtain the projection angles
             rot0 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId0)
@@ -372,145 +357,119 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
                 # both directions
                 md0.read(directionMd.getValue(emlib.MDL_SELFILE, directionId0))
                 md1.read(directionMd.getValue(emlib.MDL_SELFILE, directionId1))
-                
                 md0.intersection(md1, emlib.MDL_ITEM_ID)
-                if md0.size() > 0:
-                    md1.intersection(md0, emlib.MDL_ITEM_ID)
-
-                    # Get their likelihood values
-                    projections0 = np.array(md0.getColumnValues(emlib.MDL_DIMRED)).T
-                    projections1 = np.array(md1.getColumnValues(emlib.MDL_DIMRED)).T
-
-                    # Normalize projections
-                    norm0 = np.linalg.norm(projections0, axis=-1, keepdims=True)
-                    norm1 = np.linalg.norm(projections1, axis=-1, keepdims=True)
-                    projections0 /= norm0
-                    projections1 /= norm1
-                    
-                    # Compute the cross correlation and weight matrix
-                    cross_correlation = projections0 @ projections1.T
-                    weight = norm0 @ norm1.T
-
-                    # Write them in symmetric positions
-                    start0 = idx0*k
-                    end0 = start0+k
-                    start1 = idx1*k
-                    end1 = start1+k
-                    cross_correlations[start0:end0, start1:end1] = cross_correlation
-                    cross_correlations[start1:end1, start0:end0] = cross_correlation.T
-                    weights[start0:end0, start1:end1] = weight
-                    weights[start1:end1, start0:end0] = weight.T
-                    
-                    #fig, (ax0, ax1) = plt.subplots(1, 2)
-                    #plt.colorbar(ax0.imshow(cross_correlation))
-                    #plt.colorbar(ax1.imshow(weight))
-                    #plt.show()
-                    
-        # Normalize weights
-        weights /= abs(weights).max()
+                md1.intersection(md0, emlib.MDL_ITEM_ID)
+                
+                # Get their likelihood values
+                logLikelihood0 = md0.getColumnValues(emlib.MDL_LL)
+                logLikelihood1 = md1.getColumnValues(emlib.MDL_LL)
+                
+                # Compute the similarity as the dot product of their
+                # likelihood values
+                similarity = np.dot(logLikelihood0, logLikelihood1)
+                
+                if similarity:
+                    # Write the negative similarity in symmetric positions of 
+                    # the adjacency matrix, as the Ising Model's graph analogy
+                    # has weights equal to the negative interaction
+                    adjacency[idx0, idx1] = adjacency[idx1, idx0] = -similarity
         
-        # Store the matrices
-        self._writeCrossCorrelations(cross_correlations.tocsr())
-        self._writeWeights(weights.tocsr())
+        # Convert the adjacency matrix to sparse form
+        graph = scipy.sparse.csr_matrix(adjacency)
 
-    def basisSynchronizationStep(self):
-        k: int = self.principalComponents.get()
-        
-        cmd = 'xmipp_synchronize_transform'
+        # Check if there is a single component
+        nComponents = scipy.sparse.csgraph.connected_components(
+            graph, 
+            directed=False, 
+            return_labels=False
+        )
+        if nComponents != 1:
+            raise RuntimeError('The ensenbled graph has multiple components. '
+                               'Try incrementing the maximum distance parameter')
+
+        # Store the graph
+        self._writeGraph(graph)
+
+    def graphOptimizationStep(self):
+        # Perform a max cut of the graph
         args = []
-        args += ['-i', self._getCrossCorrelationsFilename()]
-        args += ['-w', self._getWeightsFilename()]
-        args += ['-o', self._getBasesFilename()]
-        args += ['-k', k]
-        args += ['--triangular_upper']
-        args += ['--orthogonal']
-        args += ['-v']
-
+        args += ['-i', self._getGraphFilename()]
+        args += ['-o', self._getGraphCutFilename()]
+        args += ['--sdp']
         env = self.getCondaEnv(_conda_env='xmipp_graph')
-        self.runJob(cmd, args, env=env, numberOfMpi=1)
-   
-    def correctBasisStep(self):
+        self.runJob('xmipp_graph_max_cut', args, env=env, numberOfMpi=1)
+        
+        # Load the cut
+        with open(self._getGraphCutFilename(), 'rb') as f:
+            _, (v0, v1) = pickle.load(f)
+        
+        # Invert the least amount of directions
+        invert_list = min(v0, v1, key=len)
+        print('Inverting the following directions:', invert_list)
+        
+        # Invert the projection values of the chosen
+        # directions
+        graph = self._readGraph()
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
-        classificationMd = emlib.MetaData()
-        bases = self._readBases()
-        #ih = pwem.convert.ImageHandler()
-        for i, directionId in enumerate(directionMd):
-            classificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-            #eigenImages = ih.read(self._getDirectionalEigenImagesFilename(directionId))
-            #eigenVectors = eigenImages.reshape(eigenImages.shape[0], -1)
+        directionMd.removeObjects(emlib.MDValueNE(emlib.MDL_CLASS_COUNT, 2))
+        objIds = list(directionMd)
+        directionalClassificationMd = emlib.MetaData()
+        for i in invert_list:
+            objId = objIds[i]
+            directionalClassificationMdFilename = directionMd.getValue(
+                emlib.MDL_SELFILE, objId
+            )
             
-            projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED)).T
-            basis = bases[i]
+            # Invert graph
+            graph[:,i] *= -1
+            graph[i,:] *= -1
             
-            correctedProjections = basis.T @ projections
-            
-            classificationMd.setColumnValues(emlib.MDL_DIMRED, correctedProjections.T.tolist())
-            
-            classificationMd.write(self._getCorrectedDirectionalClassificationMdFilename(directionId))
-   
-    def combineDirectionsStep(self):   
-        k: int = self.principalComponents.get()
+            # Invert the projection values
+            directionalClassificationMd.read(directionalClassificationMdFilename)
+            directionalClassificationMd.operate('logLikelihood=-logLikelihood')
+            directionalClassificationMd.write(directionalClassificationMdFilename)
+
+        self._writeCorrectedGraph(graph)
+    
+    def graphPartitionStep(self):
+        # Accumulate all the likelihood values for a given particle
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
-
-        # Accumulate all PCA projection values
-        counts = collections.Counter()
-        projections = collections.Counter()
-        for directionId in directionMd:
-            # Read the classification of this direction
-            #directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId)) # TODO
-            directionalClassificationMd.read(self._getCorrectedDirectionalClassificationMdFilename(directionId))
-            
-            # Increment the result likelihood value
-            for objId in directionalClassificationMd:
-                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
-                projection = np.array(directionalClassificationMd.getValue(emlib.MDL_DIMRED, objId))
+        count = collections.Counter()
+        sum = collections.Counter()
+        for objId in directionMd:
+            if directionMd.getValue(emlib.MDL_CLASS_COUNT, objId) == 2:
+                # Read the classification of this direction
+                directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, objId))
                 
-                counts[itemId] += 1
-                projections[itemId] += projection
-
-        # Write PCA projection values to the output metadata
+                # Increment the result likelihood value
+                for objId2 in directionalClassificationMd:
+                    itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId2)
+                    logLikelihood = directionalClassificationMd.getValue(emlib.MDL_LL, objId2)
+                    
+                    count[itemId] += 1
+                    sum[itemId] += logLikelihood
+        
+        # Write likelihoods to the output metadata
         result = emlib.MetaData(self._getWienerParticleMdFilename())
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
+            
+            # Write LL value
+            logLikelihood = sum[itemId] / count.get(itemId, 1)
+            result.setValue(emlib.MDL_LL, logLikelihood, objId)
 
-            projection = projections.get(itemId, None)
-            if projection is not None:
-                projection = projection / counts.get(itemId, 1)
-                result.setValue(emlib.MDL_DIMRED, projection.tolist(), objId)
+            # Write 3D class
+            if logLikelihood < 0.0:
+                ref3d = 1
+            elif logLikelihood > 0.0:
+                ref3d = 2
             else:
-                result.setValue(emlib.MDL_DIMRED, [0.0]*k, objId)
-                
+                ref3d = random.randint(1, 2)
+            result.setValue(emlib.MDL_REF3D, ref3d, objId)
+        
         # Store
         result.write(self._getClassificationMdFilename())
-        
-    def analysisStep(self):
-        classificationMd = emlib.MetaData(self._getClassificationMdFilename())
-        projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
-
-        maxClasses = 16
-        aics = np.empty(maxClasses)
-        bics = np.empty(maxClasses)
-        
-        for i in range(maxClasses):
-            gmm = sklearn.mixture.GaussianMixture(n_components=i+1)
-            gmm.fit(projections)
-            aics[i] = gmm.aic(projections)
-            bics[i] = gmm.bic(projections)
-            
-        self._writeAicArray(aics)
-        self._writeBicArray(bics)
-    
-    def classifyStep(self):
-        classificationMd = emlib.MetaData(self._getClassificationMdFilename())
-        projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
-        
-        gmm = sklearn.mixture.GaussianMixture(n_components=self.classCount.get())
-        gmm.fit(projections)
-        ref3d = gmm.predict(projections) + 1
-        
-        classificationMd.setColumnValues(emlib.MDL_REF3D, ref3d.tolist())
-        classificationMd.write(self._getClassificationMdFilename())
     
     def reconstructStep(self, cls):
         # Select particles
@@ -569,7 +528,7 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
         # Create volumes
         volumes = self._createSetOfVolumes()
         volumes.setSamplingRate(self._getSamplingRate())
-        for i in range(self.classCount.get()):
+        for i in range(2):
             objId = i+1
             volumeFilename = self._getClassVolumeFilename(objId)
             if self.resize > 0:
@@ -690,8 +649,8 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     def _getDirectionalClassesStackFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'classes.mrcs')
     
-    def _getDirectionalEigenImagesFilename(self, direction_id: int):
-        return self._getDirectionPath(direction_id, 'eigen_images.mrc')
+    def _getDirectionalEigenImageFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'eigen_image.mrc')
     
     def _getDirectionalAverageImageFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'average.mrc')
@@ -699,55 +658,43 @@ class XmippProtSplitVolume(ProtClassify3D, xmipp3.XmippProtocol):
     def _getDirectionalClassificationMdFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'classification.xmd')
 
-    def _getCorrectedDirectionalClassificationMdFilename(self, direction_id: int):
-        return self._getDirectionPath(direction_id, 'corrected_classification.xmd')
+    def _getDirectionalGaussianMixtureModelFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'gmm.pkl')
     
     def _getDirectionalMdFilename(self):
         return self._getExtraPath('directional.xmd')
 
-    def _getCrossCorrelationsFilename(self):
-        return self._getExtraPath('cross_correlations.npz')
-
-    def _getWeightsFilename(self):
-        return self._getExtraPath('weights.npz')
+    def _getGraphFilename(self):
+        return self._getExtraPath('graph.npz')
     
-    def _getBasesFilename(self):
-        return self._getExtraPath('bases.npy')
+    def _getCorrectedGraphFilename(self):
+        return self._getExtraPath('corrected_graph.npz')
     
-    def _getAicArrayFilename(self):
-        return self._getExtraPath('aic.npy')
+    def _getGraphCutFilename(self):
+        return self._getExtraPath('graph_cut.pkl')
     
-    def _getBicArrayFilename(self):
-        return self._getExtraPath('bic.npy')
-    
-    def _writeCrossCorrelations(self, correlations: scipy.sparse.csr_matrix) -> str:
-        path = self._getCrossCorrelationsFilename()
-        scipy.sparse.save_npz(path, correlations)
+    def _writeDirectionalGaussianMixtureModel(self, directionId: int, model: sklearn.mixture.GaussianMixture) -> str:
+        path = self._getDirectionalGaussianMixtureModelFilename(directionId)
+        with open(path, 'wb') as f:
+            pickle.dump(model, f)
         return path
     
-    def _readCrossCorrelations(self) -> scipy.sparse.csr_matrix:
-        return scipy.sparse.load_npz(self._getCrossCorrelationsFilename())
+    def _readDirectionalGaussianMixtureModel(self, directionId: int) -> sklearn.mixture.GaussianMixture:
+        with open(self._getDirectionalGaussianMixtureModelFilename(directionId), 'rb') as f:
+            return pickle.load(f)  
     
-    def _writeWeights(self, weights: scipy.sparse.csr_matrix) -> str:
-        path = self._getWeightsFilename()
-        scipy.sparse.save_npz(path, weights)
+    def _writeGraph(self, graph: scipy.sparse.csr_matrix) -> str:
+        path = self._getGraphFilename()
+        scipy.sparse.save_npz(path, graph)
         return path
     
-    def _readWeights(self) -> scipy.sparse.csr_matrix:
-        return scipy.sparse.load_npz(self._getWeightsFilename())
+    def _readGraph(self) -> scipy.sparse.csr_matrix:
+        return scipy.sparse.load_npz(self._getGraphFilename())
 
-    def _readBases(self):
-        return np.load(self._getBasesFilename())
+    def _writeCorrectedGraph(self, graph: scipy.sparse.csr_matrix) -> str:
+        path = self._getCorrectedGraphFilename()
+        scipy.sparse.save_npz(path, graph)
+        return path
     
-    def _writeAicArray(self, aics):
-        np.save(self._getAicArrayFilename(), aics)
-        
-    def _readAicArray(self):
-        return np.load(self._getAicArrayFilename())
-    
-    def _writeBicArray(self, bics):
-        np.save(self._getBicArrayFilename(), bics)
-        
-    def _readBicArray(self):
-        return np.load(self._getBicArrayFilename())
-    
+    def _readCorrectedGraph(self) -> scipy.sparse.csr_matrix:
+        return scipy.sparse.load_npz(self._getCorrectedGraphFilename())
