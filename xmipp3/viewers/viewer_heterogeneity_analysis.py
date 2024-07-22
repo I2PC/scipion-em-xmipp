@@ -57,29 +57,34 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         form.addSection(label='Analysis')
         form.addParam('displayHistograms', LabelParam, label='Histograms',
                       help='Shows the 2D histograms of pairwise principal components')
-        form.addParam('displayScatter2d', LabelParam, label='2D point scatter',
-                      help='Shows the 2D histogram of pairwise principal components')
-        form.addParam('displayScatter3d', LabelParam, label='3D point scatter',
-                      help='Shows the 2D histogram of pairwise principal components')
         form.addParam('displayInformationCriterion', LabelParam, label='Information criterion',
                       help='Shows Akaike and Bayesian information criterions')
         form.addParam('displayCrossCorrelation', LabelParam, label='Cross correlation')
+        form.addParam('displayEigenvalues', LabelParam, label='Eigen-values')
 
         form.addSection(label='Directional data')
         form.addParam('displayDirectionalMd', LabelParam, label='Directional metadata',
                       help='Shows a metadata with the directional averages and eigenimages')
+        form.addParam('displayCorrectedDirectionalMd', LabelParam, label='Corrected directional metadata',
+                      help='Shows a metadata with the directional averages and eigenimages')
         form.addParam('displayDirectionalHistograms', IntParam, label='Directional histograms',
-                      default=1,
-                      help='Shows the 2D histograms')
+                      default=1 )
+        form.addParam('displayCorrectedDirectionalHistograms', IntParam, label='Corrected directional histograms',
+                      default=1 )
         
         form.addSection(label='Graph')
+        form.addParam('display3dGraph', LabelParam, label='3D adjacency graph')
+        form.addParam('displayAdjacencyMatrix', LabelParam, label='Adjacency matrix')
+        
+        form.addSection(label='Cross correlations')
         form.addParam('displayCrossCorrelations', LabelParam, label='Cross correlations',
                       help='Shows a block matrix with cross correlations')
         form.addParam('displayWeights', LabelParam, label='Weights',
                       help='Shows a block matrix with weights')
         form.addParam('displayWeightedCrossCorrelation', LabelParam, label='Weighted cross correlation',
                       help='Shows a block matrix with weighted cross correlations')
-        form.addParam('display3dGraph', LabelParam, label='3D adjacency graph')
+        form.addParam('displayReconstructedCrossCorrelations', LabelParam, label='Reconstructed cross correlation',
+                      help='Shows a block matrix with estimated cross correlations')
 
     #--------------------------- INFO functions ----------------------------------------------------
 
@@ -87,46 +92,25 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     def _getVisualizeDict(self):
         return {
             'displayHistograms': self._displayHistograms,
-            'displayScatter2d': self._displayScatter2d,
-            'displayScatter3d': self._displayScatter3d,
             'displayInformationCriterion': self._displayInformationCriterion,
             'displayCrossCorrelation': self._displayCrossCorrelation,
+            'displayEigenvalues': self._displayEigenvalues,
             'displayDirectionalMd': self._displayDirectionalMd,
+            'display3dGraph': self._display3dGraph,
+            'displayAdjacencyMatrix': self._displayAdjacencyMatrix,
+            'displayCorrectedDirectionalMd': self._displayCorrectedDirectionalMd,
             'displayDirectionalHistograms': self._displayDirectionalHistograms,
+            'displayCorrectedDirectionalHistograms': self._displayCorrectedDirectionalHistograms,
             'displayCrossCorrelations': self._displayCrossCorrelations,
             'displayWeights': self._displayWeights,
             'displayWeightedCrossCorrelation': self._displayWeightedCrossCorrelations,
-            'display3dGraph': self._display3dGraph,
+            'displayReconstructedCrossCorrelations': self._displayReconstructedCrossCorrelations,
         }
 
     def _displayHistograms(self, e):
         projections = self._readProjections()
         return self._showHistograms(projections)
 
-    def _displayScatter2d(self, e):
-        projections = self._readProjections()
-        percentiles = np.percentile(projections, q=(1, 99), axis=0)
-    
-        fig, ax = plt.subplots()
-        ax.scatter(projections[:,-1], projections[:,-2], s=1, marker='.', alpha=0.1)
-        ax.set_xlim(percentiles[0,-1], percentiles[1,-1])
-        ax.set_ylim(percentiles[0,-2], percentiles[1,-2])
-            
-        return[fig]
-
-    def _displayScatter3d(self, e):
-        projections = self._readProjections()
-        percentiles = np.percentile(projections, q=(1, 99), axis=0)
-    
-        fig = plt.figure()
-        ax = fig.add_subplot(projection='3d')
-        ax.scatter(projections[:,-1], projections[:,-2], projections[:,-3], s=1, marker='.', alpha=0.1)
-        ax.set_xlim(percentiles[0,-1], percentiles[1,-1])
-        ax.set_ylim(percentiles[0,-2], percentiles[1,-2])
-        ax.set_zlim(percentiles[0,-3], percentiles[1,-3])
-        
-        return[fig]
-    
     def _displayInformationCriterion(self, e):
         analysis = self._readGmmAnalysis()
 
@@ -149,16 +133,85 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         fig, ax = plt.subplots()
         ax.imshow(crossCorrelation)
         return [fig]
+
+    def _displayEigenvalues(self, e):
+        eigenvalues = self._readEigenvalues()
+        x = np.arange(1, 1+len(eigenvalues))
+        y = eigenvalues
+        dy = np.diff(y)
+
+        fig, ax = plt.subplots()
+        
+        ax.bar(x, y, width=1.0, label='Eigen-values')
+        ax.plot((x[:-1]+x[1:])/2, dy, label='Adjacent difference', c='orange')
+
+        ax.legend()
+        
+        return [fig]
         
     def _displayDirectionalMd(self, e):
         dv = DataView(self._getDirectionalMdFilename())
         return [dv]
 
+    def _displayCorrectedDirectionalMd(self, e):
+        dv = DataView(self._getCorrectedDirectionalMdFilename())
+        return [dv]
+    
     def _displayDirectionalHistograms(self, e):
         directionId = self.displayDirectionalHistograms.get()
         md = emlib.MetaData(self.protocol._getDirectionalClassificationMdFilename(directionId))
         projections = np.array(md.getColumnValues(emlib.MDL_DIMRED))
         return self._showHistograms(projections)
+    
+    def _displayCorrectedDirectionalHistograms(self, e):
+        directionId = self.displayCorrectedDirectionalHistograms.get()
+        md = emlib.MetaData(self.protocol._getCorrectedDirectionalClassificationMdFilename(directionId))
+        projections = np.array(md.getColumnValues(emlib.MDL_DIMRED))
+        return self._showHistograms(projections)
+    
+    def _display3dGraph(self, e) -> plt.Figure:
+        fig = plt.figure()
+        ax: mpl3d.Axes3D = fig.add_subplot(projection='3d')
+        
+        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        objIds = list(directionMd)
+        xs = directionMd.getColumnValues(emlib.MDL_X)
+        ys = directionMd.getColumnValues(emlib.MDL_Y)
+        zs = directionMd.getColumnValues(emlib.MDL_Z)
+        points = np.column_stack((xs, ys, zs))
+        
+        ax.scatter(xs, ys, zs, color='black')
+        for objId, x, y, z in zip(objIds, xs, ys, zs):
+            ax.text(x, y, z, str(objId))
+        
+        adjacency = self._readAdjacencyGraph()
+        edges = adjacency.nonzero()
+        segments = np.stack((points[edges[0]], points[edges[1]]), axis=1)
+        counts = adjacency[edges].A1
+        
+        # Display the graph edges
+        colormap = mpl.cm.plasma
+        normalize = mpl.colors.Normalize(1.0, counts.max())
+        lines = mpl3d.art3d.Line3DCollection(
+            segments, 
+            linewidths=0.2, 
+            colors=colormap(normalize(counts)),
+        )
+        ax.add_collection(lines)
+        
+        #  Show colorbar
+        fig.colorbar(
+            mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), 
+            label='Particle count'
+        )
+        
+        return [fig]
+    
+    def _displayAdjacencyMatrix(self, e):
+        adjcency = self._readAdjacencyGraph().todense()
+        fig, ax = plt.subplots()
+        fig.colorbar(ax.imshow(adjcency), label='Intersection size')
+        return [fig]
     
     def _displayCrossCorrelations(self, e):
         crossCorrelations = self._readCrossCorrelations()
@@ -195,35 +248,18 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         )
         return [fig]
    
-    def _display3dGraph(self, e) -> plt.Figure:
-        fig = plt.figure()
-        ax: mpl3d.Axes3D = fig.add_subplot(projection='3d')
-        
-        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
-        objIds = list(directionMd)
-        xs = directionMd.getColumnValues(emlib.MDL_X)
-        ys = directionMd.getColumnValues(emlib.MDL_Y)
-        zs = directionMd.getColumnValues(emlib.MDL_Z)
-        points = np.column_stack((xs, ys, zs))
-        
-        ax.scatter(xs, ys, zs, color='black')
-        for objId, x, y, z in zip(objIds, xs, ys, zs):
-            ax.text(x, y, z, str(objId))
-        
-        adjacency = self._readAdjacencyGraph()
-        edges = adjacency.nonzero()
-        segments = np.stack((points[edges[0]], points[edges[1]]), axis=1)
-        counts = adjacency[edges].A1
-        
-        # Display the graph edges
-        colormap = mpl.cm.plasma
-        normalize = mpl.colors.LogNorm(1.0, counts.max())
-        lines = mpl3d.art3d.Line3DCollection(segments, linewidths=0.5, colors=colormap(normalize(counts)))
-        ax.add_collection(lines)
-        
-        #  Show colorbar
-        fig.colorbar(mpl.cm.ScalarMappable(norm=normalize, cmap=colormap), label='Particle count')
-        
+    def _displayReconstructedCrossCorrelations(self, e):
+        bases = self._readBases()
+        bases = bases.reshape(math.prod(bases.shape[:2]), bases.shape[2])
+        pairwise = bases @ bases.T
+        fig, ax = plt.subplots()
+        self._showBlockMatrix(
+            ax, 
+            pairwise, 
+            self._getBlockStride(),
+            vmin=-1.0, vmax=+1.0,
+            cmap=mpl.cm.coolwarm
+        )
         return [fig]
     
     # --------------------------- UTILS functions -----------------------------   
@@ -233,6 +269,9 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     def _getDirectionalMdFilename(self):
         return self.protocol._getDirectionalMdFilename()
     
+    def _getCorrectedDirectionalMdFilename(self):
+        return self.protocol._getCorrectedDirectionalMdFilename()
+
     def _readCrossCorrelations(self) -> scipy.sparse.csr_matrix:
         return self.protocol._readCrossCorrelations()
         
@@ -241,18 +280,22 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     
     def _readAdjacencyGraph(self) -> scipy.sparse.csr_matrix:
         return self.protocol._readAdjacencyGraph()
+
+    def _readPairwise(self) -> np.ndarray:
+        return self.protocol._readPairwise()
     
+    def _readBases(self) -> np.ndarray:
+        return self.protocol._readBases()
+
     def _readProjections(self) -> np.ndarray:
         md = emlib.MetaData(self.protocol._getClassificationMdFilename())
         return np.array(md.getColumnValues(emlib.MDL_DIMRED))
     
     def _readGmmAnalysis(self):
         return self.protocol._readGmmAnalysis()
-    
-    def _gridLayout(self, n: int) -> Tuple[int, int]:
-        cols = math.floor(math.sqrt(n))
-        rows = math.ceil(n / cols)
-        return rows, cols
+
+    def _readEigenvalues(self):
+        return self.protocol._readEigenvalues()
     
     def _showBlockMatrix(self, 
                          ax: plt.Axes,

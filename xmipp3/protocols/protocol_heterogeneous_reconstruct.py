@@ -25,15 +25,13 @@
 # **************************************************************************
 
 
-import pwem
 from pwem import emlib
-import pwem.convert
 from pwem.protocols import ProtClassify3D
 from pwem.objects import (Class3D, SetOfParticles, SetOfClasses3D, Particle,
                           Volume, SetOfVolumes )
 
 from pyworkflow import BETA
-from pyworkflow.utils import makePath, createLink, moveFile, cleanPath
+import pyworkflow.utils as pwutils
 from pyworkflow.protocol.params import (Form, PointerParam, FloatParam,
                                         IntParam, StringParam, BooleanParam,
                                         GT,
@@ -84,6 +82,7 @@ class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
                       default=2, validators=[GT(0)],
                       help='Number of classes to be reconstructed')
         form.addParam('principalComponents', StringParam, label='Principal components',
+                      expertLevel=LEVEL_ADVANCED,
                       help='Principal components used in evaluation')
         
     # --------------------------- INSERT steps functions ------------------------
@@ -114,16 +113,16 @@ class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
         classificationMd = emlib.MetaData(self._getInputParticleMdFilename())
         projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
         
-        #principalComponents = self._getPrincipalComponents()
-        #writeProjections = len(principalComponents) > 0
-        #if writeProjections:
-        #    projections = projections[:,principalComponents]
+        principalComponents = self._getPrincipalComponents()
+        writeProjections = len(principalComponents) > 0
+        if writeProjections:
+            projections = projections[:,principalComponents]
         
         gmm = sklearn.mixture.GaussianMixture(n_components=self.classCount.get())
         ref3d = gmm.fit_predict(projections) + 1
         
-        #if writeProjections:
-        #    classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
+        if writeProjections:
+            classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
         classificationMd.setColumnValues(emlib.MDL_REF3D, ref3d.tolist())
         classificationMd.write(self._getClassificationMdFilename())
         self._writeGaussianMixtureModel(gmm)
@@ -236,9 +235,11 @@ class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
         return self.symmetryGroup.get()
     
     def _getPrincipalComponents(self):
-        items = self.principalComponents.get().split(',')
-        return [int(item) for item in items]
-    
+        if self.principalComponents.get():
+            return pwutils.getListFromRangeString(self.principalComponents.get())
+        else:
+            return []
+            
     def _getInputParticleMdFilename(self):
         return self._getPath('input_particles.xmd')
     

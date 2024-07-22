@@ -57,11 +57,9 @@ class XmippViewerHetReconstruct(ProtocolViewer):
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Analysis')
-        form.addParam('displayHistogram1d', LabelParam, label='1D histograms',
-                      help='Shows the histogram of each principal component')
-        form.addParam('displayHistogram2d', LabelParam, label='2D histograms',
+        form.addParam('displayClassSizes', LabelParam, label='Class sizes',
                       help='Shows the 2D histogram of pairwise principal components')
-        form.addParam('displayScatter2d', LabelParam, label='2D point scatter',
+        form.addParam('displayHistograms', LabelParam, label='Histograms',
                       help='Shows the 2D histogram of pairwise principal components')
         form.addParam('displayScatter3d', LabelParam, label='3D point scatter',
                       help='Shows the 2D histogram of pairwise principal components')
@@ -72,32 +70,24 @@ class XmippViewerHetReconstruct(ProtocolViewer):
     # --------------------------- DEFINE display functions ----------------------
     def _getVisualizeDict(self):
         return {
-            'displayHistogram1d': self._displayHistogram1d,
-            'displayHistogram2d': self._displayHistogram2d,
-            'displayScatter2d': self._displayScatter2d,
+            'displayClassSizes': self._displayClassSizes,
+            'displayHistograms': self._displayHistograms,
             'displayScatter3d': self._displayScatter3d,
         }
 
-    def _displayHistogram1d(self, e):
-        projections = self._readProjections()
-        gmm = self._readGaussianMixtureModel()
-        return self._showHistogram1d(projections, gmm)
-    
-    def _displayHistogram2d(self, e):
-        projections = self._readProjections()
-        gmm = self._readGaussianMixtureModel()
-        return self._showHistogram2d(projections, gmm)
+    def _displayClassSizes(self, e):
+        md = emlib.MetaData(self._getClassificationFilename())
+        counts = collections.Counter(md.getColumnValues(emlib.MDL_REF3D))
 
-    def _displayScatter2d(self, e):
-        projections, classes = self._readProjectionsAndClasses()
-        percentiles = np.percentile(projections, q=(1, 99), axis=0)
-    
         fig, ax = plt.subplots()
-        ax.scatter(projections[:,-1], projections[:,-2], c=classes, s=1, cmap='tab10', marker='.', alpha=0.1)
-        ax.set_xlim(percentiles[0,-1], percentiles[1,-1])
-        ax.set_ylim(percentiles[0,-2], percentiles[1,-2])
+        ax.pie(counts.values(), labels=counts.keys(), autopct='%1.1f%%')
         
-        return[fig]
+        return [fig]
+
+    def _displayHistograms(self, e):
+        projections = self._readProjections()
+        gmm = self._readGaussianMixtureModel()
+        return self._showHistograms(projections, gmm)
 
     def _displayScatter3d(self, e):
         projections, classes = self._readProjectionsAndClasses()
@@ -105,7 +95,7 @@ class XmippViewerHetReconstruct(ProtocolViewer):
     
         fig = plt.figure()
         ax = fig.add_subplot(projection='3d')
-        ax.scatter(projections[:,-1], projections[:,-2], projections[:,-3], c=classes, cmap='tab10', s=1, marker='.', alpha=0.1)
+        ax.scatter(projections[:,-1], projections[:,-2], projections[:,-3], c=classes, marker='.', alpha=0.1)
         ax.set_xlim(percentiles[0,-1], percentiles[1,-1])
         ax.set_ylim(percentiles[0,-2], percentiles[1,-2])
         ax.set_zlim(percentiles[0,-3], percentiles[1,-3])
@@ -113,6 +103,9 @@ class XmippViewerHetReconstruct(ProtocolViewer):
         return[fig]
     
     # --------------------------- UTILS functions -----------------------------   
+    def _getClassificationFilename(self):
+        return self.protocol._getClassificationMdFilename()
+    
     def _readProjections(self) -> np.ndarray:
         md = emlib.MetaData(self.protocol._getClassificationMdFilename())
         return np.array(md.getColumnValues(emlib.MDL_DIMRED))
@@ -126,58 +119,76 @@ class XmippViewerHetReconstruct(ProtocolViewer):
     def _readGaussianMixtureModel(self) -> sklearn.mixture.GaussianMixture:
         return self.protocol._readGaussianMixtureModel()
     
-    def _gridLayout(self, n: int) -> Tuple[int, int]:
-        cols = math.floor(math.sqrt(n))
-        rows = math.ceil(n / cols)
-        return rows, cols
-    
-    def _showHistogram1d(self, projections: np.ndarray, gmm: sklearn.mixture.GaussianMixture):
+    def _showHistograms(self, 
+                        projections: np.ndarray,
+                        gmm: sklearn.mixture.GaussianMixture ):
+        _, k = projections.shape
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
         percentiles = np.percentile(projections, q=(1, 99), axis=0)
+        weights = gmm.weights_
+        means = gmm.means_
+        covariances = gmm.covariances_
 
-        k = projections.shape[1]
-        fig, axs = plt.subplots(1, k)
-        for i, ax in enumerate(axs):
+        fig = plt.figure()
+        
+        for i, j in itertools.combinations(range(k), r=2):
+            ax = fig.add_subplot(k, k, k*j+i+1)
+
+            x = projections[:,i]
+            y = projections[:,j]
+            xmin = percentiles[0,i]
+            xmax = percentiles[1,i]
+            ymin = percentiles[0,j]
+            ymax = percentiles[1,j]
+
+            ax.hist2d(
+                x, y, 
+                bins=32, 
+                density=True, 
+                range=((xmin, xmax), (ymin, ymax)), 
+                cmap=mpl.cm.binary
+            )
+            
+            indices = np.array([i,j])
+            subMeans = means[:,indices]
+            subCovariance = covariances[:,indices[:,None],indices]
+            for mean, covariance, color in zip(subMeans, subCovariance, colors):
+                w, v = np.linalg.eigh(covariance)
+                w = 2.0 * np.sqrt(2.0) * np.sqrt(w)
+                angle = np.rad2deg(np.arctan2(v[0,1], v[0,0]))
+                ellipse = mpl.patches.Ellipse(
+                    xy=mean,
+                    width=w[0], height=w[1],
+                    angle=180 + angle,
+                    color=color,
+                    fill=False,
+                    clip_box=ax
+                )
+                ax.add_artist(ellipse)
+        
+        for i in range(k):
+            ax = fig.add_subplot(k, k, (k+1)*i+1)
+            
             v = projections[:,i]
             vmin = percentiles[0,i]
             vmax = percentiles[1,i]
-            weights = gmm.weights_
-            means = gmm.means_[:,i]
-            variances = gmm.covariances_[:,i,i]
             
-            _, bins, _ = ax.hist(v, bins=32, range=(vmin, vmax), density=True, color='k')
-            
+            _, bins, _ = ax.hist(
+                v, 
+                bins=32, 
+                density=True, 
+                range=(vmin, vmax), 
+                color='k'
+            )
+
             x = (bins[:-1] + bins[1:]) / 2
-            ys = weights[:,None]*scipy.stats.norm.pdf(x, loc=means[:,None], scale=np.sqrt(variances[:,None]))
-            
-            ax.plot(x, np.sum(ys, axis=0))
-            for y in ys:
-                ax.plot(x, y, linestyle='--')
-            
-            ax.set_title(f'Principal component {i}')
-            
-        return [fig]
+            norm = scipy.stats.norm(
+                loc=means[:,i], 
+                scale=np.sqrt(covariances[:,i,i])
+            )
+            ys = weights*norm.pdf(x[:,None])
+            ax.plot(x, ys, linestyle='dashed')
+            ax.plot(x, np.sum(ys, axis=1))
     
-    def _showHistogram2d(self, projections: np.ndarray, gmm: sklearn.mixture.GaussianMixture):
-        percentiles = np.percentile(projections, q=(1, 99), axis=0)
+        return [fig]
         
-        k = projections.shape[1]
-        fig, axs = plt.subplots(k-1, k-1)
-        for idx0, idx1 in itertools.combinations(range(k), r=2):
-            if k > 2:
-                ax = axs[idx1-1][idx0]
-            else:
-                ax = axs
-            x = projections[:,idx0]
-            y = projections[:,idx1]
-            xmin = percentiles[0,idx0]
-            xmax = percentiles[1,idx0]
-            ymin = percentiles[0,idx1]
-            ymax = percentiles[1,idx1]
-            weights = gmm.weights_
-            means = gmm.means_[:,(idx0,idx1)]
-            covariances = gmm.covariances_[:,i,i]
-
-            ax.hist2d(x, y, bins=32, range=((xmin, xmax), (ymin, ymax)), density=True)
-
-        return [fig]
-    

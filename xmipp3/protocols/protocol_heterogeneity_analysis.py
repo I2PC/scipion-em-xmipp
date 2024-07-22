@@ -24,7 +24,6 @@
 # *
 # **************************************************************************
 
-
 from pwem import emlib
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Particle, VolumeMask, SetOfParticles, Integer
@@ -41,7 +40,6 @@ import xmipp3
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes
 import xmippLib
 
-import math
 import os.path
 import pickle
 import itertools
@@ -92,7 +90,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                       default=6, validators=[GT(0)],
                       help='Number of principal components used for directional classification')
         form.addParam('outputPrincipalComponents', IntParam, label='Output principal components',
-                      default=4, validators=[GT(0)],
+                      default=0, validators=[GE(0)], expertLevel=LEVEL_ADVANCED,
                       help='Number of principal components represented in the output.')
 
         form.addSection(label='Analysis')
@@ -429,7 +427,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-w', self._getWeightsFilename()]
         args += ['-o', self._getBasesFilename()]
         args += ['-k', k]
-        args += ['--tolerance', 0.01]
         args += ['--eigenvalues', self._getEigenvaluesFilename()]
         args += ['-p', self._getPairwiseFilename()]
         args += ['--triangular_upper']
@@ -439,23 +436,55 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self.runJob(cmd, args, env=env, numberOfMpi=1)
    
     def correctBasisStep(self):
-        ko = self._getOutputPrincipalComponentsCount()
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        correctedDirectionMd = emlib.MetaData()
         classificationMd = emlib.MetaData()
         bases = self._readBases()
-        inverseBases = np.linalg.pinv(bases)
 
-        for i, directionId in enumerate(directionMd):
-            classificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
+        # Determine output component count
+        ko = self._getOutputPrincipalComponentsCount()
+        if ko == 0:
+            w = self._readEigenvalues()
+            ko = len(w) - (1+int(np.argmax(np.diff(w))))
             
+        # Trim bases
+        u, s, vt = np.linalg.svd(bases[:,:,-ko:], full_matrices=False)
+        u *= np.sign(s)[...,None,:]
+        orthogonalBases = u @ vt
+        inverseBases = orthogonalBases.transpose(0, 2, 1)
+
+        eigenimageHandler = emlib.Image()
+        for i, directionRow in enumerate(emlib.metadata.iterRows(directionMd)):
+            directionId = directionRow.getObjId()
+            inverseBasis = inverseBases[i]
+            correctedClassificationFilename = self._getCorrectedDirectionalClassificationMdFilename(directionId)
+            correctedEigenImageFilename = self._getCorrectedDirectionalEigenImagesFilename(directionId)
+
+            # Correct eigen-images
+            eigenimageHandler.read(directionRow.getValue(emlib.MDL_IMAGE_RESIDUAL))
+            eigenimages = eigenimageHandler.getData()
+            eigenvectors = eigenimages.reshape(inverseBasis.shape[1], -1)
+            eigenvectors = inverseBasis @ eigenvectors
+            eigenimages = eigenvectors.reshape(inverseBasis.shape[0], 1, *eigenimages.shape[-2:])
+            eigenimageHandler.setData(eigenimages)
+            eigenimageHandler.write(correctedEigenImageFilename)
+            
+            # Apply basis to projection values
+            classificationMd.read(directionRow.getValue(emlib.MDL_SELFILE))
             projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
-            correctedProjections = projections @ inverseBases[i,-ko:].T
-            
+            correctedProjections = projections @ inverseBasis.T
             classificationMd.setColumnValues(emlib.MDL_DIMRED, correctedProjections.tolist())
-            classificationMd.write(self._getCorrectedDirectionalClassificationMdFilename(directionId))
-   
+            classificationMd.write(correctedClassificationFilename)
+            
+            # Add to the corrected direction metadata
+            directionRow.setValue(emlib.MDL_SELFILE, correctedClassificationFilename)
+            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, correctedEigenImageFilename)
+            directionRow.addToMd(correctedDirectionMd)
+            
+        correctedDirectionMd.write(self._getCorrectedDirectionalMdFilename())
+            
     def combineDirectionsStep(self):   
-        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
 
         # Accumulate all PCA projection values
@@ -463,8 +492,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         sigmas = collections.Counter()
         for directionId in directionMd:
             # Read the classification of this direction
-            #directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId)) # TODO
-            directionalClassificationMd.read(self._getCorrectedDirectionalClassificationMdFilename(directionId))
+            directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
             
             values = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
             sigma = np.std(values, axis=0)
@@ -479,9 +507,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
         # Write PCA projection values to the output metadata
         result = emlib.MetaData(self._getWienerParticleMdFilename())
+        ko = len(projection)
+        eigenvalues = self._readEigenvalues()[-ko:]
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-            projection = projections[itemId] / sigmas[itemId]
+            projection = (projections[itemId] / sigmas[itemId]) * eigenvalues
             result.setValue(emlib.MDL_DIMRED, projection.tolist(), objId)
                 
         # Store
@@ -511,7 +541,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         search = sklearn.model_selection.GridSearchCV(
             sklearn.mixture.GaussianMixture(), 
             param_grid={ "n_components": range(1, maxClasses+1) }, 
-            scoring=lambda estimator, x : -estimator.bic(x)
+            scoring=lambda estimator, x : -estimator.bic(x),
+            verbose=2
         )
         search.fit(projections)
     
@@ -548,9 +579,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getPrincipalComponentsCount(self) -> int:
         return self.principalComponents.get()
-    
-    def _getSecondaryPrincipalComponentsCount(self) -> int:
-        return self.secondaryPrincipalComponents.get()
     
     def _getOutputPrincipalComponentsCount(self) -> int:
         return self.outputPrincipalComponents.get()
@@ -599,6 +627,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
     def _getDirectionalEigenImagesFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'eigen_images.mrc')
+
+    def _getCorrectedDirectionalEigenImagesFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'corrected_eigen_images.mrc')
     
     def _getDirectionalAverageImageFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'average.mrc')
@@ -611,6 +642,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getDirectionalMdFilename(self):
         return self._getExtraPath('directional.xmd')
+
+    def _getCorrectedDirectionalMdFilename(self):
+        return self._getExtraPath('corrected_directional.xmd')
 
     def _getAdjacencyGraphFilename(self):
         return self._getExtraPath('adjacency.npz')
@@ -668,3 +702,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         with open(self._getGmmAnalysisFilename(), 'rb') as f:
             return pickle.load(f)
     
+    def _readEigenvalues(self):
+        return np.load(self._getEigenvaluesFilename())
+    
+    def _readPairwise(self):
+        return np.load(self._getPairwiseFilename())
