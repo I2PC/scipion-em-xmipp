@@ -29,6 +29,8 @@
 import os
 
 from pyworkflow.protocol.params import (Form, PointerParam, FloatParam, EnumParam, FileParam, IntParam, BooleanParam)
+from pwem.objects import (SetOfParticles)
+from pyworkflow.object import Float, Integer, Boolean
 
 #TODO: check what should go in the ()
 class XmippProtWrongAssignCheckScore():
@@ -45,11 +47,31 @@ class XmippProtWrongAssignCheckScore():
 
     #TODO: include init
 
+    #TODO: Include, wherever, inference output filename variable
+    #TODO: Include, wherever, final output filename variable 
+
     #--------------- DEFINE param functions ---------------
     #TODO: Scipion Form code function
     def _defineParams(self, form: Form):
 
-        pass
+        #TODO: keep in mind the other protocols TODO's
+
+        form.addSection(label='main')
+        form.addParam('inferenceInput', PointerParam,
+                      label = "Input particles",
+                      important = True,
+                      pointerClass = 'SetOfParticles')
+        form.addParam('modelToUse', FileParam, 
+                      label = "Select model for inference", 
+                      condition = 'trainingModel == %s' %self.MODEL_PRETRAIN, 
+                      help = 'Select the H5 format filename of the trained neural network. Note that the architecture must have been compiled using this same protocol.')
+        form.addParam('batchSz', IntParam, 
+                      label = "Batch size", 
+                      expertLevel = LEVEL_ADVANCED, 
+                      default = 0, 
+                      help = 'Must be an integer. If batch size is bigger than the dataset size only one batch will be used.')
+        
+        #TODO: Include help info for batches: If batchSize left to 0 only one batch will be used.
 
     #--------------- INSERT steps functions ----------------
 
@@ -60,10 +82,18 @@ class XmippProtWrongAssignCheckScore():
 
     #--------------- STEPS functions ----------------
 
+    #TODO: write function definition
+    def readInputsStep(self):
+
+        self.inputInference : SetOfParticles = self.inferenceInput.get()
+        #TODO: should I check if this is a string?
+        self.model = self.modelToUse.get()
+        self.batchSize = Integer(self.batchSz.get())
+
     #TODO: Read inputs step function
     #TODO: Prepare input function, if separate
     #TODO: Perform Inference function
-    def callScoringProgram():
+    def callScoringProgramStep():
         
         pass
 
@@ -97,7 +127,13 @@ class XmippProtWrongAssignCheckScore():
         #TODO: is any kind of casting necessary?
         self.finalSet = self.okSubset + self.processedSet
 
-    #TODO: Create output step
+    ''' # Moved from previos joined protocol just in case
+    #TODO: step to prepare output for Scipion (how do I return it to a set of particles?)
+    #TODO: write function definition
+    def createOutputStep():
+
+        pass
+    '''
 
     #--------------- INFO functions -------------------------
     def _summary(self):
