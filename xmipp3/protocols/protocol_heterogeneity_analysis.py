@@ -26,7 +26,8 @@
 
 from pwem import emlib
 from pwem.protocols import ProtClassify3D
-from pwem.objects import Particle, VolumeMask, SetOfParticles, Integer
+from pwem.objects import (Particle, VolumeMask, SetOfParticles, 
+                          Volume, SetOfVolumes, Integer)
 
 from pyworkflow import BETA
 from pyworkflow.utils import makePath, createLink, moveFile, cleanPath
@@ -37,7 +38,8 @@ from pyworkflow.protocol.params import (Form, PointerParam,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 
 import xmipp3
-from xmipp3.convert import writeSetOfParticles, setXmippAttributes
+from xmipp3.convert import (writeSetOfParticles, setXmippAttributes, 
+                            locationToXmipp )
 import xmippLib
 
 import os.path
@@ -52,11 +54,13 @@ import sklearn.model_selection
 
 class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_PARTICLES_NAME = 'Particles'
+    OUTPUT_EIGENVOLUMES_NAME = 'Eigenvolumes'
     
     _label = 'heterogeneity analysis'
     _devStatus = BETA
     _possibleOutputs = {
-        OUTPUT_PARTICLES_NAME: SetOfParticles
+        OUTPUT_PARTICLES_NAME: SetOfParticles,
+        OUTPUT_EIGENVOLUMES_NAME: SetOfVolumes
     }
 
     def __init__(self, *args, **kwargs):
@@ -137,6 +141,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('basisSynchronizationStep')
         self._insertFunctionStep('correctBasisStep')
         self._insertFunctionStep('combineDirectionsStep')
+        self._insertFunctionStep('reconstructEigenVolumesStep')
         self._insertFunctionStep('createOutputStep')
         self._insertFunctionStep('analysisStep')
 
@@ -507,15 +512,40 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
         # Write PCA projection values to the output metadata
         result = emlib.MetaData(self._getWienerParticleMdFilename())
-        ko = len(projection)
-        eigenvalues = self._readEigenvalues()[-ko:]
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-            projection = (projections[itemId] / sigmas[itemId]) * eigenvalues
+            projection = (projections[itemId] / sigmas[itemId])
             result.setValue(emlib.MDL_DIMRED, projection.tolist(), objId)
                 
         # Store
         result.write(self._getClassificationMdFilename())
+        
+    def reconstructEigenVolumesStep(self):
+        ko = self._getOutputPrincipalComponentsCount() # TODO
+        
+        correctedDirectionMd = emlib.MetaData()
+        eigenImagesMd = emlib.MetaData()
+        for directionId in range(1, 1+ko):
+            eigenImagesMd.clear()
+            correctedDirectionMd.read(self._getCorrectedDirectionalMdFilename())
+            for row in emlib.metadata.iterRows(correctedDirectionMd):
+                pcaImages = row.getValue(emlib.MDL_IMAGE_RESIDUAL)
+                pcaImage = locationToXmipp(directionId, pcaImages)
+                row.setValue(emlib.MDL_IMAGE, pcaImage)
+                row.removeLabel(emlib.MDL_MASK)
+                row.removeLabel(emlib.MDL_SELFILE)
+                row.removeLabel(emlib.MDL_IMAGE_RESIDUAL)
+                row.addToMd(eigenImagesMd)
+                
+            eigenImagesMd.write(self._getEigenImageMdFilename(directionId))
+            
+            program = 'xmipp_reconstruct_fourier'
+            args = []
+            args += ['-i', self._getEigenImageMdFilename(directionId)]
+            args += ['-o', self._getEigenVolumeFilename(directionId)]
+            args += ['--sym', self._getSymmetryGroup()]
+            
+            self.runJob(program, args)
         
     def createOutputStep(self):
         classification = emlib.MetaData(self._getClassificationMdFilename())
@@ -531,7 +561,18 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             itemDataIterator=emlib.metadata.iterRows(classification, sortByLabel=emlib.MDL_ITEM_ID)
         )
         
+        ko = self._getOutputPrincipalComponentsCount() # TODO
+        eigenVolumes: SetOfVolumes = self._createSetOfVolumes()
+        eigenVolumes.setSamplingRate(self._getInputParticles().getSamplingRate())
+        for directionId in range(1, 1+ko):
+            eigenVolume = Volume(
+                objId=directionId, 
+                location=self._getEigenVolumeFilename(directionId)
+            )
+            eigenVolumes.append(eigenVolume)
+        
         self._defineOutputs(**{self.OUTPUT_PARTICLES_NAME: particles})
+        self._defineOutputs(**{self.OUTPUT_EIGENVOLUMES_NAME: eigenVolumes})
 
     def analysisStep(self):
         classificationMd = emlib.MetaData(self._getClassificationMdFilename())
@@ -639,6 +680,12 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
     def _getCorrectedDirectionalClassificationMdFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'corrected_classification.xmd')
+    
+    def _getEigenImageMdFilename(self, directionId: int):
+        return self._getExtraPath('directional_eigen_image_%05d.xmd' % directionId)
+    
+    def _getEigenVolumeFilename(self, directionId: int):
+        return self._getExtraPath('eigen_volume_%05d.mrc' % directionId)
     
     def _getDirectionalMdFilename(self):
         return self._getExtraPath('directional.xmd')
