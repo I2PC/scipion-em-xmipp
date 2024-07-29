@@ -494,27 +494,25 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
         # Accumulate all PCA projection values
         projections = collections.Counter()
-        sigmas = collections.Counter()
+        weights = collections.Counter()
         for directionId in directionMd:
             # Read the classification of this direction
             directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-            
-            values = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
-            sigma = np.std(values, axis=0)
+            weight = directionalClassificationMd.size()
             
             # Increment the result likelihood value
             for objId in directionalClassificationMd:
                 itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
                 projection = np.array(directionalClassificationMd.getValue(emlib.MDL_DIMRED, objId))
                 
-                projections[itemId] += projection
-                sigmas[itemId] += sigma
+                projections[itemId] += weight*projection
+                weights[itemId] += weight
 
         # Write PCA projection values to the output metadata
         result = emlib.MetaData(self._getWienerParticleMdFilename())
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-            projection = (projections[itemId] / sigmas[itemId])
+            projection = (projections[itemId] / weights[itemId])
             result.setValue(emlib.MDL_DIMRED, projection.tolist(), objId)
                 
         # Store
