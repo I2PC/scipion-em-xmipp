@@ -517,9 +517,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                 
         # Store
         result.write(self._getClassificationMdFilename())
+        self.outputPrincipalComponentCount = Integer(len(projection))
+        self._store()
         
     def reconstructEigenVolumesStep(self):
-        ko = self._getOutputPrincipalComponentsCount() # TODO
+        ko = self.outputPrincipalComponentCount.get()
         
         correctedDirectionMd = emlib.MetaData()
         eigenImagesMd = emlib.MetaData()
@@ -559,7 +561,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             itemDataIterator=emlib.metadata.iterRows(classification, sortByLabel=emlib.MDL_ITEM_ID)
         )
         
-        ko = self._getOutputPrincipalComponentsCount() # TODO
+        ko = self.outputPrincipalComponentCount.get()
         eigenVolumes: SetOfVolumes = self._createSetOfVolumes()
         eigenVolumes.setSamplingRate(self._getInputParticles().getSamplingRate())
         for directionId in range(1, 1+ko):
