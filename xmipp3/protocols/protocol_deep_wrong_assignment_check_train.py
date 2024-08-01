@@ -25,13 +25,23 @@
 # **************************************************************************
 
 #TODO: Check imports
+#TODO: check whether " or ' will be used
+
+#--------------- ATTENTION ----------------
+
+#TODO: IMPORTANT!!!!!!! KEEP IN MIND Noise 0, Particle 1
+
+#--------------- ATTENTION ----------------
 
 import os
 
 from pyworkflow.protocol.params import (Form, PointerParam, FloatParam, EnumParam, FileParam, IntParam, BooleanParam)
 from pwem.objects import (SetOfParticles)
 from pyworkflow.object import Float, Integer, Boolean
+from ..convert import writeSetOfParticles
 from pwem import emlib
+from pwem.emlib.image import ImageHandler
+from math import floor
 
 import xmippLib
 
@@ -49,10 +59,14 @@ class XmippProtWrongAssignCheckTrain():
     #_stepsCheckSecs  = 60 # Scipion steps check interval (in seconds)
     #_possibleOutputs = {'output3DCoordinates' : SetOfCoordinates3D}
 
+    #TODO: Evaluate changing name to global variable
     FORM_NN_USAGE_LABELS   = ["Model from scratch", "Use existing model"]
-    #FORM_NN_USAGE_TYPELIST          = [MODEL_NEW, MODEL_PRETRAIN]
-    #TODO: check if I can use this
+    #TODO: Explain what this is
     SHIFTVALUE = 2
+
+    #TODO: Evaluate changing name to text so it's named coherently
+    REF_CORRECT = "okSubset_"
+    REF_INCORRECT = "wrongSubset_"
 
     #TODO: Check if this is correct
     def _init_(self, **kwargs):
@@ -118,8 +132,8 @@ class XmippProtWrongAssignCheckTrain():
         form.addParam('batchSz', IntParam, 
                       label = "Batch size", 
                       expertLevel = LEVEL_ADVANCED, 
-                      default = 0, 
-                      help = 'Must be an integer. If batch size is bigger than the dataset size only one batch will be used.')
+                      default = 0, #TODO: maybe no batches should not be the default
+                      help = 'Must be an integer. If batch size is bigger than the dataset size only one batch will be used. Also, if batchSize left to 0 only one batch will be used.')
         form.addParam('ensembleNum', IntParam, 
                       label = "Introduce ...", 
                       expertLevel = LEVEL_ADVANCED, 
@@ -131,32 +145,24 @@ class XmippProtWrongAssignCheckTrain():
                       default = '', 
                       help = '')
 
-        #TODO: Include help info for batches: If batchSize left to 0 only one batch will be used.
         #TODO: Finish Ensemble param when available in program
         #TODO: Decide numEpoch default + include help explanation (Maybe I want this to not be a param and optimize every time?)
         #TODO: add GPU and Threads (form.AddParallelSection?)
     
     #--------------- INSERT steps functions ----------------
+    #TODO: Write function defintion
     def _insertAllSteps(self):
         
-        #TODO: add steps
-        self.readInputsStep()
-
-        #TODO: keep in mind that no 3 set generation is necessary if no training is performed
-
-    #--------------- ATTENTION ----------------
-    
-    #TODO: IMPORTANT!!!!!!! KEEP IN MIND Noise 0, Particle 1
-
-    #--------------- ATTENTION ----------------
-
+        self.readInputs()
+        self.insertFunctionStep(self.generateSubsetsStep)
+        self.insertFunctionStep(self.callProduceResidualsStep)
+        self.insertFunctionStep(self.prepocessTrainingInputStep)
+        self.insertFunctionStep(self.callTrainingProgramStep)
 
     #--------------- STEPS functions ----------------
 
     #TODO: write function definition
-    def readInputsStep(self):
-
-        #TODO: Include inputs for reprojections
+    def readInputs(self):
 
         self.inputAssign : SetOfParticles = self.assignment.get()
         self.modelType = Integer(self.trainingModel.get())
@@ -169,77 +175,115 @@ class XmippProtWrongAssignCheckTrain():
         #self.numEnsemble = Integer(self.ensembleNum.get())
         self.numEpochs = Integer(self.numEpoch.get())
 
-        #self.assignA : SetOfParticles = self.assignmentA.get()
-        #self.assignB : SetOfParticles = self.assignmentB.get()
-        #self.compAvsB : SetOfParticles = self.angleComparison.get()
-        #self.threshold = Float(self.angleThreshold.get())
-
-    '''  # This decition has been delegated to the user
-    #TODO: write function definition
-    def divideSubsetsStep(self):
-
-        self.okSubset = []
-        self.doubtSubset = []
-
-        for ptcA, ptcB, angPtc in zip(self.assignA.iterItems(), self.assignB.iterItems(), self.compAvsB.iterItems()):
-            
-            #TODO: [TODO: deprecate] choose final criteria to decide which matrix will be appended (CHECK)
-            #TODO: can I force that the output always comes from a specific module (see particle picker)
-            # Note that this function is adapted for a Xmipp3-compare-angles-output-like input from Scipion
-            if Float(angPtc.getAttributeValue(attrName = "_xmipp_angleDiff")) <= self.threshold:
-                self.okSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcA.getMatrix()])
-            else:
-                self.doubtSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcA.getMatrix()])
-                self.doubtSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcB.getMatrix()])
-    '''
+        self.inputVol = self.inputVolume.get()
 
     #TODO: write function definition
     def generateSubsetsStep(self):
 
-        self.oksubset = []
+        self.okSubset = []
         self.wrongSubset = []
         aux = []
 
         for particle in self.inputAssign:
             
-            self.oksubset.append([particle.getNameId(), particle.getFileName(), particle.getMatrix()])
+            self.okSubset.append([particle.getNameId(), particle.getFileName(), particle.getMatrix()])
             self.wrongSubset.append([particle.getNameId(), particle.getFileName()])
             aux.append(particle.getMatrix)
 
-            aux = aux[SHIFTVALUE:] + aux[:SHIFTVALUE]
+            aux = aux[self.SHIFTVALUE:] + aux[:self.SHIFTVALUE]
 
         for ptcl, value in zip(self.wrongSubset, aux):
 
             ptcl.append(value)
+        
+    #TODO: write function definition
+    def callProduceResidualsStep(self):
 
+        fnVol = self._getTmpPath("volume.vol")
 
+        self.produceResiduals(self.okSubset, fnVol, self.REF_CORRECT)
+        self.produceResiduals(self.wrongSubset, fnVol, self.REF_INCORRECT)
+
+    #TODO: Evaluate produceResiduals for inference once cleaned
     #TODO: write function definition    
-    def callReprojectionsStep(self):
+    def produceResiduals(self, imgSet, fnVol, ref):
 
-        pass
+        #TODO: properly comment this external code (and inform it is external)
+
+        #TODO: Why do I call this residuals if the information here is not residuals (it's only the original info in Xmipp metadata file)
+        self.imgsFn = self._getExtraPath(ref + 'residuals.xmd')
+        #vol = self.inputVolume.get()
+        #imgSet = self.inputSet.get()
+
+        ## This function will write a SetOfParticles as a Xmipp metadata
+        writeSetOfParticles(imgSet, self.imgsFn)
+
+        img = ImageHandler()
+        #fnVol = self._getTmpPath("volume.vol")
+        img.convert(self.inputVolume.get(), fnVol)
+        xdim = self.inputVolume.get().getDim()[0]
+
+        #TODO: check the numberOfMpi=1 since this might not be a good practice
+        if xdim != imgSet.getDim()[0]:
+            self.runJob("xmipp_image_resize", "-i %s --dim %d" % (fnVol, imgSet.getDim()[0]), numberOfMpi=1)
+
+        #fnVol = self._getTmpPath("volume.vol")
+        anglesOutFn = self._getExtraPath(ref + "anglesCont.stk")
+        projectionsOutFn = self._getExtraPath(ref + "projections.stk")
+        self.fnResiduals = self._getExtraPath(ref + "residuals.mrcs")
+
+        program = "xmipp_angular_continuous_assign2"
+
+        args = " -i " + imgSet ## Set of particles with initial alignment
+        args += " -o " + anglesOutFn ## Output of the program (Stack of images prepared for 3D reconstruction)
+        args += " --ref " + fnVol ## Reference volume
+        args += " --optimizeAngles -- optimizeShift" 
+        args += " --max_shift" + floor(xdim*0.05) ## Maximum shift allowed in pixels
+        args += " --oprojections " + projectionsOutFn ## Output stack of projections
+        args += " --sampling " + self.inputVol.getSamplingRate() ## Sampling rate (A/pixel)
+        args += " --oresiduals " + self.fnResiduals ## Output stack of residuals
+        args += " --optimizeGray --max_gray_scale 0.95 " ## Set values for gray optimization
+
+        self.runJob(program,args)
 
     #TODO: write function definition
-    def processResidualsStep(self):
+    def extractResiduals(self):
+
+        #TODO: read residuals.mrcs (or residuals.xmd) to extract images fns 
+        #TODO: return them in whichever format fits best
+
         pass
     
     #TODO: where do I include the residuals filenames? Separated file or extra column? 
-    #       Substituting the original filename is not an option right?
+    #       Substituting the original filename is not an option right? (No, is not)
 
-
-    #TODO: step to prepare data in different XMDs
+    #TODO: move to utils since it is not an Step?
     #TODO: write function definition
-    def saveSeparateXMDStep():
+    def saveInXMD(self, pathToFile):
+
+        #Found uses to adapt to:
+            # (deprecated) 1. Generate XMD files for residuals generation (with original images)
+            # 2. Generate XMD files for training (with residual images)
 
         pass
 
-    """
+    #TODO: write function definition
+    def prepocessTrainingInputStep(self):
+
+        #TODO: Call extract residuals for every subset and join them with new fnImgs
+        #TODO: Save every subset in a different XMD and save route (self?)
+        #TODO: create output file 
+
+        pass
+
+
     #TODO: write funcion definition
-    #TODO: [TODO: deprecate function] step to call program (training, if any, and inference)
     #TODO: evaluate if -> None in function would be useful
     #TODO: remember including ensemble args when implemented
     def callTrainingProgramStep(self):
 
-        program = ""
+        #TODO: check if this name should be included elsewhere
+        program = "xmipp_deep_wrong_assign_check_tr"
 
         args = ' -c ' + str(self.) # file containing correct examples
         args += ' -w ' + str(self.) # file containing incorrect examples
@@ -259,7 +303,6 @@ class XmippProtWrongAssignCheckTrain():
 
         self.runJob(program,args)
 
-    """
 
     #TODO: Should I do anything else here before the protocol finishes?
     
@@ -270,3 +313,23 @@ class XmippProtWrongAssignCheckTrain():
         #TODO: appends to summary with the relevant info
 
     # ------------- UTILS functions -------------------------
+
+
+    '''  # This decition has been delegated to the user kept just in case while developing
+    #TODO: write function definition
+    def divideSubsetsStep(self):
+
+        self.okSubset = []
+        self.doubtSubset = []
+
+        for ptcA, ptcB, angPtc in zip(self.assignA.iterItems(), self.assignB.iterItems(), self.compAvsB.iterItems()):
+            
+            #TODO: [TODO: deprecate] choose final criteria to decide which matrix will be appended (CHECK)
+            #TODO: can I force that the output always comes from a specific module (see particle picker)
+            # Note that this function is adapted for a Xmipp3-compare-angles-output-like input from Scipion
+            if Float(angPtc.getAttributeValue(attrName = "_xmipp_angleDiff")) <= self.threshold:
+                self.okSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcA.getMatrix()])
+            else:
+                self.doubtSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcA.getMatrix()])
+                self.doubtSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcB.getMatrix()])
+    '''
