@@ -46,6 +46,7 @@ from pwem.protocols import ProtAlignMovies
 from pyworkflow.protocol.constants import (STATUS_NEW)
 from xmipp3.convert import getScipionObj
 from pwem.constants import ALIGN_NONE
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 ACCEPTED = 'Accepted'
 DISCARDED = 'Discarded'
@@ -59,6 +60,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
     _label = 'movie alignment consensus'
     outputName = 'consensusAlignments'
+    _devStatus = NEW
 
     def __init__(self, **args):
         ProtAlignMovies.__init__(self, **args)

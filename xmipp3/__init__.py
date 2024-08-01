@@ -41,7 +41,7 @@ type_of_version = 'devel' #'release'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
-_currentBinVersion = '3.23.11.0'
+_currentBinVersion = '3.24.06.0'
 __version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
 # Requirement version variables
@@ -204,6 +204,7 @@ def installDeepLearningToolkit(plugin, env):
     preMsgs = []
     cudaMsgs = []
     nvidiaDriverVer = None
+    useGpu = False
     if os.environ.get('CUDA', 'True') == 'True':
         try:
             nvidiaDriverVer = subprocess.Popen(["nvidia-smi",
@@ -229,7 +230,6 @@ def installDeepLearningToolkit(plugin, env):
             msg = ("Tensorflow installed without GPU. Just CPU computations "
                    "enabled (slow computations).")
             cudaMsgs.append(msg)
-            useGpu = False
 
     if nvidiaDriverVer is not None:
         preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
