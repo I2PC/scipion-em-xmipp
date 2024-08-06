@@ -126,10 +126,10 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
                 int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath(),
                 self._getExtraPath("subtracted_part"))
         mask = self.mask.get()
-        fnMask = mask.getFileName()
-        if fnMask.endswith('.mrc'):
-            fnMask += ':mrc'
         if mask is not None:
+            fnMask = mask.getFileName()
+            if fnMask.endswith('.mrc'):
+                fnMask += ':mrc'
             args += ' --mask %s' % fnMask
         if self.nonNegative.get():
             args += ' --nonNegative'
