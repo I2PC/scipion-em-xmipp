@@ -139,6 +139,7 @@ class Plugin(pwem.Plugin):
             'hdf5>=1.18',
             'sqlite>=3',
             'fftw>=3',
+            'openjdk',
             'mpi',
             'libtiff',
             'libjpeg-turbo'
