@@ -142,7 +142,7 @@ class Plugin(pwem.Plugin):
             'c-compiler',
             'cxx-compiler',
             'openjdk',
-            'mpi',
+            'openmpi-mpicxx',
             'libtiff',
             'libjpeg-turbo'
         ]
