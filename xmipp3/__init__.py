@@ -139,7 +139,7 @@ class Plugin(pwem.Plugin):
             'hdf5>=1.18',
             'sqlite>=3',
             'fftw>=3',
-            'openmpi-mpicxx=3',
+            'openmpi-mpicxx=4.1.3',
             'c-compiler',
             'cxx-compiler',
             'make',
