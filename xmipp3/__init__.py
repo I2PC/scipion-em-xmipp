@@ -141,6 +141,7 @@ class Plugin(pwem.Plugin):
             'fftw>=3',
             'c-compiler',
             'cxx-compiler',
+            'make',
             'openjdk',
             'openmpi-mpicxx',
             'libtiff',
