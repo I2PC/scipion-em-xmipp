@@ -41,7 +41,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pyworkflow.object import Float
 from pyworkflow.utils import getExt
-from pwem.objects import Volume, SetOfParticles
+from pwem.objects import Volume, SetOfParticles, AtomStruct
 
 
 FN_METADATA_BFACTOR_RESOLUTION = 'bfactor_resolution.xmd'
@@ -122,6 +122,8 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         # 2 Carry out the matching betweent the local resolution per residue and bfactor
         self._insertFunctionStep('matchingBfactorLocalResolution')
 
+        self._insertFunctionStep('createOutputStep')
+
     def mrc_convert(self, fileName, outputFileName):
         """Check if the extension is .mrc, if not then uses xmipp to convert it
         """
@@ -164,3 +166,8 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         params += ' -o %s' % self._getExtraPath()
 
         self.runJob('xmipp_resolution_pdb_bfactor', params)
+
+    def createOutputStep(self):
+        outputPdb = AtomStruct()
+        outputPdb.setFileName(self._getExtraPath("chimeraPDB.pdb"))
+        self._defineOutputs(outputStructure=outputPdb)

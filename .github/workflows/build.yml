@@ -11,6 +11,10 @@ jobs:
   build:
     # Specify the machine to run the job on
     runs-on: ubuntu-22.04
+    
+    #Avoid send statistics
+    env:
+      SEND_INSTALLATION_STATISTICS: "False"
 
     # Define the steps to be taken in the job
     steps:    

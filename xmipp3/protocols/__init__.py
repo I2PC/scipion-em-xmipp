@@ -39,6 +39,8 @@ from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMa
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
+from .protocol_classify_pca import XmippProtClassifyPca
+from .protocol_classify_pca_streaming import XmippProtClassifyPcaStreaming
 #from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
 from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
@@ -63,6 +65,7 @@ from .protocol_helical_parameters import XmippProtHelicalParameters
 from .protocol_kerdensom import XmippProtKerdensom
 from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
+from .protocol_movie_alignment_consensus import XmippProtConsensusMovieAlignment
 from .protocol_flexalign import XmippProtFlexAlign
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift

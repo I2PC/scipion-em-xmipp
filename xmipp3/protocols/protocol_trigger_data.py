@@ -141,11 +141,16 @@ class XmippProtTriggerData(EMProtocol, Protocol):
 
         # loading new images to process
         if len(self.images) > 0:  # taking the non-processed yet
+            extraLimitLen = -1 if self.allImages.get() else self.outputSize.get() - len(self.images)
             self.newImages = [m.clone() for m in self.imsSet.iterItems(
                 orderBy='creation',
-                where='creation>"' + str(self.check) + '"')]
+                where='creation>"' + str(self.check) + '"',
+                limit=extraLimitLen)]
         else:  # first time
-            self.newImages = [m.clone() for m in self.imsSet]
+            limitLen = -1 if self.allImages.get() else self.outputSize.get()
+            self.newImages = [m.clone() for m in self.imsSet.iterItems(
+                orderBy='creation',
+                limit=limitLen)]
 
         self.splitedImages = self.splitedImages + self.newImages
         self.images = self.images + self.newImages
@@ -207,16 +212,21 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                 if self.splitImages:  # Semi-streaming: Splitting the input
                     if len(self.splitedImages) >= self.outputSize or \
                             (self.finished and len(self.splitedImages) > 0):
-                        self.outputCount += 1
-                        imageSet = self._loadOutputSet(self.getImagesClass(),
-                                                       '%s%d.sqlite'
-                                                       % (self.getImagesType('lower'),
-                                                          self.outputCount),
-                                                       self.splitedImages)
-                        # The splitted outputSets are always closed
-                        self._updateOutputSet("%s%d" % (outputName, self.outputCount),
-                                              imageSet, Set.STREAM_CLOSED)
-                        self.splitedImages = []
+                        splitLimIndex = self.outputSize.get() if not self.finished else None
+                        numIter = 1 if len(self.splitedImages) < self.outputSize.get() \
+                            else int(len(self.splitedImages) / self.outputSize.get())
+                        for _ in range(numIter):
+                            self.outputCount += 1
+                            imageSet = self._loadOutputSet(self.getImagesClass(),
+                                                           '%s%d.sqlite'
+                                                           % (self.getImagesType('lower'),
+                                                              self.outputCount),
+                                                           self.splitedImages[:splitLimIndex
+                                                                              or len(self.splitedImages)])
+                            # The splitted outputSets are always closed
+                            self._updateOutputSet("%s%d" % (outputName, self.outputCount),
+                                                  imageSet, Set.STREAM_CLOSED)
+                            self.splitedImages = self.splitedImages[splitLimIndex:] if splitLimIndex else []
                 else:  # Full streaming case
                     if not os.path.exists(self._getPath(imsSqliteFn)):
                         imageSet = self._loadOutputSet(self.getImagesClass(),

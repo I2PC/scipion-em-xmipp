@@ -145,10 +145,6 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
         vol1 = self.vol1.get()
         pdbFn = self._getPdbFileName()
         self.outFile = self._getVolName()
-        if getExt(pdbFn) == ".cif":
-            pdbFn2 = replaceBaseExt(pdbFn, 'pdb')
-            cifToPdb(pdbFn, pdbFn2)
-            pdbFn = pdbFn2
         samplingR = vol1.getSamplingRate()
         size = vol1.getDim()
         ccp4header = headers.Ccp4Header(vol1.getFileName(), readHeader=True)
