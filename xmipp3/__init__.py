@@ -28,6 +28,7 @@
 
 import json
 import subprocess
+import shutils
 from datetime import datetime
 
 from pyworkflow import Config
@@ -43,6 +44,7 @@ _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.pn
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _current_xmipp_tag = 'ms_olz_cmake' # TODO
 _currentBinVersion = '3.23.11.0'
+_currentDepVersion = '1.0'
 __version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
 # Requirement version variables
@@ -130,6 +132,27 @@ class Plugin(pwem.Plugin):
             'dist/bin/xmipp_image_header', 
             'dist/xmipp.bashrc'
         ]
+        
+        # When changing dependencies, increment _currentDepVersion
+        CONDA_DEPENDENCIES = [
+            'cmake>=3.17',
+            'hdf5>=1.18',
+            'sqlite>=3'
+            'fftw>=3',
+            'mpi',
+            'libtiff',
+            'libjpeg-turbo'
+        ]
+        
+        if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
+            env.addPackage(
+                'xmippDep',
+                tar='void.tgz',
+                version=_currentDepVersion,
+                commands=['conda install -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES)],
+                neededProgs=['conda'],
+                default=True
+            )
         
         if develMode:
             env.addPackage(
