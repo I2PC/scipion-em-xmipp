@@ -28,7 +28,6 @@
 
 import json
 import subprocess
-import shutils
 from datetime import datetime
 
 from pyworkflow import Config
