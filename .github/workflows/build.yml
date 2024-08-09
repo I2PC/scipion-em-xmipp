@@ -56,9 +56,9 @@ jobs:
       run: ../scipion/scipion3 installp -p . --devel --noBin
 
     # Install xmipp's dependencies package
-    #- name: Install dependencies package
-    #  working-directory: ${{ github.workspace }}
-    #  run: ../scipion/scipion3 installb xmippDep
+    - name: Install dependencies package
+      working-directory: ${{ github.workspace }}
+      run: ../scipion/scipion3 installb xmippDep
 
     # Cloning Xmipp 
     - name: Cloning Xmipp
