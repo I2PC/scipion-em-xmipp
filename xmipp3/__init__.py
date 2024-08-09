@@ -43,7 +43,7 @@ _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.pn
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _current_xmipp_tag = 'ms_olz_cmake' # TODO
-_currentBinVersion = '3.23.11.0'
+_currentBinVersion = '3.24.06.0'
 _currentDepVersion = '1.0'
 __version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
