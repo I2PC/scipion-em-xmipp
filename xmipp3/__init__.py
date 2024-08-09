@@ -33,6 +33,7 @@ from datetime import datetime
 from pyworkflow import Config
 import pwem
 import pyworkflow.utils as pwutils
+from scipion.install.funcs import CommandDef
 
 from .base import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
@@ -136,7 +137,7 @@ class Plugin(pwem.Plugin):
         CONDA_DEPENDENCIES = [
             'cmake>=3.17',
             'hdf5>=1.18',
-            'sqlite>=3'
+            'sqlite>=3',
             'fftw>=3',
             'mpi',
             'libtiff',
@@ -144,11 +145,11 @@ class Plugin(pwem.Plugin):
         ]
         
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
+            commands = CommandDef('conda install -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
             env.addPackage(
-                'xmippDep',
+                'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
-                version=_currentDepVersion,
-                commands=['conda install -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES)],
+                commands=commands.getCommands(),
                 neededProgs=['conda'],
                 default=True
             )
