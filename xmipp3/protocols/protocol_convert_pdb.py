@@ -39,7 +39,7 @@ from pwem.objects import Volume, Transform, SetOfVolumes, AtomStruct, SetOfAtomS
 from pwem.protocols import ProtInitialVolume
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
-from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt, removeBaseExt
+from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt, removeBaseExt, red
 from pyworkflow import UPDATED, PROD
 
 class XmippProtConvertPdb(ProtInitialVolume):
@@ -111,7 +111,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       label="Store centered PDB",
                       help='Set to \'Yes\' if you want to save centered PDB. '
                            'It will be stored in the output directory of this protocol.')
-        form.addParam('convertCif', params.BooleanParam, default=True,
+        form.addParam('convertCif', params.BooleanParam, default=False,
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Convert CIF to PDB",
                       help='If set to true and input atom struct file is a CIF, it will get converted to PDB.')
@@ -278,7 +278,12 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
         # If file extension is .cif and conversion is required, convert to .pdb, or else we link it as is
         if getExt(pdbRaw) == ".cif" and self.convertCif.get():
-            cifToPdb(pdbRaw, convertedPdb)
+            try:
+                cifToPdb(pdbRaw, convertedPdb)
+            except:
+                self.error(red("The conversion has failed. It might be for an excessive number of atoms. "\
+                          "Try not to convert the CIF into a PDB (hidden flag)."))
+                raise RuntimeError("PDB conversion")
         else:
             createLink(pdbRaw, convertedPdb)
 
