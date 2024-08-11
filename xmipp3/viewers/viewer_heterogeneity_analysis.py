@@ -141,11 +141,14 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         dy = np.diff(y)
 
         fig, ax = plt.subplots()
+        ax2 = ax.twinx()
         
         ax.bar(x, y, width=1.0, label='Eigen-values')
-        ax.plot((x[:-1]+x[1:])/2, dy, label='Adjacent difference', c='orange')
+        ax2.plot(x[:-1]+0.5, dy, label='Adjacent difference', c='orange')
 
-        ax.legend()
+        lines, labels = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines + lines2, labels + labels2)
         
         return [fig]
         
