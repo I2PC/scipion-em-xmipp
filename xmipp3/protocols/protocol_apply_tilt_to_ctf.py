@@ -29,11 +29,11 @@ from pyworkflow.utils.properties import Message
 
 from pwem.objects import (Particle, Coordinate, Micrograph, CTFModel,
                           SetOfParticles)
-from pwem.protocols import ProtCTFAssign
+from pwem.protocols import EMProtocol
 
 import math
 
-class XmippProtApplyTiltToCtf(ProtCTFAssign):
+class XmippProtApplyTiltToCtf(EMProtocol):
     """ Apply a local deviation to the CTF based on the micrograph's tilt
     angle"""
     _label = 'apply tilt to ctf'
