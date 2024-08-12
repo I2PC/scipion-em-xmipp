@@ -43,7 +43,7 @@ class XmippProtApplyTiltToCtf(EMProtocol):
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('inputParticles', params.PointerParam, label=Message.LABEL_INPUT_PART,
-                      pointerClass=SetOfParticles, pointerCondition='hasCTF',
+                      pointerClass=SetOfParticles, pointerCondition='hasCTF and hasCoordinates',
                       important=True,
                       help='Select the particles that you want to apply the'
                            'local CTF correction.')
@@ -66,6 +66,7 @@ class XmippProtApplyTiltToCtf(EMProtocol):
         outputParticles: SetOfParticles = self._createSetOfParticles()
         
         self.sineFactor = math.sin(math.radians(self.tiltAngle.get()))
+        outputParticles.copyInfo(inputParticles)
         outputParticles.copyItems(inputParticles,
                                   updateItemCallback=self._updateItem )
      
@@ -74,16 +75,15 @@ class XmippProtApplyTiltToCtf(EMProtocol):
     
     #--------------------------- UTILS functions --------------------------------------------
     def _updateItem(self, particle: Particle, _):
+        # Compute the CTF offset
         coordinate: Coordinate = particle.getCoordinate()
-        if coordinate is not None:
-            # Compute the CTF offset
-            micrograph: Micrograph = coordinate.getMicrograph()
-            position = coordinate.getPosition()
-            r = position[self.tiltAxis.get()]
-            r *= micrograph.getSamplingRate() # Convert to angstroms.
-            dy = self.sineFactor*r
-            
-            # Write to output
-            ctf: CTFModel = particle.getCTF()
-            ctf.setDefocusU(ctf.getDefocusU() + dy)
-            ctf.setDefocusV(ctf.getDefocusV() + dy)
+        micrograph: Micrograph = coordinate.getMicrograph()
+        position = coordinate.getPosition()
+        r = position[self.tiltAxis.get()]
+        r *= micrograph.getSamplingRate() # Convert to angstroms.
+        dy = self.sineFactor*r
+        
+        # Write to output
+        ctf: CTFModel = particle.getCTF()
+        ctf.setDefocusU(ctf.getDefocusU() + dy)
+        ctf.setDefocusV(ctf.getDefocusV() + dy)
