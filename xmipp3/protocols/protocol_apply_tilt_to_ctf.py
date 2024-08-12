@@ -30,7 +30,9 @@ from pyworkflow.utils.properties import Message
 from pwem.objects import (Particle, Coordinate, Micrograph, CTFModel,
                           SetOfParticles)
 from pwem.protocols import ProtCTFAssign
-        
+
+import math
+
 class XmippProtApplyTiltToCtf(ProtCTFAssign):
     """ Apply a local deviation to the CTF based on the micrograph's tilt
     angle"""
@@ -63,6 +65,7 @@ class XmippProtApplyTiltToCtf(ProtCTFAssign):
         inputParticles: SetOfParticles = self.inputParticles.get()
         outputParticles: SetOfParticles = self._createSetOfParticles()
         
+        self.sineFactor = math.sin(math.radians(self.tiltAngle.get()))
         outputParticles.copyItems(inputParticles,
                                   updateItemCallback=self._updateItem )
      
@@ -77,9 +80,10 @@ class XmippProtApplyTiltToCtf(ProtCTFAssign):
             micrograph: Micrograph = coordinate.getMicrograph()
             position = coordinate.getPosition()
             r = position[self.tiltAxis.get()]
-            delta = r*micrograph.getSamplingRate() # Convert to angstroms.
+            r *= micrograph.getSamplingRate() # Convert to angstroms.
+            dy = self.sineFactor*r
             
             # Write to output
             ctf: CTFModel = particle.getCTF()
-            ctf.setDefocusU(ctf.getDefocusU() + delta)
-            ctf.setDefocusV(ctf.getDefocusV() + delta)
+            ctf.setDefocusU(ctf.getDefocusU() + dy)
+            ctf.setDefocusV(ctf.getDefocusV() + dy)
