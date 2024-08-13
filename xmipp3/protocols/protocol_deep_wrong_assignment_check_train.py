@@ -63,7 +63,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     _devStatus  = BETA
     #TODO: is this true?
     _conda_env = 'xmipp_DLTK_v1.0'
-    #TODO: do I want to include this?
+    
     _possibleOutputs = None
 
     #TODO: Evaluate changing global variable name
@@ -83,7 +83,6 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     #--------------- DEFINE param functions ---------------
     def _defineParams(self, form: Form):
 
-        #TODO: investigate addHidden (what for?)
         #TODO: difference between using PointerParam and FileParam?
         form.addHidden(USE_GPU, BooleanParam, default=True,
                         label="Use GPU for the model (default: Yes)",
@@ -96,6 +95,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
                         help="Your system may have several GPUs installed, "
                              " choose the one you'd like to use."
                         )
+        #TODO: Evaluate the use of this
         form.addParallelSection(threads=8, mpi=1)
 
         form.addSection(label = 'Main')
@@ -120,8 +120,8 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
                     condition = 'trainingModel == 1', 
                     help = 'Select the H5 format filename of the trained neural network.' 
                     'Note that the architecture must have been compiled using this same protocol.')
-        #TODO: maybe no batches should not be the default value
-        #TODO: evaluate if this param should really be advanced
+        #TODO: maybe no batches should not be the default value (spoiler: NO)
+        #TODO: evaluate if this param should really be advanced (or even mandatory)
         form.addParam('batchSz', IntParam, 
                     label = "Batch size", 
                     expertLevel = LEVEL_ADVANCED, 
@@ -131,7 +131,6 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         
         #TODO: Finish Ensemble param when available in program
         #TODO: Decide numEpoch default + include help explanation (Maybe I want this to not be a param and optimize every time?)
-        #TODO: add GPU and Threads (form.AddParallelSection?)
         #TODO: include flag for model data info saving
         """
         form.addParam('ensembleNum', IntParam, 
@@ -158,13 +157,13 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
 
     #--------------- STEPS functions ----------------
 
-    #TODO: evaluate change name
+    #TODO: evaluate change name into convert to follow "convention"
     #TODO: write function definition
     def readInputs(self):
 
         self.inputAssgn : SetOfParticles = self.assignment.get()
-        self.inputAssign = self._getExtraPath("initial.xmd")
-        writeSetOfParticles(self.inputAssgn, self.inputAssign)
+        self.inputAssignFn = self._getExtraPath("initial.xmd")
+        writeSetOfParticles(self.inputAssgn, self.inputAssignFn)
         
         self.inputVol = self.inputVolume.get()
         self.fnVol = self._getTmpPath("volume.vol")
@@ -187,7 +186,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         self.okSubset = self._getExtraPath("okSubset.xmd")
         self.wrongSubset = self._getExtraPath("wrongSubset.xmd")
 
-        mdInit = xmippLib.MetaData(self.inputAssign)
+        mdInit = xmippLib.MetaData(self.inputAssignFn)
 
         listOfLabelsGeneric = [xmippLib.MDL_ITEM_ID, xmippLib.MDL_IMAGE]
         listOfLabelsMatrix = [xmippLib.MDL_ANGLE_PSI, xmippLib.MDL_ANGLE_ROT, xmippLib.MDL_ANGLE_TILT, xmippLib.MDL_SHIFT_X, xmippLib.MDL_SHIFT_Y]
@@ -228,7 +227,8 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         args = ' -c ' + self.okSubset # file containing correct examples
         args += ' -w ' + self.wrongSubset # file containing incorrect examples
         args += ' -o ' + self.outputFn # file where the final model will be stored
-        args += ' -b %d' % self.batchSize
+        args += ' -b %d' % self.batchSize # number of images to feed the nn per batch (remainder is kept)
+        #TODO: keep in mind possible changes in keeping the remainder until stable version exists
 
         if self.modelType == 1:
             args += ' --pretrained ' 
@@ -264,18 +264,10 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         img = ImageHandler()
         vol = self._getTmpPath("volume.vol")
         img.convert(fnVol,vol)
-        
-        '''
-        img = ImageHandler()
-        img.convert(self.inputVolume.get(), fnVol)
-        xDim = imgSet.getDim()[0]
-        '''
 
-        #img.convert(vol, self.fnVol)
-        #xDimVol = self.fnVol.getDim()[0]
         #TODO: check the numberOfMpi=1 since this might not be a good practice
         if xDimVol != xDim:
-            #TODO: find a way to avoid using this runjob
+            #TODO: find a way, if possible, to avoid using this runjob
             self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnVol, xDim), numberOfMpi=1)
 
         anglesOutFn = self._getExtraPath("anglesCont_%s.stk" % ref)
@@ -286,19 +278,23 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         args = " -i " + fnSet ## Set of particles with initial alignment
         args += " -o " + anglesOutFn ## Output of the program (Stack of images prepared for 3D reconstruction)
         args += " --ref " + vol ## Reference volume
-        args += " --optimizeAngles --optimizeShift"
+        args += " --optimizeAngles --optimizeShift"  #TODO: investigate for educated comments
         args += " --max_shift %d" % floor(xDim*0.05) ## Maximum shift allowed in pixels
         args += " --sampling %f " % self.inputVolume.get().getSamplingRate() ## Sampling rate (A/pixel)
         args += " --oresiduals " + self.fnResiduals ## Output stack of residuals
         args += " --ignoreCTF --optimizeGray --max_gray_scale 0.95 " ## Set values for gray optimization
+        #TODO: investigate CTF for educated comments
 
+        ## Calling the residuals generation cpp program
         self.runJob(program,args)
 
-        mdRes = xmippLib.MetaData(self.fnResiduals)
+        ## Preparing residuals info to be manipulated
+        mdRes = xmippLib.MetaData(self.fnResiduals) 
+        ## Preparing original file info to be manipulated
         mdOrgn = xmippLib.MetaData(fnSet)
-
+        ## Saving the new stack of residuals in the original file
         mdOrgn.setColumnValues(xmippLib.MDL_IMAGE_RESIDUAL,mdRes.getColumnValues(xmippLib.MDL_IMAGE))
-
+        ## Updating the changes to the original file
         mdOrgn.write(fnSet)
 
         #TODO: Should I include any cleanPath?

@@ -25,26 +25,32 @@
 # **************************************************************************
 
 #TODO: Check imports
-#TODO: include relative path builder (check getExtraPath)
+#TODO: check whether " or ' will be used
+#TODO: Check comments are used cohesively
 
 import os
 
 from pyworkflow.protocol.params import (Form, PointerParam, FloatParam, EnumParam, FileParam, IntParam, BooleanParam)
 from pwem.objects import (SetOfParticles)
 from pyworkflow.object import Float, Integer, Boolean
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from xmipp3 import XmippProtocol
+from pwem.protocols import EMProtocol #TODO: do I need this?
+from ..convert import writeSetOfParticles, locationToXmipp
 
 #TODO: check what should go in the ()
-class XmippProtWrongAssignCheckScore():
+class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
 
     #TODO: Protocol explanation comment
 
     # Identification parameters
-    _label      = 'deep wrong angle assignment check'
+    _label      = 'deep wrong angle assignment check scoring'
     _devStatus  = BETA
+    #TODO: is this true?
     _conda_env = 'xmipp_DLTK_v1.0'
-    #TODO: what is this? (below)
-    #_stepsCheckSecs  = 60 # Scipion steps check interval (in seconds)
-    #_possibleOutputs = {'output3DCoordinates' : SetOfCoordinates3D}
+    _possibleOutputs = {'outputParticles' : SetOfParticles}
+
+    REF_SCORING = "scoringSet"
 
     #TODO: include init
 
@@ -53,24 +59,32 @@ class XmippProtWrongAssignCheckScore():
 
     #--------------- DEFINE param functions ---------------
     def _defineParams(self, form: Form):
-
-        #TODO: keep in mind the other protocols TODO's
+        
+        #TODO: Evaluate the use of this
+        form.addParallelSection(threads=8, mpi=1)
 
         form.addSection(label='main')
         form.addParam('inferenceInput', PointerParam,
-                      label = "Input particles",
-                      important = True,
-                      pointerClass = 'SetOfParticles')
+                    label = "Input particles",
+                    important = True,
+                    pointerClass = 'SetOfParticles')
+        form.addParam('inputVolume',PointerParam,
+                    label = "Volume to compare images to",
+                    important = True,
+                    pointerClass = 'Volume',
+                    help = 'Volume used for residuals generation')
         form.addParam('modelToUse', FileParam, 
-                      label = "Select model for inference", 
-                      help = 'Select the H5 format filename of the trained neural network. Note that the architecture must have been compiled using the homonymus train protocol.')
+                    label = "Select pretrained model", 
+                    help = 'Select the H5 format filename of the trained neural network.' 
+                    'Note that the architecture must have been compiled using this same protocol.')
+        #TODO: maybe no batches should not be the default value
+        #TODO: evaluate if this param should really be advanced
         form.addParam('batchSz', IntParam, 
-                      label = "Batch size", 
-                      expertLevel = LEVEL_ADVANCED, 
-                      default = 0, #TODO: maybe no batches should not be the default
-                      help = 'Must be an integer. If batch size is bigger than the dataset size only one batch will be used. Also, if batchSize left to 0 only one batch will be used.')
-
-        #TODO: Does the inference file already contain residuals or should I ask for the volumen and do them myself?
+                    label = "Batch size", 
+                    expertLevel = LEVEL_ADVANCED, 
+                    default = 0, 
+                    help = 'Must be an integer. If batch size is bigger than the dataset size only one batch will be used. '
+                    'Also, if batchSize left to 0 only one batch will be used.')
 
     #--------------- INSERT steps functions ----------------
 
@@ -78,61 +92,65 @@ class XmippProtWrongAssignCheckScore():
     def _insertAllSteps(self):
 
         self.readInputs()
-        self.insertFumctionStep(self.callScoringProgramStep)
-        self.insertFumctionStep(self.createOutputStep)
+        self._insertFunctionStep(self.useGenerateResidualsStep)
+        self._insertFunctionStep(self.callScoringProgramStep)
+        self._insertFunctionStep(self.createOutputStep)
 
     #--------------- STEPS functions ----------------
 
+    #TODO: evaluate change name into convert to follow "convention"
     #TODO: write function definition
     def readInputs(self):
 
         self.inputInference : SetOfParticles = self.inferenceInput.get()
-        #TODO: should I check if model is a string?
-        #TODO: comprobations for big previous model?
+        self.inputInferenceFn = self._getExtraPath("prescored.xmd")
+        writeSetOfParticles(self.inputInference, self.inputInferenceFn)
+
+        #TODO: Keep in mind possible changes in training protocol
+        self.inputVol = self.inputVolume.get()
+        self.fnVol = self._getTmpPath("volume.vol")
+
         self.model = self.modelToUse.get()
         self.batchSize = Integer(self.batchSz.get())
 
-    #TODO: Function to prepare data in XMD for program
-    #TODO: Write function definition
-    def saveInXMD(self):
-
-        pass
-
-    #TODO: Prepare input files for program, including output file creation
+    #TODO: Keep in mind training protocol changes
     #TODO: write function definition
-    def prepareScoringInputStep(self):
+    def useGenerateResidualsStep(self):
 
-        #TODO: create XMD for inference info (+ residuals if finally done in protocol)
-        #TODO: create output file (self.fnOutputFile)
-
-        pass
+        #TODO: Make sure there is no problem with not creating a subset of inference set (since we're including a few new columns)
+        self.generateResiduals(self.inputInferenceFn, self.inputVol, self.REF_SCORING)
 
 
-    #TODO: write funcion definition
+    #TODO: write funcion definition + args comments
     #TODO: evaluate if -> None in function would be useful
     def callScoringProgramStep(self):
 
         self.fnOutputFile = self._getExtraPath("scoreOutput.xmd")
 
-        #TODO: check if this name shouldbe included elsewhere
         program = "xmipp_deep_wrong_assign_check_sc"
 
-        args = ' -i ' + str(self.) # file containing images for inference
+        args = ' -i ' + str(self.inputInference) # file containing images for inference
         args += ' -m ' + str(self.model) # file containing the model to be used
+        args += ' -o ' + str(self.fnOutputFile) # 
         args += ' -b ' + self.batchSize
-        args += ' -o ' + str(self.fnOutputFile) # file where the final model will be stored
+
+        #TODO: IMPORTANT DON'T FORGET GPU usage
 
         self.runJob(program,args)
 
-    # Moved from previos joined protocol just in case
-    #TODO: step to prepare output for Scipion (how do I return it to a set of particles?)
     #TODO: write function definition
-    def createOutputStep():
+    def createOutputStep(self):
+        
+        outputSet = self._createSetOfParticles(suffix = "_after_inference")
+        #TODO: does this file contain all the info I should use?
+        outputSet.copyInfo(self.fnOutputFile)
+        #TODO: setDim is necessary?
+        #TODO: setObjLabel is necessary?
+        #TODO: Why md.IterRows ?
+        outputSet.copyItems(self.fnOutputFile) #TODO: should I include any oher arg?
 
-        #TODO: Would it make sense to take the originally given set and just include a new column with the results?
-        #TODO: Should I create a copy (real) of said set instead?
-
-        pass
+        self._defineOutputs(**{"OutputParticles": outputSet})
+        self._defineSourceRelation(self.inputInference, outputSet)
     
 
     #--------------- INFO functions -------------------------
@@ -142,26 +160,34 @@ class XmippProtWrongAssignCheckScore():
 
     # ------------- UTILS functions -------------------------
 
-        ''' #TODO: deprecated functionality, check before deleting
-    #TODO: Prepare inference output function (Moved from previous protocolo)
+    #TODO: write function definition
+    def generateResiduals(self):
+
+        #TODO: include function from training protocol once completed 
+
+        pass
+
+    ##############################################################################################
+
+    ''' # deprecated functionality, check before deleting
 
     def processInferenceResultStep(self):
         
-        #TODO: check possible castings into particle and such with ":"
+        #TOD: check possible castings into particle and such with ":"
 
-        #TODO: Keep in mind that infer output does not have MDL_REF (???)
+        #TOD: Keep in mind that infer output does not have MDL_REF (???)
         infmd = xmippLib.MetaData(self.inferOut)
 
-        #TODO: should I include confidence levels as identifiable labels? 
-        #TODO: modify how this value is set
+        #TOD: should I include confidence levels as identifiable labels? 
+        #TOD: modify how this value is set
         confThreshold = 0.95
 
         self.processedSet = []
 
         for i in range(0,len(infmd),2):
 
-            #TODO: make sure this attr is properly visited
-            #TODO: check attr name once the label is created
+            #TOD: make sure this attr is properly visited
+            #TOD: check attr name once the label is created
             if infmd[i].getAttributeValue(attrName = "classProbability") >= infmd[i+1].getAttributeValue(attrName = "classProbability"):
                 if infmd[i].getAttributeValue(attrName = "classProbability") >= confThreshold:
                     self.processedSet.append(infmd[i])
@@ -169,6 +195,6 @@ class XmippProtWrongAssignCheckScore():
                 if infmd[i+1].getAttributeValue(attrName = "classProbability") >= confThreshold:
                     self.processedSet.append(infmd[i+1])
 
-        #TODO: is any kind of casting necessary?
+        #TOD: is any kind of casting necessary?
         self.finalSet = self.okSubset + self.processedSet
     '''
