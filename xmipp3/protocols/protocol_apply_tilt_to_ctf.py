@@ -24,11 +24,13 @@
 # *
 # **************************************************************************
 
+from typing import Optional
+
 import pyworkflow.protocol.params as params
 from pyworkflow.utils.properties import Message
 
 from pwem.objects import (Particle, Coordinate, Micrograph, CTFModel,
-                          SetOfParticles)
+                          SetOfParticles, SetOfMicrographs)
 from pwem.protocols import EMProtocol
 
 import math
@@ -48,6 +50,10 @@ class XmippProtApplyTiltToCtf(EMProtocol):
                       important=True,
                       help='Select the particles that you want to apply the'
                            'local CTF correction.')
+        form.addParam('inputMicrographs', params.PointerParam, label=Message.LABEL_INPUT_MIC,
+                      pointerClass=SetOfMicrographs,
+                      important=True,
+                      help='The micrographs from which particles were extracted.')
         form.addParam('tiltAxis', params.EnumParam, label='Tilt axis', 
                       choices=self._tilt_axes, default=1,
                       help='The tilt axis. In tomography this is Y by convention.')
@@ -85,9 +91,14 @@ class XmippProtApplyTiltToCtf(EMProtocol):
     
     #--------------------------- UTILS functions --------------------------------------------
     def _updateItem(self, particle: Particle, _):
-        # Compute the CTF offset
+        # Obtain necessary objects
         coordinate: Coordinate = particle.getCoordinate()
-        micrograph: Micrograph = coordinate.getMicrograph()
+        micrograph: Optional[Micrograph] = coordinate.getMicrograph()
+        if micrograph is None:
+            micrographId = coordinate.getMicId()
+            micrograph = self.inputMicrographs.get()[micrographId]
+        
+        # Compute the CTF offset
         dimensions = micrograph.getXDim(), micrograph.getYDim()
         position = coordinate.getPosition()
         r = position[self.tiltIndex] - (dimensions[self.tiltIndex] / 2)
