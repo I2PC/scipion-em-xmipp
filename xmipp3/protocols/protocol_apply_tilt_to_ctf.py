@@ -38,6 +38,7 @@ class XmippProtApplyTiltToCtf(EMProtocol):
     angle"""
     _label = 'apply tilt to ctf'
     _tilt_axes = ['X', 'Y']
+    _tilt_signs = ['Increasing', 'Decreasing']
 
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -51,9 +52,13 @@ class XmippProtApplyTiltToCtf(EMProtocol):
                       choices=self._tilt_axes, default=1,
                       help='The tilt axis. In tomography this is Y by convention.')
         form.addParam('tiltAngle', params.FloatParam, label='Tilt angle',
-                      default=0, validators=[params.Range(-90, 90)],
+                      default=0, validators=[params.Range(0, 90)],
                       help='The angle at which the acquisition is tilted. '
-                      'In degrees. Mind the sign of the angle.')
+                      'In degrees.')
+        form.addParam('tiltSign', params.EnumParam, label='Tilt sign',
+                      choices=self._tilt_signs, default=0,
+                      help='Wether defocus increases or decreases in terms '
+                      'of the selected tilt axis.')
         
     #--------------------------- INSERT steps functions --------------------------------------------
     
@@ -66,8 +71,10 @@ class XmippProtApplyTiltToCtf(EMProtocol):
         outputParticles: SetOfParticles = self._createSetOfParticles()
         
         TILT_INDICES = [1, 0]
-        self.sineFactor = math.sin(math.radians(self.tiltAngle.get()))
+        SIGNS = [+1, -1]
+        sign = SIGNS[self.tiltSign.get()]
         self.tiltIndex = TILT_INDICES[self.tiltAxis.get()]
+        self.sineFactor = sign*math.sin(math.radians(self.tiltAngle.get()))
         
         outputParticles.copyInfo(inputParticles)
         outputParticles.copyItems(inputParticles,
