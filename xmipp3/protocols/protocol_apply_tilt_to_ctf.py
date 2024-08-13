@@ -88,8 +88,9 @@ class XmippProtApplyTiltToCtf(EMProtocol):
         # Compute the CTF offset
         coordinate: Coordinate = particle.getCoordinate()
         micrograph: Micrograph = coordinate.getMicrograph()
+        dimensions = micrograph.getXDim(), micrograph.getYDim()
         position = coordinate.getPosition()
-        r = position[self.tiltIndex]
+        r = position[self.tiltIndex] - (dimensions[self.tiltIndex] / 2)
         r *= micrograph.getSamplingRate() # Convert to angstroms.
         dy = self.sineFactor*r
         
