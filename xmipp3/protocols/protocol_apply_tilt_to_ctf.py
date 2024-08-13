@@ -65,7 +65,10 @@ class XmippProtApplyTiltToCtf(EMProtocol):
         inputParticles: SetOfParticles = self.inputParticles.get()
         outputParticles: SetOfParticles = self._createSetOfParticles()
         
+        TILT_INDICES = [1, 0]
         self.sineFactor = math.sin(math.radians(self.tiltAngle.get()))
+        self.tiltIndex = TILT_INDICES[self.tiltAxis.get()]
+        
         outputParticles.copyInfo(inputParticles)
         outputParticles.copyItems(inputParticles,
                                   updateItemCallback=self._updateItem )
@@ -79,7 +82,7 @@ class XmippProtApplyTiltToCtf(EMProtocol):
         coordinate: Coordinate = particle.getCoordinate()
         micrograph: Micrograph = coordinate.getMicrograph()
         position = coordinate.getPosition()
-        r = position[self.tiltAxis.get()]
+        r = position[self.tiltIndex]
         r *= micrograph.getSamplingRate() # Convert to angstroms.
         dy = self.sineFactor*r
         
