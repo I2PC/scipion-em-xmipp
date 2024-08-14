@@ -137,3 +137,4 @@ from .protocol_deep_hand import XmippProtDeepHand
 from .protocol_deep_center import XmippProtDeepCenter
 
 from .protocol_deep_wrong_assignment_check_train import XmippProtWrongAssignCheckTrain
+from .protocol_deep_wrong_assignment_check_score import XmippProtWrongAssignCheckScore

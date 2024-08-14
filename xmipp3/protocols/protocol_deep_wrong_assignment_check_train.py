@@ -38,7 +38,7 @@ import os
 
 from pyworkflow.protocol.params import (Form, PointerParam, FloatParam, EnumParam, FileParam, IntParam, BooleanParam, USE_GPU, GPU_LIST, StringParam)
 from pwem.objects import (SetOfParticles)
-from pyworkflow.object import Float, Integer, Boolean
+from pyworkflow.object import Float, Integer, Boolean, String
 from ..convert import writeSetOfParticles, locationToXmipp
 from pwem import emlib
 from pwem.emlib.image import ImageHandler
@@ -47,12 +47,18 @@ from pyworkflow.utils.path import cleanPath
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from xmipp3 import XmippProtocol
 from pwem.protocols import EMProtocol #TODO: do I need this?
+from pwem.objects.data import EMObject
+#from xmipp3.objects import ModelLol
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 import xmippLib
+'''
+class ModelObj (EMObject):
 
-
+    def __init__(self, fileName = None):
+        self.fileName = String(fileName)
+'''
 #TODO: check () is correct
 class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
 
@@ -64,7 +70,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     #TODO: is this true?
     _conda_env = 'xmipp_DLTK_v1.0'
     
-    _possibleOutputs = None
+    _possibleOutputs = {'finalModel' : ModelObj}
 
     #TODO: Evaluate changing global variable name
     FORM_NN_USAGE_LABELS   = ["Model from scratch", "Use existing model"]
@@ -75,15 +81,13 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     REF_CORRECT = "okSubset"
     REF_INCORRECT = "wrongSubset"
 
-    #TODO: Investigate how to properly prepare this
+    #TODO: Investigate how to properly prepare this (both)
     def _init_(self, **kwargs):
         super()._init_(**kwargs)
-        #self.stepsExecutionMode = STEPS_PARALLEL
 
     #--------------- DEFINE param functions ---------------
     def _defineParams(self, form: Form):
 
-        #TODO: difference between using PointerParam and FileParam?
         form.addHidden(USE_GPU, BooleanParam, default=True,
                         label="Use GPU for the model (default: Yes)",
                         help="If yes, the protocol will try to use a GPU for "
@@ -220,13 +224,13 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     def callTrainingProgramStep(self):
         
         #TODO: change this into proper path for model output
-        self.outputFn = self._getExtraPath("model.h5")
+        outputFn = self._getExtraPath("model.h5")
 
         program = "xmipp_deep_wrong_assign_check_tr"
 
         args = ' -c ' + self.okSubset # file containing correct examples
         args += ' -w ' + self.wrongSubset # file containing incorrect examples
-        args += ' -o ' + self.outputFn # file where the final model will be stored
+        args += ' -o ' + outputFn # file where the final model will be stored
         args += ' -b %d' % self.batchSize # number of images to feed the nn per batch (remainder is kept)
         #TODO: keep in mind possible changes in keeping the remainder until stable version exists
 
@@ -243,6 +247,9 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         #TODO: evaluate including patience args += ' -p ' + self.
 
         self.runJob(program,args)
+        
+        #self._defineOutputs(finalModel = ModelObj(fileName = outputFn))
+
     
     #--------------- INFO functions -------------------------
     def _summary(self):

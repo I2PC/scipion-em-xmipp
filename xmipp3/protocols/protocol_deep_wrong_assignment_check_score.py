@@ -38,6 +38,8 @@ from xmipp3 import XmippProtocol
 from pwem.protocols import EMProtocol #TODO: do I need this?
 from ..convert import writeSetOfParticles, locationToXmipp
 
+from pyworkflow import BETA, UPDATED, NEW, PROD
+
 #TODO: check what should go in the ()
 class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
 
@@ -48,11 +50,14 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
     _devStatus  = BETA
     #TODO: is this true?
     _conda_env = 'xmipp_DLTK_v1.0'
+
     _possibleOutputs = {'outputParticles' : SetOfParticles}
 
     REF_SCORING = "scoringSet"
 
-    #TODO: include init
+    #TODO: Investigate how to properly prepare this (both)
+    def _init_(self, **kwargs):
+        super()._init_(**kwargs)
 
     #TODO: Include, wherever, inference output filename variable
     #TODO: Include, wherever, final output filename variable 
@@ -73,10 +78,14 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
                     important = True,
                     pointerClass = 'Volume',
                     help = 'Volume used for residuals generation')
+        #form.addParam('pretrainedModel', PointerParam, label = "Model", pointerClass = "ModelObj")
+        
         form.addParam('modelToUse', FileParam, 
                     label = "Select pretrained model", 
                     help = 'Select the H5 format filename of the trained neural network.' 
                     'Note that the architecture must have been compiled using this same protocol.')
+        
+        #TODO: allowsNull = True (false is default)
         #TODO: maybe no batches should not be the default value
         #TODO: evaluate if this param should really be advanced
         form.addParam('batchSz', IntParam, 
@@ -110,7 +119,10 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
         self.inputVol = self.inputVolume.get()
         self.fnVol = self._getTmpPath("volume.vol")
 
+        #self.pretrainedModel = self.pretrainedModel.get()
+        
         self.model = self.modelToUse.get()
+
         self.batchSize = Integer(self.batchSz.get())
 
     #TODO: Keep in mind training protocol changes
@@ -141,7 +153,7 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
     #TODO: write function definition
     def createOutputStep(self):
         
-        outputSet = self._createSetOfParticles(suffix = "_after_inference")
+        outputSet = self._createSetOfParticles(suffix = "_scored")
         #TODO: does this file contain all the info I should use?
         outputSet.copyInfo(self.fnOutputFile)
         #TODO: setDim is necessary?
