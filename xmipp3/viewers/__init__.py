@@ -28,6 +28,7 @@ from .viewer import XmippViewer
 from .plotter import XmippPlotter
 
 from .viewer_angular_resolution_alignment import XmippProtAngResAlignViewer
+from .viewer_apply_tilt_to_ctf import XmippApplyTiltToCTFViewer
 from .viewer_cl2d import XmippCL2DViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
 from .viewer_deep_consensus import XmippDeepConsensusViewer
