@@ -36,9 +36,13 @@ from pyworkflow.object import Float, Integer, Boolean
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from xmipp3 import XmippProtocol
 from pwem.protocols import EMProtocol #TODO: do I need this?
-from ..convert import writeSetOfParticles, locationToXmipp
+from ..convert import writeSetOfParticles, readSetOfParticles,locationToXmipp
+from pwem.emlib.image import ImageHandler
+from math import floor
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
+
+import xmippLib
 
 #TODO: check what should go in the ()
 class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
@@ -66,7 +70,7 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
     def _defineParams(self, form: Form):
         
         #TODO: Evaluate the use of this
-        form.addParallelSection(threads=8, mpi=1)
+        form.addParallelSection(threads=8, mpi=0)
 
         form.addSection(label='main')
         form.addParam('inferenceInput', PointerParam,
@@ -141,25 +145,30 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
 
         program = "xmipp_deep_wrong_assign_check_sc"
 
-        args = ' -i ' + str(self.inputInference) # file containing images for inference
-        args += ' -m ' + str(self.model) # file containing the model to be used
-        args += ' -o ' + str(self.fnOutputFile) # 
-        args += ' -b ' + self.batchSize
+        args = ' -i ' + self.inputInferenceFn # file containing images for inference
+        args += ' -m ' + self.model # file containing the model to be used
+        args += ' -o ' + self.fnOutputFile # 
+        args += ' -b ' + str(self.batchSize)
 
         #TODO: IMPORTANT DON'T FORGET GPU usage
 
-        self.runJob(program,args)
+        self.runJob(program,args,env=self.getCondaEnv())
 
+    #TODO: explain what is going on in the function
     #TODO: write function definition
     def createOutputStep(self):
         
         outputSet = self._createSetOfParticles(suffix = "_scored")
-        #TODO: does this file contain all the info I should use?
-        outputSet.copyInfo(self.fnOutputFile)
-        #TODO: setDim is necessary?
-        #TODO: setObjLabel is necessary?
-        #TODO: Why md.IterRows ?
-        outputSet.copyItems(self.fnOutputFile) #TODO: should I include any oher arg?
+        outputSet.copyInfo(self.inputInference)
+        readSetOfParticles(self.fnOutputFile,outputSet)
+        outMd = xmippLib.MetaData(self.fnOutputFile)
+        probabilities = outMd.getColumnValues(xmippLib.MDL_CLASS_PROBABILITY)
+
+        for scoreRow, ptcl in zip(probabilities, self.inputInference):
+            newPtcl = ptcl.clone()
+            #TODO: Evaluate changing this name into something more coherent with the MDL label
+            newPtcl._score = Float(scoreRow) #Extended atribute
+            outputSet.append(newPtcl)
 
         self._defineOutputs(**{"OutputParticles": outputSet})
         self._defineSourceRelation(self.inputInference, outputSet)
@@ -172,12 +181,53 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
 
     # ------------- UTILS functions -------------------------
 
-    #TODO: write function definition
-    def generateResiduals(self):
+    #TODO: Any change must be also included in training protocol
+    #TODO: write function definition    
+    def generateResiduals(self, fnSet, fnVol, ref):
 
-        #TODO: include function from training protocol once completed 
+        #TODO: properly comment this external code (and inform it is external)
 
-        pass
+        #TODO: check if I can do this without ignoring so many args
+        xDim, _, _, _, _ = xmippLib.MetaDataInfo(fnSet)
+        xDimVol = self.inputVolume.get().getXDim()
+
+        img = ImageHandler()
+        vol = self._getTmpPath("volume.vol")
+        img.convert(fnVol,vol)
+
+        #TODO: check the numberOfMpi=1 since this might not be a good practice
+        if xDimVol != xDim:
+            #TODO: find a way, if possible, to avoid using this runjob
+            self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnVol, xDim), numberOfMpi=1)
+
+        anglesOutFn = self._getExtraPath("anglesCont_%s.stk" % ref)
+        self.fnResiduals = self._getExtraPath("residuals%s.mrcs" % ref)
+
+        program = "xmipp_angular_continuous_assign2"
+
+        args = " -i " + fnSet ## Set of particles with initial alignment
+        args += " -o " + anglesOutFn ## Output of the program (Stack of images prepared for 3D reconstruction)
+        args += " --ref " + vol ## Reference volume
+        args += " --optimizeAngles --optimizeShift"  #TODO: investigate for educated comments
+        args += " --max_shift %d" % floor(xDim*0.05) ## Maximum shift allowed in pixels
+        args += " --sampling %f " % self.inputVolume.get().getSamplingRate() ## Sampling rate (A/pixel)
+        args += " --oresiduals " + self.fnResiduals ## Output stack of residuals
+        args += " --ignoreCTF --optimizeGray --max_gray_scale 0.95 " ## Set values for gray optimization
+        #TODO: investigate CTF for educated comments
+
+        ## Calling the residuals generation cpp program
+        self.runJob(program,args)
+
+        ## Preparing residuals info to be manipulated
+        mdRes = xmippLib.MetaData(self.fnResiduals) 
+        ## Preparing original file info to be manipulated
+        mdOrgn = xmippLib.MetaData(fnSet)
+        ## Saving the new stack of residuals in the original file
+        mdOrgn.setColumnValues(xmippLib.MDL_IMAGE_RESIDUAL,mdRes.getColumnValues(xmippLib.MDL_IMAGE))
+        ## Updating the changes to the original file
+        mdOrgn.write(fnSet)
+
+        #TODO: Should I include any cleanPath?
 
     ##############################################################################################
 

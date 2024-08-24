@@ -70,7 +70,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     #TODO: is this true?
     _conda_env = 'xmipp_DLTK_v1.0'
     
-    _possibleOutputs = {'finalModel' : ModelObj}
+    #_possibleOutputs = {'finalModel' : ModelObj}
 
     #TODO: Evaluate changing global variable name
     FORM_NN_USAGE_LABELS   = ["Model from scratch", "Use existing model"]
@@ -100,7 +100,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
                              " choose the one you'd like to use."
                         )
         #TODO: Evaluate the use of this
-        form.addParallelSection(threads=8, mpi=1)
+        form.addParallelSection(threads=6, mpi=0)
 
         form.addSection(label = 'Main')
         form.addParam('assignment', PointerParam, 
@@ -246,7 +246,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         #TODO: evaluate including learning rate args += ' -l ' + self.
         #TODO: evaluate including patience args += ' -p ' + self.
 
-        self.runJob(program,args)
+        self.runJob(program,args, env=self.getCondaEnv())
         
         #self._defineOutputs(finalModel = ModelObj(fileName = outputFn))
 
@@ -258,7 +258,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
 
     # ------------- UTILS functions -------------------------
 
-    #TODO: Evaluate produceResiduals for inference once cleaned
+    #TODO: Any change must be also included in scoring protocol
     #TODO: write function definition    
     def generateResiduals(self, fnSet, fnVol, ref):
 
@@ -272,10 +272,18 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         vol = self._getTmpPath("volume.vol")
         img.convert(fnVol,vol)
 
-        #TODO: check the numberOfMpi=1 since this might not be a good practice
+        #TODO: Should I be changing the original volume???
         if xDimVol != xDim:
+
+            volume = xmippLib.Image()
+            volume.read(self.fnVol)
+            #TODO: Evaluate if this is correct
+            volume.resize(xDim, xDim, xDim)
+            volume.write(self.fnVol)
+            
+            #TODO: check the numberOfMpi=1 since this might not be a good practice
             #TODO: find a way, if possible, to avoid using this runjob
-            self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnVol, xDim), numberOfMpi=1)
+            #self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnVol, xDim), numberOfMpi=1)
 
         anglesOutFn = self._getExtraPath("anglesCont_%s.stk" % ref)
         self.fnResiduals = self._getExtraPath("residuals%s.mrcs" % ref)
@@ -290,7 +298,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         args += " --sampling %f " % self.inputVolume.get().getSamplingRate() ## Sampling rate (A/pixel)
         args += " --oresiduals " + self.fnResiduals ## Output stack of residuals
         args += " --ignoreCTF --optimizeGray --max_gray_scale 0.95 " ## Set values for gray optimization
-        #TODO: investigate CTF for educated comments
+        #TODO: investigate CTF for educated comments (DONE, description pending)
 
         ## Calling the residuals generation cpp program
         self.runJob(program,args)
