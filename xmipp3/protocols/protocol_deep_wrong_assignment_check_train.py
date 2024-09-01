@@ -36,8 +36,8 @@
 
 import os
 
-from pyworkflow.protocol.params import (Form, PointerParam, FloatParam, EnumParam, FileParam, IntParam, BooleanParam, USE_GPU, GPU_LIST, StringParam)
-from pwem.objects import (SetOfParticles)
+from pyworkflow.protocol.params import Form, PointerParam, FloatParam, EnumParam, FileParam, IntParam, BooleanParam, StringParam, GPU_LIST
+from pwem.objects import SetOfParticles
 from pyworkflow.object import Float, Integer, Boolean, String
 from ..convert import writeSetOfParticles, locationToXmipp
 from pwem import emlib
@@ -46,7 +46,7 @@ from math import floor
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from xmipp3 import XmippProtocol
-from pwem.protocols import EMProtocol #TODO: do I need this?
+from pwem.protocols import EMProtocol
 from pwem.objects.data import EMObject
 #from xmipp3.objects import ModelLol
 
@@ -59,7 +59,7 @@ class ModelObj (EMObject):
     def __init__(self, fileName = None):
         self.fileName = String(fileName)
 '''
-#TODO: check () is correct
+
 class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
 
     #TODO: Protocol explanation comment
@@ -67,7 +67,6 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     # Identification parameters
     _label      = 'deep wrong angle assignment check training'
     _devStatus  = BETA
-    #TODO: is this true?
     _conda_env = 'xmipp_DLTK_v1.0'
     
     #_possibleOutputs = {'finalModel' : ModelObj}
@@ -88,21 +87,16 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     #--------------- DEFINE param functions ---------------
     def _defineParams(self, form: Form):
 
-        form.addHidden(USE_GPU, BooleanParam, default=True,
-                        label="Use GPU for the model (default: Yes)",
-                        help="If yes, the protocol will try to use a GPU for "
-                             "model training and execution. Note that this "
-                             "will greatly decrease execution time."
-                        )
-        form.addHidden(GPU_LIST, StringParam, default='0',
-                        label="GPU ID (default: 0)",
+        form.addHidden(GPU_LIST, StringParam, 
+                        default='0',
                         help="Your system may have several GPUs installed, "
                              " choose the one you'd like to use."
                         )
-        #TODO: Evaluate the use of this
+        
+        #TODO: Explain the use of this
         form.addParallelSection(threads=6, mpi=0)
 
-        form.addSection(label = 'Main')
+        form.addSection(label = 'Input')
         form.addParam('assignment', PointerParam, 
                     label = "Input assignment", 
                     important = True, 
@@ -124,18 +118,19 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
                     condition = 'trainingModel == 1', 
                     help = 'Select the H5 format filename of the trained neural network.' 
                     'Note that the architecture must have been compiled using this same protocol.')
-        #TODO: maybe no batches should not be the default value (spoiler: NO)
-        #TODO: evaluate if this param should really be advanced (or even mandatory)
+        #TODO: what should I include as advanced? expertLevel = LEVEL_ADVANCED,
+        #TODO: evaluate use of default value vs allows null = TRUE
         form.addParam('batchSz', IntParam, 
                     label = "Batch size", 
-                    expertLevel = LEVEL_ADVANCED, 
-                    default = 0, 
-                    help = 'Must be an integer. If batch size is bigger than the dataset size only one batch will be used. '
-                    'Also, if batchSize left to 0 only one batch will be used.')
-        
+                    default = 1, 
+                    help = 'Must be an integer. If batch size is bigger than the dataset size or is set to 0 only one batch will be used.')
+        #TODO: finish help section once fully developed
+        form.addParam('saveInfo', BooleanParam,
+                      label = 'Save information about NN',
+                      default=False,
+                      help = 'When this flag is activated the protocol will save a document contaning information related to the Neural Network(s), monitored values during the training process.')
         #TODO: Finish Ensemble param when available in program
         #TODO: Decide numEpoch default + include help explanation (Maybe I want this to not be a param and optimize every time?)
-        #TODO: include flag for model data info saving
         """
         form.addParam('ensembleNum', IntParam, 
                       label = "Introduce ...", 
@@ -148,22 +143,23 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
                       default = '', 
                       help = '')
         """
-    
+
     #--------------- INSERT steps functions ----------------
     
     #TODO: Write function defintion
     def _insertAllSteps(self):
         
-        self.readInputs()
+        self._insertFunctionStep(self.convertInputs)
         self._insertFunctionStep(self.generateSubsetsStep)
         self._insertFunctionStep(self.useGenerateResidualsStep)
         self._insertFunctionStep(self.callTrainingProgramStep)
 
     #--------------- STEPS functions ----------------
 
-    #TODO: evaluate change name into convert to follow "convention"
     #TODO: write function definition
-    def readInputs(self):
+    def convertInputs(self):
+
+        self.nThreads = str(self.numberOfThreads.get())
 
         self.inputAssgn : SetOfParticles = self.assignment.get()
         self.inputAssignFn = self._getExtraPath("initial.xmd")
@@ -182,6 +178,8 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         self.batchSize = Integer(self.batchSz.get())
         #self.numEnsemble = Integer(self.ensembleNum.get())
         #self.numEpochs = Integer(self.numEpoch.get())
+
+        self.doSaveInfo = self.saveInfo.get()
         
 
     #TODO: write function definition
@@ -218,7 +216,6 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         self.generateResiduals(self.wrongSubset, self.inputVol, self.REF_INCORRECT)
         
     #TODO: write function definition
-    #TODO: evaluate if -> None in function would be useful
     #TODO: remember including ensemble args when implemented
     #TODO: check variable names for inputs (with changes in forms above)
     def callTrainingProgramStep(self):
@@ -228,19 +225,27 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
 
         program = "xmipp_deep_wrong_assign_check_tr"
 
-        args = ' -c ' + self.okSubset # file containing correct examples
-        args += ' -w ' + self.wrongSubset # file containing incorrect examples
-        args += ' -o ' + outputFn # file where the final model will be stored
-        args += ' -b %d' % self.batchSize # number of images to feed the nn per batch (remainder is kept)
-        #TODO: keep in mind possible changes in keeping the remainder until stable version exists
+        args = ' -c ' + self.okSubset ## File containing correct examples
+        args += ' -w ' + self.wrongSubset ## File containing incorrect examples
+        args += ' -o ' + outputFn ## File where the final model will be stored
+        args += ' -b %d' % self.batchSize ## Number of images to feed the nn per batch (remainder is kept)
 
         if self.modelType == 1:
-            args += ' --pretrained ' 
             # Model could be universal or specific from user
-            args += ' -f ' + str (self.pretrainedMod) # file where the pretrained model is stored
+            args += ' -f ' + str(self.pretrainedMod) # file where the pretrained model is stored
 
-        #TODO: IMPORTANT GPU usage?? Maybe include comprobation if left 0 so to directly not include the argument 
-         
+        args += ' -t ' + self.nThreads
+
+        #TODO: fully implement in program
+        if self.doSaveInfo:
+            #TODO: evaluate file format
+            savedInfoFn = self._getExtraPath("nnInfo.txt")
+            args += ' -s ' + savedInfoFn
+
+        #TODO: Write in help that the user may not write anything if all gpus are to be used
+        if self.getGpuList():
+            args += ' --gpus ' + ','.join(map(str, self.getGpuList()))
+
         #TODO: include param when default defined
         #args += ' -e ' + self. numEpochs
         #TODO: evaluate including learning rate args += ' -l ' + self.
@@ -257,14 +262,12 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         #TODO: appends to summary with the relevant info
 
     # ------------- UTILS functions -------------------------
-
     #TODO: Any change must be also included in scoring protocol
     #TODO: write function definition    
     def generateResiduals(self, fnSet, fnVol, ref):
 
         #TODO: properly comment this external code (and inform it is external)
 
-        #TODO: check if I can do this without ignoring so many args
         xDim, _, _, _, _ = xmippLib.MetaDataInfo(fnSet)
         xDimVol = self.inputVolume.get().getXDim()
 
@@ -281,8 +284,6 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
             volume.resize(xDim, xDim, xDim)
             volume.write(self.fnVol)
             
-            #TODO: check the numberOfMpi=1 since this might not be a good practice
-            #TODO: find a way, if possible, to avoid using this runjob
             #self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnVol, xDim), numberOfMpi=1)
 
         anglesOutFn = self._getExtraPath("anglesCont_%s.stk" % ref)
@@ -298,6 +299,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         args += " --sampling %f " % self.inputVolume.get().getSamplingRate() ## Sampling rate (A/pixel)
         args += " --oresiduals " + self.fnResiduals ## Output stack of residuals
         args += " --ignoreCTF --optimizeGray --max_gray_scale 0.95 " ## Set values for gray optimization
+        #TODO: investigate if these are the proper arguments to keep 
         #TODO: investigate CTF for educated comments (DONE, description pending)
 
         ## Calling the residuals generation cpp program
@@ -316,37 +318,37 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
 
 ##############################################################################################
 
-    ''' #Previous snippet from generate SubsetStep()
-    aux = []
+''' #Previous snippet from generate SubsetStep()
+aux = []
 
-    for particle in self.inputAssign:
+for particle in self.inputAssign:
+    
+    #self.okSubset.append([particle.getNameId(), particle.getFileName(), particle.getMatrix()])
+    #self.wrongSubset.append([particle.getNameId(), particle.getFileName()])
+    aux.append(particle.getMatrix())
+
+aux = aux[self.SHIFTVALUE:] + aux[:self.SHIFTVALUE]
+
+for ptcl, value in zip(self.wrongSubset, aux):
+
+    ptcl.append(value)
+'''
+
+'''  # This decition has been delegated to the user kept just in case while developing
+#TODO: write function definition
+def divideSubsetsStep(self):
+
+    self.okSubset = []
+    self.doubtSubset = []
+
+    for ptcA, ptcB, angPtc in zip(self.assignA.iterItems(), self.assignB.iterItems(), self.compAvsB.iterItems()):
         
-        #self.okSubset.append([particle.getNameId(), particle.getFileName(), particle.getMatrix()])
-        #self.wrongSubset.append([particle.getNameId(), particle.getFileName()])
-        aux.append(particle.getMatrix())
-
-    aux = aux[self.SHIFTVALUE:] + aux[:self.SHIFTVALUE]
-
-    for ptcl, value in zip(self.wrongSubset, aux):
-
-        ptcl.append(value)
-    '''
-
-    '''  # This decition has been delegated to the user kept just in case while developing
-    #TODO: write function definition
-    def divideSubsetsStep(self):
-
-        self.okSubset = []
-        self.doubtSubset = []
-
-        for ptcA, ptcB, angPtc in zip(self.assignA.iterItems(), self.assignB.iterItems(), self.compAvsB.iterItems()):
-            
-            #TODO: [TODO: deprecate] choose final criteria to decide which matrix will be appended (CHECK)
-            #TODO: can I force that the output always comes from a specific module (see particle picker)
-            # Note that this function is adapted for a Xmipp3-compare-angles-output-like input from Scipion
-            if Float(angPtc.getAttributeValue(attrName = "_xmipp_angleDiff")) <= self.threshold:
-                self.okSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcA.getMatrix()])
-            else:
-                self.doubtSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcA.getMatrix()])
-                self.doubtSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcB.getMatrix()])
-    '''
+        #TODO: [TODO: deprecate] choose final criteria to decide which matrix will be appended (CHECK)
+        #TODO: can I force that the output always comes from a specific module (see particle picker)
+        # Note that this function is adapted for a Xmipp3-compare-angles-output-like input from Scipion
+        if Float(angPtc.getAttributeValue(attrName = "_xmipp_angleDiff")) <= self.threshold:
+            self.okSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcA.getMatrix()])
+        else:
+            self.doubtSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcA.getMatrix()])
+            self.doubtSubset.append([ptcA.getNameId(), ptcA.getFileName(), ptcB.getMatrix()])
+'''

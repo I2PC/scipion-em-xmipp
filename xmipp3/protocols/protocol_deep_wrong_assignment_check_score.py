@@ -35,7 +35,7 @@ from pwem.objects import (SetOfParticles)
 from pyworkflow.object import Float, Integer, Boolean
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from xmipp3 import XmippProtocol
-from pwem.protocols import EMProtocol #TODO: do I need this?
+from pwem.protocols import EMProtocol
 from ..convert import writeSetOfParticles, readSetOfParticles,locationToXmipp
 from pwem.emlib.image import ImageHandler
 from math import floor
@@ -52,7 +52,6 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
     # Identification parameters
     _label      = 'deep wrong angle assignment check scoring'
     _devStatus  = BETA
-    #TODO: is this true?
     _conda_env = 'xmipp_DLTK_v1.0'
 
     _possibleOutputs = {'outputParticles' : SetOfParticles}
@@ -69,7 +68,7 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
     #--------------- DEFINE param functions ---------------
     def _defineParams(self, form: Form):
         
-        #TODO: Evaluate the use of this
+        #TODO: Explain the use of this
         form.addParallelSection(threads=8, mpi=0)
 
         form.addSection(label='main')
@@ -91,29 +90,27 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
         
         #TODO: allowsNull = True (false is default)
         #TODO: maybe no batches should not be the default value
-        #TODO: evaluate if this param should really be advanced
+        #TODO: include changes from training protocol (default, expert_level etc)
         form.addParam('batchSz', IntParam, 
                     label = "Batch size", 
                     expertLevel = LEVEL_ADVANCED, 
-                    default = 0, 
-                    help = 'Must be an integer. If batch size is bigger than the dataset size only one batch will be used. '
-                    'Also, if batchSize left to 0 only one batch will be used.')
+                    default = 1, 
+                    help = 'Must be an integer. If batch size is bigger than the dataset size or is set to 0 only one batch will be used.')
 
     #--------------- INSERT steps functions ----------------
 
     #TODO: Write function definition
     def _insertAllSteps(self):
 
-        self.readInputs()
+        self._insertFunctionStep(self.convertInputs)
         self._insertFunctionStep(self.useGenerateResidualsStep)
         self._insertFunctionStep(self.callScoringProgramStep)
         self._insertFunctionStep(self.createOutputStep)
 
     #--------------- STEPS functions ----------------
 
-    #TODO: evaluate change name into convert to follow "convention"
     #TODO: write function definition
-    def readInputs(self):
+    def convertInputs(self):
 
         self.inputInference : SetOfParticles = self.inferenceInput.get()
         self.inputInferenceFn = self._getExtraPath("prescored.xmd")
@@ -187,7 +184,6 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
 
         #TODO: properly comment this external code (and inform it is external)
 
-        #TODO: check if I can do this without ignoring so many args
         xDim, _, _, _, _ = xmippLib.MetaDataInfo(fnSet)
         xDimVol = self.inputVolume.get().getXDim()
 
@@ -195,9 +191,8 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
         vol = self._getTmpPath("volume.vol")
         img.convert(fnVol,vol)
 
-        #TODO: check the numberOfMpi=1 since this might not be a good practice
+        #TODO: Include changes in training protocol once checked
         if xDimVol != xDim:
-            #TODO: find a way, if possible, to avoid using this runjob
             self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnVol, xDim), numberOfMpi=1)
 
         anglesOutFn = self._getExtraPath("anglesCont_%s.stk" % ref)
