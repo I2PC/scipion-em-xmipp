@@ -292,7 +292,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
                           " Sizes smaller than 128 pixels are recommended.")
         er = self.validateDLtoolkit()
         if er:
-            errors.append(er)
+            errors+=er
         return errors
 
     def _warnings(self):
