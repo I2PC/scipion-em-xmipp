@@ -165,7 +165,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         self._defineSourceRelation(self.inputParticles, outputSet)
 
         matrix = np.array([particle._xmipp_logLikelihood.get() for particle in outputSet])
-        matrix = matrix.reshape((len(self.refs),-1))
+        matrix = matrix.reshape((len(self.inputRefs.get()),-1))
         np.save(self._getExtraPath('matrix.npy'), matrix)
 
     def _getMdRow(self, mdFile, id):
