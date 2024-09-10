@@ -140,3 +140,5 @@ XMIPP_SYM_NAME[XMIPP_In25r] = 'I4'
 
 # Xmipp programs
 CUDA_ALIGN_SIGNIFICANT = "xmipp_cuda_align_significant"
+
+EXTRA_FIELD_CP_SCORE ="_xmipp_cp_score"

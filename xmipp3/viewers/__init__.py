@@ -68,3 +68,13 @@ from .viewer_pdb_deform_zernike3d import XmippPDBDeformViewer
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer
 from .viewer_subtract_projection import XmippSubtractProjectionViewer
+
+# Mechanism to register extra fields in standard Viewer configurations
+from pwem.viewers.viewers_data import RegistryViewerConfig
+from pwem.objects import SetOfParticles
+from pwem.viewers.showj import VISIBLE
+from xmipp3.constants import EXTRA_FIELD_CP_SCORE
+
+# Register extra field for class score in set of particles
+partConf = RegistryViewerConfig.getConfig(SetOfParticles)
+partConf[VISIBLE]= partConf[VISIBLE] + " " + EXTRA_FIELD_CP_SCORE

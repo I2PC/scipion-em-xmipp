@@ -88,7 +88,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     def _defineParams(self, form: Form):
 
         form.addHidden(GPU_LIST, StringParam, 
-                        default='0',
+                        default='',
                         help="Your system may have several GPUs installed, "
                              " choose the one you'd like to use."
                         )
@@ -239,7 +239,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         #TODO: fully implement in program
         if self.doSaveInfo:
             #TODO: evaluate file format
-            savedInfoFn = self._getExtraPath("nnInfo.txt")
+            savedInfoFn = self._getExtraPath()
             args += ' -s ' + savedInfoFn
 
         #TODO: Write in help that the user may not write anything if all gpus are to be used
@@ -275,16 +275,8 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
         vol = self._getTmpPath("volume.vol")
         img.convert(fnVol,vol)
 
-        #TODO: Should I be changing the original volume???
         if xDimVol != xDim:
-
-            volume = xmippLib.Image()
-            volume.read(self.fnVol)
-            #TODO: Evaluate if this is correct
-            volume.resize(xDim, xDim, xDim)
-            volume.write(self.fnVol)
-            
-            #self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnVol, xDim), numberOfMpi=1)
+            self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnVol, xDim), numberOfMpi=1)
 
         anglesOutFn = self._getExtraPath("anglesCont_%s.stk" % ref)
         self.fnResiduals = self._getExtraPath("residuals%s.mrcs" % ref)

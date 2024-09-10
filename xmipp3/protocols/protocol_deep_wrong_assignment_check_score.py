@@ -36,13 +36,31 @@ from pyworkflow.object import Float, Integer, Boolean
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from xmipp3 import XmippProtocol
 from pwem.protocols import EMProtocol
-from ..convert import writeSetOfParticles, readSetOfParticles,locationToXmipp
+from ..convert import writeSetOfParticles, locationToXmipp
+#readSetOfParticles,
 from pwem.emlib.image import ImageHandler
 from math import floor
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 import xmippLib
+
+from pyworkflow.object import ObjectWrap, String, Float, Integer, Object
+from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
+                            ALIGN_3D)
+from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
+                          MovieParticle, CTFModel, Acquisition, SetOfParticles,
+                          Class3D, SetOfVolumes, Transform)
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
+
+from xmipp3.base import getLabelPythonType, iterMdRows
+
+from pwem import emlib
+
+from xmipp3.convert import rowFromMd, ALIGNMENT_DICT, rowToParticle
+from xmipp3.constants import EXTRA_FIELD_CP_SCORE
+#, _containsAny
 
 #TODO: check what should go in the ()
 class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
@@ -157,19 +175,45 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
         
         outputSet = self._createSetOfParticles(suffix = "_scored")
         outputSet.copyInfo(self.inputInference)
+        outMd = xmippLib.MetaData(self.fnOutputFile)
+        probabilities = outMd.getColumnValues(xmippLib.MDL_CLASS_PROBABILITY)
+        readSetOfParticles(self.fnOutputFile,outputSet,prob = probabilities)
+
+        self._defineOutputs(**{"OutputParticles": outputSet})
+        self._defineSourceRelation(self.inputInference, outputSet)
+        """
+        
+
+        for scoreRow, ptcl in zip(probabilities, outputSet):
+            #newPtcl = ptcl.clone()
+            #newPtcl.setObjId(count)
+            #TODO: Evaluate changing this name into something more coherent with the MDL label
+            ptcl._score = Float(scoreRow) #Extended atribute
+            #ptcl.write()
+            #outputSet.append(newPtcl)
+
+        outputSet.write()
+        self._store()
+        """
+        '''
+        "__________"
+        outputSet = self._createSetOfParticles(suffix = "_scored")
+        outputSet.copyInfo(self.inputInference)
         readSetOfParticles(self.fnOutputFile,outputSet)
         outMd = xmippLib.MetaData(self.fnOutputFile)
         probabilities = outMd.getColumnValues(xmippLib.MDL_CLASS_PROBABILITY)
 
+        idCounter = 1
         for scoreRow, ptcl in zip(probabilities, self.inputInference):
             newPtcl = ptcl.clone()
-            #TODO: Evaluate changing this name into something more coherent with the MDL label
+            newPtcl.setObjId(idCounter)
             newPtcl._score = Float(scoreRow) #Extended atribute
             outputSet.append(newPtcl)
+            idCounter += 1
 
         self._defineOutputs(**{"OutputParticles": outputSet})
         self._defineSourceRelation(self.inputInference, outputSet)
-    
+        '''
 
     #--------------- INFO functions -------------------------
     def _summary(self):
@@ -223,6 +267,51 @@ class XmippProtWrongAssignCheckScore(EMProtocol, XmippProtocol):
         mdOrgn.write(fnSet)
 
         #TODO: Should I include any cleanPath?
+
+def _containsAny(row, labels):
+    """ Check if the labels (values) in labelsDict
+    are present in the row.
+    """
+    values = labels.values() if isinstance(labels, dict) else labels
+    return any(row.containsLabel(l) for l in values)
+
+def readSetOfParticles(filename, partSet, **kwargs):
+    readSetOfImages(filename, partSet, rowToParticle, **kwargs)
+
+def readSetOfImages(filename, imgSet, rowToFunc, **kwargs):
+    """read from Xmipp image metadata.
+        filename: The metadata filename where the image are.
+        imgSet: the SetOfParticles that will be populated.
+        rowToFunc: this function will be used to convert the row to Object
+    """
+    imgMd = emlib.MetaData(filename)
+
+    # By default remove disabled items from metadata
+    # be careful if you need to preserve the original number of items
+    if kwargs.get('removeDisabled', True):
+        imgMd.removeDisabled()
+
+    # If the type of alignment is not sent through the kwargs
+    # try to deduced from the metadata labels
+    if 'alignType' not in kwargs:
+        imgRow = rowFromMd(imgMd, imgMd.firstObject())
+        if _containsAny(imgRow, ALIGNMENT_DICT):
+            if imgRow.containsLabel(emlib.MDL_ANGLE_TILT):
+                kwargs['alignType'] = ALIGN_PROJ
+            else:
+                kwargs['alignType'] = ALIGN_2D
+        else:
+            kwargs['alignType'] = ALIGN_NONE
+
+    if imgMd.size() > 0:
+        for pb, objId in zip(kwargs['prob'],imgMd):
+            imgRow = rowFromMd(imgMd, objId)
+            img = rowToFunc(imgRow, **kwargs)
+            setattr(img, EXTRA_FIELD_CP_SCORE,Float(pb))
+            imgSet.append(img)
+
+        imgSet.setHasCTF(img.hasCTF())
+        imgSet.setAlignment(kwargs['alignType'])
 
     ##############################################################################################
 
