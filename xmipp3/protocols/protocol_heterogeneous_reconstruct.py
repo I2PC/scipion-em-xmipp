@@ -235,11 +235,16 @@ class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
         return self.symmetryGroup.get()
     
     def _getPrincipalComponents(self):
+        result = []
+        
         if self.principalComponents.get():
-            return pwutils.getListFromRangeString(self.principalComponents.get())
-        else:
-            return []
+            result = pwutils.getListFromRangeString(self.principalComponents.get())
             
+        for i in range(len(result)):
+            result[i] -= 1
+            
+        return result
+    
     def _getInputParticleMdFilename(self):
         return self._getPath('input_particles.xmd')
     
