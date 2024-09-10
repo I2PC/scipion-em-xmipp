@@ -453,10 +453,12 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             ko = len(w) - (1+int(np.argmax(np.diff(w))))
             
         # Trim bases
-        u, s, vt = np.linalg.svd(bases[:,:,-ko:], full_matrices=False)
-        u *= np.sign(s)[...,None,:]
-        orthogonalBases = u @ vt
-        inverseBases = orthogonalBases.transpose(0, 2, 1)
+        #u, s, vt = np.linalg.svd(bases[:,:,-ko:], full_matrices=False)
+        #u *= np.sign(s)[...,None,:]
+        #orthogonalBases = u @ vt
+        #inverseBases = orthogonalBases.transpose(0, 2, 1)
+        inverseBases = bases.transpose(0, 2, 1)
+        inverseBases = inverseBases[:,-ko:,:]
 
         eigenimageHandler = emlib.Image()
         for i, directionRow in enumerate(emlib.metadata.iterRows(directionMd)):
@@ -498,14 +500,16 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         for directionId in directionMd:
             # Read the classification of this direction
             directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-            weight = directionalClassificationMd.size()
+            values = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
+            weight = np.std(values, axis=0)
+
             
             # Increment the result likelihood value
             for objId in directionalClassificationMd:
                 itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
                 projection = np.array(directionalClassificationMd.getValue(emlib.MDL_DIMRED, objId))
                 
-                projections[itemId] += weight*projection
+                projections[itemId] += projection
                 weights[itemId] += weight
 
         # Write PCA projection values to the output metadata
