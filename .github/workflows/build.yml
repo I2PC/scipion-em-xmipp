@@ -85,4 +85,4 @@ jobs:
 
     - name: Show compile log
       working-directory: ${{ github.workspace }}/../xmipp
-      run: cat xmipp.conf || cat compilation.log
+      run: cat xmipp.conf && cat compilation.log
