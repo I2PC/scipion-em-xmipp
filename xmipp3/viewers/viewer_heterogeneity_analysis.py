@@ -59,7 +59,6 @@ class XmippViewerHetAnalysis(ProtocolViewer):
                       help='Shows the 2D histograms of pairwise principal components')
         form.addParam('displayInformationCriterion', LabelParam, label='Information criterion',
                       help='Shows Akaike and Bayesian information criterions')
-        form.addParam('displayCrossCorrelation', LabelParam, label='Cross correlation')
         form.addParam('displayEigenvalues', LabelParam, label='Eigen-values')
 
         form.addSection(label='Directional data')
@@ -93,7 +92,6 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         return {
             'displayHistograms': self._displayHistograms,
             'displayInformationCriterion': self._displayInformationCriterion,
-            'displayCrossCorrelation': self._displayCrossCorrelation,
             'displayEigenvalues': self._displayEigenvalues,
             'displayDirectionalMd': self._displayDirectionalMd,
             'display3dGraph': self._display3dGraph,
@@ -125,15 +123,6 @@ class XmippViewerHetAnalysis(ProtocolViewer):
             
         return [fig]
         
-    def _displayCrossCorrelation(self, e):
-        projections = self._readProjections()
-        projections /= np.linalg.norm(projections, axis=0, keepdims=True)
-        crossCorrelation = projections.T @ projections
-
-        fig, ax = plt.subplots()
-        ax.imshow(crossCorrelation)
-        return [fig]
-
     def _displayEigenvalues(self, e):
         eigenvalues = self._readEigenvalues()
         x = np.arange(1, 1+len(eigenvalues))
@@ -331,17 +320,23 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         fig = plt.figure()
         
         for i, j in itertools.combinations(range(k), r=2):
-            ax = fig.add_subplot(k, k, k*j+i+1)
-
             x = projections[:,i]
             y = projections[:,j]
+            
             xmin = percentiles[0,i]
             xmax = percentiles[1,i]
             ymin = percentiles[0,j]
             ymax = percentiles[1,j]
 
-            ax.hist2d(x, y, bins=32, range=((xmin, xmax), (ymin, ymax)))
-        
+            ax1 = fig.add_subplot(k, k, k*j+i+1)
+            ax1.hist2d(x, y, bins=32, range=((xmin, xmax), (ymin, ymax)))
+
+            cov = np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y))
+            ax2 = fig.add_subplot(k, k, k*i+j+1)
+            ax2.imshow(cov[None, None], vmin=-1.0, vmax=1.0, cmap='coolwarm')
+            ax2.text(0, 0, '%0.3f' % float(cov), ha='center', va='center')
+            ax2.set_axis_off()
+            
         for i in range(k):
             ax = fig.add_subplot(k, k, (k+1)*i+1)
             
