@@ -50,7 +50,7 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        form.addParallelSection(threads=1, mpi=4)
+        form.addParallelSection(threads=1, mpi=16)
 
         form.addHidden(GPU_LIST, StringParam, default='0',
                        expertLevel=LEVEL_ADVANCED,
@@ -88,13 +88,21 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputSet):
         writeSetOfParticles(inputSet, self.fnImgs)
+        Xdim = self.inputParticles.get().getDimensions()[0]
+        self.scaleFactor = 1
+        if self.modelSource == self.PRETRAINED and Xdim!=64:
+            fnTmp = self._getTmpPath("particles.stk")
+            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier 64" % (self.fnImgs, fnTmp))
+            self.fnImgs = self._getTmpPath("particles.xmd")
+            self.scaleFactor = float(Xdim)/64.0
 
     def predict(self, gpuId):
         if self.modelSource==self.PRETRAINED:
             fnModel = "/home/coss/model.h5"
         else:
             fnModel = self.protocolPointer.get()._getExtraPath("model.h5")
-        args = "-i %s --gpu %s --model %s -o %s" % (self.fnImgs, gpuId, fnModel, self._getExtraPath('particles.xmd'))
+        args = "-i %s --gpu %s --model %s -o %s --scale %f" % (self.fnImgs, gpuId, fnModel,
+                                                               self._getExtraPath('particles.xmd'), self.scaleFactor)
         self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())
 
     def createOutputStep(self):
