@@ -41,7 +41,7 @@ from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
     """Center a set of particles in 2D using a neural network. The particles remain the same, but their alignment
-       includes an approximate shift to place them in the center."""
+       includes an approximate shift to place them in the center. This protocol performs the training of the model. """
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
     _label = 'deep center'
