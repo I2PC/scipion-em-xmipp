@@ -33,16 +33,19 @@ from datetime import datetime
 from pyworkflow import Config
 import pwem
 import pyworkflow.utils as pwutils
+from scipion.install.funcs import CommandDef
 
 from .base import *
-from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
 
 type_of_version = 'devel' #'release'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
-_currentBinVersion = '3.23.11.0'
-__version__ = _currentBinVersion[2:] + ".1"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
+_current_xmipp_tag = 'devel'
+_currentBinVersion = '3.24.06.0'
+_currentDepVersion = '1.0'
+__version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
@@ -56,7 +59,9 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._addVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
+        cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
+        cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
+        cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -65,8 +70,8 @@ class Plugin(pwem.Plugin):
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
 
         environ.update({
-            'PATH': pwem.Config.CUDA_BIN,
-            'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
+            'PATH': cls.getVar(XMIPP_CUDA_BIN),
+            'LD_LIBRARY_PATH': cls.getVar(XMIPP_CUDA_LIB)
         }, position=pwutils.Environ.END)
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
@@ -117,94 +122,90 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-
-        ## XMIPP SOFTWARE ##
-        xmippDeps = []  # Deps should be at requirements.txt (old: scons, joblib, scikit_learn)
-
-        # Installation vars for commands formating
-        verToken = getXmippPath('v%s' % _currentBinVersion)
-        confToken = getXmippPath("xmipp.conf")
-        installVars = {'installedToken': "installation_finished",
-                       'bindingsToken': "bindings_linked",
-                       'verToken': verToken,
-                       'nProcessors': env.getProcessors(),
-                       'xmippHome': getXmippPath(),
-                       'bindingsSrc': getXmippPath('bindings', 'python'),
-                       'bindingsDst': Config.getBindingsFolder(),
-                       'xmippLib': getXmippPath('lib', 'libXmipp.so'),
-                       'coreLib': getXmippPath('lib', 'libXmippCore.so'),
-                       'libsDst': Config.getLibFolder(),
-                       'confToken': confToken,
-                       'strPlaceHolder': '%s',  # to be replaced in the future
-                       'currVersion': _currentBinVersion
-                       }
-
-        ## Installation commands (removing bindingsToken)
-        installCmd = ("cd {cwd} && {configCmd} && {compileCmd} N={nProcessors:d} && "
-                      "ln -srfn build {xmippHome} && cd - && "
-                      "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
-        installTgt = [getXmippPath('bin', 'xmipp_reconstruct_significant'),
-                      getXmippPath("lib/libXmippJNI.so"),
-                      installVars['installedToken']]
-
-        ## Linking bindings (removing installationToken)
-        bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
-                              r"! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
-                              "ln -srfn {coreLib} {libsDst} && "
-                              "touch {bindingsToken} && "
-                              "rm {installedToken} 2> /dev/null")
-        bindingsAndLibsTgt = [os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
-                              os.path.join(Config.getBindingsFolder(), 'xmippLib.so'),
-                              os.path.join(Config.getLibFolder(), 'libXmipp.so'),
-                              installVars['bindingsToken']]
-
-        sourceTgt = [getXmippPath('xmipp.bashrc')]  # Target for xmippSrc and xmippDev
-        ## Allowing xmippDev if devel mode detected
-        # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
-        pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # bundle  = xmipp-bundle  <-  src   <-  scipion-em-xmipp
-        bundleDir = os.path.dirname(os.path.dirname(pluginDir))
-
-        isPypiDev = os.path.isfile(os.path.join(pluginDir, 'setup.py'))
-        isXmippBu = (os.path.isdir(os.path.join(bundleDir, 'src')) and
-                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
-        develMode = isPypiDev and isXmippBu
+        
+        # Determine if we are on a development 
+        bundleDir = cls.__getBundleDirectory()
+        develMode = bundleDir is not None
+        
+        nproc = env.getProcessors()
+        COMPILE_TARGETS = [
+            'dist/bin/xmipp_image_header', 
+            'dist/xmipp.bashrc'
+        ]
+        
+        # When changing dependencies, increment _currentDepVersion
+        CONDA_DEPENDENCIES = [
+            'cmake>=3.17',
+            'hdf5>=1.18',
+            'sqlite>=3',
+            'fftw>=3',
+            'mpich-mpicxx',
+            'c-compiler',
+            'cxx-compiler',
+            'make',
+            'openjdk',
+            'libtiff',
+            'libjpeg-turbo'
+        ]
+        
+        if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
+            commands = CommandDef('conda install -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
+            env.addPackage(
+                'xmippDep', version=_currentDepVersion,
+                tar='void.tgz',
+                commands=commands.getCommands(),
+                neededProgs=['conda'],
+                default=True
+            )
+        
         if develMode:
-            env.addPackage('xmippDev', tar='void.tgz',
-                           commands=[(installCmd.format(**installVars,
-                                                        cwd=bundleDir,
-                                                        configCmd='pwd',
-                                                        compileCmd='./xmipp all'),
-                                      installTgt+sourceTgt),
-                                     (bindingsAndLibsCmd.format(**installVars),
-                                      bindingsAndLibsTgt)],
-                           deps=xmippDeps, default=False)
-
-        avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
-        alreadyCompiled = os.path.isfile(getXmippPath('v' + _currentBinVersion))  # compilation token (see the xmipp script)
-        configSrc = ('./xmipp check_config' if avoidConfig
-                     else './xmipp config noAsk && ./xmipp check_config')
-        env.addPackage('xmippSrc', version=_currentBinVersion,
-                       # adding 'v' before version to fix a package target (post-link)
-                       tar='xmippSrc-v' + _currentBinVersion + '.tgz',
-                       commands=[(installCmd.format(**installVars, cwd='.',
-                                                    configCmd=configSrc,
-                                                    compileCmd='./xmipp compileAndInstall'),
-                                  installTgt + sourceTgt),
-                                 (bindingsAndLibsCmd.format(**installVars),
-                                  bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=not (develMode or alreadyCompiled))
+            env.addPackage(
+                'xmippDev',
+                tar='void.tgz',
+                commands=[(f'cd {bundleDir} && ./xmipp -j {nproc}', COMPILE_TARGETS)],
+                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+                updateCuda=True,
+                default=False
+            )
+        
+        tag = _current_xmipp_tag
+        xmippSrc = f'xmippSrc-{tag}'
+        installCommands = [
+            (f'cd .. && rm -rf {xmippSrc} && '
+            f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
+            f'cd {xmippSrc} && '
+            f'./xmipp -b {tag} -j {nproc}', COMPILE_TARGETS)   
+        ]
+        env.addPackage(
+            'xmippSrc', version=tag,
+            tar='void.tgz',
+            commands=installCommands,
+            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+            updateCuda=True,
+            default=not develMode
+        )
 
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
 
 
+    @classmethod
+    def __getBundleDirectory(cls):
+        # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
+        pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # bundle  = xmipp-bundle  <-  src   <-  scipion-em-xmipp
+        bundleDir = os.path.dirname(os.path.dirname(pluginDir))
+
+        isBundle = (os.path.isdir(os.path.join(bundleDir, 'src')) and
+                    os.path.isfile(os.path.join(bundleDir, 'xmipp')))
+        
+        return bundleDir if isBundle else None
+    
 def installDeepLearningToolkit(plugin, env):
 
     preMsgs = []
     cudaMsgs = []
     nvidiaDriverVer = None
-    useGpu = False
     if os.environ.get('CUDA', 'True') == 'True':
         try:
             nvidiaDriverVer = subprocess.Popen(["nvidia-smi",
@@ -221,7 +222,7 @@ def installDeepLearningToolkit(plugin, env):
                                 f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
                                 "set CUDA=True in 'scipion.conf' file")
                 nvidiaDriverVer = None
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, FileNotFoundError):
             nvidiaDriverVer = None
             preMsgs.append("Not nvidia driver found. Type: "
                            " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
@@ -230,6 +231,7 @@ def installDeepLearningToolkit(plugin, env):
             msg = ("Tensorflow installed without GPU. Just CPU computations "
                    "enabled (slow computations).")
             cudaMsgs.append(msg)
+            useGpu = False
 
     if nvidiaDriverVer is not None:
         preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
