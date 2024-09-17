@@ -23,68 +23,97 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
-
-
 import os.path
 import numpy as np
-import pyworkflow.protocol.params as param
-from networkx.algorithms.isomorphism.matchhelpers import tmpdoc
+import matplotlib.pyplot as plt
+
 from pwem.emlib.image import ImageHandler
-import pwem.emlib.metadata as md
 from pwem import emlib
 from pwem.protocols import ProtAnalysis2D
-from pwem.objects import SetOfParticles, SetOfAverages, SetOfClasses2D, SetOfMicrographs
-from pyworkflow import BETA, UPDATED, NEW, PROD
+from pwem.objects import SetOfParticles, SetOfClasses2D, SetOfMicrographs
+from pwem.emlib.metadata import getFirstRow
+
 import pyworkflow.protocol.params as params
-from pwem.emlib.metadata import iterRows, getFirstRow
+from pyworkflow import BETA, NEW
 
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
-import matplotlib.pyplot as plt
+from skimage.metrics import structural_similarity as ssim
 
 
 
 OUTPUT_PARTICLES = "outputParticles"
 OUTPUT_CLASSES = "outputClasses"
+OUTPUT_CLASSES_DISCARDED = 'outputClasses_discarded'
 OUTPUT_MICROGRAPHS = "outputMicrographs"
+DISCARDED = 'discarded'
 
 class XmippProtCL2DResolution(ProtAnalysis2D):
-    """ Estimate the 2D average resolution ."""
+    """ Estimate 2D average resolution ."""
+
+    # Todo: - Particles to have a resolution value
+    #   - Micrographs to have an average resolution value
 
     _label = '2D classes resolution'
     _devStatus = NEW
-    _possibleOutputs = {OUTPUT_PARTICLES:SetOfParticles,
-                        OUTPUT_CLASSES:SetOfClasses2D,
-                        OUTPUT_MICROGRAPHS:SetOfMicrographs}
+    _possibleOutputs = {
+        OUTPUT_CLASSES: SetOfClasses2D,
+        OUTPUT_CLASSES_DISCARDED: SetOfClasses2D
+    }
+
+    outputDict = {}
+
+    # _possibleOutputs = {OUTPUT_PARTICLES:SetOfParticles,
+    #                     OUTPUT_CLASSES:SetOfClasses2D,
+    #                     OUTPUT_MICROGRAPHS:SetOfMicrographs}
 
     def __init__(self, **args):
         ProtAnalysis2D.__init__(self, **args)
-        self._classesParticles = {}
-        self._imh = ImageHandler()
         self.stepsExecutionMode = params.STEPS_PARALLEL
+        self.resolDict = {}
+        self._imh = ImageHandler()
+        self.goodList = []
+        self.badList = []
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputClasses', param.PointerParam,
+        form.addParam('inputClasses', params.PointerParam,
                       label="Input 2D classes",
                       important=True, pointerClass='SetOfClasses2D',
                       help='Select the input classes to be mapped.')
-        form.addParam('proportion', param.FloatParam,
+        form.addParam('limitResol', params.FloatParam,
+                      label="Limit resolution (A)",
+                      default=10,
+                      help='This value will reject those classes that are above the limit resolution.')
+        form.addParam('proportion', params.FloatParam,
                       label="Proportion particles",
                       default=1,
                       help='This option allows to compute the 2D Average resolution with only a percentage of the'
                            ' particles. Write the proportion you want to use. If 1 it will use all the particles.')
-        form.addParam('useWiener', param.BooleanParam, default=True,
+        form.addParam('useWiener', params.BooleanParam, default=True,
                       label='Apply Wiener filter (ctf correction)?',
                       help='By setting "yes" your particles will be ctf corrected.'
+                           'If you choose "no" your particles would not be modified.')
+        form.addParam('useLPfilter', params.BooleanParam, default=True,
+                      label='Apply low-pass filter?',
+                      help='By setting "yes" your particles will be low pass filtered by a limit resolution (A).'
+                           'If you choose "no" your particles would not be modified.')
+        form.addParam('limitLPF', params.FloatParam,
+                      label="Limit resolution low-pass filter (A)",
+                      default=6,
+                      help='This value will low-pass filter your particles to this resolution.')
+        form.addParam('useMask', params.BooleanParam, default=True,
+                      label='Apply mask?',
+                      help='By setting "yes" your particles will be low pass filtered by a limit resolution (A).'
                            'If you choose "no" your particles would not be modified.')
 
         # Defining parallel arguments
         form.addParallelSection(threads=4, mpi=1)
 
+
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
-        deps = []
+        resolSteps = []
         inputClasses = self.inputClasses.get()
         proportion = self.proportion.get()
 
@@ -102,11 +131,24 @@ class XmippProtCL2DResolution(ProtAnalysis2D):
                     classParticles.append(newParticle)
 
                 resolStep = self._insertFunctionStep(self.estimateClassResolution, classParticles, classId, prerequisites=[])
-                deps.append(resolStep)
+                resolSteps.append(resolStep)
 
-        self._insertFunctionStep(self.createOutputStep, prerequisities=[deps])
+        self._insertFunctionStep(self.createOutputStep, prerequisites=resolSteps)
+
 
     # --------------------------- STEPS functions -------------------------------
+    def calculateLimitLen(self, numberParticles, proportion):
+        if numberParticles < 2:
+            self.info('Skipping this class')
+            extractLimitLen = None
+        else:
+            extractLimitLen = int(numberParticles * proportion)
+            if extractLimitLen < 2:
+                extractLimitLen = 2
+
+        return extractLimitLen
+
+
     def _loadEmptyParticleSet(self, classParticles):
         classParticles.loadAllProperties()
         acquisition = classParticles.getAcquisition()
@@ -116,132 +158,259 @@ class XmippProtCL2DResolution(ProtAnalysis2D):
 
         return copyPartSet
 
-    def calculateLimitLen(self, numberParticles, proportion):
-        if numberParticles < 2:
-            print('Skipping this class')
-            extractLimitLen = None
-        else:
-            extractLimitLen = int(numberParticles * proportion)
-            if extractLimitLen < 2:
-                extractLimitLen = 2
-
-        return extractLimitLen
 
     def estimateClassResolution(self, particles, classId):
-        print("For class %d the particles to be used to estimate resolution %d" % (classId, len(particles)))
-        directory_ref = self._getExtraPath("results_class_%d" %classId)
+        # TODO: when particles come from .mrcs xmipp fails to work with this format, convert step
+        self.info("For class %d the particles to be used to estimate resolution %d" % (classId, len(particles)))
+        tmp_path = self._getTmpPath("results_class_%d" %classId)
+        output_path = self._getExtraPath("results_class_%d" %classId)
+
         pixel_size = particles.getFirstItem().getSamplingRate()
-        os.mkdir(directory_ref)
+        os.mkdir(tmp_path)
+        os.mkdir(output_path)
 
-        if self.useWiener.get():
-            corrected_particles = self.correctWiener(particles, pixel_size, directory_ref)
-        else:
-            corrected_particles = particles
+        processed_particles = self.preprocessClassParticles(particles, pixel_size, tmp_path)
 
-        fnStackEven = os.path.join(directory_ref, "even_aligned_particles_ref%d.mrcs" % classId)
-        fnStackOdd = os.path.join(directory_ref, "odd_aligned_particles_ref%d.mrcs" % classId)
+        bestIds = self.calculate_best_particles_ssim_scores(processed_particles, classId)
+
+        fnStackEven = os.path.join(tmp_path, "even_aligned_particles_ref%d.mrcs" % classId)
+        fnStackOdd = os.path.join(tmp_path, "odd_aligned_particles_ref%d.mrcs" % classId)
         counter_even = 1
         counter_odd = 1
-
         index = 1
-        for corrected_particle in corrected_particles.iterItems(orderBy='id', direction='ASC'):
-            transform = corrected_particle.getTransform()
+
+        #best_particle = masked_particles_normalized.getItem("id", bestIds[0]).getImage().getData()
+        #plot_average(best_particle)
+
+        for particleId in bestIds:
+            masked_particle = processed_particles.getItem("id", particleId)
+            if not self.useMask.get():
+                transform = masked_particle.getTransform()
+            else:
+                transform = None
 
             if index%2 == 0:
-                self._imh.convert(corrected_particle, (counter_even, fnStackEven), transform=transform)
+                self._imh.convert(masked_particle, (counter_even, fnStackEven), transform=transform)
                 counter_even += 1
             else:
-                self._imh.convert(corrected_particle, (counter_odd, fnStackOdd), transform=transform)
+                self._imh.convert(masked_particle, (counter_odd, fnStackOdd), transform=transform)
                 counter_odd += 1
 
             index += 1
 
         average_even = self._imh.computeAverage(fnStackEven)
-        average_even.write(os.path.join(directory_ref, "even_average_ref%d.mrc" % classId))
+        average_even.write(os.path.join(output_path, "even_average_ref%d.mrc" % classId))
         average_odd = self._imh.computeAverage(fnStackOdd)
-        average_odd.write(os.path.join(directory_ref, "odd_average_ref%d.mrc" % classId))
+        average_odd.write(os.path.join(output_path, "odd_average_ref%d.mrc" % classId))
 
-        fsc_2d = self.computeFSC(average_even, average_odd, directory_ref, classId)
-        fsc_1d = self.radial_average_2d(fsc_2d)
+        frc, resolutions, digFreq = compute_fsc_and_resolutions(average_even.getData(), average_odd.getData(), pixel_size)
 
-        self.plot_fsc(fsc=fsc_1d, directory=directory_ref, pixel_size=pixel_size)
+        resolution_limit = estimate_resolution_frc(resolutions, frc, threshold=0.143)
 
-    def correctWiener(self, particles, pixel_size, directory_ref):
-        self.info('CTF correction in progress ...')
-        inputStk = os.path.join(directory_ref, 'imagesInput.xmd')
-        fnCorrectedStk = os.path.join(directory_ref, 'corrected_particles.stk')
-        fnCorrected = os.path.join(directory_ref, 'corrected_particles.xmd')
+        plot_frc(fscglob=frc, digFreq=digFreq, sampling=pixel_size, threshold=0.143,
+                 resolution_limit=resolution_limit, directory=output_path)
+
+        self.resolDict[classId] = resolution_limit
+
+
+    def preprocessClassParticles(self, particles, pixel_size, output_dir):
+        inputStk = os.path.join(output_dir, 'imagesInput.xmd')
         writeSetOfParticles(particles, inputStk)
-
         row = getFirstRow(inputStk)
         hasCTF = row.containsLabel(emlib.MDL_CTF_MODEL) or row.containsLabel(emlib.MDL_CTF_DEFOCUSU)
 
-        if hasCTF:
-            # args = (" -i %s -o %s --save_metadata_stack %s --sampling_rate %f --keep_input_columns --correct_envelope" %
-            #         (inputStk, fnCorrectedStk, fnCorrected, pixel_size))
-            args = (" -i %s -o %s --save_metadata_stack %s --sampling_rate %f --keep_input_columns" %
-                    (inputStk, fnCorrectedStk, fnCorrected, pixel_size))
-
-            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=1)
-
-            tmpDir = self._getTmpPath(os.path.basename(directory_ref))
-            os.mkdir(tmpDir)
-            fnTmpSqlite = os.path.join(tmpDir, "particlesTmp.sqlite")
-            correctedParticles = SetOfParticles(filename=fnTmpSqlite)
-            correctedParticles.copyInfo(particles)
-            readSetOfParticles(fnCorrected, correctedParticles)
+        if self.useWiener.get():
+            if hasCTF:
+                corrected_particles_fn = self.correctWiener(inputStk, pixel_size, output_dir)
+            else:
+                self.info('Cannot do the wiener ctf correction, the input particles do not have a ctf associated.')
         else:
-            self.info('Cannot do the wiener ctf correction, the input particles do not have a ctf associated.')
-            correctedParticles = particles
+            corrected_particles_fn = inputStk
 
-        return correctedParticles
+        if self.useLPfilter.get():
+            lpf_fn = self.lowPassFilter(corrected_particles_fn, pixel_size, output_dir)
+        else:
+            lpf_fn = corrected_particles_fn
 
-    def computeFSC(self, even_image, odd_image, directory, class_id):
-        # Compute the Fourier Transform
-        from scipy.fftpack import fft2, ifft2, fftshift # Scipy or numpy
-        ft1 = fft2(even_image.getData())
-        ft2 = fft2(odd_image.getData())
-        # Compute the Fourier Transforms
-        #ft1 = np.fft.fft2(even_image.getData())
-        #ft2 = np.fft.fft2(odd_image.getData())
+        if self.useMask.get():
+            dim = particles.getDimensions()[0]
+            masked_particles_fn = self.applyMask(lpf_fn, output_dir, dim)
+        else:
+            masked_particles_fn = lpf_fn
 
-        # Compute the cross - correlation
-        # cross_correlation = fftshift(np.real(ifft2(ft1 * np.conj(ft2))))
-        cross_correlation = fftshift(np.real(ft1 * np.conj(ft2)))
+        normalized_particles_fn = self.normalized_particles(masked_particles_fn, output_dir, dim)
 
-        # Compute the auto-correlations
-        # auto_corr1 = fftshift(np.real(ifft2(ft1 * np.conj(ft1))))
-        # auto_corr2 = fftshift(np.real(ifft2(ft2 * np.conj(ft2))))
-        auto_corr1 = fftshift(np.real(ft1 * np.conj(ft1)))
-        auto_corr2 = fftshift(np.real(ft2 * np.conj(ft2)))
+        tmpDir = self._getTmpPath(os.path.basename(output_dir))
+        os.mkdir(tmpDir)
+        fnTmpSqlite = os.path.join(tmpDir, "particlesTmp.sqlite")
+        processedParticles = SetOfParticles(filename=fnTmpSqlite)
+        processedParticles.copyInfo(particles)
+        readSetOfParticles(normalized_particles_fn, processedParticles)
 
-        # Compute FSC in 2D
-        fsc_2d = np.abs(cross_correlation) / np.sqrt(np.abs(auto_corr1) * np.abs(auto_corr2)) # Point to point
+        return processedParticles
 
-        return fsc_2d
 
-    def radial_average_2d(self, image):
-        y, x = np.indices((image.shape))
-        center = np.array([x.max() / 2, y.max() / 2])
-        r = np.hypot(x - center[0], y - center[1])
+    def correctWiener(self, inputStk, pixel_size, directory_ref):
+        self.info('CTF correction in progress ...')
+        fnCorrectedStk = os.path.join(directory_ref, 'corrected_particles.stk')
+        fnCorrected = os.path.join(directory_ref, 'corrected_particles.xmd')
+        args = (" -i %s -o %s --save_metadata_stack %s --pad 2 --wc -1.0 --sampling_rate %f --keep_input_columns" %
+               (inputStk, fnCorrectedStk, fnCorrected, pixel_size))
 
-        # Radial profile
-        r = r.astype(int)
-        tbin = np.bincount(r.ravel(), image.ravel())
-        nr = np.bincount(r.ravel())
-        radialprofile = tbin / nr
-        return radialprofile
+        self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+
+        return fnCorrected
+
+
+    def lowPassFilter(self, inputFn, pixel_size, directory_ref):
+        self.info('Low pass filter in progress ...')
+        fnLPFStk = os.path.join(directory_ref, 'lpf_particles.stk')
+        fnLPF = os.path.join(directory_ref, 'lpf_particles.xmd')
+
+        highFreq = pixel_size / self.limitLPF.get()  # the max resolution 2D classification algorithms normally use
+        freqDecay = pixel_size / 100  # default parameter in filter particles protocol
+
+        args = (" -i %s --fourier low_pass %f %f -o %s --save_metadata_stack %s --keep_input_columns" %
+                (inputFn, highFreq, freqDecay, fnLPFStk, fnLPF))
+        # trainingFn has not the metadata is just the images, use the md if you want to keep metadata
+        self.runJob("xmipp_transform_filter", args, numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+
+        return fnLPF
+
+
+    def applyMask(self, inputFn, directory_ref, dim):
+        self.info('Applying mask in progress ...')
+        fnMaskedStk = os.path.join(directory_ref, 'masked_particles.stk')
+        fnMasked = os.path.join(directory_ref, 'masked_particles.xmd')
+
+        args = (" -i %s --mask gaussian %f --substitute 0 -o %s --save_metadata_stack %s --keep_input_columns" %
+                (inputFn, int(dim/2), fnMaskedStk, fnMasked))
+
+        self.runJob("xmipp_transform_mask", args, numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+
+        return fnMaskedStk  # When the mask is applied the transformation matrix is applied
+
+
+    def normalized_particles(self, inputFn, directory_ref, dim):
+        self.info('Normalizing particles in progress ...')
+        fnNormalizedStk = os.path.join(directory_ref, 'normalized_particles.stk')
+        fnNormalized = os.path.join(directory_ref, 'nromalized_particles.xmd')
+
+        args = (" -i %s -o %s --save_metadata_stack %s --keep_input_columns --method NewXmipp --background circle %d" %
+               (inputFn, fnNormalizedStk, fnNormalized, int(dim / 2)))
+
+        self.runJob("xmipp_transform_normalize", args, numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+
+        return fnNormalizedStk
+
+
+    def calculate_best_particles_ssim_scores(self, particles, classId):
+        classRepresentative = self.inputClasses.get().getItem("id", classId).getRepresentative().getImage().getData()
+        classRepresentative_normalized = z_normalize(classRepresentative)
+
+        particles_scores = {}
+        for particle in particles.iterItems(orderBy='id', direction='ASC'):
+            img_particle = particle.clone().getImage().getData()
+            # plot_average(img_particle)
+            ssim_score = compute_ssim(classRepresentative_normalized, img_particle)
+            particles_scores[particle.getObjId()] = ssim_score
+
+        # plot_histogram(masked_particles_scores.values())
+        bestIds = getBestSsimScoresIds(particles_scores)
+
+        return bestIds
+
+
+    def arrangeFRC_and_frcGlobal(self, FT1, FT2, mapSize, sampling):
+
+        def defineFrequencies(mapSize):
+            '''defines the spatial frequencies present in the Fourier transforms of the 2D images.'''
+            freq = np.fft.fftfreq(mapSize) # Generates the frequency components for the given image size.
+            fx, fy = np.meshgrid(freq, freq)
+            freqMap = np.sqrt(np.multiply(fx, fx) + np.multiply(fy, fy)) # The combined frequency map, representing the magnitude of the spatial frequencies.
+            candidates = freqMap <= 0.5 # A boolean mask identifying frequency components below the Nyquist limit
+
+            return freqMap, candidates, fx[candidates], fy[candidates]
+
+        freqMap, candidates, fx, fy = defineFrequencies(mapSize)
+        # filters the Fourier transforms and the frequency map based on the valid frequency candidates identified earlier.
+        idxFreq = np.round(freqMap * mapSize)  ##.astype(int)
+        FT1_vec = FT1[candidates]
+        FT2_vec = FT2[candidates]
+        freqMap = freqMap[candidates]
+        idxFreq = idxFreq[candidates]
+        # Computes the correlation numerator and denominators required for the FSC/FRC calculation
+        Nfreqs = round(mapSize / 2) # The number of unique frequencies up to the Nyquist limit.
+        num = np.real(np.multiply(FT1_vec, np.conjugate(FT2_vec))) # Numerator of the FRC
+
+        den1 = np.absolute(FT1_vec) ** 2  # denominator auto-correlation FT1
+        den2 = np.absolute(FT2_vec) ** 2  # denominator auto-correlation FT2
+
+        # Summing over frequency bins
+        num_dirfsc = np.zeros(Nfreqs)
+        den1_dirfsc = np.zeros(Nfreqs)
+        den2_dirfsc = np.zeros(Nfreqs)
+        fourierIdx = np.arange(0, Nfreqs)
+        for i in fourierIdx: # Group the computed values (num, den1, den2) by frequency bin
+            auxIdx = (idxFreq == i)
+            num_aux = num[auxIdx]
+            den1_aux = den1[auxIdx]
+            den2_aux = den2[auxIdx]
+            num_dirfsc[i] = np.sum(num_aux)
+            den1_dirfsc[i] = np.sum(den1_aux)
+            den2_dirfsc[i] = np.sum(den2_aux)
+
+        # FRC Calculation
+        fscglob = np.divide(num_dirfsc, np.sqrt(np.multiply(den1_dirfsc, den2_dirfsc) + 1e-38))  # final FRC curve
+        fscglob[0] = 1  # corresponds to the lowest frequency (DC component).
+        digFreq = np.divide(fourierIdx + 1.0, mapSize)  # Represents the discrete frequency bins normalized by the map size.
+        resolutions = np.divide(sampling, digFreq)  # Converts these frequency bins to real-space resolution
+
+        return fscglob, resolutions, digFreq
+
 
     def createOutputStep(self):
-        # todo: put a wait here cause it is ending before the steps
-        print('FIIINISHIIIIING.-------------------------------------')
+        self.info('The resolution limit for your classes is: %s' %self.resolDict)
+        inputClasses = self.inputClasses.get()
+        limitResol = self.limitResol.get()
 
+        outClasses = SetOfClasses2D.create(self._getPath())
+        outBadClasses = SetOfClasses2D.create(self._getPath(), suffix=DISCARDED)
+        outClasses.copyInfo(inputClasses)
+        outBadClasses.copyInfo(inputClasses)
+
+        for classId, classResol in self.resolDict.items():
+            if classResol <= limitResol:
+                self.goodList.append(classId)
+            else:
+                self.badList.append(classId)
+
+        if len(self.goodList):
+            outClasses.appendFromClasses(inputClasses,
+                                         filterClassFunc=self._addGoodClass)
+            self.outputDict[OUTPUT_CLASSES] = outClasses
+
+        if len(self.badList):
+            outBadClasses.appendFromClasses(inputClasses,
+                                            filterClassFunc=self._addBadClass)
+            self.outputDict[OUTPUT_CLASSES_DISCARDED] = outBadClasses
+
+        self._defineOutputs(**self.outputDict)
+
+        if len(self.goodList):
+            self._defineSourceRelation(self.inputClasses, outClasses)
+
+        if len(self.badList):
+            self._defineSourceRelation(self.inputClasses, outBadClasses)
+
+
+    # --------------------------- UTILS functions -----------------------------
     def plot_fsc(self, fsc, directory, pixel_size, threshold=0.143):
         # Handle NaN and Inf values in FSC
         fsc = np.nan_to_num(fsc, nan=0.0, posinf=0.0, neginf=0.0)
 
         spatial_frequencies = np.linspace(0, 0.5, len(fsc))  # Nyquist frequency is 0.5 cycles/pixel
-        resolution_angstroms = 1 / (spatial_frequencies * 2 * pixel_size)  # Convert to 1/Å
+        resolution_angstroms = 1 / (spatial_frequencies * 2 * pixel_size)  # Convert to 1/?
 
         # Handle NaN and Inf values in spatial frequencies
         valid_mask = np.isfinite(resolution_angstroms)
@@ -251,29 +420,240 @@ class XmippProtCL2DResolution(ProtAnalysis2D):
         plt.figure(figsize=(10, 6))
         plt.plot(resolution_angstroms, fsc, label='FSC Curve')
         plt.axhline(y=threshold, color='r', linestyle='--', label='0.143 Threshold')
-        plt.xlabel('Spatial Frequency (1/Å)')
+        plt.xlabel('Spatial Frequency (1/?)')
         plt.ylabel('FSC')
         plt.title('Fourier Shell Correlation (FSC) Plot')
         plt.legend()
         plt.grid(True)
         plt.xlim(0, resolution_angstroms.max()-5)
-        plt.gca().invert_xaxis()  # Invert x-axis to show higher resolution (smaller Å) on the left
+        plt.gca().invert_xaxis()  # Invert x-axis to show higher resolution (smaller ?) on the left
         plt.savefig(os.path.join(directory, "fsc_plot.png"))
 
-    def smooth_curve(self, fsc, window_size=5):
-        window = np.ones(window_size) / window_size
-        return np.convolve(fsc, window, mode='same')
+
+    def _addGoodClass(self, item):
+        """ Callback function to append only good classes. """
+        return False if item.getObjId() not in self.goodList else True
 
 
-# x_dim, y_dim, _, _ = even_image.getDimensions()
-        # even_psd = even_image.computePSD(0.4, x_dim, y_dim, 1)
-        # even_psd.convertPSD()
-        # even_psd.write(os.path.join(directory, "even_psd_ref%d.mrc" % class_id))
-        #
-        # odd_psd = odd_image.computePSD(0.4, x_dim, y_dim, 1)
-        # odd_psd.convertPSD()
-        # odd_psd.write(os.path.join(directory, "odd_psd_ref%d.mrc" % class_id))
+    def _addBadClass(self, item):
+        """ Callback function to append only bad classes. """
+        return False if item.getObjId() not in self.badList else True
 
 
+# ------------------------- STATIC METHODS ----------------------------------
+def define_frequencies(map_size):
+    """
+    Define spatial frequencies and filter out those beyond the Nyquist frequency.
+
+    Parameters:
+    map_size (int): Size of the 2D Fourier space.
+
+    Returns:
+    tuple: A tuple containing:
+        - freq_map (ndarray): The frequency map.
+        - valid_freqs (ndarray): Boolean array indicating valid frequencies.
+        - idx_freq (ndarray): The index of each frequency in the frequency map.
+    """
+    freq = np.fft.fftfreq(map_size)
+    fx, fy = np.meshgrid(freq, freq)
+    freq_map = np.sqrt(fx ** 2 + fy ** 2)
+    valid_freqs = freq_map <= 0.5  # Nyquist limit
+    idx_freq = np.round(freq_map * map_size).astype(int)
+
+    return freq_map, valid_freqs, idx_freq
 
 
+def filter_fourier_components(FT1, FT2, valid_freqs):
+    """
+    Filter Fourier transforms by valid frequency components.
+
+    Parameters:
+    FT1 (ndarray): Fourier transform of the first image.
+    FT2 (ndarray): Fourier transform of the second image.
+    valid_freqs (ndarray): Boolean array indicating valid frequencies.
+
+    Returns:
+    tuple: Filtered Fourier transform components.
+    """
+    FT1_vec = FT1[valid_freqs]
+    FT2_vec = FT2[valid_freqs]
+    return FT1_vec, FT2_vec
+
+
+def compute_frc_components(FT1_vec, FT2_vec, idx_freq, Nfreqs):
+    """
+    Compute the numerator and denominators needed for FRC calculation.
+
+    Parameters:
+    FT1_vec (ndarray): Filtered Fourier transform of the first image.
+    FT2_vec (ndarray): Filtered Fourier transform of the second image.
+    idx_freq (ndarray): The index of each frequency in the frequency map.
+    Nfreqs (int): Number of unique frequencies up to the Nyquist limit.
+
+    Returns:
+    tuple: Numerator and denominators for the FRC calculation.
+    """
+    num = np.real(FT1_vec * np.conjugate(FT2_vec))
+    den1 = np.abs(FT1_vec) ** 2
+    den2 = np.abs(FT2_vec) ** 2
+
+    num_dirfsc = np.zeros(Nfreqs)
+    den1_dirfsc = np.zeros(Nfreqs)
+    den2_dirfsc = np.zeros(Nfreqs)
+
+    for i in range(Nfreqs):
+        freq_mask = (idx_freq == i)
+        num_dirfsc[i] = np.sum(num[freq_mask])
+        den1_dirfsc[i] = np.sum(den1[freq_mask])
+        den2_dirfsc[i] = np.sum(den2[freq_mask])
+
+    return num_dirfsc, den1_dirfsc, den2_dirfsc
+
+
+def calculate_frc(num_dirfsc, den1_dirfsc, den2_dirfsc):
+    """
+    Calculate the final FSC/FRC values.
+
+    Parameters:
+    num_dirfsc (ndarray): Numerator for the FRC calculation.
+    den1_dirfsc (ndarray): Denominator from the first image.
+    den2_dirfsc (ndarray): Denominator from the second image.
+
+    Returns:
+    ndarray: The calculated FSC/FRC values.
+    """
+    frc = num_dirfsc / np.sqrt(den1_dirfsc * den2_dirfsc + 1e-38)
+    frc[0] = 1  # Ensure the first value is set to 1
+    return frc
+
+
+def compute_fsc_and_resolutions(image1, image2, sampling):
+    """
+    Main function to compute the FSC/FRC and corresponding resolutions.
+
+    Parameters:
+    image1 (ndarray): First image.
+    image2 (ndarray): Second image.
+    sampling (float): Sampling rate in Angstroms per pixel.
+
+    Returns:
+    tuple: A tuple containing:
+        - frc (ndarray): The calculated FSC/FRC values.
+        - resolutions (ndarray): Corresponding resolutions in Angstroms.
+        - digFreq (ndarray): The digital frequencies.
+    """
+    # Compute the Fourier Transforms with numpy
+    ft1 = np.fft.fft2(image1)
+    ft2 = np.fft.fft2(image2)
+    map_size = np.shape(image1)[0]
+
+    # Define frequencies and filter valid ones
+    freq_map, valid_freqs, idx_freq = define_frequencies(map_size)
+
+    # Filter Fourier components by valid frequencies
+    FT1_vec, FT2_vec = filter_fourier_components(ft1, ft2, valid_freqs)
+    idx_freq = idx_freq[valid_freqs]
+
+    # Number of unique frequencies
+    Nfreqs = map_size // 2
+
+    # Compute FRC components (numerator and denominators)
+    num_dirfsc, den1_dirfsc, den2_dirfsc = compute_frc_components(FT1_vec, FT2_vec, idx_freq, Nfreqs)
+
+    # Calculate FRC
+    frc = calculate_frc(num_dirfsc, den1_dirfsc, den2_dirfsc)
+
+    # Calculate corresponding resolutions and digital frequencies
+    digFreq = (np.arange(Nfreqs) + 1) / map_size
+    resolutions = sampling / digFreq
+
+    return frc, resolutions, digFreq
+
+
+def estimate_resolution_frc(resolutions, frc, threshold):
+    # Find the intersection point with the threshold
+    cross_point = np.where(frc <= threshold)[0]
+    if len(cross_point) > 0:
+        cross_index = cross_point[0]
+
+        # Interpolate to find a more precise intersection if needed
+        if cross_index > 0:
+            x1, x2 = resolutions[cross_index - 1], resolutions[cross_index]
+            y1, y2 = frc[cross_index - 1], frc[cross_index]
+            slope = (y2 - y1) / (x2 - x1)
+            intercept = y1 - slope * x1
+            resolution_at_threshold = (threshold - intercept) / slope
+        else:
+            resolution_at_threshold = resolutions[cross_index]
+
+        print(f"The resolution at FRC = {threshold} is approximately {resolution_at_threshold:.2f} ?")
+    else:
+        resolution_at_threshold = None
+        print(f"The FSC curve does not cross the threshold of {threshold}.")
+
+    return resolution_at_threshold
+
+
+def compute_ssim(img1, img2):
+    return ssim(img1, img2, data_range=img1.max() - img1.min())
+
+
+def plot_frc(fscglob, digFreq, sampling, threshold, resolution_limit, directory):
+    def formatFreq(value, pos):
+        """ Format function for Matplotlib formatter. """
+        inv = 999.
+        if value:
+            inv = 1 / value
+        return "1/%0.2f" % inv
+
+    fig, ax = plt.subplots()
+    ax.xaxis.set_major_formatter(plt.FuncFormatter(formatFreq))
+    ax.set_ylim([-0.1, 1.1])
+    ax.plot(digFreq / sampling, fscglob, label='FRC Curve')
+    plt.xlabel('Resolution ($A^{-1}$)')
+    plt.ylabel('FRC (a.u)')
+    plt.title('FRC curve')
+
+    # Plot the threshold line
+    plt.axhline(y=threshold, color='k', linestyle='dashed', label=f'Threshold = {threshold}')
+
+    if resolution_limit:
+        plt.axvline(x=1 / resolution_limit, color='r', linestyle='dotted',
+                    label=f'Resolution = {resolution_limit:.2f} ?')
+
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(os.path.join(directory, "frc_plot.png"))
+    # plt.show()
+
+
+def plot_average(image):
+    plt.figure()
+    plt.imshow(image, cmap='gray')
+    plt.show()
+
+
+def plot_histogram(scores):
+    plt.figure()
+    plt.hist(scores)
+    plt.show()
+
+
+def getBestSsimScoresIds(resultDict):
+    # Step 1: Sort the dictionary by SSIM scores (values) in descending order (biggest scores first)
+    sorted_particles = sorted(resultDict.items(), key=lambda x: x[1], reverse=True)
+
+    # Step 2: Keep the best 50% of particles
+    half_count = int(len(sorted_particles) * 0.7)
+    best_particles = sorted_particles[:half_count]
+
+    # Step 3: Extract the particle IDs and sort them in ascending order
+    # best_particle_ids = sorted([particle_id for particle_id, score in best_particles])
+    best_particle_ids = [particle_id for particle_id, score in best_particles]
+
+    return best_particle_ids
+
+
+def z_normalize(image):
+    """Normalize the image using z-normalization."""
+    return (image - np.mean(image)) / np.std(image)
