@@ -166,12 +166,13 @@ class XmippProtCL2DResolution(ProtAnalysis2D):
         output_path = self._getExtraPath("results_class_%d" %classId)
 
         pixel_size = particles.getFirstItem().getSamplingRate()
-        os.mkdir(tmp_path)
+        # Create output path
         os.mkdir(output_path)
+        # create temporal path for data
+        os.mkdir(tmp_path)
 
         processed_particles = self.preprocessClassParticles(particles, pixel_size, tmp_path)
-
-        bestIds = self.calculate_best_particles_ssim_scores(processed_particles, classId)
+        bestIds = self.calculate_best_particles_ssim_scores(processed_particles, classId, output_path)
 
         fnStackEven = os.path.join(tmp_path, "even_aligned_particles_ref%d.mrcs" % classId)
         fnStackOdd = os.path.join(tmp_path, "odd_aligned_particles_ref%d.mrcs" % classId)
@@ -213,36 +214,34 @@ class XmippProtCL2DResolution(ProtAnalysis2D):
         self.resolDict[classId] = resolution_limit
 
 
-    def preprocessClassParticles(self, particles, pixel_size, output_dir):
-        inputStk = os.path.join(output_dir, 'imagesInput.xmd')
+    def preprocessClassParticles(self, particles, pixel_size, output_tmp_dir):
+        inputStk = os.path.join(output_tmp_dir, 'imagesInput.xmd')
         writeSetOfParticles(particles, inputStk)
         row = getFirstRow(inputStk)
         hasCTF = row.containsLabel(emlib.MDL_CTF_MODEL) or row.containsLabel(emlib.MDL_CTF_DEFOCUSU)
 
         if self.useWiener.get():
             if hasCTF:
-                corrected_particles_fn = self.correctWiener(inputStk, pixel_size, output_dir)
+                corrected_particles_fn = self.correctWiener(inputStk, pixel_size, output_tmp_dir)
             else:
                 self.info('Cannot do the wiener ctf correction, the input particles do not have a ctf associated.')
         else:
             corrected_particles_fn = inputStk
 
         if self.useLPfilter.get():
-            lpf_fn = self.lowPassFilter(corrected_particles_fn, pixel_size, output_dir)
+            lpf_fn = self.lowPassFilter(corrected_particles_fn, pixel_size, output_tmp_dir)
         else:
             lpf_fn = corrected_particles_fn
 
         if self.useMask.get():
             dim = particles.getDimensions()[0]
-            masked_particles_fn = self.applyMask(lpf_fn, output_dir, dim)
+            masked_particles_fn = self.applyMask(lpf_fn, output_tmp_dir, dim)
         else:
             masked_particles_fn = lpf_fn
 
-        normalized_particles_fn = self.normalized_particles(masked_particles_fn, output_dir, dim)
+        normalized_particles_fn = self.normalized_particles(masked_particles_fn, output_tmp_dir, dim)
 
-        tmpDir = self._getTmpPath(os.path.basename(output_dir))
-        os.mkdir(tmpDir)
-        fnTmpSqlite = os.path.join(tmpDir, "particlesTmp.sqlite")
+        fnTmpSqlite = os.path.join(output_tmp_dir, "particlesTmp.sqlite")
         processedParticles = SetOfParticles(filename=fnTmpSqlite)
         processedParticles.copyInfo(particles)
         readSetOfParticles(normalized_particles_fn, processedParticles)
@@ -304,9 +303,13 @@ class XmippProtCL2DResolution(ProtAnalysis2D):
         return fnNormalizedStk
 
 
-    def calculate_best_particles_ssim_scores(self, particles, classId):
-        classRepresentative = self.inputClasses.get().getItem("id", classId).getRepresentative().getImage().getData()
-        classRepresentative_normalized = z_normalize(classRepresentative)
+    def calculate_best_particles_ssim_scores(self, particles, classId, output_dir):
+        class_image_fn = os.path.join(output_dir,'class_%d.mrc' % classId)
+
+        classRepresentative = self.inputClasses.get().getItem("id", classId).getRepresentative().getImage()
+        classRepresentative.write(class_image_fn)
+
+        classRepresentative_normalized = z_normalize(classRepresentative.getData())
 
         particles_scores = {}
         for particle in particles.iterItems(orderBy='id', direction='ASC'):
@@ -370,7 +373,11 @@ class XmippProtCL2DResolution(ProtAnalysis2D):
 
 
     def createOutputStep(self):
-        self.info('The resolution limit for your classes is: %s' %self.resolDict)
+        # Sort the dictionary by its values in ascending order
+        #plot_histogram(self.resolDict.values())
+        sorted_dict = dict(sorted(self.resolDict.items(), key=lambda item: item[1]))
+        self.info('The resolution limit for your classes is: %s' %sorted_dict)
+
         inputClasses = self.inputClasses.get()
         limitResol = self.limitResol.get()
 
@@ -586,7 +593,7 @@ def estimate_resolution_frc(resolutions, frc, threshold):
         else:
             resolution_at_threshold = resolutions[cross_index]
 
-        print(f"The resolution at FRC = {threshold} is approximately {resolution_at_threshold:.2f} ?")
+        print(f"The resolution at FRC = {threshold} is approximately {resolution_at_threshold:.2f}")
     else:
         resolution_at_threshold = None
         print(f"The FSC curve does not cross the threshold of {threshold}.")
