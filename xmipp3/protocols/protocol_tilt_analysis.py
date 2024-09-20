@@ -46,6 +46,7 @@ from xmipp3 import emlib
 from xmipp3.convert import getScipionObj
 
 AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
+PARALLEL_BATCH_SIZE = 100
 
 class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
@@ -257,6 +258,11 @@ class XmippProtTiltAnalysis(ProtMicrographs, Protocol):
             inputMics: input mics set to be check
         """
         deps = []
+
+        # Loop through the image IDs in batches
+        # for i in range(0, len(newIds), PARALLEL_BATCH_SIZE):
+        #    batch_ids = newIds[i:i + PARALLEL_BATCH_SIZE]
+
         # For each micrograph insert the step to process it
         for micrograph in inputMics:
             if micrograph.getObjId() not in insertedDict:
