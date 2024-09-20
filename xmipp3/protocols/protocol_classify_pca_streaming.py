@@ -128,12 +128,15 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                     self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
                     newParticlesSet = self._loadEmptyParticleSet()
 
+            particlesSet.close()  # You need to close the connection to the input to avoid blocking the db
+
             if self.streamState == Set.STREAM_CLOSED:
                 self.info('Stream closed')
                 # Finish everything and close output sets
                 if len(newParticlesSet):
                     self.info('Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
+                    continue
                 else:
                     self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps)
                     self.finish = True
@@ -220,16 +223,16 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             writeSetOfParticles(input, outputOrig)
 
             if self.correctCtf:
-                # args = ' -i  %s -o %s --sampling_rate %s ' % (outputOrig, outputMRC, self.sampling)
-                # self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=8)
+                args = ' -i  %s -o %s --sampling_rate %s ' % (outputOrig, outputMRC, self.sampling)
+                self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=8)
                 # ------------ WIENER -----------------------
-                args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
-                       '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
-                      (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
-                       self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), int(self.gpuList.get()))
-                env = self.getCondaEnv()
-                env = self._setEnvVariables(env)
-                self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
+                #args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
+                #       '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
+                #      (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
+                #       self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), int(self.gpuList.get()))
+                #env = self.getCondaEnv()
+                #env = self._setEnvVariables(env)
+                #self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
             else:
                 args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
                 self.runJob("xmipp_image_convert", args, numberOfMpi=1)
