@@ -137,4 +137,5 @@ from .protocol_volume_local_adjust import XmippProtLocalVolAdj
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
 from .protocol_reconstruct_global_pca import XmippProtReconstructGlobalPca
+from .protocol_reconstruct_initVol_pca import XmippProtReconstructInitVolPca
 from .protocol_deep_center_assignment import XmippProtDeepCenter, XmippProtDeepGlobalAssignment
