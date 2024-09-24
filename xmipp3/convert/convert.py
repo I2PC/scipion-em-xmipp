@@ -1662,17 +1662,13 @@ def makeEerFilename(eer: str, fractioning: int, supersampling: str, datatype: st
     SEPARATOR = ','
     return eer + ARG_PREAMLE + ('%d' % fractioning) + SEPARATOR + supersampling + SEPARATOR + datatype
 
-def frameToRow(frame, row, firstFrame):
-    frameFilename = locationToXmipp(frame)
+def frameToRow(frame, row, firstFrame, eerFrames):
+    frameFilename = ImageHandler.locationToXmipp(frame)
     
     if os.path.splitext(frameFilename)[-1] == '.eer':
         frameFilename = makeEerFilename(frameFilename, eerFrames, '4K', 'uint8')
     row.setValue(md.MDL_IMAGE, frameFilename)
 
-    if useAlignment:
-        shiftIndex = i - firstFrame
-        row.setValue(emlib.MDL_SHIFT_X, shiftListX[shiftIndex])
-        row.setValue(emlib.MDL_SHIFT_Y, shiftListY[shiftIndex])
  
 
 def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
@@ -1712,7 +1708,12 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
 
     for i in range(f1, fN+1):
         frame.setIndex(stackIndex)
-        frameToRow(frame, row)
+        frameToRow(frame, row, firstFrame=firstFrame, eerFrames=eerFrames)
+        if useAlignment:
+            shiftIndex = i - firstFrame
+            row.setValue(emlib.MDL_SHIFT_X, shiftListX[shiftIndex])
+            row.setValue(emlib.MDL_SHIFT_Y, shiftListY[shiftIndex])
+
         row.addToMd(movieMd)
         stackIndex += 1
 
