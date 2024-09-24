@@ -1684,7 +1684,7 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
     # values might refer to different movie, e.g. no of frames :(
     firstFrame, _, frameIndex = movie.getFramesRange() # info from the movie set
     _, _ , lastFrame = movie.getDim() # actual no. of frame in the current movie
-    #lastFrame += 1 # (convert no. of frames to index, one-initiated)
+    lastFrame += 1 # (convert no. of frames to index, one-initiated)
     if lastFrame == 0:
         # this condition is for old SetOfMovies, that has lastFrame = 0.
         frames = movie.getNumberOfFrames()
