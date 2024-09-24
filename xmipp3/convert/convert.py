@@ -1678,18 +1678,18 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
         lastFrame = eerFrames
 
     if f1 < firstFrame or fN > lastFrame:
-        raise RuntimeError(f"Frame range [{f1}-{fN}] could not be greater"
-                           f" than the movie one [{firstFrame}-{lastFrame}].")
+        raise ValueError(f"Frame range [{f1}-{fN}] could not be greater"
+                         f" than the movie one [{firstFrame}-{lastFrame}].")
 
     ih = ImageHandler()
 
     if useAlignment:
         alignment = movie.getAlignment()
         if alignment is None:
-            raise Exception("Can not write alignment for movie.")
+            raise ValueError("Can not write alignment for movie.")
         a0, aN = alignment.getRange()
         if a0 < firstFrame or aN > lastFrame:
-            raise Exception("Trying to write frames which have not been aligned.")
+            raise ValueError("Trying to write frames which have not been aligned.")
         shiftListX, shiftListY = alignment.getShifts()
 
     row = md.Row()
