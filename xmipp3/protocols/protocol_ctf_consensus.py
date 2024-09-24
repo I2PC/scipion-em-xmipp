@@ -32,6 +32,7 @@ import os
 from datetime import datetime
 from cmath import rect, phase
 from math import radians, degrees
+from sqlite3 import enable_shared_cache
 
 from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
@@ -211,7 +212,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         if self.calculateConsensus:
             self.ctfFn2 = self.inputCTF2.get().getFileName()
 
-        self._insertFunctionStep('createOutputStep',
+        self._insertFunctionStep(self.createOutputStep,
                                  prerequisites=[], wait=True)
 
     def createOutputStep(self):
@@ -221,6 +222,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         self.finished = False
         self.isStreamClosed = False
         self.insertedDict = {}
+        # Important to have both:
+        self.insertedIds = []   # Contains images that have been inserted in a Step (checkNewInput).
+        # Contains images that have been processed in a Step (checkNewOutput).
+        self.acceptedIds = {}
+        self.discardedIds = {}
         self.initializeRejDict()
         self.setSecondaryAttributes()
         self.ctfFn1 = self.inputCTF.get().getFileName()
@@ -238,18 +244,15 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 return s
         return None
 
-
     def _insertNewCtfsSteps(self, newIds, insertedDict):
         deps = []
-        # Loop through the image IDs in batches
-        # for i in range(0, len(newIds), PARALLEL_BATCH_SIZE):
-        #    batch_ids = newIds[i:i + PARALLEL_BATCH_SIZE]
         stepId = self._insertFunctionStep(self.selectCtfStep, newIds,
                                               prerequisites=[])
         deps.append(stepId)
 
         for ctfId in newIds:
-            insertedDict[ctfId] = stepId # All this ctfs are going to be process in the same step
+            insertedDict[ctfId] = stepId # All these ctfs are going to be process in the same step
+            self.insertedIds.append(ctfId)
 
         return deps
 
@@ -268,7 +271,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                           pwutils.prettyTime(mTime)))
             # If the input movies.sqlite have not changed since our last check,
             # it does not make sense to check for new input data
-            if self.lastCheck > mTime and (hasattr(self, OUTPUT_CTF) or hasattr(self, OUTPUT_CTF_DISCARDED)):
+            if ((self.lastCheck > mTime and (hasattr(self, OUTPUT_CTF) or hasattr(self, OUTPUT_CTF_DISCARDED))) and
+                self.insertedIds):  # If this is empty it is dut to a static "continue" action or it is the first round
                 return None
 
             ctfsSet1 = self._loadInputCtfSet(self.ctfFn1)
@@ -277,8 +281,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             ctfSet1Ids = ctfsSet1.getIdSet()
             ctfSet2Ids = ctfsSet2.getIdSet()
 
-            newIds1 = [idCTF for idCTF in ctfSet1Ids if idCTF not in self.insertedDict]
-            newIds2 = [idCTF for idCTF in ctfSet2Ids if idCTF not in self.insertedDict]
+            newIds1 = [idCTF for idCTF in ctfSet1Ids if idCTF not in self.insertedIds]
+            newIds2 = [idCTF for idCTF in ctfSet2Ids if idCTF not in self.insertedIds]
 
             newIds = list(set(newIds1).intersection(set(newIds2)))
 
@@ -295,19 +299,27 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                           pwutils.prettyTime(mTime)))
             # If the input ctfs.sqlite have not changed since our last check,
             # it does not make sense to check for new input data
-            if self.lastCheck > mTime and (hasattr(self, OUTPUT_CTF) or hasattr(self, OUTPUT_CTF_DISCARDED)):
+            if ((self.lastCheck > mTime and (hasattr(self, OUTPUT_CTF) or hasattr(self, OUTPUT_CTF_DISCARDED))) and
+                 self.insertedIds):
                 return None
 
             # Open input ctfs.sqlite and close it as soon as possible
             ctfSet = self._loadInputCtfSet(self.ctfFn1)
             ctfSetIds = ctfSet.getIdSet()
-            newIds = [idCTF for idCTF in ctfSetIds if idCTF not in self.insertedDict]
+            newIds = [idCTF for idCTF in ctfSetIds if idCTF not in self.insertedIds]
 
             self.lastCheck = datetime.now()
             self.isStreamClosed = ctfSet.isStreamClosed()
             ctfSet.close()
 
         outputStep = self._getFirstJoinStep()
+
+        if self.isContinued() and not self.insertedIds:  # For "Continue" action and the first round
+            doneIds, size_done_ids, _, _ = self._getAllDoneIds()
+            skipIds = list(set(newIds).intersection(set(doneIds)))
+            newIds = list(set(newIds).difference(set(doneIds)))
+            self.info("Skipping CTFs with ID: %s, seems to be done" % skipIds)
+            self.insertedIds = doneIds  # During the first round of "Continue" action it has to be filled
 
         if newIds:
             fDeps = self._insertNewCtfsSteps(newIds, self.insertedDict)
@@ -319,14 +331,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
         doneListIds, size_done, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
-
         # Check for newly done items
-        ctfListIdAccepted = self._readtCtfId(True)
-        ctfListIdDiscarded = self._readtCtfId(False)
-
-        newDoneAccepted = [ctfId for ctfId in ctfListIdAccepted
+        acceptedIds = list(self.acceptedIds)
+        discardedIds = list(self.discardedIds)
+        newDoneAccepted = [ctfId for ctfId in acceptedIds
                            if ctfId not in doneListAccepted]
-        newDoneDiscarded = [ctfId for ctfId in ctfListIdDiscarded
+        newDoneDiscarded = [ctfId for ctfId in discardedIds
                             if ctfId not in doneListDiscarded]
 
         firstTimeAccepted = len(doneListAccepted) == 0
@@ -347,6 +357,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
+        if not self.finished and (not newDoneDiscarded and not newDoneAccepted):
+            # If we are not finished and no new output have been produced
+            # it does not make sense to proceed and updated the outputs
+            # so we exit from the function here
+            return
+
         def readOrCreateOutputs(doneList, newDone, label=''):
             if len(doneList) > 0 or len(newDone) > 0:
                 cSet = self._loadOutputSet(SetOfCTF, 'ctfs'+label+'.sqlite')
@@ -363,19 +379,13 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                                                                newDoneDiscarded,
                                                                DISCARDED)
 
-        if not self.finished and not newDoneDiscarded and not newDoneAccepted:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
-            return
-
         def updateRelationsAndClose(cSet, mSet, first, label=''):
 
             if os.path.exists(self._getPath('ctfs'+label+'.sqlite')):
 
                 micsAttrName = OUTPUT_MICS+label
                 self._updateOutputSet(micsAttrName, mSet, streamMode)
-                # Set micrograph as pointer to protocol to prevent pointee end up as another attribute (String, Booelan,...)
+                # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Booelan,...)
                 # that happens somewhere while scheduling.
                 cSet.setMicrographs(Pointer(self, extended=micsAttrName))
 
@@ -398,6 +408,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(STATUS_NEW)
 
+        self._store()  # Update the summary dictionary
+
 
     def fillOutput(self, ctfSet, micSet, newDone, label):
         if newDone:
@@ -408,8 +420,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 ctf = inputCtfSet[ctfId].clone()
                 mic = ctf.getMicrograph().clone()
 
-                ctf.setEnabled(self._getEnable(ctfId))
-                mic.setEnabled(self._getEnable(ctfId))
+                ctf.setEnabled(self._getEnable(ctfId, label))
+                mic.setEnabled(self._getEnable(ctfId, label))
 
                 if self.calculateConsensus:
                     ctf2 = inputCtfSet2[ctfId]
@@ -543,12 +555,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         inputCtfSet = self._loadInputCtfSet(self.ctfFn1)
 
-        if self.isContinued():
-            doneIds, size_done_ids, _, _ = self._getAllDoneIds()
-            skipIds = list(set(ctfIds).intersection(set(doneIds)))
-            ctfIds = list(set(ctfIds).difference(set(doneIds)))
-            self.info("Skipping CTFs with ID: %s, seems to be done" % skipIds)
-
         if self.calculateConsensus:
             inputCtfSet2 = self._loadInputCtfSet(self.ctfFn2)
 
@@ -635,23 +641,15 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
             """ Write to a text file the items that have been done. """
             if firstCondition or consResolCrit or secondCondition:
-                fn = self._getCtfSelecFileDiscarded()
-                with open(fn, 'a') as f:
-                    f.write('%d F\n' % ctf.getObjId())
+                self.discardedIds[ctfId] = 'F'
             else:
                 if (ctf.isEnabled()):
-                    fn = self._getCtfSelecFileAccepted()
-                    with open(fn, 'a') as f:
-                        f.write('%d T\n' % ctf.getObjId())
+                    self.acceptedIds[ctfId] = 'T'
                 else:
-                    fn = self._getCtfSelecFileAccepted()
-                    with open(fn, 'a') as f:
-                        f.write('%d F\n' % ctf.getObjId())
+                    self.acceptedIds[ctfId] = 'F'
 
             for k, v in self.discDict.items():
                 setattr(self, "rejBy"+k, Integer(v))
-
-        self._store()
 
     def calculateConsensusResolution(self, ctfId, ctf1, ctf2):
         md1 = emlib.MetaData()
@@ -682,7 +680,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             discardedIds.extend(list(self.outputCTFDiscarded.getIdSet()))
             done_ids.extend(discardedIds)
 
-        return done_ids, size_output, acceptedIds, discardedIds,
+        return done_ids, size_output, acceptedIds, discardedIds
 
     def _citations(self):
         return ['Marabini2014a']
@@ -810,35 +808,16 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         else:
             return 0
 
-    def _getCtfSelecFileAccepted(self):
-        return self._getExtraPath('selection-ctf-accepted.txt')
-
-    def _getCtfSelecFileDiscarded(self):
-        return self._getExtraPath('selection-ctf-discarded.txt')
-
-    def _readtCtfId(self, accepted):
-        if accepted:
-            fn = self._getCtfSelecFileAccepted()
+    def _getEnable(self, ctfId, label):
+        if label == ACCEPTED:
+            enable_value = self.acceptedIds[ctfId]
         else:
-            fn = self._getCtfSelecFileDiscarded()
-        ctfList = []
-        # Check what items have been previously done
-        if os.path.exists(fn):
-            with open(fn) as f:
-                ctfList += [int(line.strip().split()[0]) for line in f]
-        return ctfList
+            enable_value = self.discardedIds[ctfId]
 
-    def _getEnable(self, ctfId):
-        fn = self._getCtfSelecFileAccepted()
-        # Check what items have been previously done
-        if os.path.exists(fn):
-            with open(fn) as f:
-                for line in f:
-                    if ctfId == int(line.strip().split()[0]):
-                        if line.strip().split()[1] == 'T':
-                            return True
-                        else:
-                            return False
+        if enable_value == 'T':
+            return True
+        else:
+            return False
 
     def _loadInputCtfSet(self, ctfFn):
         self.debug("Loading input db: %s" % ctfFn)
