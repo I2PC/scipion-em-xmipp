@@ -35,10 +35,13 @@ from .protocol_angular_resolution_alignment import XmippProtResolutionAlignment
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
+from .protocol_apply_tilt_to_ctf import XmippProtApplyTiltToCtf
 from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMatrix
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
+from .protocol_classify_pca import XmippProtClassifyPca
+from .protocol_classify_pca_streaming import XmippProtClassifyPcaStreaming
 #from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
 from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
