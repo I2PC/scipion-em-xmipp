@@ -1657,6 +1657,23 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
 
     globalShiftsMD.write(xmdFn)
 
+def makeEerFilename(eer: str, fractioning: int, supersampling: str, datatype: str) -> str:
+    ARG_PREAMLE = '#'
+    SEPARATOR = ','
+    return eer + ARG_PREAMLE + ('%d' % fractioning) + SEPARATOR + supersampling + SEPARATOR + datatype
+
+def frameToRow(frame, row, firstFrame):
+    frameFilename = locationToXmipp(frame)
+    
+    if os.path.splitext(frameFilename)[-1] == '.eer':
+        frameFilename = makeEerFilename(frameFilename, eerFrames, '4K', 'uint8')
+    row.setValue(md.MDL_IMAGE, frameFilename)
+
+    if useAlignment:
+        shiftIndex = i - firstFrame
+        row.setValue(emlib.MDL_SHIFT_X, shiftListX[shiftIndex])
+        row.setValue(emlib.MDL_SHIFT_Y, shiftListY[shiftIndex])
+ 
 
 def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
     movieMd = md.MetaData()
@@ -1681,8 +1698,6 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
         raise ValueError(f"Frame range [{f1}-{fN}] could not be greater"
                          f" than the movie one [{firstFrame}-{lastFrame}].")
 
-    ih = ImageHandler()
-
     if useAlignment:
         alignment = movie.getAlignment()
         if alignment is None:
@@ -1697,16 +1712,7 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
 
     for i in range(f1, fN+1):
         frame.setIndex(stackIndex)
-        frameFilename = ih.locationToXmipp(frame)
-        if os.path.splitext(frameFilename)[-1] == '.eer':
-            frameFilename += f'#{eerFrames},4K,uint8'
-        row.setValue(md.MDL_IMAGE, frameFilename)
-
-        if useAlignment:
-            shiftIndex = i - firstFrame
-            row.setValue(emlib.MDL_SHIFT_X, shiftListX[shiftIndex])
-            row.setValue(emlib.MDL_SHIFT_Y, shiftListY[shiftIndex])
-
+        frameToRow(frame, row)
         row.addToMd(movieMd)
         stackIndex += 1
 
