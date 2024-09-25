@@ -165,6 +165,10 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
         movieId = movie.getObjId()
         movieFn = movie.getFileName()
 
+        if os.path.splitext(movieFn)[-1] == '.eer':
+            # When the input movie is an EER file, use a single 
+            movieFn += '#32,4K,uint16'
+
         # Check which estimated gain matches with the experimental gain
         args = self.getArgs(movieFn, movieId, residual=residual)
         if not self.estimateSigma.get() or noSigma:
