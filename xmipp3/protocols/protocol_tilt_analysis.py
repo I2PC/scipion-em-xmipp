@@ -29,7 +29,6 @@ from itertools import combinations
 import os
 import math
 from datetime import datetime
-from collections import OrderedDict
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam,
@@ -47,7 +46,6 @@ from xmipp3.convert import getScipionObj
 OUTPUT_MICS = "outputMicrographs"
 OUTPUT_MICS_DISCARDED = "discardedMicrographs"
 AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
-PARALLEL_BATCH_SIZE = 4
 
 class XmippProtTiltAnalysis(ProtMicrographs):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
@@ -58,6 +56,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
     _possibleOutputs = {OUTPUT_MICS: SetOfMicrographs,
                         OUTPUT_MICS_DISCARDED: SetOfMicrographs
                         }
+    PARALLEL_BATCH_SIZE = 8
 
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)
@@ -111,7 +110,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                                  prerequisites=[], wait=True)
 
     def initializeStep(self):
-        self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
         self.micsFn = self.inputMicrographs.get().getFileName()
         self.stats = {}
@@ -162,8 +160,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                       pwutils.prettyTime(mTime)))
         # If the input micrographs.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if ((self.lastCheck > mTime and (hasattr(self, OUTPUT_MICS) or hasattr(self, OUTPUT_MICS_DISCARDED))) and
-            self.insertedIds): # If this is empty it is dut to a static "continue" action or it is the first round
+        if self.lastCheck > mTime and self.insertedIds: # If this is empty it is dut to a static "continue" action or it is the first round
             return None
 
         # Open input micrographs.sqlite and close it as soon as possible
@@ -185,7 +182,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             self.insertedIds = doneIds # During the first round of "Continue" action it has to be filled
 
         if newIds:
-            fDeps = self._insertNewMicrographSteps(newIds, self.insertedDict)
+            fDeps = self._insertNewMicrographSteps(newIds)
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
             self.updateSteps()
@@ -250,20 +247,18 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         self._store()
 
-    def _insertNewMicrographSteps(self, newIds, insertedDict):
+    def _insertNewMicrographSteps(self, newIds):
         """ Insert steps to process new micrographs (from streaming)
         Params:
             newIds: input mics ids to be processed
-            insertedDict: contains ready to processed micrographs
         """
         deps = []
         # Loop through the image IDs in batches
-        for i in range(0, len(newIds), PARALLEL_BATCH_SIZE):
-            batch_ids = newIds[i:i + PARALLEL_BATCH_SIZE]
+        for i in range(0, len(newIds), self.PARALLEL_BATCH_SIZE):
+            batch_ids = newIds[i:i + self.PARALLEL_BATCH_SIZE]
             tiltStepId = self._insertFunctionStep(self.processMicrographListStep, batch_ids,
                                               prerequisites=[])
             for micId in batch_ids:
-                insertedDict[micId] = tiltStepId  # All these mics are going to be process in the same step
                 self.insertedIds.append(micId)
 
             deps.append(tiltStepId)

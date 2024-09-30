@@ -32,7 +32,6 @@ import os
 from datetime import datetime
 from cmath import rect, phase
 from math import radians, degrees
-from sqlite3 import enable_shared_cache
 
 from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
@@ -221,7 +220,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     def initializeParams(self):
         self.finished = False
         self.isStreamClosed = False
-        self.insertedDict = {}
         # Important to have both:
         self.insertedIds = []   # Contains images that have been inserted in a Step (checkNewInput).
         # Contains images that have been processed in a Step (checkNewOutput).
@@ -244,14 +242,13 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 return s
         return None
 
-    def _insertNewCtfsSteps(self, newIds, insertedDict):
+    def _insertNewCtfsSteps(self, newIds):
         deps = []
         stepId = self._insertFunctionStep(self.selectCtfStep, newIds,
                                               prerequisites=[])
         deps.append(stepId)
 
         for ctfId in newIds:
-            insertedDict[ctfId] = stepId # All these ctfs are going to be process in the same step
             self.insertedIds.append(ctfId)
 
         return deps
@@ -271,8 +268,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                           pwutils.prettyTime(mTime)))
             # If the input movies.sqlite have not changed since our last check,
             # it does not make sense to check for new input data
-            if ((self.lastCheck > mTime and (hasattr(self, OUTPUT_CTF) or hasattr(self, OUTPUT_CTF_DISCARDED))) and
-                self.insertedIds):  # If this is empty it is dut to a static "continue" action or it is the first round
+            if self.lastCheck > mTime and self.insertedIds:  # If this is empty it is dut to a static "continue" action or it is the first round
                 return None
 
             ctfsSet1 = self._loadInputCtfSet(self.ctfFn1)
@@ -299,8 +295,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                           pwutils.prettyTime(mTime)))
             # If the input ctfs.sqlite have not changed since our last check,
             # it does not make sense to check for new input data
-            if ((self.lastCheck > mTime and (hasattr(self, OUTPUT_CTF) or hasattr(self, OUTPUT_CTF_DISCARDED))) and
-                 self.insertedIds):
+            if self.lastCheck > mTime and self.insertedIds:
                 return None
 
             # Open input ctfs.sqlite and close it as soon as possible
@@ -322,7 +317,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             self.insertedIds = doneIds  # During the first round of "Continue" action it has to be filled
 
         if newIds:
-            fDeps = self._insertNewCtfsSteps(newIds, self.insertedDict)
+            fDeps = self._insertNewCtfsSteps(newIds)
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
             self.updateSteps()

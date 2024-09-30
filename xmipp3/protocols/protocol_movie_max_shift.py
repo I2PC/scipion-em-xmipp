@@ -25,7 +25,6 @@
 # *
 # **************************************************************************
 import os
-from collections import OrderedDict
 from datetime import datetime
 from os.path import exists
 import numpy as np
@@ -123,15 +122,13 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
-        """ Insert the steps to perform CTF estimation, or re-estimation,
-        on a set of micrographs.
+        """ Insert the steps to perform movie alignment evaluation
         """
         self.initializeStep()
         self._insertFunctionStep(self.createOutputStep,
                                  prerequisites=[], wait=True)
 
     def initializeStep(self):
-        self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMovies.get().getSamplingRate()
         self.movsFn = self.inputMovies.get().getFileName()
         # Important to have both:
@@ -179,8 +176,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                       pwutils.prettyTime(mTime)))
         # If the input micrographs.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if ((self.lastCheck > mTime and (hasattr(self, OUTPUT_MOVIES) or hasattr(self, OUTPUT_MOVIES_DISCARDED))) and
-            self.insertedIds): # If this is empty it is dut to a static "continue" action or it is the first round
+        if self.lastCheck > mTime and self.insertedIds: # If this is empty it is dut to a static "continue" action or it is the first round
             return None
 
         # Open input micrographs.sqlite and close it as soon as possible
@@ -202,12 +198,12 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             self.insertedIds = doneIds # During the first round of "Continue" action it has to be filled
 
         if newIds:
-            fDeps = self._insertNewMoviesSteps(newIds, self.insertedDict)
+            fDeps = self._insertNewMoviesSteps(newIds)
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
             self.updateSteps()
 
-    def _insertNewMoviesSteps(self, newIds, insertedDict):
+    def _insertNewMoviesSteps(self, newIds):
         """ Insert the processMovieStep for a given movie.
         """
         if not self.alreadyLoad:
@@ -221,7 +217,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         deps.append(stepId)
 
         for movId in newIds:
-            insertedDict[movId] = stepId  # All these movies are going to be process in the same step
             self.insertedIds.append(movId)
 
         return deps
