@@ -25,7 +25,7 @@
 # **************************************************************************
 
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol.params import (PointerParam, StringParam, EnumParam, GPU_LIST)
+from pyworkflow.protocol.params import (PointerParam, StringParam, EnumParam, FileParam, IntParam, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils import Message
 from pwem.protocols import ProtAlign2D
@@ -44,6 +44,7 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
 
     PRETRAINED = 0
     PREVIOUS = 1
+    LOCALFILE = 2
 
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
@@ -66,15 +67,20 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
                       help='The set does not need to be centered or have alignment parameters')
 
         form.addParam('modelSource', EnumParam, label="Alignment source", default=self.PRETRAINED,
-                      choices=["Pretrained model", "Previous protocol"],
+                      choices=["Pretrained model", "Previous protocol", "Local file"],
                       help="Source for the neural network")
 
         form.addParam('protocolPointer', PointerParam, label="Protocol", condition="modelSource==1",
                       pointerClass="XmippProtDeepCenter", allowsNull=True)
 
+        form.addParam('modelFile', FileParam, label="Model", condition="modelSource==2",
+                      help="Provide a local .h5 file")
+        form.addParam('modelXdim', IntParam, label="Image size of model", condition="modelSource==2",
+                      default = 64, help="Image size on which the model was trained")
+
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self.fnImgs = self._getTmpPath('imgs.xmd')
+        self.fnImgs = self._getExtraPath('imgs.xmd')
         if self.useQueueForSteps() or self.useQueue():
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
         else:
@@ -89,24 +95,36 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
     def convertInputStep(self, inputSet):
         writeSetOfParticles(inputSet, self.fnImgs)
         Xdim = self.inputParticles.get().getDimensions()[0]
-        self.scaleFactor = 1
+        self.scaleFactor = 1.0
         if self.modelSource == self.PRETRAINED and Xdim!=64:
-            fnTmp = self._getTmpPath("particles.stk")
-            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier 64" % (self.fnImgs, fnTmp))
-            self.fnImgs = self._getTmpPath("particles.xmd")
             self.scaleFactor = float(Xdim)/64.0
+        elif self.modelSource == self.LOCALFILE and Xdim!=self.modelXdim.get():
+            self.scaleFactor = float(Xdim)/self.modelXdim.get()
+        if self.scaleFactor!=1.0:
+            fnTmp = self._getTmpPath("imgs.stk")
+            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier 64" % (self.fnImgs, fnTmp))
+            self.fnImgs = self._getTmpPath("imgs.xmd")
 
     def predict(self, gpuId):
         if self.modelSource==self.PRETRAINED:
             fnModel = "/home/coss/model.h5"
-        else:
+        elif self.getRunMode()==self.PREVIOUS:
             fnModel = self.protocolPointer.get()._getExtraPath("model.h5")
+        else:
+            fnModel = self.modelFile.get()
         args = "-i %s --gpu %s --model %s -o %s --scale %f" % (self.fnImgs, gpuId, fnModel,
-                                                               self._getExtraPath('particles.xmd'), self.scaleFactor)
+                                                               self.fnImgs, self.scaleFactor)
         self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())
+        if self.scaleFactor!=1.0:
+            fnShifts = self._getTmpPath("shifts.xmd")
+            self.runJob("xmipp_metadata_utilities", '-i %s --operate keep_column "itemId shiftX shiftY psi" -o %s'%\
+                        (self.fnImgs,fnShifts), numberOfMpi=1)
+            self.fnImgs=self._getExtraPath("imgs.xmd")
+            self.runJob("xmipp_metadata_utilities", '-i %s --set join %s itemId -o %s'%\
+                        (fnShifts, self.fnImgs, self.fnImgs), numberOfMpi=1)
 
     def createOutputStep(self):
-        fnPredict = self._getExtraPath("particles.xmd")
+        fnPredict = self.fnImgs
         outputSet = self._createSetOfParticles()
         readSetOfParticles(fnPredict, outputSet)
         outputSet.copyInfo(self.inputParticles.get())
