@@ -26,7 +26,7 @@
 # **************************************************************************
 from pwem.emlib.image import ImageHandler
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol import PointerParam, StringParam, FloatParam
+from pyworkflow.protocol import PointerParam, StringParam, FloatParam, EnumParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 from pwem.protocols import ProtAnalysis3D
@@ -49,8 +49,10 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
+
         form.addParam('inputVolume', PointerParam, pointerClass="Volume",
                       label='Input volume')
+        
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
                       help='See'
@@ -72,12 +74,27 @@ class XmippProtCreateGallery(ProtAnalysis3D):
         tilt.addParam('tiltF', FloatParam, default=180, label='Max')
         tilt.addParam('tiltStep', FloatParam, default=5, label='Step')
 
-        form.addParam('maxFreq',FloatParam, default=0.25,
-                      expertLevel=LEVEL_ADVANCED,
-                      label='Maximum frequency', help="Normalized to 0.5")
         form.addParam('shiftSigma',FloatParam, default=0.0,
                       expertLevel=LEVEL_ADVANCED,
                       label='Shift sigma', help="In pixels")
+
+        form.addParam('projectionMethod',
+                EnumParam,
+                choices=['Real space', 'Shears', 'Fourier'],
+                default=2,
+                label='Projeciton method?',
+                help='Method used for computing the projection: '
+                    '- Real space: Makes projections by ray tracing in real space.\n'
+                    '- Shears: Use real-shears algorithm.\n'
+                    '- Fourier: Takes a central slice in Fourier space.')
+
+        form.addParam('maxFreq',FloatParam, default=0.25,
+                      expertLevel=LEVEL_ADVANCED,
+                      label='Maximum frequency', 
+                      help='When calculating the proyection with the Fourier method, '
+                           'it is the maximum frequency for the pixels and by default '
+                           'pixels with frequency more than 0.25 are not considered.',
+                      condition='projectionMethod==2')
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
