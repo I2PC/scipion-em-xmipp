@@ -43,6 +43,9 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     """
     _label = 'create gallery'
     _version = VERSION_1_1
+
+    PARAM_FILE_NAME =  "projectionParameters.xmd"
+
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
@@ -103,16 +106,27 @@ _projPsiRange    '0 0 1'
 _projPsiRandomness   even 
 _noiseCoord '%f 0'
 """ % (xdim, xdim, self.rot0, self.rotF,rotN, self.tilt0, self.tiltF, tiltN, self.shiftSigma)
-        fhParam = open(self._getExtraPath("projectionParameters.xmd"), 'w')
+        
+        fhParam = open(self._getExtraPath(self.PARAM_FILE_NAME), 'w')
         fhParam.write(paramContent)
         fhParam.close()
 
-        self.runJob("xmipp_phantom_project",
-                    "-i %s -o %s --params %s --method fourier 2 %f --sym %s" %
-                    (self._getTmpPath("volume.vol"),
-                     self._getPath("images.stk"),
-                     self._getExtraPath("projectionParameters.xmd"),
-                     self.maxFreq, self.symmetryGroup))
+        params = {
+            'i': self._getTmpPath("volume.vol"),
+            'o': self._getPath("images.stk"),
+            'params': self._getExtraPath(self.PARAM_FILE_NAME),
+            'maxFreq': self.maxFreq,
+            'sym': self.symmetryGroup,
+        }
+
+        args = "-i %(i)s " \
+               "-o %(o)s " \
+               "--params %(params)s " \
+               "--method fourier 2 %(maxFreq)f " \
+               "--sym %(sym)s "
+
+
+        self.runJob("xmipp_phantom_project", args % params)
 
     def createOutput(self):
         imgSetOut = self._createSetOfAverages()
