@@ -94,7 +94,7 @@ class XmippProtCreateGallery(ProtAnalysis3D):
                 EnumParam,
                 choices=['Real space', 'Shears', 'Fourier'],
                 default=2,
-                label='Projeciton method?',
+                label='Projection method',
                 help='Method used for computing the projection: '
                     '- Real space: Makes projections by ray tracing in real space.\n'
                     '- Shears: Use real-shears algorithm.\n'
@@ -117,6 +117,7 @@ class XmippProtCreateGallery(ProtAnalysis3D):
         
         form.addParam('projectionMethod',
                       EnumParam,
+                      label='Interpolation method',
                       choices=['Nearest Neighborhood', 'Linear BSpline', 'Cubic BSpline'],
                       default=2,
                       help='When calculating the proyection with the Fourier method, '
