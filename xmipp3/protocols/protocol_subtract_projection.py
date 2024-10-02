@@ -2,6 +2,7 @@
 # **************************************************************************
 # *
 # * Authors:  Estrella Fernandez Gimenez (me.fernandez@cnb.csic.es)
+# *           Federico P. de Isidro-Gomez
 # *
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
@@ -62,7 +63,6 @@ class XmippProtSubtractProjectionBase(EMProtocol):
                            'considered bad particles. Moreover, negative betas will not contribute to mean beta if '
                            '"mean" option is selected')
         form.addParam('limit_freq', BooleanParam, label="Limit frequency?: ", default=False,
-                      expertLevel=LEVEL_ADVANCED,
                       help='Limit frequency in the adjustment process to the frequency correspondent to the resolution'
                            ' indicated in "Maximum resolution" field above')
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3,
