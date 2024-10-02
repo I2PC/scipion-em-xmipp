@@ -291,6 +291,8 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             errors.append("You should resize the particles."
                           " Sizes smaller than 128 pixels are recommended.")
         er = self.validateDLtoolkit()
+        if not isinstance(er, list):
+            er = [er]
         if er:
             errors+=er
         return errors
