@@ -33,7 +33,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem import emlib
 from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
-from pyworkflow import BETA, UPDATED, NEW, PROD
+from pyworkflow import PROD
 
 OUTPUT = "output_particles.xmd"
 CITE = 'Fernandez-Gimenez2023a'
