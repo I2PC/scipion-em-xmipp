@@ -45,6 +45,9 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     _version = VERSION_1_1
 
     PARAM_FILE_NAME =  "projectionParameters.xmd"
+    METHOD_REAL_SPACE = 0
+    METHOD_SHEARS= 1
+    METHOD_FOURIER = 2
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -132,16 +135,24 @@ _noiseCoord '%f 0'
             'i': self._getTmpPath("volume.vol"),
             'o': self._getPath("images.stk"),
             'params': self._getExtraPath(self.PARAM_FILE_NAME),
-            'maxFreq': self.maxFreq,
             'sym': self.symmetryGroup,
         }
 
         args = "-i %(i)s " \
                "-o %(o)s " \
                "--params %(params)s " \
-               "--method fourier 2 %(maxFreq)f " \
                "--sym %(sym)s "
-
+        
+        if self.projectionMethod.get() == self.METHOD_REAL_SPACE:
+            params['method'] = "real_space"
+            args += "--method %(method)s "
+        elif self.projectionMethod.get() == self.METHOD_SHEARS:
+            params['method'] = "shears"
+            args += "--method %(method)s "
+        elif self.projectionMethod.get() == self.METHOD_FOURIER:
+            params['method'] = "fourier"
+            params['maxFreq'] = self.maxFreq
+            args += "--method %(method)s 2 %(maxFreq)f " \
 
         self.runJob("xmipp_phantom_project", args % params)
 
