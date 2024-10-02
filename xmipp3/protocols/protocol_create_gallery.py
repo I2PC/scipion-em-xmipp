@@ -48,6 +48,15 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     METHOD_REAL_SPACE = 0
     METHOD_SHEARS= 1
     METHOD_FOURIER = 2
+    INTERP_METHOD_NEAREST = 0
+    INTERP_METHOD_LINEAR = 1
+    INTERP_METHOD_BSPLINE = 2
+
+    interpMethosDict = {
+        INTERP_METHOD_NEAREST: "nearest",
+        INTERP_METHOD_LINEAR: "linear",
+        INTERP_METHOD_BSPLINE: "bspline"
+        }
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -91,12 +100,27 @@ class XmippProtCreateGallery(ProtAnalysis3D):
                     '- Shears: Use real-shears algorithm.\n'
                     '- Fourier: Takes a central slice in Fourier space.')
 
+        form.addParam('pad',FloatParam, default=2,
+                      expertLevel=LEVEL_ADVANCED,
+                      label='Padding', 
+                      help='When calculating the proyection with the Fourier method, '
+                           'it controls the padding factor.',
+                      condition='projectionMethod==2')
+        
         form.addParam('maxFreq',FloatParam, default=0.25,
                       expertLevel=LEVEL_ADVANCED,
                       label='Maximum frequency', 
                       help='When calculating the proyection with the Fourier method, '
                            'it is the maximum frequency for the pixels and by default '
                            'pixels with frequency more than 0.25 are not considered.',
+                      condition='projectionMethod==2')
+        
+        form.addParam('projectionMethod',
+                      EnumParam,
+                      choices=['Nearest Neighborhood', 'Linear BSpline', 'Cubic BSpline'],
+                      default=2,
+                      help='When calculating the proyection with the Fourier method, '
+                           'is the method for interpolation.',
                       condition='projectionMethod==2')
 
     #--------------------------- INSERT steps functions ------------------------
@@ -151,8 +175,10 @@ _noiseCoord '%f 0'
             args += "--method %(method)s "
         elif self.projectionMethod.get() == self.METHOD_FOURIER:
             params['method'] = "fourier"
+            params['pad'] = self.pad
             params['maxFreq'] = self.maxFreq
-            args += "--method %(method)s 2 %(maxFreq)f " \
+            params['interp'] = self.interpMethosDict[self.projectionMethod.get()]
+            args += "--method %(method)s %(pad)f %(maxFreq)f %(interp)s" \
 
         self.runJob("xmipp_phantom_project", args % params)
 
