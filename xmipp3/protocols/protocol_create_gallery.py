@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     Carlos Oscar S. Sorzano (coss@cnb.csic.es)
+# *              Federico P. de Isidro-Gomez
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -31,7 +32,6 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem.protocols import ProtAnalysis3D
 
 
-from pwem.emlib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
 from xmipp3.convert import readSetOfParticles
 
 
