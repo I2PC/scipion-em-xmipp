@@ -54,7 +54,7 @@ class XmippProtSubtractProjectionBase(EMProtocol):
         form.addParam('cirmaskrad', FloatParam, label="Circular mask radius: ", default=-1, expertLevel=LEVEL_ADVANCED,
                       help='Radius of the circular mask to avoid edge artifacts. '
                            'If -1 it is half the X dimension of the input particles')
-        form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3, expertLevel=LEVEL_ADVANCED,
+        form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3,
                       help='Maximum resolution (in A) of the data ')
         form.addParam('nonNegative', BooleanParam, label="Ignore particles with negative beta0 or R2?: ",
                       default=True,
