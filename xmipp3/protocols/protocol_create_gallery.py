@@ -52,7 +52,7 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     INTERP_METHOD_LINEAR = 1
     INTERP_METHOD_BSPLINE = 2
 
-    interpMethosDict = {
+    interpMethodsDict = {
         INTERP_METHOD_NEAREST: "nearest",
         INTERP_METHOD_LINEAR: "linear",
         INTERP_METHOD_BSPLINE: "bspline"
@@ -95,7 +95,7 @@ class XmippProtCreateGallery(ProtAnalysis3D):
                 choices=['Real space', 'Shears', 'Fourier'],
                 default=2,
                 label='Projection method',
-                help='Method used for computing the projection: '
+                help='Method used for computing the projection:\n'
                     '- Real space: Makes projections by ray tracing in real space.\n'
                     '- Shears: Use real-shears algorithm.\n'
                     '- Fourier: Takes a central slice in Fourier space.')
@@ -115,13 +115,13 @@ class XmippProtCreateGallery(ProtAnalysis3D):
                            'pixels with frequency more than 0.25 are not considered.',
                       condition='projectionMethod==2')
         
-        form.addParam('projectionMethod',
+        form.addParam('interpolationMethod',
                       EnumParam,
                       label='Interpolation method',
                       choices=['Nearest Neighborhood', 'Linear BSpline', 'Cubic BSpline'],
                       default=2,
                       help='When calculating the proyection with the Fourier method, '
-                           'is the method for interpolation.',
+                           'it is the method for interpolation.',
                       condition='projectionMethod==2')
 
     #--------------------------- INSERT steps functions ------------------------
@@ -178,7 +178,7 @@ _noiseCoord '%f 0'
             params['method'] = "fourier"
             params['pad'] = self.pad
             params['maxFreq'] = self.maxFreq
-            params['interp'] = self.interpMethosDict[self.projectionMethod.get()]
+            params['interp'] = self.interpMethodsDict[self.interpolationMethod.get()]
             args += "--method %(method)s %(pad)f %(maxFreq)f %(interp)s" \
 
         self.runJob("xmipp_phantom_project", args % params)
