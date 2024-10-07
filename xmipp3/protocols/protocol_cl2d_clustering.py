@@ -27,11 +27,14 @@
 import os.path
 from pwem.protocols import ProtAnalysis2D
 from pyworkflow.protocol.params import (PointerParam, IntParam,
-                                        BooleanParam, LEVEL_ADVANCED, LT, GT)
+                                        EnumParam, LEVEL_ADVANCED, LT, GT)
+from pwem.objects.data import Class2D, SetOfParticles, Particle, SetOfClasses2D, SetOfAverages
 from xmipp3 import XmippProtocol
 
 FN = "class_representatives"
 RESULT_FILE = 'best_clusters_with_names.txt'
+OUTPUT_CLASSES = 'outputClasses'
+OUTPUT_AVERAGES = 'outputAverages'
 
 
 class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
@@ -40,6 +43,13 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
     _label = '2D classes clustering'
     _conda_env = 'xmipp_cl2dClustering'
 
+    _possibleOutputs = {OUTPUT_CLASSES: SetOfClasses2D,
+                        OUTPUT_AVERAGES: SetOfAverages}
+
+    CLASSES = 0
+    AVERAGES = 1
+    BOTH = 2
+
     def __init__(self, **args):
         ProtAnalysis2D.__init__(self, **args)
 
@@ -47,25 +57,34 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('inputClasses', PointerParam,
-                      label="Input 2D classes",
-                      important=True, pointerClass='SetOfClasses2D',
-                      help='Select the input classes to be mapped.')
+                      label="Input 2D images",
+                      important=True, pointerClass='SetOfClasses2D, SetOfAverages',
+                      help='Select the input classes or input averages to be mapped.')
         form.addParam('min_cluster', IntParam, label='Minimum number of clusters',
                       default=10, expertLevel=LEVEL_ADVANCED, validators=[GT(1, 'Error must be greater than 1')],
                       help=''' By default, the 2D averages will start searching for the optimum number of clusters '''
                            ''' with a minimum number of 10 classes.''')
-
         form.addParam('max_cluster', IntParam, label='Maximum number of clusters',
                       default=-1, expertLevel=LEVEL_ADVANCED,
                       validators=[LT(50, 'Error must be smaller than the number of classes - 2.')],
                       help=''' By default, the 2D averages will end searching for the optimum number of clusters '''
                            ''' until a maximum number of N classes - 2. If -1 then it will act as default.''')
-
         form.addParam('compute_threads', IntParam, label='Number of computational threads',
                       default=8, expertLevel=LEVEL_ADVANCED,
                       validators=[
                           GT(0, 'Error must be greater than 0.')],
                       help=''' By default, the program will use 8 threads for computation.''')
+
+        form.addSection(label='Output')
+        form.addParam('extractOption', EnumParam,
+                      choices=['Classes', 'Averages', 'Both'],
+                      default=self.CLASSES,
+                      label="Extraction option", display=EnumParam.DISPLAY_COMBO,
+                      help='Select an option to extract from the 3D Classes: \n '
+                           '_Classes_: Create a new set of 2D classes with the respective cluster distribution. \n '
+                           '_Averages_: Extract the representatives of each cluster. This are the most representative averages. \n'
+                           '_Both_: Create a new set of 2D classes and extract their representatives.')
+
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -81,14 +100,19 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
         self.refIdsFn = os.path.join(self.directoryPath, FN + ".txt")
 
         inputClasses = self.inputClasses.get()
-
         classes_refIds = []
-        for rep in inputClasses.iterRepresentatives():
-            idClass, fn = rep.getLocation()
-            classes_refIds.append(idClass)
+
+        if isinstance(inputClasses, SetOfClasses2D):
+            for rep in inputClasses.iterRepresentatives():
+                idClass, fn = rep.getLocation()
+                classes_refIds.append(idClass)
+        else: # In case the input is a SetOfAverages
+            for rep in inputClasses.iterItems():
+                idClass, fn = rep.getLocation()
+                classes_refIds.append(idClass)
 
         # Save the corresponding .mrcs file
-        inputClasses.writeStack(self.imgsFn)
+        inputClasses.writeStack(self.imgsFn) # The same method for SetOfClasses and SetOfAverages
         # Save the original ref ids
         with open(self.refIdsFn, "w") as file:
             for item in classes_refIds:
@@ -109,13 +133,116 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
 
 
     def createOutputStep(self):
-        print('New classes')
-        classes2DSet = self._createSetOfClasses2D(self.inputClasses.get().getImages())
+        output_dict = {}
+        inputClasses = self.inputClasses.get()
+        inputClasses.loadAllProperties()
+
         result_dict_file = os.path.join(self.directoryPath, RESULT_FILE)
         result_dict = self.read_clusters_from_txt(result_dict_file)
-        # self._fillClassesFromLevel(classes2DSet)
-        result = {'outputClasses': classes2DSet}
-        self._defineOutputs(**result)
+
+        if self.extractOption.get() == self.CLASSES or self.extractOption.get() == self.BOTH:
+            self.samplingRate = inputClasses.getImages().getSamplingRate()
+            output_dict = self.createOutputSetOfClasses(inputClasses, result_dict, output_dict)
+
+        if self.extractOption.get() == self.AVERAGES or self.extractOption.get() == self.BOTH:
+            output_dict = self.createOutputSetOfAverages(inputClasses, result_dict, output_dict)
+
+        self._defineOutputs(**output_dict)
+
+        if self.extractOption.get() == self.CLASSES or self.extractOption.get() == self.BOTH:
+            self._defineSourceRelation(inputClasses.getImagesPointer(), output_dict[OUTPUT_CLASSES])
+        if self.extractOption.get() == self.AVERAGES or self.extractOption.get() == self.BOTH:
+            self._defineSourceRelation(self.inputClasses, output_dict[OUTPUT_AVERAGES])
+
+        self._store()
+
+    def createOutputSetOfAverages(self, inputClasses, result_dict, output_dict):
+        outputRefs = self._createSetOfAverages()  # We need to create always an empty set since we need to rebuild it
+        # outputRefs.copyInfo(inputClasses.getImages())
+
+        for cluster, classesRef in result_dict.items():
+            self.info('For cluster %d' % cluster)
+            self.info('We have the following ref classes: %s' % classesRef)
+            firstTime = True
+            for classRef in classesRef:
+                if firstTime: # Just want to get the first ref
+                    if isinstance(inputClasses, SetOfClasses2D):
+                        classTmp = inputClasses.getItem("id", classRef).clone()
+                        rep = classTmp.getRepresentative().clone()
+                    else:
+                        rep = inputClasses.getItem("id", classRef).clone()
+                        self.samplingRate = inputClasses.getSamplingRate()
+                    self.info('Using centroid to create new Average %s' % classRef)
+                    newAvg = Particle()
+                    newAvg.copyInfo(rep)
+                    newAvg.setObjId(int(classRef))
+                    newAvg.setClassId(int(classRef))
+                    outputRefs.append(newAvg)
+                    firstTime = False
+
+        #for rep in classes2DSet.iterRepresentatives():
+        #    newAvg = Particle()
+        #    newAvg.copyInfo(rep)
+        #    newAvg.setObjId(rep.getObjId())
+        #    outputRefs.append(newAvg)
+        outputRefs.setSamplingRate(self.samplingRate)
+        output_dict[OUTPUT_AVERAGES] = outputRefs
+
+        return output_dict
+
+    def createOutputSetOfClasses(self, inputClasses, result_dict, output_dict):
+        classes2DSet = self._createSetOfClasses2D(inputClasses.getImagesPointer())
+        dictClasses = {}
+
+        for cluster, classesRef in result_dict.items():
+            self.info('For cluster %d' % cluster)
+            self.info('We have the following ref classes: %s' % classesRef)
+            firstTime = True
+            newParticles = []
+
+            for classRef in classesRef:
+                classTmp = inputClasses.getItem("id", classRef)
+                if firstTime:
+                    self.info('First iter, using centroid to create new Class: %s' % classRef)
+                    newClass = Class2D()
+                    newClass.copyInfo(classTmp)
+                    newClass.setObjId(int(classRef))
+                    newClassId = newClass.getObjId()
+                    firstTime = False
+
+                for particle in classTmp.iterItems():
+                    particle.setClassId(newClassId)
+                    newParticles.append(particle.clone())
+
+            dictClasses[newClassId] = newParticles
+            self.info('Class particles size: %d' % len(newParticles))
+            classes2DSet.append(newClass)
+
+        for classId, particles in dictClasses.items():
+            self.info('Filling Class with ID %d with %d particles' % (classId, len(particles)))
+            class2D = classes2DSet[classId]
+            class2D.enableAppend()
+            for particle in particles:
+                class2D.append(particle)
+
+            classes2DSet.update(class2D)
+
+        classes2DSet.write()
+
+        output_dict[OUTPUT_CLASSES] = classes2DSet
+
+        return output_dict
+
+
+    # --------------------------- INFO functions --------------------------------------------
+    def _validate(self):
+        errors = []
+        if ((self.extractOption.get() == self.CLASSES or self.extractOption.get() == self.BOTH)
+                and not isinstance(self.inputClasses.get(), SetOfClasses2D)):
+            errors.append("The input 2D must be a SetOfClasses2D to generate a SetOfClasses2D.")
+
+        return errors
+
 
     # ------------------------ Utils -----------------------------
     def read_clusters_from_txt(self, file_path):
