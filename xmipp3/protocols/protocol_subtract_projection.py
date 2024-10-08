@@ -126,7 +126,7 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
             fnMask = mask.getFileName()
             if fnMask.endswith('.mrc'):
                 fnMask += ':mrc'
-            args += ' --mask %s' % fnMask
+            args += ' --mask_roi %s' % fnMask
         if self.nonNegative.get():
             args += ' --nonNegative'
         if self.subtract.get():
