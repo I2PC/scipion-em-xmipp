@@ -62,7 +62,7 @@ class XmippProtSubtractProjectionBase(EMProtocol):
                       help='Particles with negative beta0 or R2 will not appear in the output set as they are '
                            'considered bad particles. Moreover, negative betas will not contribute to mean beta if '
                            '"mean" option is selected')
-        form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3,
+        form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=1,
                       expertLevel=LEVEL_ADVANCED,
                       help='Decay of the filter (sigma) to smooth the mask transition')
         form.addParam('pad', IntParam, label="Fourier padding factor: ", default=2, expertLevel=LEVEL_ADVANCED,
