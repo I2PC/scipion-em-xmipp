@@ -62,9 +62,6 @@ class XmippProtLigFitRefine(EMProtocol):
                       help='Particles with negative beta0 or R2 will not appear in the output set as they are '
                            'considered bad particles. Moreover, negative betas will not contribute to mean beta if '
                            '"mean" option is selected')
-        form.addParam('limit_freq', BooleanParam, label="Limit frequency?: ", default=False,
-                      help='Limit frequency in the adjustment process to the frequency correspondent to the resolution'
-                           ' indicated in "Maximum resolution" field above')
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3,
                       expertLevel=LEVEL_ADVANCED,
                       help='Decay of the filter (sigma) to smooth the mask transition')
@@ -94,11 +91,10 @@ class XmippProtLigFitRefine(EMProtocol):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f ' \
-               '--sigma %d --limit_freq %d --cirmaskrad %d --save %s --oroot %s' % \
+               '--sigma %d --cirmaskrad %d --save %s --oroot %s' % \
                (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
                 vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
-                int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath(),
-                self._getExtraPath("subtracted_part"))
+                self.cirmaskrad.get(), self._getExtraPath(), self._getExtraPath("subtracted_part"))
         mask = self.mask.get()
         if mask is not None:
             fnMask = mask.getFileName()
