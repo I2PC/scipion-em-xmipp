@@ -74,7 +74,7 @@ class XmippProtWrongAssignCheckTrain(EMProtocol, XmippProtocol):
     #TODO: Evaluate changing global variable name
     FORM_NN_USAGE_LABELS   = ["Model from scratch", "Use existing model"]
     #TODO: Explain what this is for
-    SHIFTVALUE = 10
+    SHIFTVALUE = 627
 
     #TODO: Evaluate changing name to text so it's named coherently
     REF_CORRECT = "okSubset"
