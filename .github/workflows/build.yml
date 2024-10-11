@@ -21,7 +21,7 @@ jobs:
     - name: Install dependencies 
       run: |
         sudo apt-get update
-        sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopencv-dev libopenmpi-dev make cmake
+        sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopenmpi-dev make cmake
         
     - name: Install CUDA
       uses: Jimver/cuda-toolkit@master
