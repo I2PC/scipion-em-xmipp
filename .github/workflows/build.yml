@@ -18,6 +18,11 @@ jobs:
       with:
         ref: ${{ github.head_ref }}
 
+    - name: Install dependencies 
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopencv-dev libopenmpi-dev make cmake
+        
     - name: Install CUDA
       uses: Jimver/cuda-toolkit@master
       id: cuda-toolkit
@@ -41,19 +46,11 @@ jobs:
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
-    - name: Install plugin from pull request
-      working-directory: ${{ github.workspace }}
-      run: ../scipion/scipion3 installp -p . --devel --noBin
-
-    - name: Install dependencies package
-      working-directory: ${{ github.workspace }}
-      run: ../scipion/scipion3 installb xmippDep
-
+        
     - name: Cloning Xmipp
       working-directory: ${{ github.workspace }}/../
       run: git clone https://github.com/I2PC/xmipp.git
-    
-    # Checkout Xmipp to Pull Request branch if exists
+
     - name: Conditionally checkout Xmipp to ${{ github.head_ref }}
       working-directory: ${{ github.workspace }}/../xmipp
       env:
@@ -62,6 +59,7 @@ jobs:
         if [ $(git ls-remote --heads https://github.com/I2PC/xmipp.git $BRANCH_NAME | wc -l) -eq 1 ]; then
           git checkout $BRANCH_NAME
         fi
+
       
     - name: Compile Xmipp and show log
       working-directory: ${{ github.workspace }}/../xmipp
