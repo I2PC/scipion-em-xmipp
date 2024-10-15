@@ -249,6 +249,9 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                 
     
     def createGallery(self, angle, refVol):
+        # #Positivity
+        # self._positivityVolume(refVol)
+        
         args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
                 (refVol, self.symmetryGroup.get(), angle, self.refsFn)
         self.runJob("xmipp_angular_project_library", args)
@@ -401,6 +404,11 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     def _filterVolume(self, input, output, resolution):
         args = ' -i %s -o %s --fourier low_pass %s --sampling %s -v 0'%(input, output, resolution, self.sampling)
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
+        
+    def _positivityVolume(self, input):
+        program = 'xmipp_transform_threshold'
+        args = '-i %s --select below 0 --substitute value 0'%input
+        self.runJob(program,args,numberOfMpi=1)
         
         
     def _create_batch_for_scale(self, batch, input):

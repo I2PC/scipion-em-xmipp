@@ -133,9 +133,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.refsFnXmd = self._getTmpPath('references.xmd')
         self.sampling = self.inputParticles.get().getSamplingRate()
         self.size = self.inputParticles.get().getDimensions()[0]
-        self.iterations = 5
-        # angleGallery = 5, angle = 5, shift = 4, maxShift = 16 
-        angleGallery, angle, shift, maxShift = 5, 5, 4, 16
+        self.iterations = 20
   
         self.MaxShift = self.MaxShift.get()
         refVol = self.inputVolume.get().getFileName()
@@ -156,50 +154,50 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get())
         
         for iter in range(self.iterations):
-        
+            
+            
+            # if iter < 10:
+            #     angleGallery, angle, shift, maxShift = 12, 8, 4, 20
+            # elif iter < 15:
+            #     angleGallery, angle, shift, maxShift = 8, 6, 3, 12
+            # elif iter < 20:
+            #     angleGallery, angle, shift, maxShift = 6, 5, 3, 9
+            # elif iter < 25:
+            #     angleGallery, angle, shift, maxShift = 5, 5, 2, 6
+                
+            if iter < 10:
+                angleGallery, angle, shift, maxShift = 12, 8, 4, 20
+            elif iter < 14:
+                angleGallery, angle, shift, maxShift = 8, 6, 3, 12
+            elif iter < 17:
+                angleGallery, angle, shift, maxShift = 6, 5, 3, 9
+            elif iter < 20:
+                angleGallery, angle, shift, maxShift = 5, 5, 2, 6
+                
+            
+            # angleGallery, angle, shift, maxShift = self._parameters(iter)
+            # print(angleGallery, angle, shift, maxShift)
+         
             if iter > 0:
                 applyShift = True
-                refVol = self._getExtraPath('volume_iter%s.mrc'%(iter+1))
-                outXmd = self._getExtraPath('output.xmd')
+                inputXmd = outXmd
+                refVol = outVol
+                outXmd = self._getExtraPath('output_iter%s.xmd'%(iter+1))
+                outVol = self._getExtraPath('volume_iter%s.mrc'%(iter+1)+ ':mrc')
             else:
                 applyShift = False
+                inputXmd = self.imgsFnXmd 
+                outXmd = self._getExtraPath('output_iter%s.xmd'%(iter+1))
+                outVol = self._getExtraPath('volume_iter%s.mrc'%(iter+1)+ ':mrc')
         
-        
+                
         
             self._insertFunctionStep("createGallery", angleGallery, refVol)
-            self._insertFunctionStep("globalAlign", self.imgsFnXmd, self.imgsFnXmd, angle, shift, maxShift, applyShift, radius)   
-            self._insertFunctionStep("reconstructVolume", self.imgsFnXmd, refVol)
-        
+            self._insertFunctionStep("globalAlign", inputXmd, outXmd, angle, shift, maxShift, applyShift, radius)   
+            self._insertFunctionStep("reconstructVolume", outXmd, outVol)
+                    
 
-        # for iter in range(self.iterations):
-        #
-        #     # if iter > 0 and self.mode == self.REFINE:
-        #     #     refVol = self._getExtraPath('output_iter%s_avg_filt.mrc'%iter) 
-        #     #     samp_angle = 4
-        #     #     if samp_angle >  self.angleGallery.get():
-        #     #           samp_angle = self.angleGallery.get()          
-        #     #     self._insertFunctionStep("createGallery", samp_angle, refVol+ ':mrc')
-        #
-        #     if iter == 0:
-        #         angle, MaxAngle, shift, maxShift = self.angle.get(), 180, self.shift.get(), self.MaxShift
-        #         inputXmd = self.imgsFnXmd
-        #         outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
-        #         applyShift = self.applyShift 
-        #     if iter > 0:
-        #         denom = pow(2,iter-1)
-        #         angle, MaxAngle, shift, maxShift = 4/denom, 180, 2/denom, 6/denom 
-        #         inputXmd = self._getExtraPath('align_iter%s.xmd'%iter)
-        #         outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
-        #         applyShift = True
-        #
-        #     self._insertFunctionStep("globalAlign", inputXmd, outputXmd, angle, MaxAngle, shift, maxShift, applyShift, radius)   
-        #
-        #     if self.mode == self.REFINE:   
-        #         self._insertFunctionStep("reconstructVolume", iter) 
-        #     elif iter == self.iterations-1 and self.createVolume:
-        #         self._insertFunctionStep("reconstructVolume", iter)
-        #
-        
+
         # self._insertFunctionStep("createOutput", iter)
     
 
@@ -244,8 +242,13 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         args = '-i %s -o %s --sym %s  --max_resolution 0.5  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
         (input, output, self.symmetryGroup.get(), self.sampling, self.numberOfMpi.get()) 
         self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
+        #filter
+        self._filterVolume(output, output, self.resolution.get())
+        #positivity
+        self._positivityVolume(output)
+        #mask
+        self._applyMask(output)      
     
-            
 
     def createOutput(self, iter):      
         #output particle
@@ -324,6 +327,31 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         args = ' -i %s -o %s --fourier low_pass %s --sampling %s -v 0'%(input, output, resolution, self.sampling)
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
         
+    def _positivityVolume(self, input):
+        program = 'xmipp_transform_threshold'
+        args = '-i %s --select below 0 --substitute value 0'%input
+        self.runJob(program,args,numberOfMpi=1)
+        
+    def _applyMask(self, input):
+        program = 'xmipp_transform_mask'
+        args = '-i %s --mask circular -50'%input
+        self.runJob(program,args,numberOfMpi=1)
+        
+        
+    def _parameters(self, iter):
+        
+        if iter < 5:
+            angleGallery, angle, shift, maxShift = 12, 8, 4, 20
+        elif iter < 10:
+            angleGallery, angle, shift, maxShift = 8, 6, 3, 12
+        elif iter < 15:
+            angleGallery, angle, shift, maxShift = 6, 5, 3, 9
+        elif iter < 20:
+            angleGallery, angle, shift, maxShift = 5, 5, 2, 6
+        # elif iter < 10:
+        #     angleGallery, angle, shift, maxShift = 4, 4, 2, 8
+            
+        return(angleGallery, angle, shift, maxShift)
         
 
 
