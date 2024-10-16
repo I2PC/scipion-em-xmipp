@@ -374,7 +374,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 psds.append(subWind_psd_filt)
 
         output_image.setData(output_array)
-        filename = "psd_outputs" + str(mic.getObjId()) + '.jpeg'
+        filename = "psd_outputs" + str(mic.getObjId()) + '.mrc'
         output_image.write(self._getExtraPath(filename))
 
         correlation_pairs = list(combinations(psds, 2))
@@ -455,7 +455,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
     @staticmethod
     def getPSDs(micFolder, ID):
         """ Return the Mic folder where find the PSDs in the tmp folder. """
-        filename = 'psd_outputs' + str(ID) + '.jpeg'
+        filename = 'psd_outputs' + str(ID) + '.mrc'
         return os.path.join(micFolder, filename)
 
     # --------------------------- INFO functions -------------------------------
