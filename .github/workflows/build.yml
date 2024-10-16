@@ -1,71 +1,56 @@
-# Name of the GitHub Action
-name: Build scipion-em-xmipp on Pull Request
+name: Build plugin
 
-# Specify when the Action should be triggered: when a pull request is opened against the 'devel' or 'master' branch
 on:
   pull_request:
     branches: [devel, master]
 
-# Define the job that should be run
 jobs:
   build:
-    # Specify the machine to run the job on
     runs-on: ubuntu-22.04
     
-    #Avoid send statistics
+    # Avoid send statistics
     env:
-      SEND_INSTALLATION_STATISTICS: "False"
+      SEND_INSTALLATION_STATISTICS: "OFF"
 
-    # Define the steps to be taken in the job
     steps:    
-    # Check out the repository in the pull request
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@main
       with:
         ref: ${{ github.head_ref }}
 
-    # Installing CUDA
+    - name: Install dependencies 
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopenmpi-dev make cmake
+        
     - name: Install CUDA
-      uses: Jimver/cuda-toolkit@v0.2.11
+      uses: Jimver/cuda-toolkit@master
       id: cuda-toolkit
       with:
         cuda: '11.8.0'
         method: network
         sub-packages: '["nvcc", "toolkit"]'
 
-    # Installing Miniconda
     - name: Install Miniconda
-      working-directory: ${{ github.workspace }}/../
-      run: |
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-        bash Miniconda3-latest-Linux-x86_64.sh -b -p ${{ github.workspace }}/../miniconda/
-        source ./miniconda/etc/profile.d/conda.sh
-        conda update -n base -c defaults conda -y
+      uses: conda-incubator/setup-miniconda@main
+      with:
+        miniconda-version: "latest"
+        auto-update-conda: true
+        auto-activate-base: true
+        activate-environment: scipion3
+        python-version: "3.8"
         
-    # Installing Scipion
     - name: Install Scipion
       working-directory: ${{ github.workspace }}/../
       run: |
-        eval "$(${{ github.workspace }}/../miniconda/bin/conda shell.bash hook)"
-        pip3 install --user scipion-installer
-        python3 -m scipioninstaller -conda -noXmipp -noAsk scipion
+        pip install --user scipion-installer
+        python -m scipioninstaller -conda -noAsk scipion
 
-    # Install the plugin
-    - name: Install plugin from pull request
-      working-directory: ${{ github.workspace }}
-      run: ../scipion/scipion3 installp -p . --devel --noBin
-
-    # Install xmipp's dependencies package
-    - name: Install dependencies package
-      working-directory: ${{ github.workspace }}
-      run: ../scipion/scipion3 installb xmippDep
-
-    # Cloning Xmipp 
+        
     - name: Cloning Xmipp
       working-directory: ${{ github.workspace }}/../
       run: git clone https://github.com/I2PC/xmipp.git
-    
-    # Checkout Xmipp to Pull Request branch if exists, by default stays in devel
+
     - name: Conditionally checkout Xmipp to ${{ github.head_ref }}
       working-directory: ${{ github.workspace }}/../xmipp
       env:
@@ -74,8 +59,8 @@ jobs:
         if [ $(git ls-remote --heads https://github.com/I2PC/xmipp.git $BRANCH_NAME | wc -l) -eq 1 ]; then
           git checkout $BRANCH_NAME
         fi
+
       
-    # Installing Xmipp
     - name: Compile Xmipp and show log
       working-directory: ${{ github.workspace }}/../xmipp
       env:
