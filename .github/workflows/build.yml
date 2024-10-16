@@ -10,7 +10,7 @@ jobs:
     
     # Avoid send statistics
     env:
-      SEND_INSTALLATION_STATISTICS: "False"
+      SEND_INSTALLATION_STATISTICS: "OFF"
 
     steps:    
     - name: Checkout repository
