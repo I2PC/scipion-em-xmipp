@@ -126,7 +126,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         """
         self.initializeStep()
         self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True)
+                                 prerequisites=[], wait=True, needsGPU=False)
 
     def initializeStep(self):
         self.samplingRate = self.inputMovies.get().getSamplingRate()
@@ -143,7 +143,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         self._closeOutputSet()
 
     def _loadInputSet(self, movsFn):
-        """ Load the input set of mics and create a list. """
+        """ Load the input set of movies and create a list. """
         self.debug("Loading input db: %s" % movsFn)
         movSet = SetOfMovies(filename=movsFn)
         movSet.loadAllProperties()
@@ -212,7 +212,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
         # Insert the selection/rejection step process
         deps = []
-        stepId = self._insertFunctionStep(self._evaluateMovieAlign, newIds,
+        stepId = self._insertFunctionStep(self._evaluateMovieAlign, newIds,  needsGPU=False,
                                           prerequisites=[])
         deps.append(stepId)
 

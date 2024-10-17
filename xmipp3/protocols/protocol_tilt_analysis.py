@@ -107,7 +107,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         """
         self.initializeStep()
         self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True)
+                                 prerequisites=[], wait=True, needsGPU=False)
 
     def initializeStep(self):
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
@@ -256,7 +256,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # Loop through the image IDs in batches
         for i in range(0, len(newIds), self.PARALLEL_BATCH_SIZE):
             batch_ids = newIds[i:i + self.PARALLEL_BATCH_SIZE]
-            tiltStepId = self._insertFunctionStep(self.processMicrographListStep, batch_ids,
+            tiltStepId = self._insertFunctionStep(self.processMicrographListStep, batch_ids, needsGPU=False,
                                               prerequisites=[])
             for micId in batch_ids:
                 self.insertedIds.append(micId)

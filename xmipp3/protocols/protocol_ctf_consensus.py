@@ -212,7 +212,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             self.ctfFn2 = self.inputCTF2.get().getFileName()
 
         self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True)
+                                 prerequisites=[], wait=True, needsGPU=False)
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -244,7 +244,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
     def _insertNewCtfsSteps(self, newIds):
         deps = []
-        stepId = self._insertFunctionStep(self.selectCtfStep, newIds,
+        stepId = self._insertFunctionStep(self.selectCtfStep, newIds,  needsGPU=False,
                                               prerequisites=[])
         deps.append(stepId)
 
