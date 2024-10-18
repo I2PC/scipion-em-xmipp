@@ -27,13 +27,14 @@
 from pwem.objects import Volume
 from pwem.protocols import ProtReconstruct3D
 from pwem import emlib
+from pwem.emlib.metadata import getFirstRow
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
+from pyworkflow.utils.path import createLink
 from xmipp3.convert import writeSetOfParticles
 from xmipp3.base import isXmippCudaPresent
-from pyworkflow.utils import moveFile
 import os
-from pyworkflow import BETA, UPDATED, NEW, PROD
+from pyworkflow import UPDATED
 
 class XmippProtReconstructFourier(ProtReconstruct3D):
     """    
@@ -73,6 +74,8 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
                            'Param *--maxres* in Xmipp.')
         form.addParam('useHalves', params.BooleanParam, label='Use halves', default=False,
                       help='Create separate reconstructions from two random subsets. Useful for resolution measurements')
+        form.addParam('correctCTF', params.BooleanParam, label='Correct CTF', default=True,
+                      help='Correct the CTF with a Wiener filter before reconstructing, if the CTF is available')
         line = form.addLine('Padding factor',
                              expertLevel=cons.LEVEL_ADVANCED,
                              help='Padding of the input images. Higher number will result in more precise interpolation in Fourier '
@@ -106,9 +109,10 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
     def _createFilenameTemplates(self):
         """ Centralize how files are called for iterations and references. """
         myDict = {
-            'input_xmd': self._getExtraPath('input_particles.xmd'),
-            'half1_xmd': self._getExtraPath('input_particles000001.xmd'),
-            'half2_xmd': self._getExtraPath('input_particles000002.xmd'),
+            'input_xmd': self._getTmpPath('input_particles.xmd'),
+            'input_tmp_root': self._getTmpPath('input_particles_corrected'),
+            'half1_xmd': self._getTmpPath('input_particles_corrected000001.xmd'),
+            'half2_xmd': self._getTmpPath('input_particles_corrected000002.xmd'),
             'output_volume': self._getPath('output_volume.mrc'),
             'half1_volume': self._getPath('half1.mrc'),
             'half2_volume': self._getPath('half2.mrc')
@@ -128,10 +132,8 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
         self._insertFunctionStep('createOutputStep')
         
     def _insertReconstructStep(self, half=None):
-        #imgSet = self.inputParticles.get()
-
         if half is None:
-            params =  '  -i %s' % self._getFileName('input_xmd')
+            params =  '  -i %s.xmd' % self._getFileName('input_tmp_root')
             params += '  -o %s' % self._getFileName('output_volume')
         else:
             params =  '  -i %s' % self._getFileName(half + '_xmd')
@@ -180,13 +182,26 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
     def convertInputStep(self):
         particlesMd = self._getFileName('input_xmd')
         imgSet = self.inputParticles.get()
-        #TODO: This only writes metadata what about binary file
-        #it should
         writeSetOfParticles(imgSet, particlesMd)
-        
+        fnCorrectedImagesRoot = self._getFileName('input_tmp_root')
+
+        row = getFirstRow(particlesMd)
+        hasCTF = row.containsLabel(emlib.MDL_CTF_DEFOCUSU) or row.containsLabel(emlib.MDL_CTF_MODEL)
+        if hasCTF and self.correctCTF:
+            args = "-i %s -o %s.stk --save_metadata_stack %s.xmd --keep_input_columns" %\
+                   (particlesMd, fnCorrectedImagesRoot, fnCorrectedImagesRoot)
+            args += " --sampling_rate %f --correct_envelope" % imgSet.getSamplingRate()
+            if imgSet.isPhaseFlipped():
+                args += " --phase_flipped"
+            Nproc = self.numberOfThreads.get() * self.numberOfMpi.get()
+            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=min(Nproc, 24))
+            self.runJob("xmipp_image_eliminate_byEnergy", "-i %s.xmd --sigma2 9 --minSigma2 0.01" % \
+                        fnCorrectedImagesRoot, numberOfMpi=min(Nproc, 12))
+        else:
+            createLink(particlesMd,fnCorrectedImagesRoot+".xmd")
+
     def splitInputStep(self):
-        args = []
-        args += ['-i', self._getFileName('input_xmd')]
+        args = ['-i', self._getFileName('input_tmp_root')+".xmd"]
         args += ['-n', 2]
 
         self.runJob('xmipp_metadata_split', args, numberOfMpi=1)
