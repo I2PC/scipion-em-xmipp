@@ -28,10 +28,10 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import copy
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
-from pyworkflow.protocol import Protocol
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
@@ -360,8 +360,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                     moviesSetDiscarded.append(movie)
                 self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
 
-            plotDoseAnalysis(self.getDosePlot(), self.meanDoseList, self.mu, lower, upper)
-            plotDoseAnalysisDiff(self.getDoseDiffPlot(), self.medianDifferences)
+            tmp_meanDoseList = copy.deepcopy(self.meanDoseList)
+            tmp_medianDifferences = copy.deepcopy(self.medianDifferences)
+            plotDoseAnalysis(self.getDosePlot(), tmp_meanDoseList, self.mu, lower, upper)
+            plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmp_medianDifferences)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
