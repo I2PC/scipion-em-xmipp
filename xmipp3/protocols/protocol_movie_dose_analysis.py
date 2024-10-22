@@ -161,7 +161,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         outputStep = self._getFirstJoinStep()
 
         if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
-            doneIds, size_done_ids, _, _ = self._getAllDoneIds()
+            doneIds, _, _, _ = self._getAllDoneIds()
             skipIds = list(set(newIds).intersection(set(doneIds)))
             newIds = list(set(newIds).difference(set(doneIds)))
             self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
@@ -179,10 +179,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         deps = []
         # Loop through the image IDs in batches
         for i in range(0, len(newIds), self.PARALLEL_BATCH_SIZE):
-            batch_ids = newIds[i:i + self.PARALLEL_BATCH_SIZE]
-            stepId = self._insertFunctionStep(self._processMovies, batch_ids, needsGPU=False,
+            batchIds = newIds[i:i + self.PARALLEL_BATCH_SIZE]
+            stepId = self._insertFunctionStep(self._processMovies, batchIds, needsGPU=False,
                                           prerequisites=[])
-            for movId in batch_ids:
+            for movId in batchIds:
                 self.insertedIds.append(movId)
 
             deps.append(stepId)
@@ -267,7 +267,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
         if hasattr(self, 'mu'):
             # load if first time in order to make dataSets relations
-            doneListIds, size_done, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
+            doneListIds, _, _, _ = self._getAllDoneIds()
             processedIds = self.processedIds
             newDone = [micId for micId in processedIds if micId not in doneListIds]
             allDone = len(doneListIds) + len(newDone)
@@ -360,10 +360,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                     moviesSetDiscarded.append(movie)
                 self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
 
-            tmp_meanDoseList = copy.deepcopy(self.meanDoseList)
-            tmp_medianDifferences = copy.deepcopy(self.medianDifferences)
-            plotDoseAnalysis(self.getDosePlot(), tmp_meanDoseList, self.mu, lower, upper)
-            plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmp_medianDifferences)
+            tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
+            tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
+            plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper)
+            plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -374,22 +374,22 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
 # ------------------------- UTILS functions --------------------------------
     def _getAllDoneIds(self):
-        done_ids = []
+        doneIds = []
         acceptedIds = []
         discardedIds = []
-        size_output = 0
+        sizeOutput = 0
 
         if hasattr(self, OUTPUT_MOVIES):
-            size_output += self.outputMovies.getSize()
+            sizeOutput += self.outputMovies.getSize()
             acceptedIds.extend(list(self.outputMovies.getIdSet()))
-            done_ids.extend(acceptedIds)
+            doneIds.extend(acceptedIds)
 
         if hasattr(self, OUTPUT_MOVIES_DISCARDED):
-            size_output += self.outputMoviesDiscarded.getSize()
+            sizeOutput += self.outputMoviesDiscarded.getSize()
             discardedIds.extend(list(self.outputMoviesDiscarded.getIdSet()))
-            done_ids.extend(discardedIds)
+            doneIds.extend(discardedIds)
 
-        return done_ids, size_output, acceptedIds, discardedIds
+        return doneIds, sizeOutput, acceptedIds, discardedIds
 
     def getLimitIntervals(self):
         """ Funtion to obtain the acceptance interval limits."""

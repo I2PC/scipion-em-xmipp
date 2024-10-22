@@ -310,7 +310,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         outputStep = self._getFirstJoinStep()
 
         if self.isContinued() and not self.insertedIds:  # For "Continue" action and the first round
-            doneIds, size_done_ids, _, _ = self._getAllDoneIds()
+            doneIds, _, _, _ = self._getAllDoneIds()
             skipIds = list(set(newIds).intersection(set(doneIds)))
             newIds = list(set(newIds).difference(set(doneIds)))
             self.info("Skipping CTFs with ID: %s, seems to be done" % skipIds)
@@ -325,7 +325,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
-        doneListIds, size_done, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
+        doneListIds, _, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
         # Check for newly done items
         acceptedIds = list(self.acceptedIds)
         discardedIds = list(self.discardedIds)
@@ -660,22 +660,22 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         return freqResol
 
     def _getAllDoneIds(self):
-        done_ids = []
+        doneIds = []
         acceptedIds = []
         discardedIds = []
-        size_output = 0
+        sizeOutput = 0
 
         if hasattr(self, OUTPUT_CTF):
-            size_output += self.outputCTF.getSize()
+            sizeOutput += self.outputCTF.getSize()
             acceptedIds.extend(list(self.outputCTF.getIdSet()))
-            done_ids.extend(acceptedIds)
+            doneIds.extend(acceptedIds)
 
         if hasattr(self, OUTPUT_CTF_DISCARDED):
-            size_output += self.outputCTFDiscarded.getSize()
+            sizeOutput += self.outputCTFDiscarded.getSize()
             discardedIds.extend(list(self.outputCTFDiscarded.getIdSet()))
-            done_ids.extend(discardedIds)
+            doneIds.extend(discardedIds)
 
-        return done_ids, size_output, acceptedIds, discardedIds
+        return doneIds, sizeOutput, acceptedIds, discardedIds
 
     def _citations(self):
         return ['Marabini2014a']

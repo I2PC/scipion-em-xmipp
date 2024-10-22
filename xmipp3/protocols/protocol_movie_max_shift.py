@@ -191,7 +191,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         outputStep = self._getFirstJoinStep()
 
         if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
-            doneIds, size_done_ids, _, _ = self._getAllDoneIds()
+            doneIds, _, _, _ = self._getAllDoneIds()
             skipIds = list(set(newIds).intersection(set(doneIds)))
             newIds = list(set(newIds).difference(set(doneIds)))
             self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
@@ -271,7 +271,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
     def _checkNewOutput(self):
         """ Check for already selected Movies and update the output set. """
         # load if first time in order to make dataSets relations
-        doneListIds, size_done, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
+        _, _, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
         # Check for newly done items
         acceptedIds = self.acceptedIds
         discardedIds = self.discardedIds
@@ -369,22 +369,22 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     #--------------------------- UTILS functions -------------------------------
     def _getAllDoneIds(self):
-        done_ids = []
+        doneIds = []
         acceptedIds = []
         discardedIds = []
-        size_output = 0
+        sizeOutput = 0
 
         if hasattr(self, OUTPUT_MOVIES):
-            size_output += self.outputMovies.getSize()
+            sizeOutput += self.outputMovies.getSize()
             acceptedIds.extend(list(self.outputMovies.getIdSet()))
-            done_ids.extend(acceptedIds)
+            doneIds.extend(acceptedIds)
 
         if hasattr(self, OUTPUT_MOVIES_DISCARDED):
-            size_output += self.outputMoviesDiscarded.getSize()
+            sizeOutput += self.outputMoviesDiscarded.getSize()
             discardedIds.extend(list(self.outputMoviesDiscarded.getIdSet()))
-            done_ids.extend(discardedIds)
+            doneIds.extend(discardedIds)
 
-        return done_ids, size_output, acceptedIds, discardedIds
+        return doneIds, sizeOutput, acceptedIds, discardedIds
 
     def _loadOutputSet(self, SetClass, baseName):
         """ Load the output set if it exists or create a new one based on the inputs.

@@ -175,7 +175,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         outputStep = self._getFirstJoinStep()
 
         if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
-            doneIds, size_done_ids, _, _ = self._getAllDoneIds()
+            doneIds, _, _, _ = self._getAllDoneIds()
             skipIds = list(set(newIds).intersection(set(doneIds)))
             newIds = list(set(newIds).difference(set(doneIds)))
             self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
@@ -188,7 +188,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             self.updateSteps()
 
     def _checkNewOutput(self):
-        doneListIds, size_done, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
+        doneListIds, _, _, _ = self._getAllDoneIds()
         processedIds = self.processedIds
         newDone = [micId for micId in processedIds if micId not in doneListIds]
         allDone = len(doneListIds) + len(newDone)
@@ -255,10 +255,10 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         deps = []
         # Loop through the image IDs in batches
         for i in range(0, len(newIds), self.PARALLEL_BATCH_SIZE):
-            batch_ids = newIds[i:i + self.PARALLEL_BATCH_SIZE]
-            tiltStepId = self._insertFunctionStep(self.processMicrographListStep, batch_ids, needsGPU=False,
+            batchIds = newIds[i:i + self.PARALLEL_BATCH_SIZE]
+            tiltStepId = self._insertFunctionStep(self.processMicrographListStep, batchIds, needsGPU=False,
                                               prerequisites=[])
-            for micId in batch_ids:
+            for micId in batchIds:
                 self.insertedIds.append(micId)
 
             deps.append(tiltStepId)
@@ -411,22 +411,22 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
     # ------------------------- UTILS functions --------------------------------
     def _getAllDoneIds(self):
-        done_ids = []
+        doneIds = []
         acceptedIds = []
         discardedIds = []
-        size_output = 0
+        sizeOutput = 0
 
         if hasattr(self, OUTPUT_MICS):
-            size_output += self.outputMicrographs.getSize()
+            sizeOutput += self.outputMicrographs.getSize()
             acceptedIds.extend(list(self.outputMicrographs.getIdSet()))
-            done_ids.extend(acceptedIds)
+            doneIds.extend(acceptedIds)
 
         if hasattr(self, OUTPUT_MICS_DISCARDED):
-            size_output += self.discardedMicrographs.getSize()
+            sizeOutput += self.discardedMicrographs.getSize()
             discardedIds.extend(list(self.discardedMicrographs.getIdSet()))
-            done_ids.extend(discardedIds)
+            doneIds.extend(discardedIds)
 
-        return done_ids, size_output, acceptedIds, discardedIds
+        return doneIds, sizeOutput, acceptedIds, discardedIds
 
     def getWindowSize(self):
         """ Function to get the window size, automatically or the one set by the user. """
