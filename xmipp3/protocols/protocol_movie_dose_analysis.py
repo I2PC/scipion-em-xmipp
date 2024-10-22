@@ -24,47 +24,53 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import copy
+
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
-from pyworkflow.protocol import Protocol
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
+from pyworkflow import UPDATED
+import pyworkflow.utils as pwutils
+
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies
 from pwem.protocols import ProtProcessMovies
+
 from xmipp3.convert import getScipionObj
-from pyworkflow import NEW, PROD
 
 THRESHOLD = 2
-OUTPUT_ACCEPTED = 'outputMovies'
-OUTPUT_DISCARDED = 'outputMoviesDiscarded'
+OUTPUT_MOVIES = "outputMovies"
+OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 
-class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
+class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     """ Protocol for the dose analysis """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
-    _devStatus = PROD
+    _devStatus = UPDATED
     _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0
     _possibleOutputs = {
-        OUTPUT_ACCEPTED: SetOfMovies,
-        OUTPUT_DISCARDED: SetOfMovies
+        OUTPUT_MOVIES: SetOfMovies,
+        OUTPUT_MOVIES_DISCARDED: SetOfMovies
     }
 
     finished = False
     stats = {}
-    estimatedIds = []
     meanDoseList = []
     medianDoseTemporal = []
     medianDifferences = []
     meanGlobal = 0
     usingExperimental = False
+    PARALLEL_BATCH_SIZE = 8
 
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
+        self.stepsExecutionMode = cons.STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -92,50 +98,116 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
                       help='By default, if 30% of the movies are discarded'
                            'it assume that the dose has an incorrect value that endures in time.')
 
+        form.addParallelSection(threads=4, mpi=1)
+
     # -------------------------- STEPS functions ------------------------------
-    def createOutputStep(self):
-        self._closeOutputSet()
-
     def _insertAllSteps(self):
-        # Build the list of all processMovieStep ids by
-        # inserting each of the steps for each movie
-        self.insertedDict = {}
+        """ Insert the steps to perform movie dose evaluation
+                """
+        self.initializeStep()
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=[], wait=True, needsGPU=False)
+
+    def initializeStep(self):
         self.samplingRate = self.inputMovies.get().getSamplingRate()
-        # Initial steps
-        self.initializeParams()
-        # Gain and Dark conversion step
-        self.convertCIStep = []
-        convertStepId = self._insertFunctionStep('_convertInputStep',
-                                                 prerequisites=[])
-        self.convertCIStep.append(convertStepId)
-
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=[], wait=True)
-
-    def initializeParams(self):
+        self.movsFn = self.inputMovies.get().getFileName()
+        # Important to have both:
+        self.insertedIds = []  # Contains images that have been inserted in a Step (checkNewInput).
+        self.processedIds = []  # Contains images that have been processed in a Step (checkNewOutput).
+        # Contains images that have been processed in a Step (checkNewOutput).
+        self.isStreamClosed = self.inputMovies.get().isStreamClosed()
         self.framesRange = self.inputMovies.get().getFramesRange()
-        self.dims = self.inputMovies.get().getFirstItem().getDim()
-        self.pixelSize =  self.inputMovies.get().getFirstItem().getSamplingRate()
         dosePerFrame = self.inputMovies.get().getFirstItem().getAcquisition().getDosePerFrame()
+
         if dosePerFrame != 0 and dosePerFrame != None:
             self.dosePerFrame = dosePerFrame
         else:
             self.usingExperimental = True
 
-    def _processMovie(self, movie):
-        movieId = movie.getObjId()
-        self.estimatedIds.append(movieId)
-        stats = self.estimatePoissonCount(movie)
-        self.stats[movieId] = stats
+    def createOutputStep(self):
+        self._closeOutputSet()
 
+    def _loadInputSet(self, movsFn):
+        """ Load the input set of movies and create a list. """
+        self.debug("Loading input db: %s" % movsFn)
+        movSet = SetOfMovies(filename=movsFn)
+        movSet.loadAllProperties()
+        self.isStreamClosed = movSet.isStreamClosed()
+        movSet.close()
+        self.debug("Closed db.")
+        return movSet
+
+    def _checkNewInput(self):
+        # Check if there are new micrographs to process from the input set
+        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
+        mTime = datetime.fromtimestamp(os.path.getmtime(self.movsFn))
+        self.debug('Last check: %s, modification: %s'
+                   % (pwutils.prettyTime(self.lastCheck),
+                      pwutils.prettyTime(mTime)))
+        # If the input micrographs.sqlite have not changed since our last check,
+        # it does not make sense to check for new input data
+        if self.lastCheck > mTime and self.insertedIds: # If this is empty it is due to a static "continue" action or it is the first round
+            return None
+
+        # Open input micrographs.sqlite and close it as soon as possible
+        movSet = self._loadInputSet(self.movsFn)
+        movSetIds = movSet.getIdSet()
+        newIds = [idMov for idMov in movSetIds if idMov not in self.insertedIds]
+
+        self.isStreamClosed = movSet.isStreamClosed()
+        self.lastCheck = datetime.now()
+        movSet.close()
+
+        outputStep = self._getFirstJoinStep()
+
+        if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
+            doneIds, _, _, _ = self._getAllDoneIds()
+            skipIds = list(set(newIds).intersection(set(doneIds)))
+            newIds = list(set(newIds).difference(set(doneIds)))
+            self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
+            self.insertedIds = doneIds # During the first round of "Continue" action it has to be filled
+
+        if newIds:
+            fDeps = self._insertNewMoviesSteps(newIds)
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+            self.updateSteps()
+
+    def _insertNewMoviesSteps(self, newIds):
+        """ Insert the processMovieStep for a given movie.
+        """
+        deps = []
+        # Loop through the image IDs in batches
+        for i in range(0, len(newIds), self.PARALLEL_BATCH_SIZE):
+            batchIds = newIds[i:i + self.PARALLEL_BATCH_SIZE]
+            stepId = self._insertFunctionStep(self._processMovies, batchIds, needsGPU=False,
+                                          prerequisites=[])
+            for movId in batchIds:
+                self.insertedIds.append(movId)
+
+            deps.append(stepId)
+
+        return deps
+
+    def _processMovies(self, movieIds):
+        inputMovies = self._loadInputSet(self.movsFn)
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
-        if not os.path.exists(fnMonitorSummary):
-            fhMonitorSummary = open(fnMonitorSummary, "w")
-        else:
-            fhMonitorSummary = open(fnMonitorSummary, "a")
 
-        fhMonitorSummary.write("movie_%06d_poisson_count: mean=%f stdev=%f [min=%f,max=%f]\n" %
-                               (movieId, stats['mean'], stats['std'], stats['min'], stats['max']))
+        for movieId in movieIds:
+            movie = inputMovies.getItem("id", movieId).clone()
+            movieId = movie.getObjId()
+            stats = self.estimatePoissonCount(movie)
+            self.stats[movieId] = stats
+            self.processedIds.append(movieId)
+
+            if not os.path.exists(fnMonitorSummary):
+                fhMonitorSummary = open(fnMonitorSummary, "w")
+            else:
+                fhMonitorSummary = open(fnMonitorSummary, "a")
+
+            fhMonitorSummary.write("movie_%06d_poisson_count: mean=%f stdev=%f [min=%f,max=%f]\n" %
+                                   (movieId, stats['mean'], stats['std'], stats['min'], stats['max']))
+
         fhMonitorSummary.close()
 
 
@@ -176,13 +248,6 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
         return outputSet
 
     def _checkNewOutput(self):
-        if getattr(self, 'finished', False):
-            return
-
-        # If continue then we need to define again some parameters
-        if self.isContinued():
-            self.initializeParams()
-
         if len(self.meanDoseList) >= self.n_samples.get() and not hasattr(self, 'mu'):
             medianDoseExperimental = np.median(self.meanDoseList)
             if hasattr(self, 'dosePerFrame'):
@@ -201,37 +266,30 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
                 self.mu = medianDoseExperimental
 
         if hasattr(self, 'mu'):
-            # Load previously done items (from text file)
-            doneList = self._readDoneList()
-            # Check for newly done items
-            newDone = [m for m in self.listOfMovies
-                       if m.getObjId() not in doneList and self._isMovieDone(m)]
-            # Update the file with the newly done movies
-            # or exit from the function if no new done movies
-            self.debug('_checkNewOutput: ')
-            self.debug('   listOfMovies: %s, doneList: %s, newDone: %s'
-                       % (len(self.listOfMovies), len(doneList), len(newDone)))
-
-            allDone = len(doneList) + len(newDone)
-            # We have finished when there is no more input movies
+            # load if first time in order to make dataSets relations
+            doneListIds, _, _, _ = self._getAllDoneIds()
+            processedIds = self.processedIds
+            newDone = [micId for micId in processedIds if micId not in doneListIds]
+            allDone = len(doneListIds) + len(newDone)
+            maxMicSize = self._loadInputSet(self.movsFn).getSize()
+            # We have finished when there is not more input movies
             # (stream closed) and the number of processed movies is
             # equal to the number of inputs
-            self.finished = self.streamClosed and allDone == len(self.listOfMovies)
-            streamMode = Set.STREAM_CLOSED if self.finished \
-                else Set.STREAM_OPEN
+            self.finished = self.isStreamClosed and allDone == maxMicSize
+            streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-            if newDone:
-                self._writeDoneList(newDone)
-            elif not self.finished:
+            if not self.finished and not newDone:
                 # If we are not finished and no new output have been produced
                 # it does not make sense to proceed and updated the outputs
                 # so we exit from the function here
                 return
 
-            self.debug('   finished: %s ' % self.finished)
-            self.debug('        self.streamClosed (%s) AND' % self.streamClosed)
-            self.debug('        allDone (%s) == len(self.listOfMovies (%s)'
-                       % (allDone, len(self.listOfMovies)))
+            # Update the file with the newly done movies
+            # or exit from the function if no new done movies
+            self.debug('_checkNewOutput: ')
+            self.debug('  doneList: %s, newDone: %s'
+                        % (len(doneListIds), len(newDone)))
+            self.debug('        self.isStreamClosed (%s) AND' % self.isStreamClosed)
             self.debug('   streamMode: %s' % streamMode)
             # Find the acceptance intervals
             lower, upper = self.getLimitIntervals()
@@ -241,8 +299,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
             acceptedMovies = []
             discardedMovies = []
 
-            for movie in newDone:
-                newMovie = movie.clone()
+            inputMovieSet = self._loadInputSet(self.movsFn)
+
+            for movieId in newDone:
+                newMovie = inputMovieSet.getItem("id", movieId).clone()
                 newMovie.setFramesRange(self.framesRange)
                 movieId = newMovie.getObjId()
                 stats = self.stats[movieId]
@@ -261,7 +321,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
                 self.medianDifferences.append(diff_median)
                 self.medianDoseTemporal.append(mean)
                 self.info('Movie with id %d has a mean dose per frame of %f and a diff of %f percent'
-                          %(movie.getObjId(), mean, diff_median))
+                          %(movieId, mean, diff_median))
 
                 if lower <= mean <= upper:
                     self.info('accepted')
@@ -293,22 +353,44 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies, Protocol):
                 moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
                 for movie in acceptedMovies:
                     moviesSet.append(movie)
-                self._updateOutputSet(OUTPUT_ACCEPTED, moviesSet, streamMode)
+                self._updateOutputSet(OUTPUT_MOVIES, moviesSet, streamMode)
             if len(discardedMovies)>0:
                 moviesSetDiscarded = self._loadOutputSet(SetOfMovies, 'movies_discarded.sqlite')
                 for movie in discardedMovies:
                     moviesSetDiscarded.append(movie)
-                self._updateOutputSet(OUTPUT_DISCARDED, moviesSetDiscarded, streamMode)
+                self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
 
-            plotDoseAnalysis(self.getDosePlot(), self.meanDoseList, self.mu, lower, upper)
-            plotDoseAnalysisDiff(self.getDoseDiffPlot(), self.medianDifferences)
+            tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
+            tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
+            plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper)
+            plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
 
+        self._store()
+
 # ------------------------- UTILS functions --------------------------------
+    def _getAllDoneIds(self):
+        doneIds = []
+        acceptedIds = []
+        discardedIds = []
+        sizeOutput = 0
+
+        if hasattr(self, OUTPUT_MOVIES):
+            sizeOutput += self.outputMovies.getSize()
+            acceptedIds.extend(list(self.outputMovies.getIdSet()))
+            doneIds.extend(acceptedIds)
+
+        if hasattr(self, OUTPUT_MOVIES_DISCARDED):
+            sizeOutput += self.outputMoviesDiscarded.getSize()
+            discardedIds.extend(list(self.outputMoviesDiscarded.getIdSet()))
+            doneIds.extend(discardedIds)
+
+        return doneIds, sizeOutput, acceptedIds, discardedIds
+
     def getLimitIntervals(self):
         """ Funtion to obtain the acceptance interval limits."""
         lower = self.mu - self.mu * (self.percentage_threshold.get()/100)
