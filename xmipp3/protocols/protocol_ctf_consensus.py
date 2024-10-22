@@ -325,7 +325,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
-        doneListIds, _, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
+        _, _, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
         # Check for newly done items
         acceptedIds = list(self.acceptedIds)
         discardedIds = list(self.discardedIds)
@@ -805,11 +805,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
     def _getEnable(self, ctfId, label):
         if label == ACCEPTED:
-            enable_value = self.acceptedIds[ctfId]
+            enableValue = self.acceptedIds[ctfId]
         else:
-            enable_value = self.discardedIds[ctfId]
+            enableValue = self.discardedIds[ctfId]
 
-        if enable_value == 'T':
+        if enableValue == 'T':
             return True
         else:
             return False

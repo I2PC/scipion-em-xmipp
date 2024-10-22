@@ -321,7 +321,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                 Returns True if fails! """
                 if micOut is None:
                     print('Mic/Movie is None do not introduce')
-                    return
                 else:
                     micOut.setEnabled(enable)
                     outSet.append(micOut)
