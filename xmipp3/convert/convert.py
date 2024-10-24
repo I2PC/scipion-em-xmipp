@@ -1657,10 +1657,24 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
 
     globalShiftsMD.write(xmdFn)
 
+def makeEerFilename(eer: str, fractioning: int, supersampling: str, datatype: str) -> str:
+    ARG_PREAMLE = '#'
+    SEPARATOR = ','
+    return eer + ARG_PREAMLE + ('%d' % fractioning) + SEPARATOR + supersampling + SEPARATOR + datatype
 
-def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
+def frameToRow(frame, row, firstFrame, eerFrames):
+    frameFilename = ImageHandler.locationToXmipp(frame)
+    
+    if os.path.splitext(frameFilename)[-1] == '.eer':
+        frameFilename = makeEerFilename(frameFilename, eerFrames, '4K', 'uint8')
+    row.setValue(md.MDL_IMAGE, frameFilename)
+
+ 
+
+def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
     movieMd = md.MetaData()
     frame = movie.clone()
+    isEer = next(iter(movie.getFiles())).endswith('.eer')
     # get some info about the movie
     # problem is, that it can come from a movie set, and some
     # values might refer to different movie, e.g. no of frames :(
@@ -1673,19 +1687,20 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
         if frames is not None:
             lastFrame = frames
 
-    if f1 < firstFrame or fN > lastFrame:
-        raise Exception("Frame range could not be greater"
-                        " than the movie one.")
+    if isEer:
+        lastFrame = eerFrames
 
-    ih = ImageHandler()
+    if f1 < firstFrame or fN > lastFrame:
+        raise ValueError(f"Frame range [{f1}-{fN}] could not be greater"
+                         f" than the movie one [{firstFrame}-{lastFrame}].")
 
     if useAlignment:
         alignment = movie.getAlignment()
         if alignment is None:
-            raise Exception("Can not write alignment for movie. ")
+            raise ValueError("Can not write alignment for movie.")
         a0, aN = alignment.getRange()
         if a0 < firstFrame or aN > lastFrame:
-            raise Exception("Trying to write frames which have not been aligned.")
+            raise ValueError("Trying to write frames which have not been aligned.")
         shiftListX, shiftListY = alignment.getShifts()
 
     row = md.Row()
@@ -1693,8 +1708,7 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
 
     for i in range(f1, fN+1):
         frame.setIndex(stackIndex)
-        row.setValue(md.MDL_IMAGE, ih.locationToXmipp(frame))
-
+        frameToRow(frame, row, firstFrame=firstFrame, eerFrames=eerFrames)
         if useAlignment:
             shiftIndex = i - firstFrame
             row.setValue(emlib.MDL_SHIFT_X, shiftListX[shiftIndex])
