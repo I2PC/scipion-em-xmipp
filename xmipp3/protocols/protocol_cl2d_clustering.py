@@ -103,10 +103,12 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
         classes_refIds = []
 
         if isinstance(inputClasses, SetOfClasses2D):
+            self.samplingRate = inputClasses.getFirstItem().getRepresentative().getSamplingRate()
             for rep in inputClasses.iterRepresentatives():
                 idClass, fn = rep.getLocation()
                 classes_refIds.append(idClass)
         else: # In case the input is a SetOfAverages
+            self.samplingRate = inputClasses.getSamplingRate()
             for rep in inputClasses.iterItems():
                 idClass, fn = rep.getLocation()
                 classes_refIds.append(idClass)
@@ -141,7 +143,6 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
         result_dict = self.read_clusters_from_txt(result_dict_file)
 
         if self.extractOption.get() == self.CLASSES or self.extractOption.get() == self.BOTH:
-            self.samplingRate = inputClasses.getImages().getSamplingRate()
             output_dict = self.createOutputSetOfClasses(inputClasses, result_dict, output_dict)
 
         if self.extractOption.get() == self.AVERAGES or self.extractOption.get() == self.BOTH:
