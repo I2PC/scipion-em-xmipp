@@ -28,6 +28,7 @@ import os
 from datetime import datetime
 from os.path import exists
 import numpy as np
+import copy
 
 from pyworkflow import VERSION_3_0
 from pyworkflow import UPDATED
@@ -147,7 +148,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         self.debug("Loading input db: %s" % movsFn)
         movSet = SetOfMovies(filename=movsFn)
         movSet.loadAllProperties()
-        self.isStreamClosed = movSet.isStreamClosed()
         movSet.close()
         self.debug("Closed db.")
         return movSet
@@ -273,8 +273,9 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         # load if first time in order to make dataSets relations
         _, _, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
         # Check for newly done items
-        acceptedIds = self.acceptedIds
-        discardedIds = self.discardedIds
+        acceptedIds = copy.deepcopy(self.acceptedIds)
+        discardedIds = copy.deepcopy(self.discardedIds)
+
         newDoneAccepted = [movId for movId in acceptedIds
                            if movId not in doneListAccepted]
         newDoneDiscarded = [movId for movId in discardedIds
