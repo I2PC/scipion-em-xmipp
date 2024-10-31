@@ -24,15 +24,12 @@
 # *
 # **************************************************************************
 
-from math import floor
 import numpy as np
-import os
-
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, BooleanParam, IntParam)
-from pyworkflow.utils.path import cleanPath
+from pyworkflow.protocol.params import (PointerParam, MultiPointerParam,
+                                        FloatParam, BooleanParam, IntParam)
 from pwem.protocols import ProtAnalysis3D
-from pwem.objects import (Volume, SetOfVolumes, AtomStruct, SetOfAtomStructs, SetOfParticles)
+from pwem.objects import Volume, SetOfParticles
 import pwem.emlib.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
@@ -40,7 +37,6 @@ from pwem import emlib
 from xmipp3.convert import setXmippAttributes, xmippToLocation
 import xmippLib
 
-        
 class XmippProtComputeLikelihood(ProtAnalysis3D):
     """This protocol computes the likelihood of a set of particles with assigned angles when compared to a
        set of maps or atomic models"""
@@ -63,6 +59,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='Volume, set of volumes or set of atomic structures to which the set of '\
                            'particles will be compared to')
         form.addParam('particleRadius', IntParam, label="Particle radius (px): ", default=-1)
+        form.addParam('noiseRadius', IntParam, label="Noise radius (px): ", default=-1,
+                      help='This radius should be larger than the particle radius to create a ring for estimating noise')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=0, expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
                            'Value 0 implies no filtering.')
@@ -147,14 +145,17 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             particleRadius=Xdim/2
         mask = dist_from_center <= particleRadius
 
-        inputRefs = self.inputRefs.get()
+        inputRefs = self.inputRefs
         i=1
-        if isinstance(inputRefs, Volume):
-            self.produceResiduals(inputRefs.getFileName(), i, mask)
-        else:
-            for volume in self.inputRefs.get():
-                self.produceResiduals(volume.getFileName(), i, mask)
+        for item in inputRefs:
+            ref = item.get()
+            if isinstance(ref, Volume):
+                self.produceResiduals(ref.getFileName(), i, mask)
                 i += 1
+            else:
+                for volume in ref:
+                    self.produceResiduals(volume.getFileName(), i, mask)
+                    i += 1
 
     def appendRows(self, outputSet, fnXmd):
         self.iterMd = md.iterRows(fnXmd, md.MDL_ITEM_ID)
@@ -166,18 +167,20 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         outputSet.copyInfo(self.inputParticles.get())
 
         i=1
-        if isinstance(self.inputRefs.get(), Volume):
-            self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd"%i))
-        else:
-            for _ in self.inputRefs.get():
+        for item in self.inputRefs:
+            if isinstance(item.get(), Volume):
                 self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
                 i += 1
+            else:
+                for _ in item.get():
+                    self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
+                    i += 1
 
         self._defineOutputs(reprojections=outputSet)
         self._defineSourceRelation(self.inputParticles, outputSet)
 
         matrix = np.array([particle._xmipp_logLikelihood.get() for particle in outputSet])
-        matrix = matrix.reshape((len(self.inputRefs.get()),-1))
+        matrix = matrix.reshape((i-1,-1))
         np.save(self._getExtraPath('matrix.npy'), matrix)
 
     def _getMdRow(self, mdFile, id):
