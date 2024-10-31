@@ -104,16 +104,28 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             args+=" --optimizeGray --max_gray_scale %f"%self.maxGrayChange
         self.runJob("xmipp_angular_continuous_assign2", args)
 
+        Xdim = self.inputParticles.get().getDimensions()[0]
+        Y, X = np.ogrid[:Xdim, :Xdim]
+        dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
+        particleRadius = self.particleRadius.get()
+        noiseRadius = self.noiseRadius.get()
+
+        noiseMask = particleRadius < dist_from_center <= noiseRadius
+
         mdResults = md.MetaData(self._getTmpPath("anglesCont.xmd"))
         mdOut = md.MetaData()
         for objId in mdResults:
             itemId = mdResults.getValue(emlib.MDL_ITEM_ID,objId)
             fnResidual = mdResults.getValue(emlib.MDL_IMAGE_RESIDUAL,objId)
             I = xmippLib.Image(fnResidual)
+
             elements_within_circle = I.getData()[mask]
-            var = np.var(elements_within_circle)
             sum_of_squares = np.sum(elements_within_circle ** 2)
             Npix = elements_within_circle.size
+
+            elements_between_circles = I.getData()[noiseMask]
+            var = np.var(elements_between_circles)
+
             LL = -sum_of_squares/(2*var) - Npix/2 * np.log(2*np.pi*var)
 
             newRow = md.Row()
