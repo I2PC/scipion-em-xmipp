@@ -200,7 +200,8 @@ class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
                 (XmippProtReconstructHighRes, ['particleRadius']),
                 (XmippProtSubtractProjection, ['cirmaskrad']),
                 (XmippProtBoostParticles, ['cirmaskrad']),
-                (XmippProtComputeLikelihood, ['particleRadius'])]
+                (XmippProtComputeLikelihood, ['particleRadius']),
+                (XmippProtComputeLikelihood, ['noiseRadius'])]
 
     def _getParameters(self, protocol):
 
