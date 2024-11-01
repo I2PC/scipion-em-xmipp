@@ -58,7 +58,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       pointerClass='Volume,SetOfVolumes',
                       help='Volume, set of volumes or set of atomic structures to which the set of '\
                            'particles will be compared to')
-        form.addParam('particleRadius', IntParam, label="Particle radius (px): ", default=-1)
+        form.addParam('particleRadius', IntParam, label="Particle radius (px): ", default=-1,
+                      help='This radius should include the particle but be small enough to leave room to create a ring for estimating noise')
         form.addParam('noiseRadius', IntParam, label="Noise radius (px): ", default=-1,
                       help='This radius should be larger than the particle radius to create a ring for estimating noise')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=0, expertLevel=LEVEL_ADVANCED,
@@ -145,17 +146,15 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             particleRadius=Xdim/2
         mask = dist_from_center <= particleRadius
 
-        inputRefs = self.inputRefs
+        inputRefs = self.inputRefs.get()
         i=1
-        for item in inputRefs:
-            ref = item.get()
-            if isinstance(ref, Volume):
-                self.produceResiduals(ref.getFileName(), i, mask)
+        if isinstance(inputRefs, Volume):
+            self.produceResiduals(inputRefs.getFileName(), i, mask)
+            i += 1
+        else:
+            for volume in inputRefs:
+                self.produceResiduals(volume.getFileName(), i, mask)
                 i += 1
-            else:
-                for volume in ref:
-                    self.produceResiduals(volume.getFileName(), i, mask)
-                    i += 1
 
     def appendRows(self, outputSet, fnXmd):
         self.iterMd = md.iterRows(fnXmd, md.MDL_ITEM_ID)
