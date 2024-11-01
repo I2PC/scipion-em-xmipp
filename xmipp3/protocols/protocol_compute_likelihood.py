@@ -109,7 +109,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         particleRadius = self.particleRadius.get()
         noiseRadius = self.noiseRadius.get()
 
-        noiseMask = particleRadius < dist_from_center <= noiseRadius
+        noiseMask = (particleRadius < dist_from_center) & (dist_from_center <= noiseRadius)
 
         mdResults = md.MetaData(self._getTmpPath("anglesCont.xmd"))
         mdOut = md.MetaData()
@@ -166,14 +166,13 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         outputSet.copyInfo(self.inputParticles.get())
 
         i=1
-        for item in self.inputRefs:
-            if isinstance(item.get(), Volume):
+        if isinstance(self.inputRefs.get(), Volume):
+            self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
+            i += 1
+        else:
+            for _ in self.inputRefs.get():
                 self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
                 i += 1
-            else:
-                for _ in item.get():
-                    self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
-                    i += 1
 
         self._defineOutputs(reprojections=outputSet)
         self._defineSourceRelation(self.inputParticles, outputSet)
