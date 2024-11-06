@@ -47,26 +47,74 @@ class XmippProtSubtractProjectionBase(EMProtocol):
     @classmethod
     def _defineParams(cls, form):
         form.addSection(label='Input')
-        form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles', label="Particles ",
+        form.addParam('inputParticles', 
+                      PointerParam, 
+                      pointerClass='SetOfParticles', 
+                      label="Particles ",
                       help='Specify a SetOfParticles')
-        form.addParam('vol', PointerParam, pointerClass='Volume', label="Reference volume ",
+        form.addParam('vol', 
+                      PointerParam, 
+                      pointerClass='Volume', 
+                      label="Reference volume ",
                       help='Specify a volume.')
-        form.addParam('cirmaskrad', FloatParam, label="Circular mask radius: ", default=-1, expertLevel=LEVEL_ADVANCED,
+        form.addParam('maskOption',
+                EnumParam,
+                choices=['Circular mask', 'Protein mask'],
+                default=0,
+                label='Mask',
+                help='Mask to be applied to particles before subtraction. Pixels out to mask are ignored in the analysis:\n'
+                     '- Circular mask: circular mask is applied to every particle.\n'
+                     '- Protein mask: specimen mask indicating the region of the map that must be conisdered in the analysis.')
+        form.addParam('cirmaskrad', 
+                      FloatParam, 
+                      label="Circular mask radius: ", 
+                      default=-1, 
+                      expertLevel=LEVEL_ADVANCED,
                       help='Radius of the circular mask to avoid edge artifacts. '
-                           'If -1 it is half the X dimension of the input particles')
-        form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3,
-                      help='Maximum resolution (in A) of the data ')
-        form.addParam('nonNegative', BooleanParam, label="Ignore particles with negative beta0 or R2?: ",
+                           'If -1 it is half the X dimension of the input particles',
+                      condition='maskOption==0')
+        form.addParam('mask', 
+                      PointerParam, 
+                      pointerClass='VolumeMask', 
+                      label='Mask ', 
+                      allowsNull=True,
+                      help='Specify a 3D mask for the region of the input volume that must be considered in the analysis.',
+                      condition='maskOption==1')
+        form.addParam('resol', 
+                      FloatParam, 
+                      label="Maximum resolution (A)", 
+                      default=-1,
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Maximum resolution in Angtroms up to which the substraction is calculated. By default (-1) it is '
+                           ' set to sampling/sqrt(2).')
+        form.addParam('nonNegative',
+                      BooleanParam,
+                      label="Ignore particles with negative beta0 or R2?: ",
                       default=True,
                       expertLevel=LEVEL_ADVANCED,
                       help='Particles with negative beta0 or R2 will not appear in the output set as they are '
                            'considered bad particles. Moreover, negative betas will not contribute to mean beta if '
                            '"mean" option is selected')
-        form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=1,
+        form.addParam('sigma', 
+                      FloatParam, 
+                      label="Decay of the filter (sigma): ", 
+                      default=1,
                       expertLevel=LEVEL_ADVANCED,
                       help='Decay of the filter (sigma) to smooth the mask transition')
-        form.addParam('pad', IntParam, label="Fourier padding factor: ", default=2, expertLevel=LEVEL_ADVANCED,
+        form.addParam('pad', 
+                      IntParam, 
+                      label="Fourier padding factor: ", 
+                      default=2, 
+                      expertLevel=LEVEL_ADVANCED,
                       help='The volume is zero padded by this factor to produce projections')
+        form.addParam('realSpaceProjection', 
+                      EnumParam,
+                      choices=['Fourier ', 'Real space'],
+                      default=0,
+                      label='Projector',
+                      help='Projector for the input volume (mask is always projected in real space):\n'
+                           '- Fourier: faster but more artifact prone.\n'
+                           '- Real space: slower but more accurate.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -94,7 +142,7 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         XmippProtSubtractProjectionBase._defineParams(form)
-        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask ', allowsNull=True,
+        form.addParam('maskRoi', PointerParam, pointerClass='VolumeMask', label='ROI mask ', allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep or subtract, '
                            'avoiding masks with 1s in background. If no mask is given, the subtraction is performed in'
                            ' whole images.')
@@ -121,16 +169,18 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
                (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
                 vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
                 self.cirmaskrad.get(), self._getExtraPath(), self._getExtraPath("subtracted_part"))
-        mask = self.mask.get()
-        if mask is not None:
-            fnMask = mask.getFileName()
-            if fnMask.endswith('.mrc'):
-                fnMask += ':mrc'
-            args += ' --mask_roi %s' % fnMask
+        maskRoi = self.maskRoi.get()
+        if maskRoi is not None:
+            fnMaskRoi = maskRoi.getFileName()
+            if fnMaskRoi.endswith('.mrc'):
+                fnMaskRoi += ':mrc'
+            args += ' --mask_roi %s' % fnMaskRoi
         if self.nonNegative.get():
             args += ' --nonNegative'
         if self.subtract.get():
             args += ' --subtract'
+        if self.realSpaceProjection.get() == 1:
+            args += ' --realSpaceProjection'
         self.runJob("xmipp_subtract_projection", args)
 
     # --------------------------- INFO functions --------------------------------------------
