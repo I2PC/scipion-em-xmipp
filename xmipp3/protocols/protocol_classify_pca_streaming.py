@@ -331,6 +331,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         # Limit the number of threads
         env['OMP_NUM_THREADS'] = '12'
         env['MKL_NUM_THREADS'] = '12'
+        env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
         return env
 
     def _updateFnClassification(self):
