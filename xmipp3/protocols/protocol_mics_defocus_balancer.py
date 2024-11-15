@@ -47,7 +47,9 @@ OUTPUT_MICS = "outputMicrographs"
 class XmippProtMicDefocusSampler(ProtCTFMicrographs):
     """
     Protocol to make a balanced subsample of meaningful CTFs in basis of the defocus
-    values. Both CTFs and micrographs will be output.
+    values. Both CTFs and micrographs will be output. CTFs with different defocus values look differently,
+    while low defocus images will have bigger fringes, higher defocus values will have more compact rings.
+    Also, micrographs with a greater defocus will have more contrast.
     """
     _label = 'micrographs defocus sampler'
     _devStatus = NEW
@@ -59,21 +61,19 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
         self._freqResol = {}
-        self.stepsExecutionMode = params.STEPS_PARALLEL
 
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('inputCTF', params.PointerParam, pointerClass='SetOfCTF',
                       label="Input CTF", important=True,
-                      help='Select the estimated CTF to evaluate')
+                      help='Select the estimated CTF to evaluate.')
+        form.addSection(label='Sampling')
         form.addParam('minImages', params.IntParam,
-                      default=100, label='Minimum number of images to make sampling',
+                      default=100, label='Minimum number of images',
                             help='Minimum number of images to make the defocus balanced sampling.')
         form.addParam('numImages', params.IntParam,
                       default=25, label='Number of sample images',
                       help='Sample size of the defocus balanced sampling.')
-
-        form.addParallelSection(threads=2, mpi=1)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
@@ -110,9 +110,7 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         stepId = self._insertFunctionStep(self.extractBalancedDefocus, newIds,  needsGPU=False,
                                               prerequisites=[])
         deps.append(stepId)
-
-        for ctfId in newIds:
-            self.insertedIds.append(ctfId)
+        self.insertedIds.extend(newIds)
 
         return deps
 
@@ -173,7 +171,8 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
             ctfDefocus[ctfId] = defocusU
 
         self.sampled_images = balanced_sampling(image_dict=ctfDefocus, N=self.numImages.get(), bins=10)
-        self.info('The selected CTFs for the sample images are the following: %s' % self.sampled_images)
+        self.info('The number of CTFs selected for defocus balanced sampling is the following: %d'
+                  %len(self.sampled_images))
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
