@@ -37,7 +37,7 @@ from pyworkflow.protocol.params import IntParam
 from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
 from pyworkflow.constants import BETA
 
-from pwem.objects import SetOfClasses2D, SetOfAverages
+from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles
 from pwem.constants import ALIGN_NONE, ALIGN_2D
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
@@ -101,25 +101,27 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             if not self._newParticlesToProcess():
                 self.info('No new particles')
             else:
-                with self._lock:  # This lock needs to be here since the classifyItems access the inputSet
-                    # and can create a race condition
-                    particlesSet = self._loadInputParticleSet()
-                    self.streamState = particlesSet.getStreamState()
-                    where = None
-                    if self.lastCreationTime:
-                        where = 'creation>"' + str(self.lastCreationTime) + '"'
+                #with self._lock:  # This lock needs to be here since the classifyItems access the inputSet
+                # and can create a race condition
+                particlesSet = self._loadInputParticleSet()
+                self.streamState = particlesSet.getStreamState()
+                where = None
+                if self.lastCreationTime:
+                    where = 'creation>"' + str(self.lastCreationTime) + '"'
 
-                    for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
-                        tmp = particle.getObjCreation()
-                        newParticlesSet.append(particle.clone())
+                for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
+                    tmp = particle.getObjCreation()
+                    newParticlesSet.append(particle.clone())
 
+                particlesSet.close()
                 self.lastCreationTime = tmp
                 self.info('%d new particles' % len(newParticlesSet))
                 self.info('Last creation time REGISTER %s' % self.lastCreationTime)
 
                 # ------------------------------------ PCA TRAINING ----------------------------------------------
                 if self._doPcaTraining(newParticlesSet):
-                    self.pcaStep = self._insertFunctionStep(self.runPCASteps, newParticlesSet, prerequisites=[])
+                    self.pcaStep = self._insertFunctionStep(self.runPCASteps, newParticlesSet,
+                                                            prerequisites=[], needsGPU=True)
                     if len(newParticlesSet) == len(self.inputParticles.get()) and self.streamState == Set.STREAM_CLOSED:
                         self.staticRun = True
                         self.info('Static Run')
@@ -135,14 +137,14 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                     self.info('Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
                 else:
-                    self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps)
+                    self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps, needsGPU=False)
                     self.finish = True
                     continue  # To avoid waiting 1 min
 
             sys.stdout.flush()
-            time.sleep(60)
+            time.sleep(30)
 
-        sys.stdout.flush()  # One last flush
+        # sys.stdout.flush()  # One last flush
 
     # --------------------------- STEPS functions -------------------------------
     def _initialStep(self):
@@ -161,6 +163,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
     def _initFnStep(self):
         updateEnviron(self.gpuList.get())
+        self.inputFn = self.inputParticles.get().getFileName()
         self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
         self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd')  # Wiener
         self.imgsPcaFn = self._getTmpPath('images_pca.mrc')
@@ -174,6 +177,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.sigmaProt = self.inputParticles.get().getDimensions()[0] / 3
 
         self.sampling = self.inputParticles.get().getSamplingRate()
+        self.acquisition = self.inputParticles.get().getAcquisition()
         resolution = self.resolution.get()
         if resolution < 2 * self.sampling:
             resolution = (2 * self.sampling) + 0.5
@@ -200,14 +204,19 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
         self._updateFnClassification()
         classStep = self._insertFunctionStep(self.runClassificationSteps,
-                                             newParticlesSet, prerequisites=self.pcaStep)
+                                             newParticlesSet, prerequisites=self.pcaStep, needsGPU=True)
         updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
-                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep)
+                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep,
+                                              needsGPU=False)
         self.newDeps.append(updateStep)
 
     def runClassificationSteps(self, newParticlesSet):
         self.classificationLaunch = True
-        self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+        if self.correctCtf:
+            self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsXmd) # Wiener filter
+        else:
+            self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+
         self.classification(self.imgsFn, self.numberClasses,
                             self.imgsOrigXmd, self.mask.get(), self.sigmaProt)
         self.classificationLaunch = False
@@ -306,7 +315,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     # --------------------------- UTILS functions -----------------------------
     def _loadInputParticleSet(self):
         """ Returns te input set of particles"""
-        partSet = self.inputParticles.get()
+        self.debug("Loading input db: %s" % self.inputFn)
+        partSet = SetOfParticles(filename=self.inputFn)
         partSet.loadAllProperties()
 
         return partSet
@@ -317,11 +327,11 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     def _loadEmptyParticleSet(self):
         partSet = self.inputParticles.get()
         partSet.loadAllProperties()
-        self.acquisition = partSet.getAcquisition()
         copyPartSet = self._createSetOfParticles()
         copyPartSet.copyInfo(partSet)
-        copyPartSet.setSamplingRate(self.sampling)
-        copyPartSet.setAcquisition(self.acquisition)
+        # TODO: Is this really necessary?
+        #copyPartSet.setSamplingRate(self.sampling)
+        #copyPartSet.setAcquisition(self.acquisition)
 
         return copyPartSet
 
