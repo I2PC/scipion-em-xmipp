@@ -1,12 +1,12 @@
 ## Release 3.24.12 - P
    - New protocols
-      - 
+      - ..
    - Protocols updated
-      - 
+      - ..
    - Protocols fixed
-      -  
+      -  ..
    - Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
-      - 
+      - ..
    - More scipio-em-xmipp
 
 ## Release 3.24.06 - Oceanus
