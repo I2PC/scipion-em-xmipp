@@ -46,10 +46,10 @@ OUTPUT_MICS = "outputMicrographs"
 
 class XmippProtMicDefocusSampler(ProtCTFMicrographs):
     """
-    Protocol to make a balanced subsample of meaningful CTFs in basis of the defocus
-    values. Both CTFs and micrographs will be output. CTFs with different defocus values look differently,
+    Protocol to make a balanced subsample of meaningful CTFs in basis of the defocus values.
+    Both CTFs and micrographs will be output. CTFs with different defocus values look differently,
     while low defocus images will have bigger fringes, higher defocus values will have more compact rings.
-    Also, micrographs with a greater defocus will have more contrast.
+    Micrographs with a greater defocus will have more contrast.
     """
     _label = 'micrographs defocus sampler'
     _devStatus = NEW
@@ -70,7 +70,7 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         form.addSection(label='Sampling')
         form.addParam('minImages', params.IntParam,
                       default=100, label='Minimum number of images',
-                            help='Minimum number of images to make the defocus balanced sampling.')
+                            help='Minimum number of images for balanced defocus sampling.')
         form.addParam('numImages', params.IntParam,
                       default=25, label='Number of sample images',
                       help='Sample size of the defocus balanced sampling.')
@@ -93,10 +93,11 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         self.ctfFn = self.inputCTF.get().getFileName()
 
     def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all ctfs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
+        ''' This function will be used for streaming, to check which is
+        the first function that need to wait for all ctfs
+        to have completed, this can be overriden in subclasses
+        (e.g., in Xmipp 'sortPSDStep')
+        '''
         return 'createOutputStep'
 
     def _getFirstJoinStep(self):
@@ -107,8 +108,7 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def _insertNewCtfsSteps(self, newIds):
         deps = []
-        stepId = self._insertFunctionStep(self.extractBalancedDefocus, newIds,  needsGPU=False,
-                                              prerequisites=[])
+        stepId = self._insertFunctionStep(self.extractBalancedDefocus, newIds,  needsGPU=False, prerequisites=[])
         deps.append(stepId)
         self.insertedIds.extend(newIds)
 
@@ -259,7 +259,8 @@ def balanced_sampling(image_dict, N, bins=10):
     Returns:
     - sampled_images (list): List of sampled image IDs.
     """
-
+	   
+    
     # Step 1: Get all defocus values and determine the bin edges
     defocus_values = list(image_dict.values())
     bin_edges = np.linspace(min(defocus_values), max(defocus_values), bins + 1)
