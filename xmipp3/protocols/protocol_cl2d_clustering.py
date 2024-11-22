@@ -244,8 +244,7 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
 
         return errors
 
-
-    # ------------------------ Utils -----------------------------
+    # ------------------------------------ Utils ----------------------------------------------
     def read_clusters_from_txt(self, file_path):
         """
         Reads a cluster dictionary from a .txt file formatted as:
@@ -278,3 +277,11 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
                     clusters[current_cluster].append(line)
 
         return clusters
+
+    # --------------------------------- Viewer functions ---------------------------------
+    def getClusterPlot(self):
+        return self._getExtraPath('best_cluster_visualization_with_images.png')
+
+
+    def getClusterImagesPlot(self):
+        return self._getExtraPath('all_clusters_with_labels.png')
