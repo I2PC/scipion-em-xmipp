@@ -6,11 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "scipion-em-xmipp"
 dynamic = ["version"]
 dependencies = [
+    "scipion-em",
+    "scipion-pyworkflow>=3.0.31",
     "numpy>=1.21.0",
     "pandas>=1.3.0,<1.4.0",
-    "scipion-pyworkflow>=3.0.31",
     "scikit-learn>=1.2",
-    "scipion-em",
     "scipy<=1.10.0",
     "joblib",
     "peppercorn",
@@ -35,7 +35,8 @@ Homepage = "https://github.com/I2PC/scipion-em-xmipp"
 Issues = "https://github.com/I2PC/scipion-em-xmipp/issues"
 
 [tool.setuptools.dynamic]
-version = {attr = "xmipp3.__version__"}
+version = {attr = "xmipp3.version.__version__"}
+
 
 [project.entry-points."pyworkflow.plugin"]
-xmipp = "xmipp3"
+xmipp3 = "xmipp3"
