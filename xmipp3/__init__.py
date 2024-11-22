@@ -32,13 +32,13 @@ import pwem
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from scipion.install.funcs import CommandDef
-
+import version
 from .base import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
 
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
-
+_currentDepVersion = '1.0'
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
@@ -160,7 +160,7 @@ class Plugin(pwem.Plugin):
                 default=False
             )
         
-        tag = _current_xmipp_tag
+        tag = version._current_xmipp_tag
         xmippSrc = f'xmippSrc-{tag}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
