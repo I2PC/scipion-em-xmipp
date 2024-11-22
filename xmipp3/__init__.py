@@ -42,6 +42,14 @@ _currentDepVersion = '1.0'
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
+type_of_version = version.type_of_version
+_logo = version._logo
+_current_xmipp_tag = version._current_xmipp_tag
+_currentBinVersion = version._currentBinVersion
+_currentDepVersion = version._currentDepVersion
+__version__ = version.__version__
+
+
 class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
