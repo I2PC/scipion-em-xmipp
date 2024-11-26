@@ -59,9 +59,11 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='Volume, set of volumes or set of atomic structures to which the set of '\
                            'particles will be compared to')
         form.addParam('particleRadius', IntParam, label="Particle radius (px): ", default=-1,
-                      help='This radius should include the particle but be small enough to leave room to create a ring for estimating noise')
+                      help='This radius should include the particle but be small enough to leave room to create a ring for estimating noise\n'
+                            'If left at -1, this will take half the image width. In this case, the whole circle will be used to estimate noise')
         form.addParam('noiseRadius', IntParam, label="Noise radius (px): ", default=-1,
-                      help='This radius should be larger than the particle radius to create a ring for estimating noise')
+                      help='This radius should be larger than the particle radius to create a ring for estimating noise\n'
+                            'If left at -1, this will take half the image width.')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=0, expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
                            'Value 0 implies no filtering.')
@@ -87,7 +89,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         imgSet = self.inputParticles.get()
         writeSetOfParticles(imgSet, self._getTmpPath("images.xmd"))
 
-    def produceResiduals(self, fnVol, i, mask):
+    def produceResiduals(self, fnVol, i, mask, noiseMask):
         fnAngles = self._getTmpPath("images.xmd")
         anglesOutFn = self._getTmpPath("anglesCont.stk")
         if self.keepResiduals:
@@ -102,14 +104,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         if self.optimizeGray:
             args+=" --optimizeGray --max_gray_scale %f"%self.maxGrayChange
         self.runJob("xmipp_angular_continuous_assign2", args)
-
-        Xdim = self.inputParticles.get().getDimensions()[0]
-        Y, X = np.ogrid[:Xdim, :Xdim]
-        dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
-        particleRadius = self.particleRadius.get()
-        noiseRadius = self.noiseRadius.get()
-
-        noiseMask = (particleRadius < dist_from_center) & (dist_from_center <= noiseRadius)
 
         mdResults = md.MetaData(self._getTmpPath("anglesCont.xmd"))
         mdOut = md.MetaData()
@@ -141,19 +135,28 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         Xdim = self.inputParticles.get().getDimensions()[0]
         Y, X = np.ogrid[:Xdim, :Xdim]
         dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
+
         particleRadius = self.particleRadius.get()
         if particleRadius<0:
             particleRadius=Xdim/2
         mask = dist_from_center <= particleRadius
 
+        noiseRadius = self.noiseRadius.get()
+        if noiseRadius == -1:
+            noiseRadius = Xdim/2
+        if noiseRadius > particleRadius:
+            noiseMask = (particleRadius < dist_from_center) & (dist_from_center <= noiseRadius)
+        else:
+            noiseMask = mask
+
         inputRefs = self.inputRefs.get()
         i=1
         if isinstance(inputRefs, Volume):
-            self.produceResiduals(inputRefs.getFileName(), i, mask)
+            self.produceResiduals(inputRefs.getFileName(), i, mask, noiseMask)
             i += 1
         else:
             for volume in inputRefs:
-                self.produceResiduals(volume.getFileName(), i, mask)
+                self.produceResiduals(volume.getFileName(), i, mask, noiseMask)
                 i += 1
 
     def appendRows(self, outputSet, fnXmd):
