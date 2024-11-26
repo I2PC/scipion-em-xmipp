@@ -26,15 +26,18 @@
 
 from typing import Tuple
 
+
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.protocol.params import IntParam, LabelParam
+from pyworkflow.protocol.params import IntParam, LabelParam, PointerParam
 from pyworkflow.protocol.params import LT, LE, GE, GT, Range
 
-from pwem.viewers import DataView
+from pwem.viewers import DataView, ChimeraView
 from pwem import emlib
+from pwem.objects import Volume
 
 from xmipp3.protocols.protocol_heterogeneity_analysis import XmippProtHetAnalysis
 
+import os
 import math
 import itertools
 import numpy as np
@@ -55,11 +58,14 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Analysis')
+        form.addParam('consensusVolume', PointerParam, label='Consensus volume',
+                      pointerClass=Volume, allowsNull=True)
         form.addParam('displayHistograms', LabelParam, label='Histograms',
                       help='Shows the 2D histograms of pairwise principal components')
         form.addParam('displayInformationCriterion', LabelParam, label='Information criterion',
                       help='Shows Akaike and Bayesian information criterions')
         form.addParam('displayEigenvalues', LabelParam, label='Eigen-values')
+        form.addParam('displayEigenVolume', IntParam, label='Eigen-volumes')
 
         form.addSection(label='Directional data')
         form.addParam('displayDirectionalMd', LabelParam, label='Directional metadata',
@@ -93,6 +99,7 @@ class XmippViewerHetAnalysis(ProtocolViewer):
             'displayHistograms': self._displayHistograms,
             'displayInformationCriterion': self._displayInformationCriterion,
             'displayEigenvalues': self._displayEigenvalues,
+            'displayEigenVolume': self._displayEigenVolume,
             'displayDirectionalMd': self._displayDirectionalMd,
             'display3dGraph': self._display3dGraph,
             'displayAdjacencyMatrix': self._displayAdjacencyMatrix,
@@ -140,6 +147,14 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         ax.legend(lines + lines2, labels + labels2)
         
         return [fig]
+        
+    def _displayEigenVolume(self, e):
+        command = self._writeChimeraScript(
+            self.consensusVolume.get().getFileName(),
+            self.displayEigenVolume.get()
+        )
+        
+        return [ChimeraView(command)]
         
     def _displayDirectionalMd(self, e):
         dv = DataView(self._getDirectionalMdFilename())
@@ -348,3 +363,16 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     
         return [fig]
         
+    def _writeChimeraScript(self, consensusVol: str, i: int) -> str:
+        scriptFile = self.protocol._getExtraPath('fusion_chimera.cxc')
+        sampling = self.protocol.inputParticles.get().getSamplingRate()
+        sampling = 1.0 / sampling
+        
+        with open(scriptFile, 'w') as f:
+            f.write("open %s\n" % os.path.abspath(consensusVol))
+            f.write("open %s\n" % os.path.abspath(self.protocol._getEigenVolumeFilename(i)))
+            f.write("vol #2 hide\n")
+            f.write("color sample #1 map #2 palette bwr\n")
+        
+        return scriptFile
+    
