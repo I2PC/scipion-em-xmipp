@@ -34,6 +34,7 @@ import numpy as np
 import os
 
 from pwem.viewers.plotter import EmPlotter
+from pwem.objects.data import Volume
 
 from pyworkflow.protocol.params import LabelParam, IntParam, FloatParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
@@ -97,6 +98,9 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         volNumber1 = self.volNumber1.get()-1 if self.volNumber1.get() != -1 else -1
         volNumber2 = self.volNumber2.get() # no subtraction as end of range
         self._checkNumbers(volNumber1, volNumber2, 'volume')
+
+        if isinstance(self.refs, Volume):
+            self.refs = [self.refs]
         
         filename = self.protocol._getExtraPath('matrix.npy')
         if not os.path.exists(filename):
