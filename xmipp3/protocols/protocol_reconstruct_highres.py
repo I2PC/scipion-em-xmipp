@@ -542,7 +542,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                maxFreq=0.25
             else:
                maxFreq=0.45
-        self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete %f"%(fnVol1,fnVol2,maxFreq),numberOfMpi=1)
+            self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete %f"%(fnVol1,fnVol2,maxFreq),numberOfMpi=1)
 
         # Compare both reconstructions
         self.evaluateReconstructions(0)
