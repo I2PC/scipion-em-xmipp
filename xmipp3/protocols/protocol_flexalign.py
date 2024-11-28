@@ -232,7 +232,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
         if self.inputMovies.get().getGain():
             ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
-            if ext in ['.tif', '.tiff']:
+            if ext in ['.tif', '.tiff', '.gain']:
               self.flipY = True
               inGainFn = self.inputMovies.get().getGain()
               gainFn = xmutils.flipYImage(inGainFn, outDir = self._getExtraPath())
