@@ -35,7 +35,7 @@ from pyworkflow import UPDATED
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
-from pyworkflow.protocol.constants import STATUS_NEW, STEPS_PARALLEL
+from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
 
