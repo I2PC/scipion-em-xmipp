@@ -111,12 +111,12 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
         if isinstance(inputSet2D, SetOfClasses2D):
             self.samplingRate = inputSet2D.getFirstItem().getRepresentative().getSamplingRate()
             for rep in inputSet2D.iterRepresentatives():
-                idClass, fn = rep.getLocation()
+                idClass, _ = rep.getLocation()
                 classes_refIds.append(idClass)
         else: # In case the input is a SetOfAverages
             self.samplingRate = inputSet2D.getSamplingRate()
             for rep in inputSet2D.iterItems():
-                idClass, fn = rep.getLocation()
+                idClass, _ = rep.getLocation()
                 classes_refIds.append(idClass)
 
         # Save the corresponding .mrcs file
