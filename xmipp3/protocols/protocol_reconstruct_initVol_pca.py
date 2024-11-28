@@ -33,7 +33,7 @@ import numpy as np
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, EnumParam,
                                         BooleanParam, IntParam, GPU_LIST)
 from pyworkflow.utils.path import (moveFile)
 from pwem.protocols import ProtRefine3D
@@ -85,37 +85,28 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('inputParticles', PointerParam, label="Experimental Images", important=True,
                       pointerClass='SetOfParticles', allowsNull=True,
                       help='Select a set of images at full resolution')
-        form.addParam('inputVolume', PointerParam, label="Initial volumes", important=True,
-                      pointerClass='Volume', allowsNull=True,
-                      help='Select a initial volume . ')
+        form.addParam('classes', IntParam, default="1",
+                      label='Number of classes',
+                      help='The number of classes for a multi reference refinement')
         form.addParam('particleRadius', FloatParam, default=-1,
-                     label='Radius of particle (px)', #condition='scale',
+                     label='Radius of particle (px)', 
                      help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
+        form.addParam('classify', BooleanParam, default=False, condition='classes > 1',
+                      label='Do you want clasify?',
+                      help='If you set to *Yes*, the particles are divided between volume')
        
                   
         form.addSection(label='Pca training')
         
-        form.addParam('resolution',FloatParam, label="max resolution", default=8,
+        form.addParam('resolution',FloatParam, label="max resolution", default=10,
                       help='Maximum resolution to be consider for alignment')
-        form.addParam('coef' ,FloatParam, label="% variance", default=0.95, expertLevel=LEVEL_ADVANCED,
+        form.addParam('coef' ,FloatParam, label="% variance", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        
-        
-        form.addSection(label='Global alignment')
-        form.addParam('applyShift', BooleanParam, default=False,
-                      label='Consider previous alignment?',
-                      help='If you set to *Yes*, the particles will be centered acording to previous alignment')
-        form.addParam('angle' ,IntParam, label="initial angular sampling", default=8, 
-                      help='Angular sampling for particles alignment')
-        form.addParam('shift' ,IntParam, label="initial shift sampling", default=4, 
-                      help='Sampling rate in the alignment')
-        form.addParam('MaxShift', IntParam, label="Max. shift", default=20, expertLevel=LEVEL_ADVANCED,
-                      help='Maximum shift for translational search')
-        
+      
 
 
         form.addParallelSection(threads=1, mpi=4)
@@ -128,18 +119,12 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
         self.imgsFnXmd = self._getTmpPath('images.xmd')
         self.imgsFn = self._getTmpPath('images.mrcs')
-        # self.imgsFn = self._getTmpPath('images.mrc')
         self.refsFn = self._getTmpPath('references.mrcs')
         self.refsFnXmd = self._getTmpPath('references.xmd')
         self.sampling = self.inputParticles.get().getSamplingRate()
         self.size = self.inputParticles.get().getDimensions()[0]
         self.iterations = 20
-  
-        self.MaxShift = self.MaxShift.get()
-        refVol = self.inputVolume.get().getFileName()
-        extVol = getExt(refVol)
-        if (extVol == '.mrc') or (extVol == '.map'):
-           refVol = refVol + ':mrc'  
+        self.classes = self.classes.get()
         
  
         if self.particleRadius.get() == -1:
@@ -148,55 +133,115 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
             radius = int(self.particleRadius.get())
 
         
-
-
         self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn)
         self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get())
+        for cl in range (self.classes):   
+            refVol = self._getTmpPath('randomVol_class%s.mrc'%cl)+ ':mrc'
+            self._insertFunctionStep('initRandomVol', self.imgsOrigXmd, self._getTmpPath('random_class%s.xmd'%(cl)), refVol)
+        
         
         for iter in range(self.iterations):
-            
-            
+                
             # if iter < 10:
             #     angleGallery, angle, shift, maxShift = 12, 8, 4, 20
-            # elif iter < 15:
+            # elif iter < 14:
             #     angleGallery, angle, shift, maxShift = 8, 6, 3, 12
-            # elif iter < 20:
+            # elif iter < 17:
             #     angleGallery, angle, shift, maxShift = 6, 5, 3, 9
-            # elif iter < 25:
+            # elif iter < 20:
             #     angleGallery, angle, shift, maxShift = 5, 5, 2, 6
-                
+            
+            # if self.classes == 1 or self.classify:
+            #     if iter < 10:
+            #         angleGallery, angle, shift, maxShift = 12, 8, 3, 12
+            #     elif iter < 14:
+            #         angleGallery, angle, shift, maxShift = 8, 6, 2, 6
+            #     elif iter < 17:
+            #         angleGallery, angle, shift, maxShift = 6, 5, 1.5, 4.5
+            #     elif iter < 20:
+            #         angleGallery, angle, shift, maxShift = 5, 5, 1, 3
+            # else:
             if iter < 10:
-                angleGallery, angle, shift, maxShift = 12, 8, 4, 20
+                angleGallery, angle, shift, maxShift = 12, 8, 3, 12
             elif iter < 14:
                 angleGallery, angle, shift, maxShift = 8, 6, 3, 12
             elif iter < 17:
-                angleGallery, angle, shift, maxShift = 6, 5, 3, 9
+                angleGallery, angle, shift, maxShift = 6, 5, 3, 12
             elif iter < 20:
-                angleGallery, angle, shift, maxShift = 5, 5, 2, 6
+                angleGallery, angle, shift, maxShift = 5, 5, 3, 12
+                
                 
             
             # angleGallery, angle, shift, maxShift = self._parameters(iter)
             # print(angleGallery, angle, shift, maxShift)
-         
-            if iter > 0:
-                applyShift = True
-                inputXmd = outXmd
-                refVol = outVol
-                outXmd = self._getExtraPath('output_iter%s.xmd'%(iter+1))
-                outVol = self._getExtraPath('volume_iter%s.mrc'%(iter+1)+ ':mrc')
-            else:
-                applyShift = False
-                inputXmd = self.imgsFnXmd 
-                outXmd = self._getExtraPath('output_iter%s.xmd'%(iter+1))
-                outVol = self._getExtraPath('volume_iter%s.mrc'%(iter+1)+ ':mrc')
-        
                 
-        
-            self._insertFunctionStep("createGallery", angleGallery, refVol)
-            self._insertFunctionStep("globalAlign", inputXmd, outXmd, angle, shift, maxShift, applyShift, radius)   
-            self._insertFunctionStep("reconstructVolume", outXmd, outVol)
-                    
+            # if iter > 5 and self.classes > 1:
+            #     saveClass = True
+            # else:    
+            #     saveClass = False
 
+            if self.classify and iter > 3:
+                    saveClass = True
+            else:
+                saveClass = False
+            
+            
+            # if iter > 8:
+            #     if self.classes == 1 or saveClass == True:
+            #         applyShift = True
+            # else: 
+            #     applyShift = False
+            
+            # saveClass = False
+            applyShift = False
+            #
+            # if iter > 5:
+            #     applyShift = True
+
+                          
+            refVol = [None] * self.classes  
+            refIm = [None] * self.classes
+            outXmd = [None] * self.classes 
+            outVol = [None] * self.classes
+            select = [None] * self.classes
+            if iter > 0:
+                # refVol = outVol
+                # inputXmd = outXmd
+                for cl in range(self.classes):
+                    if saveClass == True and iter > 4 :
+                        inputXmd = self._getExtraPath('output_iter%s_classes.xmd'%(iter))
+                    else: 
+                        inputXmd = self._getExtraPath('output_iter%s_class%s.xmd'%(iter, cl))
+                        
+                    refVol[cl] = self._getExtraPath('volume_iter%s_class%s.mrc'%(iter, cl)+ ':mrc')
+                    outXmd[cl] = self._getExtraPath('output_iter%s_class%s.xmd'%(iter+1, cl))
+                    outVol[cl] = self._getExtraPath('volume_iter%s_class%s.mrc'%(iter+1, cl)+ ':mrc')
+                    refIm[cl] = self._getTmpPath('references_class%s'%(cl))
+                    select[cl] = self._getExtraPath('output_select_iter%s_class%s.xmd'%(iter+1, cl))
+            else:
+                # applyShift = False
+                inputXmd = self.imgsFnXmd
+                for cl in range(self.classes):
+                    refVol[cl] = self._getTmpPath('randomVol_class%s.mrc'%cl)+ ':mrc' 
+                    outXmd[cl] = self._getExtraPath('output_iter%s_class%s.xmd'%(iter+1, cl))
+                    outVol[cl] = self._getExtraPath('volume_iter%s_class%s.mrc'%(iter+1, cl)+ ':mrc')
+                    refIm[cl] = self._getTmpPath('references_class%s'%(cl))
+                    select[cl] = self._getExtraPath('output_select_iter%s_class%s.xmd'%(iter+1, cl))
+            
+            # resol = 20 - ( (iter+1)/2 )
+            # self._insertFunctionStep("pcaTraining", self.imgsFn, resol)
+                
+            for cl in range(self.classes):
+                self._insertFunctionStep("createGallery", angleGallery, refVol[cl], refIm[cl])
+            
+            self._insertFunctionStep("globalAlign", inputXmd, refIm[cl], outXmd[0], angle, shift, maxShift, applyShift, saveClass, radius, iter)   
+            
+            for cl in range(self.classes):
+                if saveClass:
+                    self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get())
+                else:
+                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, self.resolution.get())
+                    
 
         # self._insertFunctionStep("createOutput", iter)
     
@@ -209,11 +254,25 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
                 
    
-    def createGallery(self, angle, refVol):
+    def createGallery(self, angle, refVol, refIm):
+        #--perturb 0.01
         args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
-                (refVol, self.symmetryGroup.get(), angle, self.refsFn)
-        self.runJob("xmipp_angular_project_library", args)
-        moveFile( self._getTmpPath('references.doc'), self.refsFnXmd)
+                (refVol, self.symmetryGroup.get(), angle, refIm+'.mrcs')
+        self.runJob("xmipp_angular_project_library", args, numberOfMpi=1)
+        moveFile(refIm+'.doc', refIm+'.xmd')
+        
+        
+    def initRandomVol(self, inputXMD, outputXMD, outputVOL):
+        args = ' -s %s  -o %s --random_angles' %(inputXMD, outputXMD)
+        
+        env = self.getCondaEnv()
+        env['LD_LIBRARY_PATH'] = ''
+        self.runJob("xmipp_global_align_preprocess", args, numberOfMpi=1, env=env)
+        
+        program = 'xmipp_cuda_reconstruct_fourier'    
+        args = '-i %s -o %s --sym %s  --max_resolution %s  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
+        (outputXMD, outputVOL, self.symmetryGroup.get(), 0.5, self.sampling, self.numberOfMpi.get()) 
+        self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
         
     
     def pcaTraining(self, inputIm, resolutionTrain):
@@ -225,29 +284,42 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob("xmipp_global_align_train", args, numberOfMpi=1, env=env)
         
         
-    def globalAlign(self, inputXmd, outputXmd, angle, shift, MaxShift, applyShift, rad):
-        args = ' -i %s -r %s -a %s -amax 180 -sh %s -msh %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt  -o %s -stExp %s  -stRef %s  -s %s -radius %s'% \
-                (self.imgsFn, self.refsFn, angle, shift, MaxShift,\
-                 self._getExtraPath(), self._getExtraPath(), outputXmd, inputXmd, self.refsFnXmd, self.sampling, rad)
+    def globalAlign(self, inputXmd, refIm, outputXmd, angle, shift, MaxShift, applyShift, saveClass, rad, iter):
+        args = ' -i %s -r %s -a %s -amax 180 -sh %s -msh %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt  -o %s -stExp %s  -stRef %s  -s %s -radius %s -nCl %s'% \
+                (self.imgsFn, refIm+'.mrcs', angle, shift, MaxShift,\
+                 self._getExtraPath(), self._getExtraPath(), outputXmd, inputXmd, refIm+'.xmd', self.sampling, rad, self.classes)
         if applyShift:
             args += ' --apply_shifts ' 
+        if saveClass:
+            args += ' --save_class '
 
         env=self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
-        self.runJob("xmipp_global_align", args, numberOfMpi=1, env=env)
+        # self.runJob("xmipp_global_align", args, numberOfMpi=1, env=env)
+        self.runJob("xmipp_initVol_pca", args, numberOfMpi=1, env=env)
+        # self._extract_select_xmd(iter)
+        #Select class and create xmds
+        if saveClass:
+            self._extract_class_xmd(iter)
+        else:    
+            self._extract_select_xmd(iter)
         
-    def reconstructVolume(self, input, output):
-        gpuList = self.getGpuList()
+    def reconstructVolume(self, input, output, iter, resol):
+        
         program = 'xmipp_cuda_reconstruct_fourier'    
-        args = '-i %s -o %s --sym %s  --max_resolution 0.5  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
-        (input, output, self.symmetryGroup.get(), self.sampling, self.numberOfMpi.get()) 
+        args = '-i %s -o %s --sym %s  --max_resolution %s  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
+        (input, output, self.symmetryGroup.get(), 0.5, self.sampling, self.numberOfMpi.get()) 
         self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
         #filter
-        self._filterVolume(output, output, self.resolution.get())
+        # self._filterVolume(output, output, self.resolution.get())
+        self._filterVolume(output, output, resol)
         #positivity
         self._positivityVolume(output)
+        #automatic mask
+        if iter < 7:
+            self._applyMaskThreshold(output)
         #mask
-        self._applyMask(output)      
+        self._applyCicularMask(output)      
     
 
     def createOutput(self, iter):      
@@ -332,11 +404,53 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         args = '-i %s --select below 0 --substitute value 0'%input
         self.runJob(program,args,numberOfMpi=1)
         
-    def _applyMask(self, input):
+    def _applyCicularMask(self, input):
         program = 'xmipp_transform_mask'
         args = '-i %s --mask circular -50'%input
         self.runJob(program,args,numberOfMpi=1)
         
+    def _applyMaskThreshold(self, input):
+        program ='xmipp_volume_segment'
+        args = '-i %s -o %s --method otsu'%(input, self._getTmpPath('mask.mrc'))
+        self.runJob(program,args,numberOfMpi=1)
+        
+        program ='xmipp_transform_morphology'
+        args = '-i %s --binaryOperation removeSmall 50'%(self._getTmpPath('mask.mrc'))
+        self.runJob(program,args,numberOfMpi=1)
+        
+        program ='xmipp_transform_morphology'
+        args = '-i %s --binaryOperation keepBiggest'%(self._getTmpPath('mask.mrc'))
+        self.runJob(program,args,numberOfMpi=1)
+        
+        program ='xmipp_image_operate'
+        args = '-i %s  --mult %s '%(input, self._getTmpPath('mask.mrc:mrc'))
+        self.runJob(program,args,numberOfMpi=1)
+        
+        
+    def _extract_class_xmd(self, iter):
+        
+        generic_xmd = self._getExtraPath('output_iter%s_classes.xmd'%(iter+1))
+        
+        for cl in range(self.classes):
+            
+            out = self._getExtraPath('output_iter%s_class%s.xmd'%(iter+1, cl))
+            
+            program ='xmipp_metadata_utilities'
+            args = '-i %s --query select "class==%s" -o %s '%(generic_xmd, cl, out)
+            self.runJob(program,args,numberOfMpi=1)
+            
+            
+    def _extract_select_xmd(self, iter):
+                
+        for cl in range(self.classes):
+            
+            generic_xmd = self._getExtraPath('output_iter%s_class%s.xmd'%(iter+1, cl))
+            out = self._getExtraPath('output_select_iter%s_class%s.xmd'%(iter+1, cl))
+            
+            program ='xmipp_metadata_utilities'
+            args = '-i %s --query select "sel==1" -o %s '%(generic_xmd,  out)
+            self.runJob(program,args,numberOfMpi=1)
+            
         
     def _parameters(self, iter):
         
