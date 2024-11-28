@@ -26,7 +26,7 @@
 
 import numpy as np
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, MultiPointerParam,
+from pyworkflow.protocol.params import (PointerParam, StringParam, USE_GPU, GPU_LIST,
                                         FloatParam, BooleanParam, IntParam)
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Volume, SetOfParticles
@@ -34,7 +34,7 @@ import pwem.emlib.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 from pwem import emlib
-from xmipp3.convert import setXmippAttributes, xmippToLocation
+from xmipp3.convert import setXmippAttributes
 import xmippLib
 
 class XmippProtComputeLikelihood(ProtAnalysis3D):
@@ -74,7 +74,18 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='The actual gray value can be at most as small as 1-change or as large as 1+change')
         form.addParam('keepResiduals', BooleanParam, label="Keep residuals?", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Keep residuals rather than deleting them after calculation')
+        
         form.addParallelSection(threads=0, mpi=8)
+
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -103,7 +114,12 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             args+=" --max_resolution %f"%self.resol
         if self.optimizeGray:
             args+=" --optimizeGray --max_gray_scale %f"%self.maxGrayChange
-        self.runJob("xmipp_angular_continuous_assign2", args)
+
+        if self.useGpu:
+            args+=" --nThreads %d"%self.numberOfMpi.get()
+            self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
+        else:
+            self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
 
         mdResults = md.MetaData(self._getTmpPath("anglesCont.xmd"))
         mdOut = md.MetaData()
