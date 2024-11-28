@@ -25,10 +25,11 @@
 # ******************************************************************************
 
 import os.path
+from pwem.objects.data import Class2D, Particle, SetOfClasses2D, SetOfAverages
 from pwem.protocols import ProtAnalysis2D
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         EnumParam, LEVEL_ADVANCED, LT, GT)
-from pwem.objects.data import Class2D, Particle, SetOfClasses2D, SetOfAverages
+from pyworkflow import NEW, BETA
 from xmipp3 import XmippProtocol
 
 FN = "class_representatives"
@@ -38,10 +39,11 @@ OUTPUT_AVERAGES = 'outputAverages'
 
 
 class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
-    """ 2D clustering protocol to group similar classes """
+    """ 2D clustering protocol to group similar images (2D Averages or 2D Classes) """
 
     _label = 'clustering 2d classes'
     _conda_env = 'xmipp_cl2dClustering'
+    _devStatus = BETA
 
     _possibleOutputs = {OUTPUT_CLASSES: SetOfClasses2D,
                         OUTPUT_AVERAGES: SetOfAverages}
@@ -146,6 +148,11 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
         result_dict_file = os.path.join(self.directoryPath, RESULT_FILE)
         result_dict = self.read_clusters_from_txt(result_dict_file)
 
+        message = ("Classify original input set of %d images into %d groups of structural different images"
+                   % (self.inputSet2D.get().getSize(), len(result_dict)))
+
+        self.summaryVar.set(message)
+
         if self.extractOption.get() == self.CLASSES or self.extractOption.get() == self.BOTH:
             output_dict = self.createOutputSetOfClasses(inputSet2D, result_dict, output_dict)
 
@@ -236,6 +243,16 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
 
 
     # --------------------------- INFO functions --------------------------------------------
+    def _summary(self):
+        summary = []
+        if not hasattr(self, OUTPUT_CLASSES) and not hasattr(self, OUTPUT_AVERAGES):
+            summary.append("Output set not ready yet.")
+        else:
+            summary.append(self.summaryVar.get())
+
+        return summary
+
+
     def _validate(self):
         errors = []
         if ((self.extractOption.get() == self.CLASSES or self.extractOption.get() == self.BOTH)
