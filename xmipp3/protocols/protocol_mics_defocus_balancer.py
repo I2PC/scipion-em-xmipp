@@ -175,7 +175,7 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                   %len(self.sampled_images))
 
         stats = compute_statistics(list(ctfDefocus.values()))
-        message = ("The defocus statistics are the following: range %d min %d max %d mean %d std %.1f"
+        message = ("The defocus statistics are the following: range %d   min %d   max %d   mean %d   std %.1f"
                    %(stats["range"], stats["min"], stats["max"],stats["mean"], stats["std"]))
         self.summaryVar.set(message)
 
