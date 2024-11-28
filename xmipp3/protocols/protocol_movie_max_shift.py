@@ -84,7 +84,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
+        #self.stepsExecutionMode = STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -119,7 +119,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                        help='Maximum total travel to evaluate the whole movie '
                             'condition.')
 
-        form.addParallelSection(threads=2, mpi=1)
         
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
