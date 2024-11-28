@@ -485,6 +485,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             i=1
             for vol in self.inputVolumes.get():
                 fnVol=join(fnDirCurrent,"volume%02d.vol"%i)
+                if i==1:
+                    fnVol1 = fnVol
+                else:
+                    fnVol2 = fnVol
                 img.convert(vol, fnVol)
                 if newXdim!=vol.getDim()[0]:
                     self.runJob('xmipp_transform_window',"-i %s --size %d"%(fnVol,newXdim),numberOfMpi=1)
