@@ -1098,7 +1098,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     args+=" --phaseFlipped"
                 #if self.weightResiduals:
                 #    args+=" --oresiduals %s"%join(fnDirLocal,"residuals%02i.stk"%i)
-                self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get())
+                # 
+                if self.useGpu:
+                    args+=" --nThreads %d"%self.numberOfMpi.get()
+                    self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
+                else:
+                    self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
                 self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnLocalStk,R),numberOfMpi=min(self.numberOfMpi.get(),24))
                 self.writeInfoField(fnDirLocal,"count",emlib.MDL_COUNT,int(2+i))
 
