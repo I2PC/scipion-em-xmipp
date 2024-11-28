@@ -1,5 +1,13 @@
-## Release 3.XX.YY - TBD
-
+## Release 3.24.12 - P
+   - New protocols
+      - ..
+   - Protocols updated
+      - ..
+   - Protocols fixed
+      -  ..
+   - Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
+      - ..
+   - More scipion-em-xmipp
 
 ## Release 3.24.06 - Oceanus
    - New protocols
@@ -31,7 +39,7 @@
       - metaprotocol_golden_highres
       - solid_angle
       - split_volume
-   - More scipio-em-xmipp
+   - More scipion-em-xmipp
       - Solve Sonar Cloud reported bugs
       - Flexible import of pyQT on chimera script
       - Removing tkAgg matplotlib requirement in viewer_structure_map
@@ -61,7 +69,7 @@
       - classification_gpuCorr
       - classification_gpuCorr_full
       - classification_gpuCorr_semi
-   - More scipio-em-xmipp
+   - More scipion-em-xmipp
       - Updated Nvidia driver required version
 
 
