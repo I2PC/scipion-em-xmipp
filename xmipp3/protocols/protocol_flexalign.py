@@ -240,7 +240,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
               gainFn = self.inputMovies.get().getGain()
 
             if self.gainRot.get() != 0 or self.gainFlip.get() != 0:
-              gainFn = self.transformGain(gainFn)
+              gainFn = self.transformGain(gainFn, self._getTmpPath('gain.tif'))
             args += ' --gain "%s"' % gainFn
 
         if self.autoControlPoints.get():
