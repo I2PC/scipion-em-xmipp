@@ -137,10 +137,10 @@ class XmippProtCTFDefocusGroup(ProtProcessParticles):
             if  resolution > resolutionError/ctfGroupMaxDiff:
                 avgDef /=  counter
                 df.cleanObjId()
-                df.setDefocusMin(minDef)
-                df.setDefocusMax(maxDef)
-                df.setDefocusAvg(avgDef)
-                df.setSize(counter)
+                df._defocusMin.set(minDef)
+                df._defocusMax.set(maxDef)
+                df._defocusSum.set(df._defocusSum.get()+avgDef)
+                df._size.set(counter)
                 setOfDefocus.append(df)
                 counter = 0
                 minDef = defocusU

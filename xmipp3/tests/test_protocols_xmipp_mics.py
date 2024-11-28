@@ -1204,3 +1204,41 @@ class TestXmippProtTiltAnalysis(TestXmippBase):
         self.assertEquals(len(protTilt2.outputMicrographs), 17, "Incorrect number of accepted micrographs")
         self.assertEquals(len(protTilt2.discardedMicrographs), 3, "Incorrect number of discarded micrographs")
         self.assertTrue(protTilt2.isFinished(), "Tilt analysis failed")
+
+
+class TestXmippMicDefocusSampler(TestXmippBase):
+    """This class check if the protocol to make a defocus-balance subset of mics in Xmipp works properly."""
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData()
+        cls.protImport = cls.runImportMicrographBPV(cls.micsFn)
+        cls.protCTFestimation = cls.runCTFEstimation()
+
+    @classmethod
+    def runCTFEstimation(cls):
+        """ Run protocol to estimate the CTF """
+        protCTF = cls.newProtocol(XmippProtCTFMicrographs)
+        protCTF.inputMicrographs.set(cls.protImport.outputMicrographs)
+        cls.launchProtocol(protCTF)
+
+        return protCTF
+
+    def testDefocusBalancer1(self):
+        prot = self._runDefocusSampler("Balance subset 2 mics", minImages=3, numImages=1)
+        self.assertSetSize(prot.outputMicrographs, size=1)
+
+    def testDefocusBalancer2(self):
+        prot = self._runDefocusSampler("Balance subset 1 mic", minImages=3, numImages=2)
+        self.assertSetSize(prot.outputMicrographs, size=2)
+
+    def _runDefocusSampler(cls, label, minImages, numImages):
+        protDefocusSampler = cls.newProtocol(XmippProtMicDefocusSampler,
+                                          minImages=minImages,
+                                          numImages=numImages)
+        protDefocusSampler.inputCTF = Pointer(cls.protCTFestimation, extended='outputCTF')
+        protDefocusSampler.setObjLabel(label)
+        cls.launchProtocol(protDefocusSampler)
+
+        return protDefocusSampler
