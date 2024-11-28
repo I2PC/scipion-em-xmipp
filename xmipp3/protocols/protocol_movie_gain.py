@@ -556,6 +556,6 @@ def array_zeros_to_median(a, thres=0.01, depth=1):
     idys = np.where(np.abs(a) < thres)[1]
 
     for i in range(len(idxs)):
-        sur_values = surrounding_values(a, idxs[i], idys[i], depth)
+        sur_values = xmutils.surrounding_values(a, idxs[i], idys[i], depth)
         a[idxs[i]][idys[i]] = np.median(sur_values)
     return a
