@@ -60,7 +60,7 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
-        self._freqResol = {}
+
 
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -68,12 +68,12 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                       label="Input CTF", important=True,
                       help='Select the estimated CTF to evaluate.')
         form.addSection(label='Sampling')
-        form.addParam('minImages', params.IntParam,
-                      default=100, label='Minimum number of images',
-                            help='Minimum number of images to make the defocus balanced sampling.')
         form.addParam('numImages', params.IntParam,
-                      default=25, label='Number of sample images',
-                      help='Sample size of the defocus balanced sampling.')
+                      default=25, label='Sample size',
+                      help='Number of images after the defocus balanced sampling.')
+        form.addParam('minImages', params.IntParam,
+                      default=100, label='Minimum number of images to make sampling',
+                      help='Minimum number of images to make the defocus balanced sampling.')
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
@@ -174,6 +174,11 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         self.info('The number of CTFs selected for defocus balanced sampling is the following: %d'
                   %len(self.sampled_images))
 
+        stats = compute_statistics(list(ctfDefocus.values()))
+        message = ("The defocus statistics are the following: range %d min %d max %d mean %d std %.1f"
+                   %(stats["range"], stats["min"], stats["max"],stats["mean"], stats["std"]))
+        self.summaryVar.set(message)
+
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
         # Check for results: we have finished when there is results in sample_images list
@@ -245,7 +250,18 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         return doneIds, sizeOutput
 
     def _summary(self):
-        pass
+        summary = []
+        if not hasattr(self, OUTPUT_MICS):
+            summary.append("Output set not ready yet.")
+        else:
+            populationSize = self.minImages.get()
+            outputSize = self.outputMicrographs.getSize()
+            summary.append("From %d micrographs extract a balanced defocus sample of: %d micrographs"
+                           % (populationSize, outputSize))
+            summary.append(self.summaryVar.get())
+
+        return summary
+
 
 def balanced_sampling(image_dict, N, bins=10):
     """
@@ -294,3 +310,31 @@ def balanced_sampling(image_dict, N, bins=10):
 
     # Limit to N images in case there are extra
     return sampled_images[:N]
+
+
+def compute_statistics(values):
+    """
+    Compute basic statistics for a list of numerical values.
+
+    Parameters:
+    - values (list or array-like): A list of numerical values (e.g., defocus values).
+
+    Returns:
+    - dict: A dictionary containing the statistics: min, max, mean, median, std, variance, and range.
+    """
+
+    # Convert to a NumPy array for efficient computation
+    values = np.array(values)
+
+    # Compute statistics
+    stats = {
+        "min": np.min(values),
+        "max": np.max(values),
+        "mean": np.mean(values),
+        "median": np.median(values),
+        "std": np.std(values, ddof=1),  # Sample standard deviation
+        "variance": np.var(values, ddof=1),  # Sample variance
+        "range": np.max(values) - np.min(values),
+    }
+
+    return stats
