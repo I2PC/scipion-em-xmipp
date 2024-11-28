@@ -43,7 +43,7 @@ from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
 from pwem.protocols import ProtAlignMovies
 
-from xmipp3.convert import writeMovieMd
+from xmipp3.convert import writeMovieMd, isEerMovie
 from xmipp3.base import isXmippCudaPresent
 import xmipp3.utils as xmutils
 from pyworkflow import BETA, UPDATED, NEW, PROD
@@ -194,7 +194,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
     def tryProcessMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
 
-        if next(iter(self.inputMovies.get().getFiles())).endswith('.eer'):
+        if self._isInputEer():
             n = self.nFrames.get()
         else:
             _, _, n = movie.getDim()
@@ -294,11 +294,16 @@ class XmippProtFlexAlign(ProtAlignMovies):
       xmutils.writeImageFromArray(flipped_array, outFn)
       return outFn
 
+    def _isInputEer(self):
+        return isEerMovie(self.inputMovies.get())
+
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
     def _setControlPoints(self):
         x, y, frames = self.inputMovies.get().getDim()
+        if self._isInputEer():
+            frames = self.nFrames.get()
         Ts = self.inputMovies.get().getSamplingRate()
         # one control point each 1000 A
         self.controlPointX.set(max([int(x * Ts) / 1000 + 2, 3]))

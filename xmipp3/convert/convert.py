@@ -31,6 +31,7 @@ This module contains converter functions that will serve to:
 """
 
 import os
+from typing import Union
 from os.path import join, exists
 from collections import OrderedDict
 try:
@@ -46,7 +47,7 @@ from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
                             ALIGN_3D)
 from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
                           MovieParticle, CTFModel, Acquisition, SetOfParticles,
-                          Class3D, SetOfVolumes, Transform)
+                          Class3D, SetOfVolumes, Movie, SetOfMovies, Transform)
 from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
 
@@ -1666,15 +1667,21 @@ def frameToRow(frame, row, firstFrame, eerFrames):
     frameFilename = ImageHandler.locationToXmipp(frame)
     
     if os.path.splitext(frameFilename)[-1] == '.eer':
-        frameFilename = makeEerFilename(frameFilename, eerFrames, '4K', 'uint8')
+        frameFilename = makeEerFilename(frameFilename, eerFrames, '4K', 'uint16')
     row.setValue(md.MDL_IMAGE, frameFilename)
 
- 
-
+def isEerMovie(movie: Union[Movie, SetOfMovies]):
+    if movie is not None:
+        files = movie.getFiles()
+        if len(files) > 0:
+            return next(iter(files)).endswith('.eer')
+    
+    return False
+    
 def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
     movieMd = md.MetaData()
     frame = movie.clone()
-    isEer = next(iter(movie.getFiles())).endswith('.eer')
+    isEer = isEerMovie(movie)
     # get some info about the movie
     # problem is, that it can come from a movie set, and some
     # values might refer to different movie, e.g. no of frames :(
