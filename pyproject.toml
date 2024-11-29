@@ -20,7 +20,7 @@ dependencies = [
 
 authors = [
     {name = "Oier Lauzirika Zarrabeitia", email = "oierlauzi@bizkaia.eu"},
-    {name = "Alberto Garcia Mena", email = "pconesa@cnb.csic.es"},
+    {name = "Alberto Garcia Mena", email = "alberto.garcia@cnb.csic.es"},
     {name = "Carlos Oscar Sanchez Sorzano", email = "coss@cnb.csic.es"},
 ]
 
