@@ -107,7 +107,7 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
 
     def predict(self, gpuId):
         if self.modelSource==self.PRETRAINED:
-            fnModel = "/home/coss/model.h5"
+            fnModel = self.getModel('deep_center', 'deepCenterModel.h5') 
         elif self.getRunMode()==self.PREVIOUS:
             fnModel = self.protocolPointer.get()._getExtraPath("model.h5")
         else:
