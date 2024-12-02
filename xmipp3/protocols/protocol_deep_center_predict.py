@@ -75,6 +75,7 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
 
         form.addParam('modelFile', FileParam, label="Model", condition="modelSource==2",
                       help="Provide a local .h5 file")
+        
         form.addParam('modelXdim', IntParam, label="Image size of model", condition="modelSource==2",
                       default = 64, help="Image size on which the model was trained")
 
@@ -100,7 +101,8 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
             self.scaleFactor = float(Xdim)/64.0
         elif self.modelSource == self.LOCALFILE and Xdim!=self.modelXdim.get():
             self.scaleFactor = float(Xdim)/self.modelXdim.get()
-        if self.scaleFactor!=1.0:
+        epsilon = 1e-6  # Un margen de tolerancia pequeño
+        if abs(self.scaleFactor - 1.0) > epsilon:
             fnTmp = self._getTmpPath("imgs.stk")
             self.runJob("xmipp_image_resize", "-i %s -o %s --fourier 64" % (self.fnImgs, fnTmp))
             self.fnImgs = self._getTmpPath("imgs.xmd")
@@ -115,7 +117,8 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
         args = "-i %s --gpu %s --model %s -o %s --scale %f" % (self.fnImgs, gpuId, fnModel,
                                                                self.fnImgs, self.scaleFactor)
         self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())
-        if self.scaleFactor!=1.0:
+        epsilon = 1e-6  # Un margen de tolerancia pequeño
+        if abs(self.scaleFactor - 1.0) > epsilon:
             fnShifts = self._getTmpPath("shifts.xmd")
             self.runJob("xmipp_metadata_utilities", '-i %s --operate keep_column "itemId shiftX shiftY psi" -o %s'%\
                         (self.fnImgs,fnShifts), numberOfMpi=1)
