@@ -1238,7 +1238,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protClassify.outputClasses)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200, "There was a problem with Compare Reprojections from classes")
+        self.assertIsNotNone(prot.reprojections_vol203, "There was a problem with Compare Reprojections from classes")
 
     def test_particles2(self):
         print("Run Compare Reprojections from averages")
@@ -1247,7 +1247,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protImportAvgs.outputAverages)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200, "There was a problem with Compare Reprojections from averages")
+        self.assertIsNotNone(prot.reprojections_vol203, "There was a problem with Compare Reprojections from averages")
 
     def test_particles3(self):
         print("Run Compare Reprojections from projections with angles")
@@ -1256,7 +1256,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protProjMatch.outputParticles)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from projections with angles")
 
     def test_particles4(self):
@@ -1266,7 +1266,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protClassify.outputClasses)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from classes evaluating residuals")
 
     def test_particles5(self):
@@ -1276,7 +1276,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protImportAvgs.outputAverages)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from averages evaluating residuals")
 
     def test_particles6(self):
@@ -1286,7 +1286,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protProjMatch.outputParticles)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from projections"
                              " with angles evaluating residuals")
 
@@ -1297,7 +1297,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protProjMatch.outputParticles)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from projections"
                              " with angles evaluating residuals without user mask")
 
