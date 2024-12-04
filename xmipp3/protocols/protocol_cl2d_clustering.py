@@ -42,7 +42,6 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
     """ 2D clustering protocol to group similar images (2D Averages or 2D Classes) """
 
     _label = 'clustering 2d classes'
-    _conda_env = 'xmipp_cl2dClustering'
     _devStatus = BETA
 
     _possibleOutputs = {OUTPUT_CLASSES: SetOfClasses2D,
