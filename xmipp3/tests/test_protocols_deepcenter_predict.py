@@ -25,6 +25,7 @@ from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pwem.protocols import ProtImportParticles
 
 from xmipp3.protocols import XmippProtDeepCenterPredict
+import xmippLib
        
     
 class TestDeepCenterPredict(BaseTest):
@@ -61,3 +62,5 @@ class TestDeepCenterPredict(BaseTest):
         self.launchProtocol(protCenter)
         self.assertIsNotNone(protCenter.outputParticles.getFileName(), 
                              "There was a problem with the centering")
+        
+
