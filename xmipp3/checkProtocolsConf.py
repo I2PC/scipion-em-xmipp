@@ -41,8 +41,10 @@ def get_classes_from_file(file_path):
 with open("protocols.conf", 'r', encoding='utf-8') as file:
     protocolsConf = file.read()
 
-blackList = ['ScatterImageMarker','XMIPPCOLUMNS']
-
+blackList = ['ScatterImageMarker','XMIPPCOLUMNS', 'XmippProtVolAdjBase', 'AlignVolPartOutputs','ProtPickingConsensusOutput',
+             'XmippProtEliminateEmptyBase', 'XmippProtDeepConsSubSet', 'XmippProtWriteTestP', 'NoOutputGenerated','XmippProtSubtractProjectionBase',
+             'XmippProtWriteTestC','KendersomBaseClassify','XmippProtAlignVolumeForWeb', 'XMIPPCOLUMNS', 'NoOutputGenerated', 'ScatterImageMarker',
+             'AlignVolPartOutputs']
 
 #######Missing classes
 missingCounter = 0
@@ -106,8 +108,9 @@ protocols[partProt] = 'XmippProtScreenParticles'
 protocolsWithoutTest = []
 for py_file in glob.glob("protocols/*.py"):
     for class_name in get_classes_from_file(py_file):
-	    if class_name not in protocols:
-		    protocolsWithoutTest.append(class_name)
+	    if not class_name in blackList:
+		    if class_name not in protocols:
+			    protocolsWithoutTest.append(class_name)
 		    
 print(f"\nProtocolos without test ({len(protocolsWithoutTest)}/{len(protocols)})")
 print('\n'.join(protocolsWithoutTest))
