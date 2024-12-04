@@ -40,7 +40,9 @@ def get_classes_from_file(file_path):
 with open("protocols.conf", 'r', encoding='utf-8') as file:
     protocolsConf = file.read()
 
-blackList = ['ScatterImageMarker','XMIPPCOLUMNS']
+blackList = ['ScatterImageMarker','XMIPPCOLUMNS', 'XmippProtVolAdjBase', 'AlignVolPartOutputs','ProtPickingConsensusOutput',
+             'XmippProtEliminateEmptyBase', 'XmippProtDeepConsSubSet', 'XmippProtWriteTestP', 'NoOutputGenerated','XmippProtSubtractProjectionBase',
+             'XmippProtWriteTestC','KendersomBaseClassify','XmippProtAlignVolumeForWeb']
 
 missingCounter = 0
 classCounter = 0
