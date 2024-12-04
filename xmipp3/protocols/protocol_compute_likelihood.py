@@ -77,10 +77,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         
         form.addParallelSection(threads=0, mpi=8)
 
-        form.addHidden(USE_GPU, BooleanParam, default=True,
+        form.addHidden(USE_GPU, BooleanParam, default=False,
                        label="Use GPU for execution",
                        help="This protocol has both CPU and GPU implementation.\
-                       Select the one you want to use.")
+                       Select the one you want to use. Be aware that the GPU program is new and may have problems")
 
         form.addHidden(GPU_LIST, StringParam, default='0',
                        expertLevel=LEVEL_ADVANCED,
