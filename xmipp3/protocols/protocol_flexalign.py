@@ -38,12 +38,12 @@ import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pwem.emlib.metadata as md
 from pwem import emlib
-from pwem.objects import Image
+from pwem.objects import Image, SetOfMovies
 from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
 from pwem.protocols import ProtAlignMovies
 
-from xmipp3.convert import writeMovieMd
+from xmipp3.convert import writeMovieMd, isEerMovie
 from xmipp3.base import isXmippCudaPresent
 import xmipp3.utils as xmutils
 from pyworkflow import BETA, UPDATED, NEW, PROD
@@ -66,6 +66,12 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
     def _defineAlignmentParams(self, form):
         ProtAlignMovies._defineAlignmentParams(self, form)
+
+        EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and next(iter(inputMovies.getFiles())).endswith(".eer")'
+
+        form.addParam('nFrames', params.IntParam, label='Number of EER frames',
+                      condition=EER_CONDITION, default=40, validators=[params.GT(0, "Number of EER frames must be a positive integer (> 0).")],
+                      help='Number of frames to be generated. EER files contain subframes, that will be grouped into the selected number of frames.')
 
         # FlexAlign does not support cropping
         form._paramsDict['Alignment']._paramList.remove('Crop_offsets__px_')
@@ -188,12 +194,15 @@ class XmippProtFlexAlign(ProtAlignMovies):
     def tryProcessMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
 
-        _, _, n = movie.getDim()
+        if self._isInputEer():
+            n = self.nFrames.get()
+        else:
+            _, _, n = movie.getDim()
         a0, aN = self._getFrameRange(n, 'align')
         s0, sN = self._getFrameRange(n, 'sum')
 
         inputMd = os.path.join(movieFolder, 'input_movie.xmd')
-        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False)
+        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False, eerFrames=self.nFrames.get())
 
         args = '-i "%s" ' % inputMd
         args += ' -o "%s"' % self._getShiftsFile(movie)
@@ -223,7 +232,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
         if self.inputMovies.get().getGain():
             ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
-            if ext in ['.tif', '.tiff']:
+            if ext in ['.tif', '.tiff', '.gain']:
               self.flipY = True
               inGainFn = self.inputMovies.get().getGain()
               gainFn = xmutils.flipYImage(inGainFn, outDir = self._getExtraPath())
@@ -231,7 +240,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
               gainFn = self.inputMovies.get().getGain()
 
             if self.gainRot.get() != 0 or self.gainFlip.get() != 0:
-              gainFn = self.transformGain(gainFn)
+              gainFn = self.transformGain(gainFn, self._getTmpPath('gain.tif'))
             args += ' --gain "%s"' % gainFn
 
         if self.autoControlPoints.get():
@@ -285,11 +294,16 @@ class XmippProtFlexAlign(ProtAlignMovies):
       xmutils.writeImageFromArray(flipped_array, outFn)
       return outFn
 
+    def _isInputEer(self):
+        return isEerMovie(self.inputMovies.get())
+
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
     def _setControlPoints(self):
         x, y, frames = self.inputMovies.get().getDim()
+        if self._isInputEer():
+            frames = self.nFrames.get()
         Ts = self.inputMovies.get().getSamplingRate()
         # one control point each 1000 A
         self.controlPointX.set(max([int(x * Ts) / 1000 + 2, 3]))
@@ -411,7 +425,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
         if (self.binFactor.get() < 1):
             errors.append("Bin factor must be >= 1")
-
+        
         return errors
 
     def _citations(self):
