@@ -36,7 +36,7 @@ import os
 from pwem.viewers.plotter import EmPlotter
 from pwem.objects.data import Volume
 
-from pyworkflow.protocol.params import LabelParam, IntParam, FloatParam
+from pyworkflow.protocol.params import LabelParam, IntParam, FloatParam, BooleanParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 
 from xmipp3.protocols.protocol_compute_likelihood import XmippProtComputeLikelihood
@@ -72,6 +72,12 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
                       label='Final volume number')
 
         group = form.addGroup('Values range')
+
+        group.addParam('normalise', BooleanParam, default=False,
+                      label='Normalise LL matrix by dividing by mean value of each column?',
+                      help='This may increase the contrast to help with interpretability. '
+                           'Note the sign swaps and values are either side of 1.')
+
         group.addParam('vmin', FloatParam, default=-1,
                       label='Minimum blue value',
                       help='All values below this will be coloured blue if not -1')
@@ -109,6 +115,9 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
             np.save(filename, matrix)
         else:
             matrix = np.load(filename)
+
+        if self.normalise.get():
+            matrix = np.divide(matrix, np.mean(matrix, axis=0))
 
         if volNumber1 != -1 and volNumber2 != -1:
             matrix = matrix[volNumber1:volNumber2]
