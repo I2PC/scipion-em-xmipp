@@ -32,8 +32,8 @@ import pwem
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from scipion.install.funcs import CommandDef
-import version
 from .base import *
+from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
 
 
