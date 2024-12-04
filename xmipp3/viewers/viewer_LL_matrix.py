@@ -73,10 +73,10 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
 
         group = form.addGroup('Values range')
 
-        group.addParam('normalise', BooleanParam, default=False,
+        group.addParam('normalise', BooleanParam, default=True,
                       label='Normalise LL matrix by dividing by mean value of each column?',
                       help='This may increase the contrast to help with interpretability. '
-                           'Note the sign swaps and values are either side of 1.')
+                           'Note: we keep the sign negative to keep the order of values.')
 
         group.addParam('vmin', FloatParam, default=-1,
                       label='Minimum blue value',
@@ -117,7 +117,7 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
             matrix = np.load(filename)
 
         if self.normalise.get():
-            matrix = np.divide(matrix, np.mean(matrix, axis=0))
+            matrix = -np.divide(matrix, np.mean(matrix, axis=0))
 
         if volNumber1 != -1 and volNumber2 != -1:
             matrix = matrix[volNumber1:volNumber2]
