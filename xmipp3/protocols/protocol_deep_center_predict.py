@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     COS Sorzano, Erney Ramirez and Adrian Sansinena
+# * Authors:     COS Sorzano
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -25,34 +25,33 @@
 # **************************************************************************
 
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
-                                        IntParam, BooleanParam, GPU_LIST)
+from pyworkflow.protocol.params import (PointerParam, StringParam, EnumParam, FileParam, IntParam, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils import Message
-from pyworkflow.utils.path import createLink
 from pwem.protocols import ProtAlign2D
-from pwem.objects import String
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 import os
-from os import remove
 import xmipp3
-from xmipp_base import XmippScript
-from pyworkflow import BETA, UPDATED, NEW, PROD
+from pyworkflow import BETA
 
-class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
+class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
     """Center a set of particles in 2D using a neural network. The particles remain the same, but their alignment
-       includes an approximate shift to place them in the center. This protocol performs the training of the model. """
+       includes an approximate shift to place them in the center. This protocol only predicts, it does not train. """
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
-    _label = 'deep center'
+    _label = 'deep center predict'
     _devStatus = BETA
+
+    PRETRAINED = 0
+    PREVIOUS = 1
+    LOCALFILE = 2
 
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        form.addParallelSection(threads=1, mpi=4)
+        form.addParallelSection(threads=1, mpi=16)
 
         form.addHidden(GPU_LIST, StringParam, default='0',
                        expertLevel=LEVEL_ADVANCED,
@@ -67,43 +66,22 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
                       pointerClass='SetOfParticles',
                       help='The set does not need to be centered or have alignment parameters')
 
-        form.addParam('sigma', FloatParam,
-                      label="Shift sigma",
-                      default=5,
-                      help="In pixels. This is used to generate artificially shifted particles.")
+        form.addParam('modelSource', EnumParam, label="Alignment source", default=self.PRETRAINED,
+                      choices=["Pretrained model", "Previous protocol", "Local file"],
+                      help="Source for the neural network")
 
-        form.addParam('precision', FloatParam,
-                      label="Precision",
-                      default=0.5,
-                      help="In pixels.")
+        form.addParam('protocolPointer', PointerParam, label="Protocol", condition="modelSource==1",
+                      pointerClass="XmippProtDeepCenter", allowsNull=True)
 
-        form.addSection(label="Training")
-
-        form.addParam('trainSetSize', IntParam, label="Train set size", default=5000,
-                      help='How many particles to use for training. Set to -1 for all of them')
-
-        form.addParam('numEpochs', IntParam,
-                      label="Number of epochs",
-                      default=100,
-                      expertLevel=LEVEL_ADVANCED,
-                      help="Number of epochs for training.")
-
-        form.addParam('batchSize', IntParam,
-                      label="Batch size for training",
-                      default=32,
-                      expertLevel=LEVEL_ADVANCED,
-                      help="Batch size for training.")
-
-        form.addParam('learningRate', FloatParam,
-                      label="Learning rate",
-                      default=0.001,
-                      expertLevel=LEVEL_ADVANCED,
-                      help="Learning rate for training.")
+        form.addParam('modelFile', FileParam, label="Model", condition="modelSource==2",
+                      help="Provide a local .h5 file")
+        
+        form.addParam('modelXdim', IntParam, label="Image size of model", condition="modelSource==2",
+                      default = 64, help="Image size on which the model was trained")
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self.fnImgs = self._getTmpPath('imgs.xmd')
-        self.fnImgsTrain = self._getTmpPath('imgsTrain.xmd')
+        self.fnImgs = self._getExtraPath('imgs.xmd')
         if self.useQueueForSteps() or self.useQueue():
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
         else:
@@ -111,32 +89,45 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
         self._insertFunctionStep("convertInputStep", self.inputParticles.get())
-        self._insertFunctionStep("train", numGPU[0])
         self._insertFunctionStep("predict", numGPU[0])
         self._insertFunctionStep("createOutputStep")
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputSet):
         writeSetOfParticles(inputSet, self.fnImgs)
-        if self.trainSetSize.get()>0:
-            self.runJob("xmipp_metadata_utilities","-i %s --operate random_subset %d -o %s"%\
-                        (self.fnImgs,self.trainSetSize, self.fnImgsTrain), numberOfMpi=1)
-        else:
-            createLink(self.fnImgs, self.fnImgsTrain)
-
-    def train(self, gpuId):
-        args = "-i %s --omodel %s --sigma %f --maxEpochs %d --batchSize %d --gpu %s --learningRate %f --precision %f"%\
-                (self.fnImgsTrain, self._getExtraPath("model.h5"), self.sigma, self.numEpochs, self.batchSize, gpuId,
-                 self.learningRate, self.precision)
-        self.runJob(f"xmipp_deep_center", args, numberOfMpi=1, env=self.getCondaEnv())
+        Xdim = self.inputParticles.get().getDimensions()[0]
+        self.scaleFactor = 1.0
+        if self.modelSource == self.PRETRAINED and Xdim!=64:
+            self.scaleFactor = float(Xdim)/64.0
+        elif self.modelSource == self.LOCALFILE and Xdim!=self.modelXdim.get():
+            self.scaleFactor = float(Xdim)/self.modelXdim.get()
+        epsilon = 1e-6  # Un margen de tolerancia pequeño
+        if abs(self.scaleFactor - 1.0) > epsilon:
+            fnTmp = self._getTmpPath("imgs.stk")
+            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier 64" % (self.fnImgs, fnTmp))
+            self.fnImgs = self._getTmpPath("imgs.xmd")
 
     def predict(self, gpuId):
-        fnModel = self._getExtraPath("model.h5")
-        args = "-i %s --gpu %s --model %s -o %s" % (self.fnImgs, gpuId, fnModel, self._getExtraPath('particles.xmd'))
+        if self.modelSource==self.PRETRAINED:
+            fnModel = self.getModel('deepCenter', 'deepCenterModel.h5') 
+        elif self.getRunMode()==self.PREVIOUS:
+            fnModel = self.protocolPointer.get()._getExtraPath("model.h5")
+        else:
+            fnModel = self.modelFile.get()
+        args = "-i %s --gpu %s --model %s -o %s --scale %f" % (self.fnImgs, gpuId, fnModel,
+                                                               self.fnImgs, self.scaleFactor)
         self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())
+        epsilon = 1e-6  # Un margen de tolerancia pequeño
+        if abs(self.scaleFactor - 1.0) > epsilon:
+            fnShifts = self._getTmpPath("shifts.xmd")
+            self.runJob("xmipp_metadata_utilities", '-i %s --operate keep_column "itemId shiftX shiftY psi" -o %s'%\
+                        (self.fnImgs,fnShifts), numberOfMpi=1)
+            self.fnImgs=self._getExtraPath("imgs.xmd")
+            self.runJob("xmipp_metadata_utilities", '-i %s --set join %s itemId -o %s'%\
+                        (fnShifts, self.fnImgs, self.fnImgs), numberOfMpi=1)
 
     def createOutputStep(self):
-        fnPredict = self._getExtraPath("particles.xmd")
+        fnPredict = self.fnImgs
         outputSet = self._createSetOfParticles()
         readSetOfParticles(fnPredict, outputSet)
         outputSet.copyInfo(self.inputParticles.get())
