@@ -11,7 +11,8 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-from xmipp3 import XMIPP_URL, __version__
+from xmipp3 import XMIPP_URL
+from xmipp3.version import __version__
 
 here = path.abspath(path.dirname(__file__))
 
