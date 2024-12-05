@@ -39,7 +39,7 @@ OUTPUT_AVERAGES = 'outputAverages'
 
 
 class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
-    """ 2D clustering protocol to group similar images (2D Averages or 2D Classes) """
+    """2D clustering protocol to group similar images (2D Averages or 2D Classes) """
 
     _label = 'clustering 2d classes'
     _devStatus = BETA
@@ -64,21 +64,21 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
         form.addParam('min_cluster', IntParam, label='Minimum number of clusters',
                       default=10, expertLevel=LEVEL_ADVANCED,
                       validators=[GT(1, 'Error must be greater than 1')],
-                      help=''' This number will limit the search for the optimum number of clusters. 
-                               By default, the 2D averages will start searching for the optimum number of clusters
-                               with a minimum number of 10 classes.''')
+                      help=' This number will limit the search for the optimum number of clusters. '
+                               'By default, the 2D averages will start searching for the optimum number of clusters'
+                               'with a minimum number of 10 classes.')
         form.addParam('max_cluster', IntParam, label='Maximum number of clusters',
                       default=-1, expertLevel=LEVEL_ADVANCED,
                       validators=[LT(50, 'Error must be smaller than the number of classes - 2.')],
-                      help='''This number will limit the search for the optimum number of clusters. 
-                              If -1 then it will act as default. By default, the 2D averages will end searching
-                              for the optimum number of clusters until a maximum number of N_classes - 2.''')
+                      help='This number will limit the search for the optimum number of clusters. '
+                              'If -1 then it will act as default. By default, the 2D averages will end searching'
+                              'for the optimum number of clusters until a maximum number of N_classes - 2.')
         form.addParam('compute_threads', IntParam, label='Number of computational threads',
                       default=8, expertLevel=LEVEL_ADVANCED,
                       validators=[
                           GT(0, 'Error must be greater than 0.')],
-                      help=''' By default, the program will use 8 threads for computation. 
-                               The higher the number the fastest the computation will be''')
+                      help=' By default, the program will use 8 threads for computation.'
+                               'The higher the number the fastest the computation will be')
 
         form.addSection(label='Output')
         form.addParam('extractOption', EnumParam,

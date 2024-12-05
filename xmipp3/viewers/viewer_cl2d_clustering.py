@@ -34,8 +34,7 @@ import os
 
 
 class XmippCL2DClusteringViewer(EmProtocolViewer):
-    """ This viewer is intended to visualize the selection made by
-        the Xmipp - clustering 2d classes protocol.
+    """ This viewer is intended to visualize the selection made by the Xmipp - clustering 2d classes protocol.
     """
     _label = 'viewer Clustering 2D Classes'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
@@ -49,9 +48,9 @@ class XmippCL2DClusteringViewer(EmProtocolViewer):
                       help="Visualize the aggregated 2D classes, 2D averages or both.")
         form.addParam('visualizeCluster', LabelParam,
                       label="Visualize a 2D representation of the clustering",
-                      help="""This will show a 2D representation of the clustering operation. 
-                              The clustering operation is done on a multidimensional space, meaning that this
-                              2D representation (using TSNE) might not capture the real difference between some clusters.""")
+                      help="This will show a 2D representation of the clustering operation. "
+                              "The clustering operation is done on a multidimensional space, meaning that this"
+                              "2D representation (using TSNE) might not capture the real difference between some clusters.")
         form.addParam('visualizeClusterImages', LabelParam,
                       label="Visualize the clusters distribution",
                       help="Visualize the clusters images.")
