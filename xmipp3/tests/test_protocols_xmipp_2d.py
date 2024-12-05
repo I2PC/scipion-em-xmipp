@@ -1601,6 +1601,26 @@ class TestXmippClassifyPca(TestXmippBase):
 
         self.assertSetSize(prot.outputClasses, size, msg)
 
+class TestXmippProtCL2DClustering(TestXmippBase):
+    """This class check if the protocol clustering 2d classes in Xmipp works properly."""
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData('mda')
+        cls.protImportAvgs = cls.runImportAverages(cls.averagesFn, 3.5)
+
+    def test_clustering(self):
+        print("Run clustering 2D classes from 2D averages")
+        prot = self.newProtocol(XmippProtCL2DClustering,
+                                min_cluster=3, max_cluster=-1, extractOption=1)
+        prot.inputSet2D.set(self.protImportAvgs.outputAverages)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.outputAverages,
+                             "There was a problem with Clustering 2D Classes")
+        self.assertSetSize(prot.outputAverages, size=3)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
