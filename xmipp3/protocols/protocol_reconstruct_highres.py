@@ -698,7 +698,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.runJob("xmipp_image_resize","-i %s -o %s --fourier %d"%(self.imgsFn,fnNewParticles,newXdim),numberOfMpi=min(self.numberOfMpi.get(),24))
         else:
             self.runJob("xmipp_image_convert","-i %s -o %s --save_metadata_stack %s"%(self.imgsFn,fnNewParticles,join(fnDir,"images.xmd")),
-                        numberOfMpi=1)
+                        numberOfMpi=min(self.numberOfMpi.get(), 16))
         R=self.particleRadius.get()
         if R<=0:
             R=self.inputParticles.get().getDimensions()[0]/2
@@ -1587,7 +1587,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
-            self.runJob("xmipp_image_convert","-i %s_convolved.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
+            self.runJob("xmipp_image_convert","-i %s_convolved.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=min(self.numberOfMpi.get(), 16))
             cleanPath("%s_convolved.vol"%fnRootRestored)
             cleanPath("%s_deconvolved.vol"%fnRootRestored)
 
@@ -1620,7 +1620,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
             else:
                 self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
-            self.runJob("xmipp_image_convert","-i %s_avgDiff.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
+            self.runJob("xmipp_image_convert","-i %s_avgDiff.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=min(self.numberOfMpi.get(), 16))
             cleanPath("%s_avgDiff.vol"%fnRootRestored)
             cleanPath("%s_restored1.vol"%fnRootRestored)
             cleanPath("%s_restored2.vol"%fnRootRestored)
