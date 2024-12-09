@@ -8,16 +8,13 @@
 
    - Protocols updated
       - convert_pdb: now can read cif
-      - flexalign: Added support for reading EER
+      - flexalign: Added support for reading EER. Optimized and refactor the streaming, the continue action stabilized
       - create_gallery: Allow Scipion protocol create gallery to access missing projection options
-      - ctf_consensus: optimized and refactor the streaming, the continue action stabilized
-      - flexalign: optimized and refactor the streaming, the continue action stabilized
+      - ctf_consensus: optimized and refactor the streaming, the continue action stabilized. Remove parallelization
       - movie_dose_analysis: optimized and refactor the streaming, the continue action stabilized
-      - movie_max_shift: optimized and refactor the streaming, the continue action stabilized
+      - movie_max_shift: optimized and refactor the streaming, the continue action stabilized, Remove parallelization
       - tilt_analysis: optimized and refactor the streaming, the continue action stabilized
       - subtract_projection: Adaptations for new logic in Xmipp program
-      - ctf_consensus: Remove parallelization
-      - movie_max_shift: Remove parallelization
       - reconstruct_highres: Add GPU use for local angle assignment 
 
    - Protocols fixed
