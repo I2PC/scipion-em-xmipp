@@ -57,6 +57,8 @@ from pwem.constants import ALIGN_PROJ
 from pwem import emlib
 from xmipp3.base import HelicalFinder, isXmippCudaPresent
 from xmipp3.convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
+from pyworkflow import UPDATED, PROD
+
 
 def getPreviousQuality(img, imgRow):
     if hasattr(img,"_xmipp_cost"):
@@ -86,6 +88,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
        defocus group. You may want to perform iterations one by one, and remove from one
        iteration to the next, those particles that worse fit the model."""
     _label = 'highres'
+    _devStatus = UPDATED
+
     _lastUpdateVersion = VERSION_1_1
     
     SPLIT_STOCHASTIC = 0

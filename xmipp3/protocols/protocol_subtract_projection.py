@@ -33,7 +33,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem import emlib
 from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
-from pyworkflow import PROD
+from pyworkflow import PROD, UPDATED
 
 OUTPUT = "output_particles.xmd"
 CITE = 'Fernandez-Gimenez2023a'
@@ -41,7 +41,7 @@ CITE = 'Fernandez-Gimenez2023a'
 class XmippProtSubtractProjectionBase(EMProtocol):
     """ Helper class that contains some Protocol utilities methods
     used by both  XmippProtSubtractProjection and XmippProtBoostParticles."""
-    _devStatus = PROD
+    _devStatus = UPDATED
 
     # --------------------------- DEFINE param functions --------------------------------------------
     @classmethod
