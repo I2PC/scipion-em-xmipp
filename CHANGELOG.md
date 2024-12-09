@@ -33,7 +33,6 @@
         
    - More scipion-em-xmipp
       - scikit-learn updated to 1.2
-      - Do not install dependencies in conda by default
       - protocols.conf list completed. All protocols are listed and clustered in Scipion
 
 ## Release 3.24.06 - Oceanus
