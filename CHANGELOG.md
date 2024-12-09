@@ -1,13 +1,40 @@
-## Release 3.24.12 - P
+## Release 3.24.12 - Poseidon
    - New protocols
-      - ..
+      - apply_tilt_to_ctf: Apply a local deviation to the CTF based on the micrograph's tilt
+    angle
+      - mics_defocus_balancer: It takes as input a certain number of CTFs and makes a balanced sampling of N images based on the defocus U values
+      - deep_center_predict: Center a set of particles in 2D using a neural network
+      - cl2d_clustering: 2D clustering protocol to group similar images (2D Averages or 2D Classes)
+
    - Protocols updated
-      - ..
+      - convert_pdb: now can read cif
+      - flexalign: Added support for reading EER. Optimized and refactor the streaming, the continue action stabilized
+      - create_gallery: Allow Scipion protocol create gallery to access missing projection options
+      - ctf_consensus: optimized and refactor the streaming, the continue action stabilized. Remove parallelization
+      - movie_dose_analysis: optimized and refactor the streaming, the continue action stabilized
+      - movie_max_shift: optimized and refactor the streaming, the continue action stabilized, Remove parallelization
+      - tilt_analysis: optimized and refactor the streaming, the continue action stabilized
+      - subtract_projection: Adaptations for new logic in Xmipp program
+      - reconstruct_highres: Add GPU use for local angle assignment 
+
    - Protocols fixed
-      -  ..
+      -  trigger_data: Fix the way we split the output
+      -  subtract_projection: fnMask sub
+      -  classify_pca: Bug fix in the validate function
+      -  reconstruct_fourier: Fourier reconstruction now allows performing the CTF correction inside the same protocol.
+      -  volume_local_sharpening: local deblur performs now a single iteration by defaul
+      -  movie_max_shift: fixed with several parallel threads in streaming
+      -  reconstruct_highres: add unassigned vars fnVol1 fnVol2 to set loop
+      -  ctf_defocus_group: fix when testing multiple downsampling factors
+      -  ctf_micrographs: fix when testing multiple downsampling factors
+
    - Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
-      - ..
+      - angular_resolution_alignment
+        
    - More scipion-em-xmipp
+      - scikit-learn updated to 1.2
+      - Do not install dependencies in conda by default
+      - protocols.conf list completed. All protocols are listed and clustered in Scipion
 
 ## Release 3.24.06 - Oceanus
    - New protocols

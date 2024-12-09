@@ -46,6 +46,7 @@ blackList = ['ScatterImageMarker','XMIPPCOLUMNS', 'XmippProtVolAdjBase', 'AlignV
              'XmippProtWriteTestC','KendersomBaseClassify','XmippProtAlignVolumeForWeb', 'XMIPPCOLUMNS', 'NoOutputGenerated', 'ScatterImageMarker',
              'AlignVolPartOutputs']
 
+
 #######Missing classes
 missingCounter = 0
 classCounter = 0
