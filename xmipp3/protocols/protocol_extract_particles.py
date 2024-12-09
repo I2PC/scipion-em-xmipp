@@ -50,7 +50,7 @@ FACTOR_BOXSIZE = 1.5
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Protocol to extract particles from a set of coordinates"""
     _label = 'extract particles'
-    _devStatus = UPDATED
+    _devStatus = PROD
     RESIZE_FACTOR = 0
     RESIZE_DIMENSIONS = 1
     RESIZE_SAMPLINGRATE = 2

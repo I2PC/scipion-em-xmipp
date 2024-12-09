@@ -32,12 +32,15 @@ from pyworkflow.utils.properties import Message
 from pwem.objects import (Particle, Coordinate, Micrograph, CTFModel,
                           SetOfParticles, SetOfMicrographs)
 from pwem.protocols import EMProtocol
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 import math
 
 class XmippProtApplyTiltToCtf(EMProtocol):
     """ Apply a local deviation to the CTF based on the micrograph's tilt
     angle"""
+    _devStatus = NEW
+
     _label = 'apply tilt to ctf'
     _tilt_axes = ['X', 'Y']
     _tilt_signs = ['Increasing', 'Decreasing']

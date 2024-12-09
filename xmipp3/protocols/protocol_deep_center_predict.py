@@ -32,7 +32,8 @@ from pwem.protocols import ProtAlign2D
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 import os
 import xmipp3
-from pyworkflow import BETA
+from pyworkflow import BETA, UPDATED, NEW, PROD
+
 
 class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
     """Center a set of particles in 2D using a neural network. The particles remain the same, but their alignment
