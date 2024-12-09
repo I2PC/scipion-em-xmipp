@@ -8,6 +8,7 @@
 
    - Protocols updated
       - convert_pdb: now can read cif
+      - flexalign: Added support for reading EER
       - create_gallery: Allow Scipion protocol create gallery to access missing projection options
       - ctf_consensus: optimized and refactor the streaming, the continue action stabilized
       - flexalign: optimized and refactor the streaming, the continue action stabilized
