@@ -30,6 +30,7 @@
 
    - Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
       - angular_resolution_alignment
+      - movie_opticalflow.py
         
    - More scipion-em-xmipp
       - scikit-learn updated to 1.2
