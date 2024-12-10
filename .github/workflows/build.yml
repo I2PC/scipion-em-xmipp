@@ -68,3 +68,7 @@ jobs:
         BRANCH_NAME: ${{ github.head_ref }}
         SEND_INSTALLATION_STATISTICS: OFF 
       run: ../scipion/scipion3 run ./xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
+
+    - name: Show compile log
+      working-directory: ${{ github.workspace }}/../xmipp
+      run: cat xmipp.conf && cat compilation.log
