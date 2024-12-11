@@ -65,6 +65,12 @@ class XmippProtFlexAlign(ProtAlignMovies):
     #--------------------------- DEFINE param functions ------------------------
 
     def _defineAlignmentParams(self, form):
+        form.addParallelSection(threads=1, mpi=1)
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         ProtAlignMovies._defineAlignmentParams(self, form)
 
         EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and next(iter(inputMovies.getFiles())).endswith(".eer")'
@@ -77,10 +83,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
         form._paramsDict['Alignment']._paramList.remove('Crop_offsets__px_')
         form._paramsDict['Alignment']._paramList.remove('Crop_dimensions__px_')
 
-        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
-                       expertLevel=cons.LEVEL_ADVANCED,
-                       label="Choose GPU IDs",
-                       help="Add a list of GPU devices that can be used")
+        
 
         form.addParam('maxResForCorrelation', params.FloatParam, default=30,
                        label='Maximum resolution (A)',
@@ -156,8 +159,6 @@ class XmippProtFlexAlign(ProtAlignMovies):
                       display=params.EnumParam.DISPLAY_COMBO,
                       help="Flip gain reference after rotation. "
                            "For tiff movies, gain is automatically upside-down flipped")
-
-        form.addParallelSection(threads=1, mpi=2)
 
         
 
@@ -375,14 +376,11 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
     def _validateParallelProcessing(self):
         nGpus = len(self.gpuList.get().split())
-        nMPI = self.numberOfMpi.get()
         nThreads = self.numberOfThreads.get()
         errors = []
-        if nThreads != 1:
-            errors.append('Multithreading is not supported. Use a single thread or one MPI.')
-        validMPIs = 1 if nGpus == 1 else nGpus + 1
-        if self.useGpu.get() and nMPI != validMPIs:
-            errors.append('Invalid number of MPI. Please set it to %d, as you set %d GPU(s)' % (validMPIs, nGpus))
+        neededThreads = 1 if nGpus == 1 else nGpus + 1
+        if nThreads != neededThreads:
+            errors.append('Please assign the number of threads so that it corresponds to the amount of GPUs + 1.')
         return errors
 
     def _validateBinary(self):
