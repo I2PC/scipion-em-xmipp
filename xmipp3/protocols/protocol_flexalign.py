@@ -77,11 +77,6 @@ class XmippProtFlexAlign(ProtAlignMovies):
         form._paramsDict['Alignment']._paramList.remove('Crop_offsets__px_')
         form._paramsDict['Alignment']._paramList.remove('Crop_dimensions__px_')
 
-        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
-                       label="Use GPU for execution",
-                       help="This protocol has both CPU and GPU implementation.\
-                       Select the one you want to use.")
-
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -162,7 +157,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
                       help="Flip gain reference after rotation. "
                            "For tiff movies, gain is automatically upside-down flipped")
 
-        form.addParallelSection(threads=1, mpi=1)
+        form.addParallelSection(threads=1, mpi=2)
 
         
 
