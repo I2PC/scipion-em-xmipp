@@ -281,6 +281,7 @@ class TestXmippCTFEstimation(TestXmippBase):
         protCTF = XmippProtCTFMicrographs()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
         protCTF.ctfDownFactor.set(2)
+        protCTF.accel1D.set(False)
         self.proj.launchProtocol(protCTF, wait=True)
         self.assertIsNotNone(protCTF.outputCTF, "SetOfCTF has not been produced.")
         ctfModel = protCTF.outputCTF.getFirstItem()
