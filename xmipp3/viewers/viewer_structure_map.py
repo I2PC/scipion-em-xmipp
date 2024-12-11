@@ -26,7 +26,6 @@
 
 import os, matplotlib, math
 
-from PIL.ImageColor import colormap
 from scipy import ndimage
 from scipy.spatial import KDTree
 import tkinter as tk
