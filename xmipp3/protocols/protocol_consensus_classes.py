@@ -90,25 +90,9 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('referenceIntersectionStep')
         self._insertFunctionStep('intersectStep')
         self._insertFunctionStep('mergeStep')
         self._insertFunctionStep('findElbowsStep')
-
-    def referenceIntersectionStep(self):
-        sizes = self._getInputClassificationSizes()
-        nImages = sizes[0].sum()
-        sourceProbabilities = self._calculateIntersectionSourceProbabilities(sizes)
-        intersectionProbabilities = self._calculateIntersectionProbabilities(sourceProbabilities)
-        normIntersectionProbabilities = self._calculateNormalizedIntersectionProbabilities(
-            sourceProbabilities, 
-            intersectionProbabilities
-        )
-        intersectionSizes = np.sort(intersectionProbabilities * nImages)
-        normalizedIntersectionSizes = np.sort(normIntersectionProbabilities) # No need to multiply
-
-        # Write
-        self._writeReferenceIntersectionSizes(intersectionSizes, normalizedIntersectionSizes)
 
     def intersectStep(self):
         classifications = self._getInputClassifications()
@@ -128,9 +112,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
             classifications=classifications,
             clustering=intersections,
             suffix=self._getMergedIntersectionSuffix(len(intersections)),
-            comments=traces,
-            referenceSizes=referenceSizes,
-            normalizedReferenceSizes=normalizedReferenceSizes
+            traces=traces
         )
         
         self._defineOutputs(outputClasses=outputClasses)
@@ -271,9 +253,9 @@ class XmippProtConsensusClasses(ProtClassify3D):
         itId = iter(ids)
 
         result = next(itCls)
-        traces = list(map('001.{:d}'.format, next(itId)))
+        traces = [[(0, trace)] for trace in next(itId)]
         
-        for i, (classification, ids) in enumerate(zip(itCls, itId), start=2):
+        for i, (classification, ids) in enumerate(zip(itCls, itId), start=1):
             intersections = []
             intersection_traces = []
 
@@ -283,7 +265,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                     intersection = cls0.intersection(cls1)
                     if len(intersection) > 0:
                         intersections.append(intersection)
-                        intersection_traces.append(trace + ' & {:03d}.{:d}'.format(i, id))
+                        intersection_traces.append(trace + [(i, id)])
 
             # Use the new intersection for the next step
             result = intersections
@@ -518,7 +500,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
             classifications = self._getInputClassifications()
             intersections = self._getOutputIntersectionIds()
             linkage = self._readLinkageMatrix()
-            referenceSizes, normalizedReferenceSizes = self._readReferenceIntersectionSizes()
             
             # Merge and create the set of classes
             merging = self._calculateMergedIntersections(intersections, linkage, stop=n)
@@ -527,9 +508,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                 images=images,
                 classifications=classifications,
                 clustering=merged,
-                suffix=suffix,
-                referenceSizes=referenceSizes,
-                normalizedReferenceSizes=normalizedReferenceSizes
+                suffix=suffix
             )
 
             self._defineOutputs(**{'merged' + str(n): outputClasses})
@@ -542,9 +521,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                             classifications: Sequence[SetOfClasses],
                             clustering: Sequence[Set[int]], 
                             suffix: str,
-                            comments=None,
-                            referenceSizes=None, 
-                            normalizedReferenceSizes=None ):
+                            traces ):
 
         # Create an empty set with the same images as the input classification
         result: SetOfClasses = self._EMProtocol__createSet( # HACK
@@ -553,6 +530,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
             suffix
         ) 
         result.setImages(images)
+        nParticles = len(images)
     
         # Fill the output
         def updateItem(item: Image, _):
@@ -578,23 +556,19 @@ class XmippProtConsensusClasses(ProtClassify3D):
                 classifications
             )
             size = len(cluster)
-            relativeSize = size / len(representativeClass)
             
             item.setRepresentative(representativeClass.getRepresentative().clone())
-
-            if comments is not None:
-                item.setObjComment(comments[classIdx])
+            #item.setObjComment(comments[classIdx])
             
-            if referenceSizes is not None:
-                sizePercentile = self._calculatePercentile(referenceSizes, size)
-                pValue = 1 - sizePercentile
-                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+            trace = traces[classIdx]
+            sizeByChance = 1.0
+            for classificationId, classId in trace:
+                sizeByChance *= len(self._getInputClassification(classificationId)[classId]) / nParticles
+            
+            dist = scipy.stats.binom(nParticles, sizeByChance / nParticles)
+            pValue = 1 - dist.cdf(size)
+            setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
                 
-            if normalizedReferenceSizes is not None:
-                relativeSizePercentile = self._calculatePercentile(normalizedReferenceSizes, relativeSize)
-                pValue = 1 - relativeSizePercentile
-                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
-
         result.classifyItems(
             updateItemCallback=updateItem,
             updateClassCallback=updateClass,
