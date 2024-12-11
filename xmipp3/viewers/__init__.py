@@ -56,6 +56,7 @@ from .viewer_local_sharpening import viewerXmippProtLocSharp
 from .viewer_volume_subtraction import XmippProtVolSubtractionViewer
 from .viewer_volume_consensus import XmippVolumeConsensusViewer
 from .viewer_dose_analysis import XmippMovieDoseAnalysisViewer
+from .viewer_cl2d_clustering import XmippCL2DClusteringViewer
 
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 

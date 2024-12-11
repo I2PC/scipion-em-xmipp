@@ -28,6 +28,7 @@ from pwem.emlib.image import ImageHandler
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol import PointerParam, StringParam, FloatParam, EnumParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem.protocols import ProtAnalysis3D
 
@@ -41,6 +42,8 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     This gallery of projections may help to understand the images
     observed in the microscope.
     """
+    _devStatus = UPDATED
+
     _label = 'create gallery'
     _version = VERSION_1_1
 

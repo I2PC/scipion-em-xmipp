@@ -165,6 +165,10 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
         movieId = movie.getObjId()
         movieFn = movie.getFileName()
 
+        if os.path.splitext(movieFn)[-1] == '.eer':
+            # When the input movie is an EER file, use a single 
+            movieFn += '#32,4K,uint16'
+
         # Check which estimated gain matches with the experimental gain
         args = self.getArgs(movieFn, movieId, residual=residual)
         if not self.estimateSigma.get() or noSigma:
@@ -552,6 +556,6 @@ def array_zeros_to_median(a, thres=0.01, depth=1):
     idys = np.where(np.abs(a) < thres)[1]
 
     for i in range(len(idxs)):
-        sur_values = surrounding_values(a, idxs[i], idys[i], depth)
+        sur_values = xmutils.surrounding_values(a, idxs[i], idys[i], depth)
         a[idxs[i]][idys[i]] = np.median(sur_values)
     return a

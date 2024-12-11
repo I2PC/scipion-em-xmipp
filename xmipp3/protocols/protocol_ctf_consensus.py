@@ -77,7 +77,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
         self._freqResol = {}
-        self.stepsExecutionMode = params.STEPS_PARALLEL
 
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -203,7 +202,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            'If *No*, only the primary metadata (plus consensus '
                            'scores) will be in the resulting CTF.')
 
-        form.addParallelSection(threads=2, mpi=1)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
