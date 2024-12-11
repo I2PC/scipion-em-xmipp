@@ -7,8 +7,8 @@
       - cl2d_clustering: 2D clustering protocol to group similar images (2D Averages or 2D Classes)
 
    - Protocols updated
+      - flexalign: Added support for reading EER. Optimized and refactor the streaming, the continue action stabilized. FlexAlign can run multiple times in a single GPU or in multiple GPUs from within Scipion3.
       - convert_pdb: now can read cif
-      - flexalign: Added support for reading EER. Optimized and refactor the streaming, the continue action stabilized
       - create_gallery: Allow Scipion protocol create gallery to access missing projection options
       - ctf_consensus: optimized and refactor the streaming, the continue action stabilized. Remove parallelization
       - movie_dose_analysis: optimized and refactor the streaming, the continue action stabilized
