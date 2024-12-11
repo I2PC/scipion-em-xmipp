@@ -70,6 +70,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
                        help="Add a list of GPU devices that can be used")
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True, label="Use GPU or CPU implementation of the algorithm.")
 
         ProtAlignMovies._defineAlignmentParams(self, form)
 
