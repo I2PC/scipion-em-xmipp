@@ -220,7 +220,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         
         mean_frames = []
         filename = movie.getFileName()
-        if self._isInputEer():
+        if filename.endswith(".eer"):
             n = self.nFrames.get()
             filename += "#%d,4K,uint16" % n
         else:
@@ -385,9 +385,6 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self._store()
 
 # ------------------------- UTILS functions --------------------------------
-    def _isInputEer(self):
-        return isEerMovie(self.inputMovies.get())
-
     def _getAllDoneIds(self):
         doneIds = []
         acceptedIds = []
