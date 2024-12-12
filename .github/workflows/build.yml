@@ -10,7 +10,7 @@ jobs:
     
     # Avoid send statistics
     env:
-      SEND_INSTALLATION_STATISTICS: "OFF"
+      SEND_INSTALLATION_STATISTICS: OFF
 
     steps:    
     - name: Checkout repository
@@ -66,4 +66,5 @@ jobs:
       env:
         BUILD_TESTS: True
         BRANCH_NAME: ${{ github.head_ref }}
+        SEND_INSTALLATION_STATISTICS: OFF 
       run: ../scipion/scipion3 run ./xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)

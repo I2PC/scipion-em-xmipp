@@ -27,28 +27,28 @@
 # **************************************************************************
 
 import json
-import subprocess
 from datetime import datetime
-
-from pyworkflow import Config
 import pwem
+from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from scipion.install.funcs import CommandDef
-
 from .base import *
+from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
 
-type_of_version = 'devel' #'release'
-_logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
-_current_xmipp_tag = 'devel'
-_currentBinVersion = '3.24.06.0'
 _currentDepVersion = '1.0'
-__version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
-
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
+
+type_of_version = version.type_of_version
+_logo = version._logo
+_current_xmipp_tag = version._current_xmipp_tag
+_currentBinVersion = version._currentBinVersion
+_currentDepVersion = version._currentDepVersion
+__version__ = version.__version__
+
 
 class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
@@ -168,7 +168,7 @@ class Plugin(pwem.Plugin):
                 default=False
             )
         
-        tag = _current_xmipp_tag
+        tag = version._current_xmipp_tag
         xmippSrc = f'xmippSrc-{tag}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '

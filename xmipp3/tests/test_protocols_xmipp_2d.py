@@ -1238,7 +1238,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protClassify.outputClasses)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200, "There was a problem with Compare Reprojections from classes")
+        self.assertIsNotNone(prot.reprojections_vol203, "There was a problem with Compare Reprojections from classes")
 
     def test_particles2(self):
         print("Run Compare Reprojections from averages")
@@ -1247,7 +1247,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protImportAvgs.outputAverages)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200, "There was a problem with Compare Reprojections from averages")
+        self.assertIsNotNone(prot.reprojections_vol203, "There was a problem with Compare Reprojections from averages")
 
     def test_particles3(self):
         print("Run Compare Reprojections from projections with angles")
@@ -1256,7 +1256,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protProjMatch.outputParticles)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from projections with angles")
 
     def test_particles4(self):
@@ -1266,7 +1266,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protClassify.outputClasses)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from classes evaluating residuals")
 
     def test_particles5(self):
@@ -1276,7 +1276,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protImportAvgs.outputAverages)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from averages evaluating residuals")
 
     def test_particles6(self):
@@ -1286,7 +1286,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protProjMatch.outputParticles)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from projections"
                              " with angles evaluating residuals")
 
@@ -1297,7 +1297,7 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet2D.set(self.protProjMatch.outputParticles)
         prot.inputSet3D.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections_vol200,
+        self.assertIsNotNone(prot.reprojections_vol203,
                              "There was a problem with Compare Reprojections from projections"
                              " with angles evaluating residuals without user mask")
 
@@ -1600,6 +1600,26 @@ class TestXmippClassifyPca(TestXmippBase):
             time.sleep(2)
 
         self.assertSetSize(prot.outputClasses, size, msg)
+
+class TestXmippProtCL2DClustering(TestXmippBase):
+    """This class check if the protocol clustering 2d classes in Xmipp works properly."""
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData('mda')
+        cls.protImportAvgs = cls.runImportAverages(cls.averagesFn, 3.5)
+
+    def test_clustering(self):
+        print("Run clustering 2D classes from 2D averages")
+        prot = self.newProtocol(XmippProtCL2DClustering,
+                                min_cluster=3, max_cluster=-1, extractOption=1)
+        prot.inputSet2D.set(self.protImportAvgs.outputAverages)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.outputAverages,
+                             "There was a problem with Clustering 2D Classes")
+        self.assertSetSize(prot.outputAverages, size=3)
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
