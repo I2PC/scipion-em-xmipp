@@ -91,14 +91,13 @@ class XmippProtConsensusClasses(ProtClassify3D):
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('intersectStep')
-        self._insertFunctionStep('mergeStep')
-        self._insertFunctionStep('findElbowsStep')
+        #self._insertFunctionStep('mergeStep')
+        #self._insertFunctionStep('findElbowsStep')
 
     def intersectStep(self):
         classifications = self._getInputClassifications()
         classParticleIds = self._getInputClassParticleIds()
         classIds = self._getInputClassIds()
-        referenceSizes, normalizedReferenceSizes = self._readReferenceIntersectionSizes()
 
         # Perform the intersections between input classes
         intersections, traces = self._calculateIntersections(classParticleIds, classIds)
@@ -273,6 +272,22 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
         assert(len(result) == len(traces))
         return result, traces
+    
+    def _getRandomClassificationProbabilities(self, traces: Sequence[Sequence[Tuple[int, int]]]):
+        probabilities = []
+        
+        nParticles = len(self._getInputImages())
+        for trace in traces:
+            probability = 1.0
+            for classificationIndex, classId in trace:
+                classification = self._getInputClassification(classificationIndex)
+                probability *= len(classification[classId]) / nParticles
+            probabilities.append(probability)
+            
+        return probabilities
+
+    def _getTraceAsComment(self, trace):
+        return ' & '.join(map(lambda item : '%02d.%03d' % item, trace))
 
     def _pruneIntersections(self,
                             intersections: Iterable[Set[int]],
@@ -521,7 +536,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                             classifications: Sequence[SetOfClasses],
                             clustering: Sequence[Set[int]], 
                             suffix: str,
-                            traces ):
+                            traces: Optional[Sequence[Sequence[Tuple[int, int]]]] = None ):
 
         # Create an empty set with the same images as the input classification
         result: SetOfClasses = self._EMProtocol__createSet( # HACK
@@ -531,6 +546,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
         ) 
         result.setImages(images)
         nParticles = len(images)
+        if traces is not None:
+            probabilities = self._getRandomClassificationProbabilities(traces)
     
         # Fill the output
         def updateItem(item: Image, _):
@@ -558,16 +575,15 @@ class XmippProtConsensusClasses(ProtClassify3D):
             size = len(cluster)
             
             item.setRepresentative(representativeClass.getRepresentative().clone())
-            #item.setObjComment(comments[classIdx])
             
-            trace = traces[classIdx]
-            sizeByChance = 1.0
-            for classificationId, classId in trace:
-                sizeByChance *= len(self._getInputClassification(classificationId)[classId]) / nParticles
-            
-            dist = scipy.stats.binom(nParticles, sizeByChance / nParticles)
-            pValue = 1 - dist.cdf(size)
-            setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+            if traces is not None:
+                dist = scipy.stats.binom(
+                    n=nParticles, 
+                    p=probabilities[classIdx]
+                )
+                pValue = 1 - dist.cdf(size)
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+                item.setObjComment(self._getTraceAsComment(traces[classIdx]))
                 
         result.classifyItems(
             updateItemCallback=updateItem,
