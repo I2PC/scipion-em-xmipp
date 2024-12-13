@@ -8,6 +8,7 @@ dynamic = ["version"]
 dependencies = [
     "scipion-em",
     "scipion-pyworkflow>=3.0.31",
+    "scipion-em-xmippBase",
     "scikit-learn>=1.2",
     "scikit-image",
     "scipy<=1.10.0",
