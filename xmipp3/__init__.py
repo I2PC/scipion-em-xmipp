@@ -162,7 +162,7 @@ class Plugin(pwem.Plugin):
             env.addPackage(
                 'xmippDev',
                 tar='void.tgz',
-                commands=[(f'cd {bundleDir} && ./xmipp -j {nproc}', COMPILE_TARGETS)],
+                commands=[(f'cd {bundleDir} && ./xmipp', COMPILE_TARGETS)],
                 neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
                 updateCuda=True,
                 default=False
@@ -174,7 +174,7 @@ class Plugin(pwem.Plugin):
             (f'cd .. && rm -rf {xmippSrc} && '
             f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
-            f'./xmipp -b {tag} -j {nproc}', COMPILE_TARGETS)   
+            f'./xmipp -b {tag}', COMPILE_TARGETS)   
         ]
         env.addPackage(
             'xmippSrc', version=tag,
