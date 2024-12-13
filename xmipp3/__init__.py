@@ -127,7 +127,6 @@ class Plugin(pwem.Plugin):
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
         
-        nproc = env.getProcessors()
         COMPILE_TARGETS = [
             'dist/bin/xmipp_image_header', 
             'dist/xmipp.bashrc'
