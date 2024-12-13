@@ -118,7 +118,7 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
         args = "-i %s --gpu %s --model %s -o %s --scale %f" % (self.fnImgs, gpuId, fnModel,
                                                                self.fnImgs, self.scaleFactor)
         self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())
-        epsilon = 1e-6  # Un margen de tolerancia pequeño
+        epsilon = 1e-6
         if abs(self.scaleFactor - 1.0) > epsilon:
             fnShifts = self._getTmpPath("shifts.xmd")
             self.runJob("xmipp_metadata_utilities", '-i %s --operate keep_column "itemId shiftX shiftY psi" -o %s'%\
