@@ -7,4 +7,4 @@ joblib
 peppercorn
 plotter
 PyWavelets
-
+scipion-em-xmippBase
