@@ -26,12 +26,12 @@
 # *
 # **************************************************************************
 
-from os.path import basename
 from pyworkflow.protocol.params import PointerParam, IntParam, EnumParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 from pyworkflow import NEW
+from pwem import emlib
 
 
 class XmippProtClassifyPartialOccupancy(EMProtocol):
@@ -128,7 +128,11 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath(self.OUTPUT_PARTICLES), outputSet)
+        readSetOfParticles(self._getExtraPath(self.OUTPUT_PARTICLES), 
+                           outputSet,
+                           extraLabels=[emlib.MDL_ZSCORE, 
+                                        emlib.MDL_AVG,
+                                        emlib.MDL_STDDEV])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
