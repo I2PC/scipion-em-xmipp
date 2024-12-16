@@ -1093,6 +1093,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 #    args+=" --oresiduals %s"%join(fnDirLocal,"residuals%02i.stk"%i)
                 # 
                 if self.useGpu:
+                    self.setCudaVisibleDevices()
                     args+=" --nThreads %d"%self.numberOfMpi.get()
                     self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
                 else:
