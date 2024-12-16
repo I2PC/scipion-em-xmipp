@@ -110,7 +110,7 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         params = {
            "-i":  self._getExtraPath(self.INPUT_PARTICLES),
            "--ref": fnVol,
-           "-o": self._getExtraPath(self.OUTPUT),
+           "-o": self._getExtraPath(self.OUTPUT_PARTICLES),
            "--padding": self.pad.get(),
            "--save": self._getExtraPath(),
            "--oroot": self._getExtraPath(self.OROOT_PREFIX),
@@ -122,13 +122,13 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
 
         args = ' '.join(['%s %s' % (k, str(v)) for k, v in params.items()])   
         
-        self.runJob("xmipp_subtract_projection", args)
+        self.runJob("classify_partial_occupancy", args)
 
     def createOutputStep(self):
         inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath(self.OUTPUT), outputSet)
+        readSetOfParticles(self._getExtraPath(self.OUTPUT_PARTICLES), outputSet)
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
