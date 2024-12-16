@@ -40,6 +40,7 @@ from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
 from .protocol_cl2d_clustering import XmippProtCL2DClustering
+from .protocol_classify_partial_occupancy import XmippProtClassifyPartialOccupancy
 from .protocol_classify_pca import XmippProtClassifyPca
 from .protocol_classify_pca_streaming import XmippProtClassifyPcaStreaming
 #from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
