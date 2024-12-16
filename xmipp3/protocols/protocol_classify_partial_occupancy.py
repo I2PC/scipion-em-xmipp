@@ -29,7 +29,6 @@
 from os.path import basename
 from pyworkflow.protocol.params import PointerParam, IntParam, EnumParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pwem import emlib
 from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 from pyworkflow import NEW
@@ -38,14 +37,14 @@ from pyworkflow import NEW
 class XmippProtClassifyPartialOccupancy(EMProtocol):
     """ This protocol classify a set of particles based on the local density in the region defined by the provided mask. """
 
-    _label = 'subtract projection'
+    _label = 'classify partial occupancy'
     INPUT_PARTICLES = "input_particles.xmd"
     OUTPUT_PARTICLES = "output_particles.xmd"
     OROOT_PREFIX = "subtracted_part"
     _devStatus = NEW
 
     # --------------------------- DEFINE param functions --------------------------------------------
-    def _insertAllSteps(self, form):
+    def _defineParams(self, form):
         form.addSection(label='Input')
 
         form.addParam('inputParticles',
@@ -87,7 +86,7 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
                                 mpi=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
-    def _insertSubSteps(self):
+    def _insertAllSteps(self):
         self._insertFunctionStep('convertStep')
         self._insertFunctionStep('subtractionStep')
         self._insertFunctionStep('createOutputStep')
