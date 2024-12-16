@@ -147,8 +147,6 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
             errors.append("Input volume and mask should have same sampling rate")
         if vol.getDim() != maskRoi.getDim():
             errors.append("Input volume and mask should have same dimensions")
-        if self.resol.get() == 0:
-            errors.append("Resolution (angstroms) should be bigger than 0")
         return errors
 
     def _warnings(self):
