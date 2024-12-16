@@ -462,6 +462,24 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         self.runJob('xmipp_metadata_utilities','-i %s -o %s --operate keep_column "particleId weightSSNR" '%\
                     (self.imgsFn,self._getExtraPath("ssnrWeights.xmd")),numberOfMpi=1)
 
+    def setCudaVisibleDevices(self):
+        count=0
+        GpuListCuda=''
+        if self.useQueueForSteps() or self.useQueue():
+            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+            GpuList = GpuList.split(",")
+            for elem in GpuList:
+                GpuListCuda = GpuListCuda+str(count)+' '
+                count+=1
+        else:
+            GpuListAux = ''
+            for elem in self.getGpuList():
+                GpuListCuda = GpuListCuda+str(count)+' '
+                GpuListAux = GpuListAux+str(elem)+','
+                count+=1
+            os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+        return GpuListCuda
+
     def doIteration000(self):
         fnDirCurrent=self._getExtraPath('Iter000')
         makePath(fnDirCurrent)
@@ -509,21 +527,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         N_GPUs = len((self.gpuList.get()).split(','))
                         args += ' -gpusPerNode %d' % N_GPUs
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-                    count=0
-                    GpuListCuda=''
-                    if self.useQueueForSteps() or self.useQueue():
-                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                        GpuList = GpuList.split(",")
-                        for elem in GpuList:
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            count+=1
-                    else:
-                        GpuListAux = ''
-                        for elem in self.getGpuList():
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            GpuListAux = GpuListAux+str(elem)+','
-                            count+=1
-                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    self.setCudaVisibleDevices()
                     if self.numberOfMpi.get()==1:
                         args += " --device %s" %(GpuListCuda)
                     args += ' --thr %s' % self.numberOfThreads.get()
@@ -916,22 +920,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     # cleanPath(join(fnDirSignificant,"angles_iter001_00.xmd"))
                                     cleanPath(join(fnDirSignificant,"images_significant_iter001_00.xmd"))
                             else:
-                                count=0
-                                GpuListCuda=''
-                                if self.useQueueForSteps() or self.useQueue():
-                                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                                    GpuList = GpuList.split(",")
-                                    for elem in GpuList:
-                                        GpuListCuda = GpuListCuda+str(count)+' '
-                                        count+=1
-                                else:
-                                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-                                    GpuListAux = ''
-                                    for elem in self.getGpuList():
-                                        GpuListCuda = GpuListCuda+str(count)+' '
-                                        GpuListAux = GpuListAux+str(elem)+','
-                                        count+=1
-                                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                                self.setCudaVisibleDevices()
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
                                        (fnGroup, fnGalleryGroupMd, fnAnglesGroup,self.numberOfReplicates.get(), GpuListCuda)
                                 self.runJob(CUDA_ALIGN_SIGNIFICANT,args, numberOfMpi=1)
@@ -1424,21 +1413,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         N_GPUs = len((self.gpuList.get()).split(','))
                         args += ' -gpusPerNode %d' % N_GPUs
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-                    count=0
-                    GpuListCuda=''
-                    if self.useQueueForSteps() or self.useQueue():
-                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                        GpuList = GpuList.split(",")
-                        for elem in GpuList:
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            count+=1
-                    else:
-                        GpuListAux = ''
-                        for elem in self.getGpuList():
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            GpuListAux = GpuListAux+str(elem)+','
-                            count+=1
-                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    GpuListCuda=self.setCudaVisibleDevices()
                     if self.numberOfMpi.get()==1:
                         args += " --device %s" %(GpuListCuda)
                     args += ' --thr %s' % self.numberOfThreads.get()
