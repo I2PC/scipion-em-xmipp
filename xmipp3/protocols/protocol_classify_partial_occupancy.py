@@ -122,7 +122,7 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
 
         args = ' '.join(['%s %s' % (k, str(v)) for k, v in params.items()])   
         
-        self.runJob("classify_partial_occupancy", args)
+        self.runJob("xmipp_classify_partial_occupancy", args)
 
     def createOutputStep(self):
         inputSet = self.inputParticles.get()
