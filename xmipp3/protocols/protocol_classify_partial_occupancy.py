@@ -138,16 +138,15 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         errors = []
         part = self.inputParticles.get().getFirstItem()
         vol = self.vol.get()
-        mask = self.mask.get()
+        maskRoi = self.maskRoi.get()
         if part.getDim()[0] != vol.getDim()[0]:
             errors.append("Input particles and volume should have same X and Y dimensions")
         if round(part.getSamplingRate(), 2) != round(vol.getSamplingRate(), 2):
             errors.append("Input particles and volume should have same sampling rate")
-        if mask:
-            if round(vol.getSamplingRate(), 2) != round(mask.getSamplingRate(), 2):
-                errors.append("Input volume and mask should have same sampling rate")
-            if vol.getDim() != mask.getDim():
-                errors.append("Input volume and mask should have same dimensions")
+        if round(vol.getSamplingRate(), 2) != round(maskRoi.getSamplingRate(), 2):
+            errors.append("Input volume and mask should have same sampling rate")
+        if vol.getDim() != maskRoi.getDim():
+            errors.append("Input volume and mask should have same dimensions")
         if self.resol.get() == 0:
             errors.append("Resolution (angstroms) should be bigger than 0")
         return errors
@@ -160,7 +159,7 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
 
     def _summary(self):
         summary = ["Volume: %s\nSet of particles: %s\nMask: %s" %
-                   (self.vol.get().getFileName(), self.inputParticles.get(), self.mask.get().getFileName())]
+                   (self.vol.get().getFileName(), self.inputParticles.get(), self.maskRoi.get().getFileName())]
         return summary
 
     def _methods(self):
@@ -168,6 +167,5 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         if not hasattr(self, 'outputParticles'):
             methods.append("Output particles not ready yet.")
         else:
-            methods.append("Volume projections subtracted to particles keeping the region in %s"
-                           % basename(self.mask.get().getFileName()))
+            methods.append("Input particles splited based on partial occupancy successfully!")
         return methods
