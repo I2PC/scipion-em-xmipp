@@ -34,13 +34,14 @@ from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 from pyworkflow import NEW
 
-OUTPUT = "output_particles.xmd"
 
 class XmippProtClassifyPartialOccupancy(EMProtocol):
     """ This protocol classify a set of particles based on the local density in the region defined by the provided mask. """
 
     _label = 'subtract projection'
     INPUT_PARTICLES = "input_particles.xmd"
+    OUTPUT_PARTICLES = "output_particles.xmd"
+    OROOT_PREFIX = "subtracted_part"
     _devStatus = NEW
 
     # --------------------------- DEFINE param functions --------------------------------------------
@@ -101,35 +102,26 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         fnVol = vol.getFileName()
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
-        args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f ' \
-               '--sigma %d --save %s --oroot %s' % \
-               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
-                vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
-                self._getExtraPath(), self._getExtraPath("subtracted_part"))
-        
-        if self.maskOption.get() == 0:
-            args += " --cirmaskrad %d " % self.cirmaskrad.get()
-        else:
-            fnMask = self.mask.get().getFileName()
-            if fnMask.endswith('.mrc'):
-                fnMask += ':mrc'
-            args += " --mask %s" % fnMask
 
         maskRoi = self.maskRoi.get()
-        if maskRoi is not None:
-            fnMaskRoi = maskRoi.getFileName()
-            if fnMaskRoi.endswith('.mrc'):
-                fnMaskRoi += ':mrc'
-            args += ' --mask_roi %s' % fnMaskRoi
-        
-        if self.nonNegative.get():
-            args += ' --nonNegative'
-        
-        if self.subtract.get():
-            args += ' --subtract'
-        
+        fnMaskRoi = maskRoi.getFileName()
+        if fnMaskRoi.endswith('.mrc'):
+            fnMaskRoi += ':mrc'
+
+        params = {
+           "-i":  self._getExtraPath(self.INPUT_PARTICLES),
+           "--ref": fnVol,
+           "-o": self._getExtraPath(self.OUTPUT),
+           "--padding": self.pad.get(),
+           "--save": self._getExtraPath(),
+           "--oroot": self._getExtraPath(self.OROOT_PREFIX),
+           "--mask_roi": fnMaskRoi,
+        }
+
         if self.realSpaceProjection.get() == 1:
-            args += ' --realSpaceProjection'
+            params["--realSpaceProjection"] = ' '
+
+        args = ' '.join(['%s %s' % (k, str(v)) for k, v in params.items()])   
         
         self.runJob("xmipp_subtract_projection", args)
 
@@ -137,9 +129,7 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath(OUTPUT), outputSet,
-                           extraLabels=[emlib.MDL_SUBTRACTION_R2, emlib.MDL_SUBTRACTION_BETA0,
-                                        emlib.MDL_SUBTRACTION_BETA1])
+        readSetOfParticles(self._getExtraPath(self.OUTPUT), outputSet)
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
