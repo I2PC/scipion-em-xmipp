@@ -25,9 +25,9 @@
 # *
 # **************************************************************************
 
-type_of_version = 'devel' #'release'
+type_of_version = 'release' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 _current_xmipp_tag = 'devel'
-_currentBinVersion = '3.24.06.0'
+_currentBinVersion = '3.24.12.0'
 _currentDepVersion = '1.0'
 __version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
