@@ -80,6 +80,11 @@ class XmippProtSubtractProjectionBase(EMProtocol):
                       allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that must be considered in the analysis.',
                       condition='maskOption==1')
+        form.addParam('ignoreCTF',
+                      BooleanParam,
+                      label="Ignore CTF",
+                      default=False,
+                      help='Do not consider CTF in the subtraction. Use if particles have been CTF corrected.')
         form.addParam('resol', 
                       FloatParam, 
                       label="Maximum resolution (A)", 
@@ -195,6 +200,9 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         
         if self.realSpaceProjection.get() == 1:
             args += ' --realSpaceProjection'
+
+        if self.ignoreCTF.get():
+            args += ' --ignoreCTF'
         
         self.runJob("xmipp_subtract_projection", args)
 
@@ -271,6 +279,10 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
 
         if self.nonNegative.get():
             args += ' --nonNegative'
+            
+        if self.ignoreCTF.get():
+            args += ' --ignoreCTF'
+            
         self.runJob("xmipp_subtract_projection", args)
 
     # --------------------------- INFO functions --------------------------------------------
