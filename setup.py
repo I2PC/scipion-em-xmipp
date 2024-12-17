@@ -11,7 +11,8 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-from xmipp3 import XMIPP_URL, __version__
+from xmipp3 import XMIPP_URL
+from xmipp3.version import __version__
 
 here = path.abspath(path.dirname(__file__))
 
@@ -51,7 +52,7 @@ setup(
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
-    description='Plugin to use Xmipp programs within the Scipion framework (see https://scipion-em.github.io/docs/).',
+    description='Plugin to use Xmipp programs within the Scipion framework (see https://xmipp.i2pc.es/).',
 
     # This is an optional longer description of your project that represents
     # the body of text which users will see when they visit PyPI.
@@ -75,7 +76,7 @@ setup(
 
     # This should be a valid email address corresponding to the author listed
     # above.
-    author_email='scipion@cnb.csic.es',  # Optional
+    author_email='xmipp@cnb.csic.es',  # Optional
 
     # Classifiers help users find your project by categorizing it.
     #

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scipion-em-xmipp"
+dynamic = ["version"]
+dependencies = [
+    "scipion-em",
+    "scipion-pyworkflow>=3.0.31",
+    "scikit-learn>=1.2",
+    "scikit-image",
+    "scipy<=1.10.0",
+    "joblib",
+    "peppercorn",
+    "plotter",
+    "PyWavelets",
+]
+
+authors = [
+    {name = "Oier Lauzirika Zarrabeitia", email = "oierlauzi@bizkaia.eu"},
+    {name = "Alberto Garcia Mena", email = "alberto.garcia@cnb.csic.es"},
+    {name = "Carlos Oscar Sanchez Sorzano", email = "coss@cnb.csic.es"},
+]
+
+description = "Plugin to use Xmipp programs within the Scipion framework."
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["scipion electron-microscopy cryo-em structural-biology image-processing scipion-3.0"]
+license = {text = "GNU General Public License v3 (GPLv3)"}
+
+[project.urls]
+Homepage = "https://github.com/I2PC/scipion-em-xmipp"
+Issues = "https://github.com/I2PC/scipion-em-xmipp/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "xmipp3.version.__version__"}
+
+
+[project.entry-points."pyworkflow.plugin"]
+xmipp3 = "xmipp3"
