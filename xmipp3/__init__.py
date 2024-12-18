@@ -169,7 +169,8 @@ class Plugin(pwem.Plugin):
             )
         
         #Release binaries installation
-        if scipionAppVersion <= '3.7.0':
+        scipionApp = int(''.join(map(str, [int(x) for x in scipionAppVersion.split('.')])))
+        if scipionApp <= 370:
 	        print("\n---------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
         else:
             tag = version._current_xmipp_tag
