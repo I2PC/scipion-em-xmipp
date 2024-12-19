@@ -173,7 +173,7 @@ class Plugin(pwem.Plugin):
 	vScipionApp = Version(scipionAppVersion)
 	vMinRequired = Version('3.7.1')
         if vScipionApp < vMinRequired:
-	        print("\n---------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
+	        print("\n---------------------------------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
         else:
             tag = version._current_xmipp_tag
             xmippSrc = f'xmippSrc-{tag}'
