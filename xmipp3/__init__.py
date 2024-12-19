@@ -33,6 +33,7 @@ from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from scipion.install.funcs import CommandDef
 from scipion import __version__ as scipionAppVersion
+from packaging.version import Version
 from .base import *
 from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
@@ -169,8 +170,9 @@ class Plugin(pwem.Plugin):
             )
         
         #Release binaries installation
-        scipionApp = int(''.join(map(str, [int(x) for x in scipionAppVersion.split('.')])))
-        if scipionApp <= 370:
+	vScipionApp = Version(scipionAppVersion)
+	vMinRequired = Version('3.7.1')
+        if vScipionApp < vMinRequired:
 	        print("\n---------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
         else:
             tag = version._current_xmipp_tag
