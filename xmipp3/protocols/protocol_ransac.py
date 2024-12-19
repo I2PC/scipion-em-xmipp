@@ -178,8 +178,8 @@ class XmippProtRansac(ProtInitialVolume):
         inputSet = self.inputSet.get()
         self.Xdim = inputSet.getDimensions()[0]
         
-        fnOutputReducedClass = self._getExtraPath("reducedClasses.xmd")
-        fnOutputReducedClassNoExt = os.path.splitext(fnOutputReducedClass)[0]
+        fnTmp = self._getTmpPath("filtered")
+        fnOutputReducedClass = self._getExtraPath("reducedClasses")
     
         # Low pass filter and resize        
         maxFreq = self.maxFreq.get()
@@ -195,9 +195,10 @@ class XmippProtRansac(ProtInitialVolume):
         freq = ts / maxFreq
         ts = K * ts
 
-        self._insertRunJobStep("xmipp_transform_filter","-i %s -o %s --fourier low_pass %f --oroot %s"
-                                                %(self.imgsFn,fnOutputReducedClass,freq,fnOutputReducedClassNoExt))
-        lastId = self._insertRunJobStep("xmipp_image_resize","-i %s --fourier %d -o %s" %(fnOutputReducedClass,self.Xdim2,fnOutputReducedClassNoExt))
+        self._insertRunJobStep("xmipp_transform_filter","-i %s -o %s.mrcs --fourier low_pass %f --save_metadata_stack %s.xmd"
+                                                %(self.imgsFn,fnTmp,freq,fnTmp))
+        lastId = self._insertRunJobStep("xmipp_image_resize","-i %s.mrcs -o %s.mrcs --fourier %d --save_metadata_stack %s.xmd" %\
+                                        (fnTmp, fnOutputReducedClass, self.Xdim2, fnOutputReducedClass))
 
         # Generate projection gallery from the initial volume
         if self.initialVolume.hasValue():
@@ -339,13 +340,13 @@ class XmippProtRansac(ProtInitialVolume):
         mdCorr.write("corrThreshold@"+fnCorr,emlib.MD_APPEND)
         print("Correlation threshold: "+str(self.corrThresh.get()))
     
-    
     def evaluateVolumesStep(self):
         fnCorr=self._getExtraPath("correlations.xmd")
         fnCorr = 'corrThreshold@'+fnCorr
         mdCorr= emlib.MetaData(fnCorr)
         objId = mdCorr.firstObject()    
         CorrThresh = mdCorr.getValue(emlib.MDL_WEIGHT,objId)
+        numValid=0
         for n in range(self.nRansac.get()):        
             fnRoot="ransac%05d"%n              
             fnAngles=self._getTmpPath("angles_"+fnRoot+".xmd")    
@@ -360,7 +361,12 @@ class XmippProtRansac(ProtInitialVolume):
             md= emlib.MetaData()
             objId = md.addObject()
             md.setValue(emlib.MDL_WEIGHT,float(numInliers),objId)
+            if numInliers>0:
+                numValid+=1
             md.write("inliers@"+fnAngles,emlib.MD_APPEND)
+        if numValid==0:
+            raise ValueError("There are no valid map. Consider lowering the threshold to have more inliers. "\
+                             "Current threshold %f"%CorrThresh)
     
     def getBestVolumesStep(self):
         volumes = []
