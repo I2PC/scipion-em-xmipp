@@ -58,7 +58,7 @@ class Plugin(pwem.Plugin):
     _supportedVersions = []
     _url = XMIPP_URL
     _condaRootPath = None
-    
+    print('Inside xmipp init')
     # Refressing the plugin
     # Inspects the call stack to find 'installPipModule' and sets 'self._plugin' to None.
     # Uses CPython's internal API 'PyFrame_LocalsToFast' to sync changes.
@@ -68,7 +68,7 @@ class Plugin(pwem.Plugin):
         import ctypes
         for frameInfo in inspect.stack():
             if frameInfo.function == "installPipModule":
-                print(frameInfo)
+                print(f'frameInfo: {frameInfo}')
                 frame = frameInfo[0]
                 frame.f_locals['self']._plugin = None
                 ctypes.pythonapi.PyFrame_LocalsToFast(
