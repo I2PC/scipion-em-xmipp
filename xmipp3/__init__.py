@@ -193,9 +193,10 @@ class Plugin(pwem.Plugin):
         xmippSrc = f'xmippSrc-{tag}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
-            f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
+            f'git clone --depth 1 {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
-            f'./xmipp -b {tag}', COMPILE_TARGETS)
+            f'git checkout {tag}'
+            f'./xmipp', COMPILE_TARGETS)
         ]
         env.addPackage(
             'xmippSrc', version=tag,
