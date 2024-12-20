@@ -58,7 +58,6 @@ class Plugin(pwem.Plugin):
     _supportedVersions = []
     _url = XMIPP_URL
     _condaRootPath = None
-    print('Inside xmipp init')
     # Refressing the plugin
     # Inspects the call stack to find 'installPipModule' and sets 'self._plugin' to None.
     # Uses CPython's internal API 'PyFrame_LocalsToFast' to sync changes.
