@@ -32,6 +32,8 @@ import pwem
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from scipion.install.funcs import CommandDef
+from scipion import __version__ as scipionAppVersion
+from packaging.version import Version
 from .base import *
 from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
@@ -56,7 +58,23 @@ class Plugin(pwem.Plugin):
     _supportedVersions = []
     _url = XMIPP_URL
     _condaRootPath = None
-
+    # Refressing the plugin
+    # Inspects the call stack to find 'installPipModule' and sets 'self._plugin' to None.
+    # Uses CPython's internal API 'PyFrame_LocalsToFast' to sync changes.
+    # Risky and CPython-specific; use only if redesign is not possible.
+    try:
+        import inspect
+        import ctypes
+        for frameInfo in inspect.stack():
+            if frameInfo.function == "installPipModule":
+                frame = frameInfo[0]
+                frame.f_locals['self']._plugin = None
+                ctypes.pythonapi.PyFrame_LocalsToFast(
+				    ctypes.py_object(frame),
+				    ctypes.c_int(1))
+    except Exception as e:
+        print(e)
+    
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
@@ -167,13 +185,17 @@ class Plugin(pwem.Plugin):
                 default=False
             )
         
+        #Release binaries installation
+        # if Version(scipionAppVersion) < Version('3.7.1'):
+	    #     print("\n---------------------------------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
+        # else:
         tag = version._current_xmipp_tag
         xmippSrc = f'xmippSrc-{tag}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
             f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
-            f'./xmipp -b {tag}', COMPILE_TARGETS)   
+            f'./xmipp -b {tag}', COMPILE_TARGETS)
         ]
         env.addPackage(
             'xmippSrc', version=tag,
@@ -183,10 +205,9 @@ class Plugin(pwem.Plugin):
             updateCuda=True,
             default=not develMode
         )
-
+        
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
-
 
     @classmethod
     def __getBundleDirectory(cls):
