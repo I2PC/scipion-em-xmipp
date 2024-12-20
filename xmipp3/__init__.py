@@ -196,7 +196,7 @@ class Plugin(pwem.Plugin):
             f'git clone --depth 1 {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
             f'git checkout {tag}'
-            f'./xmipp -b {tag}', COMPILE_TARGETS)
+            f'./xmipp', COMPILE_TARGETS)
         ]
         env.addPackage(
             'xmippSrc', version=tag,
