@@ -31,7 +31,7 @@ from pwem.objects import (Particle, VolumeMask, SetOfParticles,
 
 from pyworkflow import BETA
 from pyworkflow.utils import makePath, createLink, moveFile, cleanPath
-from pyworkflow.protocol.params import (Form, PointerParam, 
+from pyworkflow.protocol.params import (Form, PointerParam, EnumParam,
                                         FloatParam, IntParam,
                                         StringParam, BooleanParam,
                                         GE, GT, Range,
@@ -89,18 +89,19 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('resize', IntParam, label='Resize', default=0,
                       validators=[GE(0)])
 
-        form.addSection(label='Classification')
+        form.addSection(label='Analysis')
         form.addParam('principalComponents', IntParam, label='Principal components',
                       default=6, validators=[GT(0)],
                       help='Number of principal components used for directional classification')
+        form.addParam('secondaryPrincipalComponents', IntParam, label='Secondary principal components',
+                      default=8, validators=[GE(0)], expertLevel=LEVEL_ADVANCED,
+                      help='Number of principal components represented in the output.')
         form.addParam('outputPrincipalComponents', IntParam, label='Output principal components',
                       default=0, validators=[GE(0)], expertLevel=LEVEL_ADVANCED,
                       help='Number of principal components represented in the output.')
-
-        form.addSection(label='Analysis')
-        form.addParam('maxClasses', IntParam, label='Maximum number of classes',
-                      default=16, validators=[GT(0)],
-                      help='Maximum number of classes considered in the analysis step')
+        form.addParam('optimizationMethod', EnumParam, label='Optimization method',
+                      choices=['SDP', 'Burer-Monteiro'], expertLevel=LEVEL_ADVANCED,
+                      default=0 )
         
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
@@ -143,7 +144,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('combineDirectionsStep')
         self._insertFunctionStep('reconstructEigenVolumesStep')
         self._insertFunctionStep('createOutputStep')
-        self._insertFunctionStep('analysisStep')
+        #self._insertFunctionStep('analysisStep')
 
     def _summary(self):
         summary = []
@@ -364,8 +365,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         objIds = list(directionMd)
         nDirections = len(objIds)
         adjacency = scipy.sparse.lil_matrix((nDirections, )*2)
-        crossCorrelations = scipy.sparse.lil_matrix((nDirections*k, )*2)
-        weights = scipy.sparse.lil_matrix(crossCorrelations.shape)
+        similarities = scipy.sparse.lil_matrix((nDirections*k, )*2)
         for (idx0, directionId0), (idx1, directionId1) in itertools.combinations(enumerate(objIds), r=2):
             # Obtain the projection angles
             rot0 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId0)
@@ -391,51 +391,48 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                     md1.intersection(md0, emlib.MDL_ITEM_ID)
                     adjacency[idx0,idx1] = adjacency[idx1,idx0] = n
                     
-                    # Get their likelihood values
+                    # Get their PCA projection values
                     projections0 = np.array(md0.getColumnValues(emlib.MDL_DIMRED)).T
                     projections1 = np.array(md1.getColumnValues(emlib.MDL_DIMRED)).T
-
-                    # Normalize projections
-                    norm0 = np.linalg.norm(projections0, axis=-1, keepdims=True)
-                    norm1 = np.linalg.norm(projections1, axis=-1, keepdims=True)
-                    projections0 /= norm0
-                    projections1 /= norm1
                     
-                    # Compute the cross correlation and weight matrix
-                    crossCorrelation = projections0 @ projections1.T
-                    weight = norm0 @ norm1.T
+                    # Compute similarity
+                    similarity = projections0 @ projections1.T
 
                     # Write them in symmetric positions
                     start0 = idx0*k
                     end0 = start0+k
                     start1 = idx1*k
                     end1 = start1+k
-                    crossCorrelations[start0:end0, start1:end1] = crossCorrelation
-                    crossCorrelations[start1:end1, start0:end0] = crossCorrelation.T
-                    weights[start0:end0, start1:end1] = weight
-                    weights[start1:end1, start0:end0] = weight.T
+                    similarities[start0:end0, start1:end1] = similarity.T
+                    similarities[start1:end1, start0:end0] = similarity
                     
-        # Normalize weights
-        weights /= abs(weights).max()
+        # Normalize similarities
+        similarities /= abs(similarities).max()
         
         # Store the matrices
         self._writeAdjacencyGraph(adjacency.tocsr())
-        self._writeCrossCorrelations(crossCorrelations.tocsr())
-        self._writeWeights(weights.tocsr())
+        self._writeCrossCorrelations(similarities.tocsr())
 
     def basisSynchronizationStep(self):
         k = self._getPrincipalComponentsCount()
+        k2 = self._getSecondaryPrincipalComponentsCount()
         
         cmd = 'xmipp_synchronize_transform'
         args = []
         args += ['-i', self._getCrossCorrelationsFilename()]
-        args += ['-w', self._getWeightsFilename()]
         args += ['-o', self._getBasesFilename()]
+        args += ['--adjacency', self._getAdjacencyGraphFilename()]
         args += ['-k', k]
-        args += ['--eigenvalues', self._getEigenvaluesFilename()]
-        args += ['-p', self._getPairwiseFilename()]
+        args += ['-k2', k2]
+        args += ['--pairwise', self._getPairwiseFilename()]
+        args += ['--verbose']
         args += ['--triangular_upper']
-        args += ['-v']
+
+        if self.optimizationMethod == 0:
+            args += ['--method', 'sdp']
+            args += ['--eigenvalues', self._getEigenvaluesFilename()]
+        elif self.optimizationMethod == 1:
+            args += ['--method', 'burer-monteiro']
 
         env = self.getCondaEnv(_conda_env='xmipp_graph')
         self.runJob(cmd, args, env=env, numberOfMpi=1)
@@ -445,20 +442,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         correctedDirectionMd = emlib.MetaData()
         classificationMd = emlib.MetaData()
         bases = self._readBases()
-
-        # Determine output component count
-        ko = self._getOutputPrincipalComponentsCount()
-        if ko == 0:
-            w = self._readEigenvalues()
-            ko = len(w) - (1+int(np.argmax(np.diff(w))))
-            
-        # Trim bases
-        #u, s, vt = np.linalg.svd(bases[:,:,-ko:], full_matrices=False)
-        #u *= np.sign(s)[...,None,:]
-        #orthogonalBases = u @ vt
-        #inverseBases = orthogonalBases.transpose(0, 2, 1)
         inverseBases = bases.transpose(0, 2, 1)
-        inverseBases = inverseBases[:,-ko:,:]
 
         eigenimageHandler = emlib.Image()
         for i, directionRow in enumerate(emlib.metadata.iterRows(directionMd)):
@@ -624,6 +608,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getPrincipalComponentsCount(self) -> int:
         return self.principalComponents.get()
+    
+    def _getSecondaryPrincipalComponentsCount(self) -> int:
+        return self.secondaryPrincipalComponents.get()
     
     def _getOutputPrincipalComponentsCount(self) -> int:
         return self.outputPrincipalComponents.get()
