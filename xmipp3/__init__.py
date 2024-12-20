@@ -68,14 +68,13 @@ class Plugin(pwem.Plugin):
         import ctypes
         for frameInfo in inspect.stack():
             if frameInfo.function == "installPipModule":
-                print(f'frameInfo: {frameInfo}')
                 frame = frameInfo[0]
                 frame.f_locals['self']._plugin = None
                 ctypes.pythonapi.PyFrame_LocalsToFast(
 				    ctypes.py_object(frame),
 				    ctypes.c_int(1))
     except Exception as e:
-	    print(e)
+        print(e)
     
     @classmethod
     def _defineVariables(cls):
@@ -188,30 +187,28 @@ class Plugin(pwem.Plugin):
             )
         
         #Release binaries installation
-        vScipionApp = Version(scipionAppVersion)
-        vMinRequired = Version('3.7.1')
-        if vScipionApp < vMinRequired:
-	        print("\n---------------------------------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
-        else:
-            tag = version._current_xmipp_tag
-            xmippSrc = f'xmippSrc-{tag}'
-            installCommands = [
-                (f'cd .. && rm -rf {xmippSrc} && '
-                f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
-                f'cd {xmippSrc} && '
-                f'./xmipp -b {tag}', COMPILE_TARGETS)   
-            ]
-            env.addPackage(
-                'xmippSrc', version=tag,
-                tar='void.tgz',
-                commands=installCommands,
-                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-                updateCuda=True,
-                default=not develMode
-            )
-            
-            ## EXTRA PACKAGES ##
-            installDeepLearningToolkit(cls, env)
+        # if Version(scipionAppVersion) < Version('3.7.1'):
+	    #     print("\n---------------------------------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
+        # else:
+        tag = version._current_xmipp_tag
+        xmippSrc = f'xmippSrc-{tag}'
+        installCommands = [
+            (f'cd .. && rm -rf {xmippSrc} && '
+            f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
+            f'cd {xmippSrc} && '
+            f'./xmipp -b {tag}', COMPILE_TARGETS)
+        ]
+        env.addPackage(
+            'xmippSrc', version=tag,
+            tar='void.tgz',
+            commands=installCommands,
+            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+            updateCuda=True,
+            default=not develMode
+        )
+        
+        ## EXTRA PACKAGES ##
+        installDeepLearningToolkit(cls, env)
 
     @classmethod
     def __getBundleDirectory(cls):
