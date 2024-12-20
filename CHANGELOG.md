@@ -1,3 +1,6 @@
+## Release 3.24.12.1 - Poseidon
+   - More scipion-em-xmipp
+      - Updating version for pypi requirements
 ## Release 3.24.12 - Poseidon
    - New protocols
       - apply_tilt_to_ctf: Apply a local deviation to the CTF based on the micrograph's tilt
