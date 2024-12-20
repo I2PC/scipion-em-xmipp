@@ -58,6 +58,24 @@ class Plugin(pwem.Plugin):
     _supportedVersions = []
     _url = XMIPP_URL
     _condaRootPath = None
+    
+    #Refressing the plugin
+    # Inspects the call stack to find 'installPipModule' and sets 'self._plugin' to None.
+    # Uses CPython's internal API 'PyFrame_LocalsToFast' to sync changes.
+    # Risky and CPython-specific; use only if redesign is not possible.
+    try:
+        import inspect
+        import ctypes
+        for frameInfo in inspect.stack():
+            if frameInfo.function == "installPipModule":
+                print(frameInfo)
+                frame = frameInfo[0]
+                frame.f_locals['self']._plugin = None
+                ctypes.pythonapi.PyFrame_LocalsToFast(
+	                ctypes.py_object(frame),
+	                ctypes.c_int(1))
+    except Exception as e:
+        print(e)
 
     @classmethod
     def _defineVariables(cls):
@@ -170,9 +188,7 @@ class Plugin(pwem.Plugin):
             )
         
         #Release binaries installation
-	vScipionApp = Version(scipionAppVersion)
-	vMinRequired = Version('3.7.1')
-        if vScipionApp < vMinRequired:
+        if Version(scipionAppVersion) < Version('3.7.1'):
 	        print("\n---------------------------------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
         else:
             tag = version._current_xmipp_tag
