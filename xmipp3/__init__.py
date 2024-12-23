@@ -46,8 +46,8 @@ NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
 type_of_version = version.type_of_version
 _logo = version._logo
-_current_xmipp_tag = version._current_xmipp_tag
-_currentBinVersion = version._currentBinVersion
+_binTagVersion = version._binTagVersion
+_pluginTagVersion= version._pluginTagVersion
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
 
@@ -185,14 +185,14 @@ class Plugin(pwem.Plugin):
                 default=False
             )
         
-        tag = version._current_xmipp_tag
+        tag = version._pluginTagVersion
         xmippSrc = f'xmippSrc-{tag}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
             f'git clone --depth 1 {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
             f'git checkout {tag}  '
-            f'./xmipp -b {tag} ', COMPILE_TARGETS)
+            f'./xmipp -b {_binTagVersion} ', COMPILE_TARGETS)
         ]
         env.addPackage(
             'xmippSrc', version=tag,
