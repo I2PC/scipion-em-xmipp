@@ -35,4 +35,4 @@ _binTagVersion = _binVersion + '-Poseidon' #'devel' or _binVersion + '-Poseidon'
 _pluginTagVersion = _pluginVersion + '-Poseidon'  #'devel' or _pluginVersion + '-Poseidon'
 
 _currentDepVersion = '1.0'
-__version__ = _pluginTagVersion
+__version__ = _pluginVersion
