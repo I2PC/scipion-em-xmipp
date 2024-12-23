@@ -34,7 +34,6 @@ from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import IntParam
-from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
 from pyworkflow.constants import BETA
 
 from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles
@@ -52,7 +51,7 @@ LAST_DONE_FILE = "last_done.txt"
 BATCH_UPDATE = 5000
 
 
-class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
+class XmippProtClassifyPcaStreaming(XmippProtClassifyPca):
     """ Classifies a set of images. """
 
     _label = '2D classification pca streaming'
@@ -69,7 +68,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
     def __init__(self, **args):
         XmippProtClassifyPca.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
+        #self.stepsExecutionMode = STEPS_PARALLEL
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -80,98 +79,116 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                       label="particles for initial classification",
                       help='Number of particles for an initial classification to compute the 2D references')
 
-        form.addParallelSection(threads=3, mpi=1)
-
     # --------------------------- INSERT steps functions ----------------------
-    def stepsGeneratorStep(self) -> None:
-        """
-        This step should be implemented by any streaming protocol.
-        It should check its input and when ready conditions are met
-        call the self._insertFunctionStep method.
-        """
-        self._initialStep()
+    def _insertAllSteps(self):
+        self.initializeParams()
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=[], wait=True, needsGPU=False)
+
+    def createOutputStep(self):
+        self._closeOutputSet()
+
+    def initializeParams(self):
+        # Streaming variavles
+        self.finished = False
         self.newDeps = []
-        newParticlesSet = self._loadEmptyParticleSet()
+        # Important to have both:
+        self.insertedIds = []  # Contains images that have been inserted in a Step (checkNewInput).
+        self.processedIds = []  # Ids to be output
+        self.isStreamClosed = self.inputParticles.get().isStreamClosed()
+        self.inputFn = self.inputParticles.get().getFileName()
 
-        if self.isContinued() and self._isPcaDone():
-            self.info('Continue protocol')
-            self._updateVarsToContinue()
+        self.staticRun = True if self.isStreamClosed else False
+        if self.staticRun:
+            self.info('Static Run')
 
-        while not self.finish:
-            if not self._newParticlesToProcess():
-                self.info('No new particles')
-            else:
-                particlesSet = self._loadInputParticleSet()
-                self.streamState = particlesSet.getStreamState()
-                where = None
-                if self.lastCreationTime:
-                    where = 'creation>"' + str(self.lastCreationTime) + '"'
+        #  Program variables
+        self._initialStep()
 
-                for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
-                    tmp = particle.getObjCreation()
-                    newParticlesSet.append(particle.clone())
+    def _getFirstJoinStepName(self):
+        # This function will be used for streaming, to check which is
+        # the first function that need to wait for all ctfs
+        # to have completed, this can be overriden in subclasses
+        # (e.g., in Xmipp 'sortPSDStep')
+        return 'createOutputStep'
 
-                particlesSet.close()
-                self.lastCreationTime = tmp
-                self.info('%d new particles' % len(newParticlesSet))
-                self.info('Last creation time REGISTER %s' % self.lastCreationTime)
+    def _getFirstJoinStep(self):
+        for s in self._steps:
+            if s.funcName == self._getFirstJoinStepName():
+                return s
+        return None
 
-                # ------------------------------------ PCA TRAINING ----------------------------------------------
-                if self._doPcaTraining(newParticlesSet):
-                    self.pcaStep = self._insertFunctionStep(self.runPCASteps, newParticlesSet,
-                                                            prerequisites=[], needsGPU=True)
-                    if len(newParticlesSet) == len(particlesSet) and self.streamState == Set.STREAM_CLOSED:
-                        self.staticRun = True
-                        self.info('Static Run')
-                # ------------------------------------ CLASSIFICATION ----------------------------------------------
-                if self._doClassification(newParticlesSet):
-                    self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
-                    newParticlesSet = self._loadEmptyParticleSet()
+    def _stepsCheck(self):
+        self._checkNewInput()
+        #self._checkNewOutput()
 
-            if self.streamState == Set.STREAM_CLOSED:
-                self.info('Stream closed')
-                # Finish everything and close output sets
-                if len(newParticlesSet):
-                    self.info('Finish processing with last batch %d' % len(newParticlesSet))
-                    self.lastRound = True
-                else:
-                    self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps, needsGPU=False)
-                    self.finish = True
-                    continue  # To avoid waiting
+    def _checkNewInput(self):
+        # Check if there are new images to process from the input set
+        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
+        mTime = datetime.fromtimestamp(os.path.getmtime(self.inputFn))
+        self.debug('Last check: %s, modification: %s'
+                    % (prettyTime(self.lastCheck),
+                       prettyTime(mTime)))
+        # If the input.sqlite have not changed since our last check,
+        # it does not make sense to check for new input data
+        if self.lastCheck > mTime and self.insertedIds:  # If this is empty it is due to a static "continue" action or it is the first round
+            return None
 
-            self.inputParticles.get().close() # If this is not close then it blocks the input protocol
-            # However if you put it it will block the iterItems of the classify if it is long
-            sys.stdout.flush()
-            time.sleep(30)
+        inputSet = self._loadInputSet(self.inputFn)
+        inputSetIds = inputSet.getIdSet()
 
-        sys.stdout.flush()  # One last flush
+        if self.insertedIds:
+            newIds = [idImage for idImage in inputSetIds if idImage not in self.insertedIds]
+        else:
+            newIds = list(inputSetIds)
+
+        self.lastCheck = datetime.now()
+        self.isStreamClosed = inputSet.isStreamClosed()
+        inputSet.close()
+
+        outputStep = self._getFirstJoinStep()
+
+        if self.isContinued() and not self.insertedIds:  # For "Continue" action and the first round
+            doneIds, _ = self._getAllDoneIds()
+            skipIds = list(set(newIds).intersection(set(doneIds)))
+            newIds = list(set(newIds).difference(set(doneIds)))
+            self.info("Skipping Images with ID: %s, seems to be done" % skipIds)
+            self.insertedIds = doneIds  # During the first round of "Continue" action it has to be filled
+
+        if newIds and (self._doPcaTraining(newIds) or self._doClassification(newIds)):
+            fDeps = self._insertProcessingSteps(newIds)
+
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+
+            self.updateSteps()
+
+    def _loadInputSet(self, inputFn):
+        self.debug("Loading input db: %s" % inputFn)
+        inputSet = SetOfParticles(filename=inputFn)
+        inputSet.loadAllProperties()
+        return inputSet
+
+    # ------------------------------------------ Utils ---------------------------------------
+
+    def _getAllDoneIds(self):
+        doneIds = []
+        sizeOutput = 0
+
+        if hasattr(self, OUTPUT_CLASSES):
+            sizeOutput = self.outputClasses.getImages().getSize()
+            doneIds.extend(list(self.outputClasses.getImages().getIdSet()))
+
+        return doneIds, sizeOutput
 
     # --------------------------- STEPS functions -------------------------------
     def _initialStep(self):
-        self.finish = False
-        self.lastCreationTime = 0
-        self.lastCreationTimeProcessed = 0
-        self.streamState = Set.STREAM_OPEN
-        self.lastRound = False
-        self.pcaLaunch = False
+        #self.lastRound = False
+        #self.pcaLaunch = False
         self.classificationLaunch = False
         self.classificationRound = 0
         self.firstTimeDone = False
-        self.staticRun = False
-        # Initialize files
-        self._initFnStep()
-
-    def _initFnStep(self):
-        updateEnviron(self.gpuList.get())
-        self.inputFn = self.inputParticles.get().getFileName()
-        self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
-        self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd')  # Wiener
-        self.imgsPcaFn = self._getTmpPath('images_pca.mrc')
-        self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
-        self.imgsXmd = self._getTmpPath('images_.xmd')  # Wiener
-        self.imgsFn = self._getTmpPath('images_.mrc')
-        self.refXmd = self._getTmpPath('references.xmd')
-        self.ref = self._getExtraPath('classes.mrcs')
+        # Initialize variables
         self.sigmaProt = self.sigma.get()
         if self.sigmaProt == -1:
             self.sigmaProt = self.inputParticles.get().getDimensions()[0] / 3
@@ -189,26 +206,75 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         else:
             self.numberClasses = self.numberOfClasses.get()
 
+        # Initialize files
+        self._initFnStep()
+
+    def _initFnStep(self):
+        updateEnviron(self.gpuList.get())
+        self.inputFn = self.inputParticles.get().getFileName()
+        self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
+        self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd')  # Wiener
+        self.imgsPcaFn = self._getTmpPath('images_pca.mrc')
+        self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
+        self.imgsXmd = self._getTmpPath('images_.xmd')  # Wiener
+        self.imgsFn = self._getTmpPath('images_.mrc')
+        self.refXmd = self._getTmpPath('references.xmd')
+        self.ref = self._getExtraPath('classes.mrcs')
+
+
+    def _insertProcessingSteps(self, newIds):
+        deps = []
+
+        inputParticles = self._loadInputSet(self.inputFn)
+
+        if not self.staticRun:
+            newParticlesSet = self._loadEmptyParticleSet()  # Esto hay que moverlo fuera y pasarle como atributo para streaming
+            for partId in newIds:
+                particle = inputParticles.getItem("id", partId).clone()
+                newParticlesSet.append(particle)
+        else:
+            newParticlesSet = inputParticles
+
+        # ------------------------------------ PCA TRAINING ----------------------------------------------
+        if self._doPcaTraining(newIds):
+            self.pcaStep = self._insertPCASteps(newParticlesSet)
+            # fDeps.append(self.pcaStep) We dont need to store it as it is a dependecy of the other
+        # ------------------------------------ CLASSIFICATION ----------------------------------------------
+        if self._doClassification(newIds):
+            print('DO classification steeeeeep')
+            classifyStep = self._insertClassificationSteps(newParticlesSet)
+            self.insertedIds.extend(newIds)
+            deps.append(classifyStep)
+
+        return deps
+
+    def _insertPCASteps(self, newParticlesSet):
+        pcaStep = self._insertFunctionStep(self.runPCASteps, newParticlesSet,
+                                                        prerequisites=[], needsGPU=True)
+        return pcaStep
+
     def runPCASteps(self, newParticlesSet):
         # Run PCA steps
-        self.pcaLaunch = True
+        # self.pcaLaunch = True
         if self.correctCtf:
             self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaXmdOut)  # Wiener filter
         else:
             self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
         numTrain = min(len(newParticlesSet), self.training.get())
         self.pcaTraining(self.imgsPcaFn, self.resolutionPca, numTrain)
-        self.pcaLaunch = False
+        # self.pcaLaunch = False
         self._setPcaDone()
 
-    def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
+
+    def _insertClassificationSteps(self, newParticlesSet):
         self._updateFnClassification()
         classStep = self._insertFunctionStep(self.runClassificationSteps,
                                              newParticlesSet, prerequisites=self.pcaStep, needsGPU=True)
-        updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
-                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep,
-                                              needsGPU=False)
-        self.newDeps.append(updateStep)
+        #updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
+        #                                      lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep,
+        #                                      needsGPU=False)
+        #self.newDeps.append(updateStep)
+        return classStep
 
     def runClassificationSteps(self, newParticlesSet):
         self.classificationLaunch = True
@@ -223,6 +289,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
     def convertInputStep(self, input, outputOrig, outputMRC):
         if self._isPcaDone() and self.staticRun:  # Static run: reuse files to avoid doing this twice
+            print('static run motherfucker')
             self.imgsOrigXmd = self.imgsPcaXmd
             self.imgsFn = self.imgsPcaFn
         else:
@@ -410,24 +477,28 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
         return outputRefs
 
-    def _doPcaTraining(self, newParticlesSet):
+    def _doPcaTraining(self, newParticlesIds):
         """ Two cases for launching PCA steps:
             - If there are enough particles and PCA has not been launched or finished.
             - Launch if it's the last round of new particles and PCA has not been launched or finished. """
-        return (len(newParticlesSet) >= self.training.get() and not self._isPcaDone() and not self.pcaLaunch) or \
-            (self.lastRound and not self._isPcaDone() and not self.pcaLaunch)
+        return ((len(newParticlesIds) >= self.training.get() or self.isStreamClosed)
+                and (not self._isPcaDone() and not hasattr(self, "pcaStep")))
+            #(self.lastRound and not self._isPcaDone() and not
 
-    def _doClassification(self, newParticlesSet):
+    def _doClassification(self, newParticlesIds):
         """ Three cases for launching Classification
             - First round of classification: enough particles and PCA done
             - Update classification: classification done, PCA done and enough batch size
             - First or update classification with a smaller batch: last round of particles and not classification launch
         """
-        return (len(newParticlesSet) >= self.classificationBatch.get() and self._isPcaDone()
-                and not self._isClassificationDone() and not self.classificationLaunch) \
-            or (len(newParticlesSet) >= BATCH_UPDATE and self._isClassificationDone() and self._isPcaDone()
-                and not self.classificationLaunch) \
-            or (self.lastRound and not self.classificationLaunch)
+        #return (len(newParticlesSet) >= self.classificationBatch.get() and self._isPcaDone()
+        #        and not self._isClassificationDone() and not self.classificationLaunch) \
+        #    or (len(newParticlesSet) >= BATCH_UPDATE and self._isClassificationDone() and self._isPcaDone()
+        #        and not self.classificationLaunch) \
+        #    or (self.lastRound and not self.classificationLaunch)
+        return (((len(newParticlesIds) >= self.classificationBatch.get() and not self._isClassificationDone())
+                or (len(newParticlesIds) >= BATCH_UPDATE and self._isClassificationDone())
+                 and (self._isPcaDone() and not self.classificationLaunch)) or self.staticRun and not self.classificationLaunch)
 
     def _isPcaDone(self):
         done = False
