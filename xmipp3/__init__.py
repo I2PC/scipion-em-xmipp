@@ -185,18 +185,14 @@ class Plugin(pwem.Plugin):
                 default=False
             )
         
-        #Release binaries installation
-        # if Version(scipionAppVersion) < Version('3.7.1'):
-	    #     print("\n---------------------------------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
-        # else:
         tag = version._current_xmipp_tag
         xmippSrc = f'xmippSrc-{tag}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
             f'git clone --depth 1 {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
-            f'git checkout {tag}'
-            f'./xmipp -b {tag}', COMPILE_TARGETS)
+            f'git checkout {tag} '
+            f'./xmipp -b {tag} ', COMPILE_TARGETS)
         ]
         env.addPackage(
             'xmippSrc', version=tag,
