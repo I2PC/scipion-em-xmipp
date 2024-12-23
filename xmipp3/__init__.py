@@ -189,7 +189,7 @@ class Plugin(pwem.Plugin):
         xmippSrc = f'xmippSrc-{tag}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
-            f'git clone --depth 1 {XMIPP_GIT_URL} {xmippSrc} && '
+            f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
             f'git checkout {tag} && '
             f'./xmipp -b {_binTagVersion} ', COMPILE_TARGETS)
