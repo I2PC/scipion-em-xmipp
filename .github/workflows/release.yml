@@ -39,7 +39,7 @@ jobs:
         cat latest_changelog_with_title.md | tail -n +2 > latest_changelog.md
         RELEASE_NAME=$(cat latest_changelog_with_title.md | head -n 1 | sed 's/## Release //' | sed 's/^ *//')
         echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=v${RELEASE_NAME// /}" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=${RELEASE_NAME// /}" >> $GITHUB_OUTPUT
     
     - name: Generate tag
       id: tag_version
