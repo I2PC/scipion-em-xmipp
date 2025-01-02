@@ -292,13 +292,13 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         particles = emlib.MetaData()
         itemIds = set()
         for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
-            directionId = int(block.split("_")[1])
-
             particles.readBlock(self._getNeighborsMdFilename(), block)
             if particles.size() == 0:
-                print('Direction %d has no particles. Skipping' % directionId)
+                print('Direction %s has no particles. Skipping' % block)
                 continue
 
+            directionId = directionalMd.addObject()
+                
             # Write particles
             makePath(self._getDirectionPath(directionId))
             particles.write(self._getDirectionParticlesMdFilename(directionId))
@@ -317,7 +317,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImagesFilename(directionId))
             directionRow.setValue(emlib.MDL_SELFILE, self._getDirectionalClassificationMdFilename(directionId))
             directionRow.setValue(emlib.MDL_COUNT, particles.size())
-            directionRow.addToMd(directionalMd)
+            directionRow.writeToMd(directionalMd, directionId)
 
         if len(itemIds) != len(self._getInputParticles()):
             raise RuntimeError('Not all particles were grouped. Please try '
@@ -395,6 +395,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                     projections0 = np.array(md0.getColumnValues(emlib.MDL_DIMRED)).T
                     projections1 = np.array(md1.getColumnValues(emlib.MDL_DIMRED)).T
                     
+                    projections0 -= projections0.mean(axis=1, keepdims=True)
+                    projections1 -= projections1.mean(axis=1, keepdims=True)
+                    
                     # Compute similarity
                     similarity = projections0 @ projections1.T
 
@@ -403,8 +406,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                     end0 = start0+k
                     start1 = idx1*k
                     end1 = start1+k
-                    similarities[start0:end0, start1:end1] = similarity.T
-                    similarities[start1:end1, start0:end0] = similarity
+                    similarities[start0:end0, start1:end1] = similarity
+                    similarities[start1:end1, start0:end0] = similarity.T
                     
         # Normalize similarities
         similarities /= abs(similarities).max()
@@ -415,22 +418,26 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
     def basisSynchronizationStep(self):
         k = self._getPrincipalComponentsCount()
-        k2 = self._getSecondaryPrincipalComponentsCount()
+        p = self._getOutputPrincipalComponentsCount()
         
         cmd = 'xmipp_synchronize_transform'
         args = []
         args += ['-i', self._getCrossCorrelationsFilename()]
         args += ['-o', self._getBasesFilename()]
-        args += ['--adjacency', self._getAdjacencyGraphFilename()]
         args += ['-k', k]
-        args += ['-k2', k2]
+        args += ['--adjacency', self._getAdjacencyGraphFilename()]
         args += ['--pairwise', self._getPairwiseFilename()]
+        args += ['--eigenvalues', self._getEigenvaluesFilename()]
         args += ['--verbose']
         args += ['--triangular_upper']
 
+        if p > 0:
+            args += ['-p', p]
+        else:
+            args += ['--auto_trim']
+
         if self.optimizationMethod == 0:
             args += ['--method', 'sdp']
-            args += ['--eigenvalues', self._getEigenvaluesFilename()]
         elif self.optimizationMethod == 1:
             args += ['--method', 'burer-monteiro']
 
