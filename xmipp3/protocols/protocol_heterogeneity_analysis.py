@@ -44,14 +44,12 @@ from xmipp3.convert import (writeSetOfParticles, setXmippAttributes,
 import xmippLib
 
 import os.path
-import pickle
 import itertools
 import collections
 import numpy as np
 import scipy.sparse
 import scipy.stats
-import sklearn.mixture
-import sklearn.model_selection
+import sklearn.decomposition
 
 class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_PARTICLES_NAME = 'Particles'
@@ -426,7 +424,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['--adjacency', self._getAdjacencyGraphFilename()]
         args += ['--pairwise', self._getPairwiseFilename()]
         args += ['--eigenvalues', self._getEigenvaluesFilename()]
-        args += ['--verbose']
+        #args += ['--verbose']
         args += ['--triangular_upper']
 
         if p > 0:
@@ -470,32 +468,53 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         correctedDirectionMd.write(self._getCorrectedDirectionalMdFilename())
             
     def combineDirectionsStep(self):   
+        symList = xmippLib.SymList()
+        symList.readSymmetryFile(self._getSymmetryGroup())
+        maxAngularDistance = self._getAngularDistance()
         directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
 
         # Accumulate all PCA projection values
         projections = collections.Counter()
         weights = collections.Counter()
+        amplitudes = 0
         for directionId in directionMd:
+            directionRot = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId)
+            directionTilt = directionMd.getValue(emlib.MDL_ANGLE_TILT, directionId)
+
             # Read the classification of this direction
             directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
             values = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
-            stddev = np.std(values, axis=0)
-            weight = len(values)
+            var = np.var(values, axis=0)
+            stddev = np.sqrt(var)
+            amplitudes += var
             
             # Increment the result likelihood value
             for objId in directionalClassificationMd:
                 itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
+                rot = directionalClassificationMd.getValue(emlib.MDL_ANGLE_ROT, objId)
+                tilt = directionalClassificationMd.getValue(emlib.MDL_ANGLE_TILT, objId)
                 projection = np.array(directionalClassificationMd.getValue(emlib.MDL_DIMRED, objId))
+                
+                angularDistance = symList.computeDistanceAngles(
+                    directionRot, directionTilt, 0.0, 
+                    rot, tilt, 0.0,
+                    True, self.checkMirrors.get(), False
+                )
+                weight = (maxAngularDistance-angularDistance) / maxAngularDistance
+                assert weight >= 0
                 
                 projections[itemId] += weight * (projection / stddev)
                 weights[itemId] += weight
+
+        amplitudes /= directionMd.size()
+        amplitudes = np.sqrt(amplitudes)
 
         # Write PCA projection values to the output metadata
         result = emlib.MetaData(self._getWienerParticleMdFilename())
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-            projection = projections[itemId] / weights[itemId]
+            projection = amplitudes*(projections[itemId] / weights[itemId])
             result.setValue(emlib.MDL_DIMRED, projection.tolist(), objId)
                 
         # Store
@@ -510,7 +529,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         classificationMd = emlib.MetaData(classificationFilename)
         projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
         projections = pca.fit_transform(projections)
-        classificationMd.setColumnValues(projections.tolist())
+        classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
         classificationMd.write(classificationFilename)
         
         bases = self._readBases()
@@ -523,7 +542,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             classificationMd = emlib.MetaData(classificationFilename)
             projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
             projections = pca.transform(projections)
-            classificationMd.setColumnValues(projections.tolist())
+            classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
             classificationMd.write(classificationFilename)
      
     def correctEigenImagesStep(self):
