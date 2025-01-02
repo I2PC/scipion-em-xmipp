@@ -141,6 +141,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('correctBasisStep')
         self._insertFunctionStep('combineDirectionsStep')
         self._insertFunctionStep('diagonalizeStep')
+        self._insertFunctionStep('correctEigenImagesStep')
         self._insertFunctionStep('reconstructEigenVolumesStep')
         self._insertFunctionStep('createOutputStep')
 
@@ -448,21 +449,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         bases = self._readBases()
         inverseBases = bases.transpose(0, 2, 1)
 
-        eigenimageHandler = emlib.Image()
         for i, directionRow in enumerate(emlib.metadata.iterRows(directionMd)):
             directionId = directionRow.getObjId()
             inverseBasis = inverseBases[i]
             correctedClassificationFilename = self._getCorrectedDirectionalClassificationMdFilename(directionId)
             correctedEigenImageFilename = self._getCorrectedDirectionalEigenImagesFilename(directionId)
-
-            # Correct eigen-images
-            eigenimageHandler.read(directionRow.getValue(emlib.MDL_IMAGE_RESIDUAL))
-            eigenimages = eigenimageHandler.getData()
-            eigenvectors = eigenimages.reshape(inverseBasis.shape[1], -1)
-            eigenvectors = inverseBasis @ eigenvectors
-            eigenimages = eigenvectors.reshape(inverseBasis.shape[0], 1, *eigenimages.shape[-2:])
-            eigenimageHandler.setData(eigenimages)
-            eigenimageHandler.write(correctedEigenImageFilename)
             
             # Apply basis to projection values
             classificationMd.read(directionRow.getValue(emlib.MDL_SELFILE))
@@ -522,6 +513,10 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         classificationMd.setColumnValues(projections.tolist())
         classificationMd.write(classificationFilename)
         
+        bases = self._readBases()
+        bases = bases @ pca.components_.T
+        self._writeBases(bases)
+
         directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
         for directionId in directionMd:
             classificationFilename = directionMd.getValue(emlib.MDL_SELFILE, directionId)
@@ -530,7 +525,23 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             projections = pca.transform(projections)
             classificationMd.setColumnValues(projections.tolist())
             classificationMd.write(classificationFilename)
-            
+     
+    def correctEigenImagesStep(self):
+        bases = self._readBases()
+        inverseBases = bases.transpose(0, 2, 1)
+
+        directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
+        eigenimageHandler = emlib.Image()
+        for i, directionId in enumerate(directionMd):
+            inverseBasis = inverseBases[i]
+            eigenimageHandler.read(self._getDirectionalEigenImagesFilename(directionId))
+            eigenimages = eigenimageHandler.getData()
+            eigenvectors = eigenimages.reshape(inverseBasis.shape[1], -1)
+            eigenvectors = inverseBasis @ eigenvectors
+            eigenimages = eigenvectors.reshape(inverseBasis.shape[0], 1, *eigenimages.shape[-2:])
+            eigenimageHandler.setData(eigenimages)
+            eigenimageHandler.write(self._getCorrectedDirectionalEigenImagesFilename(directionId))
+        
     def reconstructEigenVolumesStep(self):
         ko = self.outputPrincipalComponentCount.get()
         
@@ -719,6 +730,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
     def _readBases(self):
         return np.load(self._getBasesFilename())
+
+    def _writeBases(self, bases):
+        return np.save(self._getBasesFilename(), bases)
 
     def _readEigenvalues(self):
         return np.load(self._getEigenvaluesFilename())
