@@ -93,9 +93,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('principalComponents', IntParam, label='Principal components',
                       default=6, validators=[GT(0)],
                       help='Number of principal components used for directional classification')
-        form.addParam('secondaryPrincipalComponents', IntParam, label='Secondary principal components',
-                      default=8, validators=[GE(0)], expertLevel=LEVEL_ADVANCED,
-                      help='Number of principal components represented in the output.')
         form.addParam('outputPrincipalComponents', IntParam, label='Output principal components',
                       default=0, validators=[GE(0)], expertLevel=LEVEL_ADVANCED,
                       help='Number of principal components represented in the output.')
@@ -297,9 +294,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                 print('Direction %s has no particles. Skipping' % block)
                 continue
 
-            directionId = directionalMd.addObject()
-                
             # Write particles
+            directionId = directionalMd.addObject()
             makePath(self._getDirectionPath(directionId))
             particles.write(self._getDirectionParticlesMdFilename(directionId))
             
@@ -569,27 +565,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._defineOutputs(**{self.OUTPUT_PARTICLES_NAME: particles})
         self._defineOutputs(**{self.OUTPUT_EIGENVOLUMES_NAME: eigenVolumes})
 
-    def analysisStep(self):
-        classificationMd = emlib.MetaData(self._getClassificationMdFilename())
-        projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
-        maxClasses = self.maxClasses.get()
-
-        search = sklearn.model_selection.GridSearchCV(
-            sklearn.mixture.GaussianMixture(), 
-            param_grid={ "n_components": range(1, maxClasses+1) }, 
-            scoring=lambda estimator, x : -estimator.bic(x),
-            verbose=2
-        )
-        search.fit(projections)
-    
-        result = search.cv_results_
-        index = np.argmax(result['mean_test_score'])
-        nClasses = result['param_n_components'][index]
-
-        self.recommendedNumberOfClasses = Integer(nClasses)
-        self._store()
-        self._writeGmmAnalysis(result)
-        
     # --------------------------- UTILS functions -------------------------------
     def _getDeviceList(self):
         gpus = self.getGpuList()
@@ -615,9 +590,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _getPrincipalComponentsCount(self) -> int:
         return self.principalComponents.get()
-    
-    def _getSecondaryPrincipalComponentsCount(self) -> int:
-        return self.secondaryPrincipalComponents.get()
     
     def _getOutputPrincipalComponentsCount(self) -> int:
         return self.outputPrincipalComponents.get()
@@ -709,9 +681,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getPairwiseFilename(self):
         return self._getExtraPath('pairwise.npy')
 
-    def _getGmmAnalysisFilename(self):
-        return self._getExtraPath('analysis.pkl')
-
     def _writeAdjacencyGraph(self, adjacency: scipy.sparse.csr_matrix) -> str:
         path = self._getAdjacencyGraphFilename()
         scipy.sparse.save_npz(path, adjacency)
@@ -727,26 +696,10 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     
     def _readCrossCorrelations(self) -> scipy.sparse.csr_matrix:
         return scipy.sparse.load_npz(self._getCrossCorrelationsFilename())
-    
-    def _writeWeights(self, weights: scipy.sparse.csr_matrix) -> str:
-        path = self._getWeightsFilename()
-        scipy.sparse.save_npz(path, weights)
-        return path
-    
-    def _readWeights(self) -> scipy.sparse.csr_matrix:
-        return scipy.sparse.load_npz(self._getWeightsFilename())
 
     def _readBases(self):
         return np.load(self._getBasesFilename())
 
-    def _writeGmmAnalysis(self, analysis):
-        with open(self._getGmmAnalysisFilename(), 'wb') as f:
-            pickle.dump(analysis, f)
-        
-    def _readGmmAnalysis(self):
-        with open(self._getGmmAnalysisFilename(), 'rb') as f:
-            return pickle.load(f)
-    
     def _readEigenvalues(self):
         return np.load(self._getEigenvaluesFilename())
     
