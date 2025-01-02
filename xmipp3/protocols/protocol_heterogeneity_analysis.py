@@ -97,7 +97,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                       help='Number of principal components represented in the output.')
         form.addParam('optimizationMethod', EnumParam, label='Optimization method',
                       choices=['SDP', 'Burer-Monteiro'], expertLevel=LEVEL_ADVANCED,
-                      default=0 )
+                      default=1 )
         
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
