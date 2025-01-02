@@ -29,7 +29,7 @@ type_of_version = 'release' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _binVersion = 'v3.24.12.0' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz)
-_pluginVersion = _binVersion + '.2' # Set this to ".0" on each Xmipp binary release, otherwise (hotfixes) increase it --> ".1", ".2", ...
+_pluginVersion = 'v3.24.12.2' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz) or in scipion-em-xmipp
 
 _binTagVersion = _binVersion + '-Poseidon' #'devel' or _binVersion + '-Poseidon'
 _pluginTagVersion = _pluginVersion + '-Poseidon'  #'devel' or _pluginVersion + '-Poseidon'

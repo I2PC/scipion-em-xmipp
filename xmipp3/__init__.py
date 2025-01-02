@@ -185,17 +185,16 @@ class Plugin(pwem.Plugin):
                 default=False
             )
         
-        tag = version._pluginTagVersion
-        xmippSrc = f'xmippSrc-{tag}'
+        xmippSrc = f'xmippSrc-{version._binTagVersion}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
             f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
-            f'git checkout {tag} && '
-            f'./xmipp -b {_binTagVersion} ', COMPILE_TARGETS)
+            f'git checkout {version._binTagVersion} && '
+            f'./xmipp -branch {version._binTagVersion} -branchPlugin {version._pluginTagVersion} ', COMPILE_TARGETS)
         ]
         env.addPackage(
-            'xmippSrc', version=tag,
+            'xmippSrc', version=version._binTagVersion,
             tar='void.tgz',
             commands=installCommands,
             neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
