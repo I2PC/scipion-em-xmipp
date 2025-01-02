@@ -36,6 +36,7 @@ from pyworkflow.protocol.params import (Form, PointerParam, EnumParam,
                                         StringParam, BooleanParam,
                                         GE, GT, Range,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
+import sklearn.decomposition
 
 import xmipp3
 from xmipp3.convert import (writeSetOfParticles, setXmippAttributes, 
@@ -139,9 +140,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('basisSynchronizationStep')
         self._insertFunctionStep('correctBasisStep')
         self._insertFunctionStep('combineDirectionsStep')
+        self._insertFunctionStep('diagonalizeStep')
         self._insertFunctionStep('reconstructEigenVolumesStep')
         self._insertFunctionStep('createOutputStep')
-        #self._insertFunctionStep('analysisStep')
 
     def _summary(self):
         summary = []
@@ -511,6 +512,25 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self.outputPrincipalComponentCount = Integer(len(projection))
         self._store()
         
+    def diagonalizeStep(self):
+        pca = sklearn.decomposition.PCA()
+        
+        classificationFilename = self._getClassificationMdFilename()
+        classificationMd = emlib.MetaData(classificationFilename)
+        projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
+        projections = pca.fit_transform(projections)
+        classificationMd.setColumnValues(projections.tolist())
+        classificationMd.write(classificationFilename)
+        
+        directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
+        for directionId in directionMd:
+            classificationFilename = directionMd.getValue(emlib.MDL_SELFILE, directionId)
+            classificationMd = emlib.MetaData(classificationFilename)
+            projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
+            projections = pca.transform(projections)
+            classificationMd.setColumnValues(projections.tolist())
+            classificationMd.write(classificationFilename)
+            
     def reconstructEigenVolumesStep(self):
         ko = self.outputPrincipalComponentCount.get()
         
