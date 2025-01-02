@@ -143,17 +143,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('reconstructEigenVolumesStep')
         self._insertFunctionStep('createOutputStep')
 
-    def _summary(self):
-        summary = []
-        
-        recommendedNumberOfClasses = getattr(self, 'recommendedNumberOfClasses', None)
-        if recommendedNumberOfClasses is not None:
-            summary.append("Recommended number of classes: %d." % recommendedNumberOfClasses)
-        else:
-            summary.append("Recommended number of classes not ready")
-
-        return summary
-
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
         inputParticles: SetOfParticles = self.inputParticles.get()
