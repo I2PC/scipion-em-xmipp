@@ -36,7 +36,6 @@ from pyworkflow.protocol.params import (Form, PointerParam, EnumParam,
                                         StringParam, BooleanParam,
                                         GE, GT, Range,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
-import sklearn.decomposition
 
 import xmipp3
 from xmipp3.convert import (writeSetOfParticles, setXmippAttributes, 
