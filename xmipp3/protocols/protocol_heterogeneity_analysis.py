@@ -309,6 +309,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                                '"Angular sampling"')
 
         directionalMd.write(self._getDirectionalMdFilename())
+        self.directionCount = Integer(directionalMd.size())
+        self._store()
             
     def classifyDirectionsStep(self):
         k = self._getPrincipalComponentsCount()
@@ -401,6 +403,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._writeCrossCorrelations(similarities.tocsr())
 
     def basisSynchronizationStep(self):
+        n = self._getDirectionCount()
         k = self._getPrincipalComponentsCount()
         p = self._getOutputPrincipalComponentsCount()
         
@@ -408,17 +411,16 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getCrossCorrelationsFilename()]
         args += ['-o', self._getBasesFilename()]
+        args += ['-n', n]
         args += ['-k', k]
-        args += ['--adjacency', self._getAdjacencyGraphFilename()]
         args += ['--pairwise', self._getPairwiseFilename()]
         args += ['--eigenvalues', self._getEigenvaluesFilename()]
         #args += ['--verbose']
-        args += ['--triangular_upper']
 
         if p > 0:
             args += ['-p', p]
         else:
-            args += ['--auto_trim']
+            args += ['--auto_trim', 0.99]
 
         if self.optimizationMethod == 0:
             args += ['--method', 'sdp']
@@ -632,6 +634,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getOutputPrincipalComponentsCount(self) -> int:
         return self.outputPrincipalComponents.get()
 
+    def _getDirectionCount(self) -> int:
+        return self.directionCount.get()
+    
     def _getInputMaskFilename(self):
         return self._getTmpPath('mask.mrc')
     
