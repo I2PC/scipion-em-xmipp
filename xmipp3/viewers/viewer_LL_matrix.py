@@ -117,7 +117,7 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
             matrix = np.load(filename)
 
         if self.normalise.get():
-            matrix = -np.divide(matrix, np.mean(matrix, axis=0))
+            matrix = np.divide(matrix, np.mean(matrix, axis=0)) * np.sign(np.mean(matrix))
 
         if volNumber1 != -1 and volNumber2 != -1:
             matrix = matrix[volNumber1:volNumber2]
