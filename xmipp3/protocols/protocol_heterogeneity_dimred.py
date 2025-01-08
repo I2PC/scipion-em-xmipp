@@ -30,8 +30,9 @@ from pwem.objects import Particle, SetOfParticles
 
 from pyworkflow import BETA
 from pyworkflow.object import ObjectWrap
-from pyworkflow.protocol.params import Form, PointerParam, EnumParam, IntParam
-import sklearn.decomposition
+from pyworkflow.protocol.params import (Form, PointerParam, EnumParam, 
+                                        IntParam, StringParam, LEVEL_ADVANCED)
+import pyworkflow.utils as pwutils
 
 import xmipp3
 from xmipp3.convert import setXmippAttribute, getXmippAttribute
@@ -69,6 +70,11 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
                       choices=self.DIMRED_METHODS, default=0 )
         form.addParam('outputDim', IntParam, label='Output dimensions',
                       default=2)
+        form.addParam('neighbors', IntParam, label='Neighbor count',
+                      default=12, expertLevel=LEVEL_ADVANCED)
+        form.addParam('components', StringParam, label='Components',
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Components used in evaluation')
         form.addParallelSection(threads=8)
         
     # --------------------------- INSERT steps functions ------------------------
@@ -78,10 +84,14 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
     # --------------------------- STEPS functions -------------------------------
     def dimredStep(self):
         particles = self._getInputParticles()
+        components = self._getComponents()
+        transformer = self._getTransformer()
         result: SetOfParticles = self._createSetOfParticles()
         
         values = self._getValues(particles)
-        transformer = self._getTransformer()
+        if len(components) > 0:
+            values = values[:,components]
+
         projections = transformer.fit_transform(values)
 
         def updateItem(item: Particle, coord: np.ndarray):
@@ -96,22 +106,34 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
     def _getInputParticles(self) -> SetOfParticles:
         return self.inputParticles.get()
 
+    def _getComponents(self):
+        result = []
+        
+        if self.components.get():
+            result = pwutils.getListFromRangeString(self.components.get())
+            
+        for i in range(len(result)):
+            result[i] -= 1
+            
+        return result
+
     def _getTransformer(self) -> sklearn.base.TransformerMixin:
         method = self.DIMRED_METHODS[self.method.get()]
         d = self.outputDim.get()
         jobs = self.numberOfThreads.get()
+        neighbors = self.neighbors.get()
         
         result = None
         if method == 'isomap':
-            result = sklearn.manifold.Isomap(n_components=d, n_jobs=jobs)
+            result = sklearn.manifold.Isomap(n_components=d, n_neighbors=neighbors, n_jobs=jobs)
         elif method == 'spectral':
-            result = sklearn.manifold.SpectralEmbedding(n_components=d, n_jobs=jobs)
+            result = sklearn.manifold.SpectralEmbedding(n_components=d, n_neighbors=neighbors, n_jobs=jobs)
         elif method == 'tsne':
             result = sklearn.manifold.TSNE(n_components=d, n_jobs=jobs)
         elif method == 'mds':
             result = sklearn.manifold.MDS(n_components=d, n_jobs=jobs)
         elif method == 'umap':
-            result = umap.UMAP(n_components=d, n_jobs=jobs)
+            result = umap.UMAP(n_components=d, n_neighbors=neighbors, n_jobs=jobs)
             
         return result
         
