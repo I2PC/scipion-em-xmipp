@@ -143,7 +143,7 @@ class XmippViewerHetReconstruct(ProtocolViewer):
 
             ax.hist2d(
                 x, y, 
-                bins=32, 
+                bins=96, 
                 density=True, 
                 range=((xmin, xmax), (ymin, ymax)), 
                 cmap=mpl.cm.binary
@@ -152,7 +152,7 @@ class XmippViewerHetReconstruct(ProtocolViewer):
             indices = np.array([i,j])
             subMeans = means[:,indices]
             subCovariance = covariances[:,indices[:,None],indices]
-            for mean, covariance, color in zip(subMeans, subCovariance, colors):
+            for mean, covariance, color in zip(subMeans, subCovariance, itertools.cycle(colors)):
                 w, v = np.linalg.eigh(covariance)
                 w = 2.0 * np.sqrt(2.0) * np.sqrt(w)
                 angle = np.rad2deg(np.arctan2(v[0,1], v[0,0]))
