@@ -50,7 +50,8 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
     DIMRED_METHODS = [
         'isomap',
         'spectral',
-        'tsne'
+        'tsne',
+        'mds'
     ]
 
     def __init__(self, *args, **kwargs):
@@ -104,6 +105,8 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
             result = sklearn.manifold.SpectralEmbedding(n_components=d, n_jobs=jobs)
         elif method == 'tsne':
             result = sklearn.manifold.TSNE(n_components=d, n_jobs=jobs)
+        elif method == 'mds':
+            result = sklearn.manifold.MDS(n_components=d, n_jobs=jobs)
             
         return result
         
