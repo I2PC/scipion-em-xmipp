@@ -38,6 +38,8 @@ from xmipp3.convert import setXmippAttribute, getXmippAttribute
 
 import numpy as np
 import sklearn.manifold
+import umap
+
 
 class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
     OUTPUT_PARTICLES_NAME = 'Particles'
@@ -51,7 +53,8 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
         'isomap',
         'spectral',
         'tsne',
-        'mds'
+        'mds',
+        'umap'
     ]
 
     def __init__(self, *args, **kwargs):
@@ -107,6 +110,8 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
             result = sklearn.manifold.TSNE(n_components=d, n_jobs=jobs)
         elif method == 'mds':
             result = sklearn.manifold.MDS(n_components=d, n_jobs=jobs)
+        elif method == 'umap':
+            result = umap.UMAP(n_components=d, n_jobs=jobs)
             
         return result
         
