@@ -34,7 +34,7 @@ from pyworkflow import BETA
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.params import (Form, PointerParam, FloatParam,
                                         IntParam, StringParam, BooleanParam,
-                                        GT,
+                                        EnumParam, GT,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 
 import xmipp3
@@ -42,7 +42,6 @@ from xmipp3.convert import writeSetOfParticles
 
 import pickle
 import numpy as np
-import scipy.stats
 import sklearn.mixture
 
 class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
@@ -55,6 +54,13 @@ class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
         OUTPUT_CLASSES_NAME: SetOfClasses3D,
         OUTPUT_VOLUMES_NAME: SetOfVolumes
     }
+
+    COVARIANCE_TYPES = [
+        'spherical',
+        'tied',
+        'diag',
+        'full'
+    ]
 
     def __init__(self, *args, **kwargs):
         ProtClassify3D.__init__(self, *args, **kwargs)
@@ -81,6 +87,8 @@ class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('classCount', IntParam, label='Class count',
                       default=2, validators=[GT(0)],
                       help='Number of classes to be reconstructed')
+        form.addParam('covarianceType', EnumParam, label='Covariance type',
+                      choices=self.COVARIANCE_TYPES, default=3)
         form.addParam('principalComponents', StringParam, label='Principal components',
                       expertLevel=LEVEL_ADVANCED,
                       help='Principal components used in evaluation')
@@ -118,7 +126,7 @@ class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
         if writeProjections:
             projections = projections[:,principalComponents]
         
-        gmm = sklearn.mixture.GaussianMixture(n_components=self.classCount.get())
+        gmm = self._getModel()
         ref3d = gmm.fit_predict(projections) + 1
         
         if writeProjections:
@@ -244,6 +252,15 @@ class XmippProtHetReconstruct(ProtClassify3D, xmipp3.XmippProtocol):
             result[i] -= 1
             
         return result
+    
+    def _getModel(self) -> sklearn.mixture.GaussianMixture:
+        covarianceType = self.COVARIANCE_TYPES[self.covarianceType.get()]
+        components = self.classCount.get()
+        
+        return sklearn.mixture.GaussianMixture(
+            n_components=components, 
+            covariance_type=covarianceType
+        )
     
     def _getInputParticleMdFilename(self):
         return self._getPath('input_particles.xmd')
