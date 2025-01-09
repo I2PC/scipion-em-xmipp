@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-type_of_version = 'release' #'release' 'devel'
+type_of_version = 'devel' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _binVersion = 'v3.24.12.0' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz)
