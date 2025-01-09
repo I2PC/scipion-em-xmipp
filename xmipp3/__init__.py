@@ -46,8 +46,8 @@ NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
 type_of_version = version.type_of_version
 _logo = version._logo
-_current_xmipp_tag = version._current_xmipp_tag
-_currentBinVersion = version._currentBinVersion
+_binTagVersion = version._binTagVersion
+_pluginTagVersion= version._pluginTagVersion
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
 
@@ -185,20 +185,16 @@ class Plugin(pwem.Plugin):
                 default=False
             )
         
-        #Release binaries installation
-        # if Version(scipionAppVersion) < Version('3.7.1'):
-	    #     print("\n---------------------------------------------------\nAttention! The current version of 'scipion-app' is outdated.\nTo update it to the latest version, please run the following command in your terminal:\n\n  scipion3 update\n\nThis command will update 'scipion-app' to the latest available version.\nNote: The minimum required version of 'scipion-app' is 3.7.1.")
-        # else:
-        tag = version._current_xmipp_tag
-        xmippSrc = f'xmippSrc-{tag}'
+        xmippSrc = f'xmippSrc-{version._binTagVersion}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
-            f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
+            f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
-            f'./xmipp -b {tag}', COMPILE_TARGETS)
+            f'git checkout {version._binTagVersion} && '
+            f'./xmipp --production True ', COMPILE_TARGETS)
         ]
         env.addPackage(
-            'xmippSrc', version=tag,
+            'xmippSrc', version=version._binTagVersion,
             tar='void.tgz',
             commands=installCommands,
             neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],

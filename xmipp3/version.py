@@ -27,7 +27,12 @@
 
 type_of_version = 'release' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
-_currentBinVersion = '3.24.12.0'
-_current_xmipp_tag = 'v3.24.12.1-Poseidon' #'devel' or for release similar to 'v3.24.12-Poseidon'
+
+_binVersion = 'v3.24.12.0' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz)
+_pluginVersion = 'v3.24.12.2' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz) or in scipion-em-xmipp
+
+_binTagVersion = _binVersion + '-Poseidon' #'devel' or _binVersion + '-Poseidon'
+_pluginTagVersion = _pluginVersion + '-Poseidon'  #'devel' or _pluginVersion + '-Poseidon'
+
 _currentDepVersion = '1.0'
-__version__ = _currentBinVersion[2:] + ".1"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
+__version__ = _pluginVersion # Name of the pypi package
