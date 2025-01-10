@@ -72,8 +72,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         form.addParam('maxGrayChange', FloatParam, label="Max. gray change: ", default=0.99, expertLevel=LEVEL_ADVANCED,
                       condition='optimizeGray',
                       help='The actual gray value can be at most as small as 1-change or as large as 1+change')
-        form.addParam('keepResiduals', BooleanParam, label="Keep residuals?", default=False, expertLevel=LEVEL_ADVANCED,
-                      help='Keep residuals rather than deleting them after calculation')
         
         form.addParallelSection(threads=0, mpi=8)
 
@@ -98,15 +96,12 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     def convertStep(self):
         from ..convert import writeSetOfParticles
         imgSet = self.inputParticles.get()
-        writeSetOfParticles(imgSet, self._getTmpPath("images.xmd"))
+        writeSetOfParticles(imgSet, self._getExtraPath("images.xmd"))
 
     def produceResiduals(self, fnVol, i, mask, noiseMask):
-        fnAngles = self._getTmpPath("images.xmd")
-        anglesOutFn = self._getTmpPath("anglesCont.stk")
-        if self.keepResiduals:
-            fnResiduals = self._getExtraPath("residuals%03d.stk" % i)
-        else:
-            fnResiduals = self._getTmpPath("residuals%03d.stk"%i)
+        fnAngles = self._getExtraPath("images.xmd")
+        anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
+        fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
 
         Ts = self.inputParticles.get().getSamplingRate()
         args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s" % (fnAngles, anglesOutFn, fnVol, Ts, fnResiduals)
@@ -121,7 +116,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         else:
             self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
 
-        mdResults = md.MetaData(self._getTmpPath("anglesCont.xmd"))
+        mdResults = md.MetaData(self._getExtraPath("anglesCont%03d.xmd"%i))
         mdOut = md.MetaData()
         for objId in mdResults:
             itemId = mdResults.getValue(emlib.MDL_ITEM_ID,objId)
