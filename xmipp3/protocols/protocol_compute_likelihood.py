@@ -137,8 +137,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             newRow.setValue(emlib.MDL_LL, float(LL))
             newRow.setValue(emlib.MDL_IMAGE_REF, fnVol)
             # newRow.setValue(emlib.MDL_RESIDUAL_VARIANCE, var)
-            if self.keepResiduals:
-                newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
+            newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
             newRow.addToMd(mdOut)
         mdOut.write(self._getExtraPath("logLikelihood%03d.xmd"%i))
 
@@ -211,8 +210,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 particle.setObjId(None)
                 setXmippAttributes(particle, self.lastRow,
                                    emlib.MDL_LL, emlib.MDL_IMAGE_REF)
-                if self.keepResiduals:
-                    setXmippAttributes(particle, self.lastRow, emlib.MDL_IMAGE_RESIDUAL)
+                setXmippAttributes(particle, self.lastRow, emlib.MDL_IMAGE_RESIDUAL)
             try:
                 self.lastRow = next(self.iterMd)
             except StopIteration:
