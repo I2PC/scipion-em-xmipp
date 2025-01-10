@@ -458,9 +458,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         correctedDirectionMd.write(self._getCorrectedDirectionalMdFilename())
             
     def combineDirectionsStep(self):   
-        symList = xmippLib.SymList()
-        symList.readSymmetryFile(self._getSymmetryGroup())
-        maxAngularDistance = self._getAngularDistance()
         directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
 
@@ -468,36 +465,28 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         projections = collections.Counter()
         weights = collections.Counter()
         amplitudes = 0
+        count = 0
         for directionId in directionMd:
-            directionRot = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId)
-            directionTilt = directionMd.getValue(emlib.MDL_ANGLE_TILT, directionId)
-
             # Read the classification of this direction
             directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
             values = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
             var = np.var(values, axis=0)
             stddev = np.sqrt(var)
-            amplitudes += var
             
             # Increment the result likelihood value
             for objId in directionalClassificationMd:
                 itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
-                rot = directionalClassificationMd.getValue(emlib.MDL_ANGLE_ROT, objId)
-                tilt = directionalClassificationMd.getValue(emlib.MDL_ANGLE_TILT, objId)
                 projection = np.array(directionalClassificationMd.getValue(emlib.MDL_DIMRED, objId))
-                
-                angularDistance = symList.computeDistanceAngles(
-                    directionRot, directionTilt, 0.0, 
-                    rot, tilt, 0.0,
-                    True, self.checkMirrors.get(), False
-                )
-                weight = (maxAngularDistance-angularDistance) / maxAngularDistance
-                assert weight >= 0
-                
-                projections[itemId] += weight * (projection / stddev)
-                weights[itemId] += weight
 
-        amplitudes /= directionMd.size()
+                gain = stddev
+                noise2 = 1
+                projections[itemId] += gain / noise2 * projection
+                weights[itemId] += (gain*gain) / noise2
+                amplitudes += np.square(projection)
+                count += 1
+                
+
+        amplitudes /= count
         amplitudes = np.sqrt(amplitudes)
 
         # Write PCA projection values to the output metadata
@@ -522,6 +511,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
         classificationMd.write(classificationFilename)
         
+        """
         bases = self._readBases()
         bases = bases @ pca.components_.T
         self._writeBases(bases)
@@ -534,7 +524,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             projections = pca.transform(projections)
             classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
             classificationMd.write(classificationFilename)
-     
+        """
+             
     def correctEigenImagesStep(self):
         bases = self._readBases()
         inverseBases = bases.transpose(0, 2, 1)
