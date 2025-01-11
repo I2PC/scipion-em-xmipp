@@ -135,11 +135,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('classifyDirectionsStep')
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('basisSynchronizationStep')
-        self._insertFunctionStep('correctBasisStep')
+        #self._insertFunctionStep('correctBasisStep')
         self._insertFunctionStep('combineDirectionsStep')
         self._insertFunctionStep('diagonalizeStep')
-        self._insertFunctionStep('correctEigenImagesStep')
-        self._insertFunctionStep('reconstructEigenVolumesStep')
+        #self._insertFunctionStep('correctEigenImagesStep')
+        #self._insertFunctionStep('reconstructEigenVolumesStep')
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions -------------------------------
@@ -458,42 +458,42 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         correctedDirectionMd.write(self._getCorrectedDirectionalMdFilename())
             
     def combineDirectionsStep(self):   
-        directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
+        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
+        bases = self._readBases()
 
         # Accumulate all PCA projection values
-        projections = collections.Counter()
+        accumulator = collections.Counter()
         weights = collections.Counter()
         amplitudes = 0
         count = 0
-        for directionId in directionMd:
+        for i, directionId in enumerate(directionMd):
             # Read the classification of this direction
+            basis = bases[i]
             directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-            values = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
-            var = np.var(values, axis=0)
-            stddev = np.sqrt(var)
+            projections = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
+            projections = projections @ basis # (basis.T @ projections.T).T
+            stddev = np.std(projections, axis=0)
             
             # Increment the result likelihood value
-            for objId in directionalClassificationMd:
+            for objId, projection in zip(directionalClassificationMd, projections):
                 itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
-                projection = np.array(directionalClassificationMd.getValue(emlib.MDL_DIMRED, objId))
-
+                
                 gain = stddev
                 noise2 = 1
-                projections[itemId] += gain / noise2 * projection
+                accumulator[itemId] += gain / noise2 * projection
                 weights[itemId] += (gain*gain) / noise2
                 amplitudes += np.square(projection)
                 count += 1
-                
 
         amplitudes /= count
         amplitudes = np.sqrt(amplitudes)
 
         # Write PCA projection values to the output metadata
-        result = emlib.MetaData(self._getWienerParticleMdFilename())
+        result = emlib.MetaData(self._getInputParticleMdFilename())
         for objId in result:
             itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-            projection = amplitudes*(projections[itemId] / weights[itemId])
+            projection = amplitudes*(accumulator[itemId] / weights[itemId])
             result.setValue(emlib.MDL_DIMRED, projection.tolist(), objId)
                 
         # Store
@@ -511,11 +511,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
         classificationMd.write(classificationFilename)
         
-        """
         bases = self._readBases()
         bases = bases @ pca.components_.T
         self._writeBases(bases)
 
+        """
         directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
         for directionId in directionMd:
             classificationFilename = directionMd.getValue(emlib.MDL_SELFILE, directionId)
