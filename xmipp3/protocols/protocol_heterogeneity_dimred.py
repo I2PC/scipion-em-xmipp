@@ -51,6 +51,7 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
         OUTPUT_PARTICLES_NAME: SetOfParticles
     }
     DIMRED_METHODS = [
+        'none',
         'isomap',
         'spectral',
         'tsne',
@@ -92,13 +93,14 @@ class XmippProtHetDimred(ProtClassify3D, xmipp3.XmippProtocol):
         if len(components) > 0:
             values = values[:,components]
 
-        projections = transformer.fit_transform(values)
+        if transformer is not None:
+            values = transformer.fit_transform(values)
 
         def updateItem(item: Particle, coord: np.ndarray):
             setXmippAttribute(item, emlib.MDL_DIMRED, ObjectWrap(coord.tolist()))
 
         result.copyInfo(particles)
-        result.copyItems(particles, updateItemCallback=updateItem, itemDataIterator=iter(projections))
+        result.copyItems(particles, updateItemCallback=updateItem, itemDataIterator=iter(values))
         
         self._defineOutputs(**{self.OUTPUT_PARTICLES_NAME: result})
 
