@@ -463,10 +463,10 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
         m = directionMd.size()
         k = self.outputPrincipalComponentCount.get()
+
         gains = np.ones((m, k))
         noise2 = np.ones((m, k))
-        print(gains.shape)
-        for _ in range(16):
+        for _ in range(4):
             averages, count = self._computeAverages(directionMd, gains, noise2)
             gains = self._computeGains(directionMd, averages, noise2, count)
             #noise2 = self._computeNoise(directionMd, averages, gains) # Test
@@ -788,7 +788,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             result[:,i] = optimization.x 
         
         result /= np.linalg.norm(result, axis=0)
-        result *= m
+        result *= np.sqrt(m)
 
         return result
     
