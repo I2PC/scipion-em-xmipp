@@ -24,6 +24,8 @@
 # *
 # **************************************************************************
 
+from typing import Dict, List
+
 from pwem import emlib
 from pwem.protocols import ProtClassify3D
 from pwem.objects import (Particle, VolumeMask, SetOfParticles, 
@@ -98,6 +100,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('optimizationMethod', EnumParam, label='Optimization method',
                       choices=['SDP', 'Burer-Monteiro'], expertLevel=LEVEL_ADVANCED,
                       default=1 )
+        form.addParam('averagingIterations', IntParam, label='Averaging iterations',
+                      expertLevel=LEVEL_ADVANCED, default=64 )
         
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
@@ -136,7 +140,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('classifyDirectionsStep')
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('basisSynchronizationStep')
-        self._insertFunctionStep('correctBasisStep')
+        #self._insertFunctionStep('correctBasisStep')
         self._insertFunctionStep('combineDirectionsStep')
         self._insertFunctionStep('diagonalizeStep')
         #self._insertFunctionStep('correctEigenImagesStep')
@@ -456,31 +460,36 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             directionRow.addToMd(correctedDirectionMd)
             
         correctedDirectionMd.write(self._getCorrectedDirectionalMdFilename())
-        self.outputPrincipalComponentCount = Integer(correctedProjections.shape[1])
-        self._store()
             
     def combineDirectionsStep(self):   
-        directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
-        m = directionMd.size()
-        k = self.outputPrincipalComponentCount.get()
-
-        gains = np.ones((m, k))
-        noise2 = np.ones((m, k))
-        for _ in range(4):
-            averages, count = self._computeAverages(directionMd, gains, noise2)
-            gains = self._computeGains(directionMd, averages, noise2, count)
-            #noise2 = self._computeNoise(directionMd, averages, gains) # Test
-        averages, _ = self._computeAverages(directionMd, gains, noise2)
+        bases = self._readBases()
+        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
+        particlesMd = emlib.MetaData(self._getInputParticleMdFilename())
+        itemIdToIndex = dict(zip(particlesMd.getColumnValues(emlib.MDL_ITEM_ID), itertools.count()))
+        data = self._readDirectionalValues(directionMd, itemIdToIndex, bases)
+        m, _, p = bases.shape
+        
+        gains = np.ones((m, p))
+        noise2 = np.ones((m, p))
+        for _ in range(self.averagingIterations.get()):
+            averages = self._computeAverages(data, gains, noise2)
+            gains, noise2 = self._computeGainAndNoise(data, averages)
+            gains /= np.linalg.norm(gains, axis=0)
+            gains *= np.sqrt(m)
+        averages = self._computeAverages(data, gains, noise2)
 
         # Write PCA projection values to the output metadata
-        result = emlib.MetaData(self._getInputParticleMdFilename())
-        for objId in result:
-            itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-            average = averages[itemId]
-            result.setValue(emlib.MDL_DIMRED, average.tolist(), objId)
+        for objId in particlesMd:
+            itemId = particlesMd.getValue(emlib.MDL_ITEM_ID, objId)
+            i = itemIdToIndex[itemId]
+            average = averages[i]
+            particlesMd.setValue(emlib.MDL_DIMRED, average.tolist(), objId)
 
         self._writeGains(gains)
-        result.write(self._getClassificationMdFilename())
+        self._writeAveragingNoise(noise2)
+        particlesMd.write(self._getClassificationMdFilename())
+        self.outputPrincipalComponentCount = Integer(len(average))
+        self._store()
         
     def diagonalizeStep(self):
         pca = sklearn.decomposition.PCA()
@@ -699,6 +708,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getGainsFilename(self):
         return self._getExtraPath('gains.npy')
 
+    def _getAveragingNoiseFilename(self):
+        return self._getExtraPath('noise.npy')
+
     def _writeAdjacencyGraph(self, adjacency: scipy.sparse.csr_matrix) -> str:
         path = self._getAdjacencyGraphFilename()
         scipy.sparse.save_npz(path, adjacency)
@@ -733,81 +745,85 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _writeGains(self, gains):
         return np.save(self._getGainsFilename(), gains)
 
-    def _computeAverages(self, directionMd: emlib.MetaData, gains: np.ndarray, noise2: np.ndarray) -> dict:
-        accumulator = collections.Counter()
-        weights = collections.Counter()
-        directionalClassificationMd = emlib.MetaData()
-        count = 0
-        for i, directionId in enumerate(directionMd):
-            # Read the classification of this direction
-            directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-            gain = gains[i]
-            sigma2 = noise2[i]
-            
-            # Increment the result likelihood value
-            for objId in directionalClassificationMd:
-                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
-                projection = np.array(directionalClassificationMd.getValue(emlib.MDL_DIMRED, objId))
+    def _readAveragingNoise(self):
+        return np.load(self._getAveragingNoiseFilename())
+
+    def _writeAveragingNoise(self, noise):
+        return np.save(self._getAveragingNoiseFilename(), noise)
+
+
+    def _readDirectionalValues(self, 
+                               directionMd: emlib.MetaData,
+                               itemIdToIndex: Dict[int, int],
+                               bases: np.ndarray) -> List[scipy.sparse.csr_matrix]:
+        m, _, p = bases.shape
+        n = len(itemIdToIndex)
+        result = [scipy.sparse.lil_matrix((n, m)) for _ in range(p)]
                 
-                accumulator[itemId] += gain / sigma2 * projection
-                weights[itemId] += (gain*gain) / sigma2
-                count += 1
-
-        for itemId in accumulator.keys():
-            accumulator[itemId] /= weights[itemId]
-
-        return accumulator, count
-    
-    def _computeGains(self, directionMd: emlib.MetaData, averages: dict, noise2: np.ndarray, height: int):
         directionalClassificationMd = emlib.MetaData()
-        m, k = noise2.shape
-        
-        designs = [scipy.sparse.lil_matrix((height, m)) for _ in range(k)]
-        targets = [np.ndarray(height) for _ in range(k)]
-        start = 0
-        for i, directionId in enumerate(directionMd):
+        for j, directionId in enumerate(directionMd):
             directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-        
+            basis = bases[j]
             itemIds = directionalClassificationMd.getColumnValues(emlib.MDL_ITEM_ID)
-            y = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
-            x = np.array([averages[itemId] for itemId in itemIds])
-            end = start + len(itemIds)
+            values = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
+            values = values @ basis # (basis.T @ values.T).T
             
-            for j in range(k):
-                designs[j][start:end,i] = x[:,j]
-                targets[j][start:end] = y[:,j]
+            for itemId, value in zip(itemIds, values):
+                i = itemIdToIndex[itemId]
+                for k in range(p):
+                    result[k][i, j] = value[k]
+                    
+        return [item.tocsc() for item in result]
+
+    def _computeAverages(self, 
+                         data: List[scipy.sparse.csc_array],
+                         gains: np.ndarray, 
+                         noise2: np.ndarray ) -> np.ndarray:
+        p = len(data)
+        n, m = data[0].shape
+
+        numerator = np.zeros((n, p))
+        denominator = np.zeros((n, p))
+        for k in range(p):
+            plane = data[k]
+            for j in range(m):
+                gain = gains[j,k]
+                sigma2 = noise2[j,k]
+                start = plane.indptr[j]
+                end = plane.indptr[j+1]
+                indices = plane.indices[start:end]
+                values = plane.data[start:end]
                 
-            start = end
-        assert start == height
-        
-        result = np.empty_like(noise2)
-        for i in range(k):
-            design = designs[i].tocsr()
-            target = targets[i]
-            optimization = scipy.optimize.lsq_linear(design, target, bounds=(0, np.inf))
-            result[:,i] = optimization.x 
-        
-        result /= np.linalg.norm(result, axis=0)
-        result *= np.sqrt(m)
+                numerator[indices,k] += gain / sigma2 * values
+                denominator[indices,k] += np.square(gain) / sigma2
 
-        return result
+        return numerator / denominator
     
-    def _computeNoise(self, directionMd: emlib.MetaData, averages: dict, gains: np.ndarray):
-        directionalClassificationMd = emlib.MetaData()
+    def _computeGainAndNoise(self, 
+                             data: List[scipy.sparse.csc_array],
+                             averages: np.ndarray ) -> np.ndarray:
+        p = len(data)
+        n, m = data[0].shape
         
-        noise2 = np.zeros_like(gains)
-        for i, directionId in enumerate(directionMd):
-            directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
-            n = directionalClassificationMd.size()
-            
-            for objId in directionalClassificationMd:
-                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
-                projection = np.array(directionalClassificationMd.getValue(emlib.MDL_DIMRED, objId))
-                average = averages[itemId]
+        gains = np.empty((m, p))
+        noise2 = np.empty((m, p))
+        for k in range(p):
+            plane = data[k]
+            for j in range(m):
+                start = plane.indptr[j]
+                end = plane.indptr[j+1]
+                indices = plane.indices[start:end]
+                y = plane.data[start:end]
+                x = averages[indices,k]
                 
-                noise2[i] += np.square(projection - average)
+                correlation = np.dot(x, y)
+                power = np.dot(x, x)
+                gain = correlation / power
+                
+                error = gain*x - y
+                sigma2 = np.dot(error, error) / len(error)
+                
+                gains[j,k] = gain
+                noise2[j,k] = sigma2
 
-            noise2[i] /= n
-
-        return noise2
-    
+        return gains, noise2
