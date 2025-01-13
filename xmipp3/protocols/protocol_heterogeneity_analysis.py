@@ -473,9 +473,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         noise2 = np.ones((m, p))
         for _ in range(self.averagingIterations.get()):
             averages = self._computeAverages(data, gains, noise2)
-            gains, noise2 = self._computeGainAndNoise(data, averages)
-            gains /= np.linalg.norm(gains, axis=0)
-            gains *= np.sqrt(m)
+            gains = self._computeGains(data, averages, noise2)
+            noise2 = self._computeNoise(data, averages, gains)
         averages = self._computeAverages(data, gains, noise2)
 
         # Write PCA projection values to the output metadata
@@ -799,14 +798,16 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
         return numerator / denominator
     
-    def _computeGainAndNoise(self, 
-                             data: List[scipy.sparse.csc_array],
-                             averages: np.ndarray ) -> np.ndarray:
+    def _computeGains(self, 
+                      data: List[scipy.sparse.csc_array],
+                      averages: np.ndarray,
+                      noise2: np.ndarray ) -> np.ndarray:
         p = len(data)
         n, m = data[0].shape
         
-        gains = np.empty((m, p))
-        noise2 = np.empty((m, p))
+        result = np.empty((m, p))
+        correlations = np.empty(m)
+        powers = np.empty(m)
         for k in range(p):
             plane = data[k]
             for j in range(m):
@@ -816,14 +817,35 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                 y = plane.data[start:end]
                 x = averages[indices,k]
                 
-                correlation = np.dot(x, y)
-                power = np.dot(x, x)
-                gain = correlation / power
+                correlations[j] = np.dot(x, y)
+                powers[j] = np.dot(x, x)
+
+            sigma2 = noise2[:,k]
+            inversePowers = 1/powers
+            l = (np.dot(correlations, inversePowers) - m) / np.dot(sigma2, inversePowers)
+            result[:,k] = (correlations - l*sigma2) * inversePowers
+            
+        return result
+    
+    def _computeNoise(self, 
+                      data: List[scipy.sparse.csc_array],
+                      averages: np.ndarray,
+                      gains: np.ndarray) -> np.ndarray:
+        p = len(data)
+        n, m = data[0].shape
+        
+        result = np.empty((m, p))
+        for k in range(p):
+            plane = data[k]
+            for j in range(m):
+                gain = gains[j,k]
+                start = plane.indptr[j]
+                end = plane.indptr[j+1]
+                indices = plane.indices[start:end]
+                y = plane.data[start:end]
+                x = averages[indices,k]
                 
                 error = gain*x - y
-                sigma2 = np.dot(error, error) / len(error)
-                
-                gains[j,k] = gain
-                noise2[j,k] = sigma2
+                result[j,k] = np.dot(error, error) / len(error)
 
-        return gains, noise2
+        return result
