@@ -60,7 +60,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
     _label = 'movie alignment consensus'
     outputName = 'consensusAlignments'
-    _devStatus = NEW
+    _devStatus = PROD
 
     def __init__(self, **args):
         ProtAlignMovies.__init__(self, **args)

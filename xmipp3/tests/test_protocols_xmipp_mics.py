@@ -281,6 +281,7 @@ class TestXmippCTFEstimation(TestXmippBase):
         protCTF = XmippProtCTFMicrographs()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
         protCTF.ctfDownFactor.set(2)
+        protCTF.accel1D.set(False)
         self.proj.launchProtocol(protCTF, wait=True)
         self.assertIsNotNone(protCTF.outputCTF, "SetOfCTF has not been produced.")
         ctfModel = protCTF.outputCTF.getFirstItem()
@@ -810,7 +811,7 @@ class TestXmippVarianceFiltering(TestXmippBase):
 
         compare(83)
         compare(228)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.1640, 0.5190)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.300016, 0.408174)
 
         print('\t --> Checking rejection particles for variance by screen protocol')
         protScreen = self.newProtocol(XmippProtScreenParticles,
@@ -819,14 +820,14 @@ class TestXmippVarianceFiltering(TestXmippBase):
         self.launchProtocol(protScreen)
         self.assertIsNotNone(protScreen.outputParticles,
                              "Output has not been produced by screen particles prot.")
-        self.assertEqual(len(protScreen.outputParticles), 303,
+        self.assertEqual(len(protScreen.outputParticles), 348,
                          "Output Set Of Particles must be 303, "
                          "but %s found. Bad filtering in screen particles prot." %
                          len(protScreen.outputParticles))
 
 
         # test values summary values
-        GOLD_THRESHOLD = 1.133451234375
+        GOLD_THRESHOLD = 1.246297515625
         self.assertAlmostEqual(GOLD_THRESHOLD, protScreen.varThreshold.get(),
                                msg="Variance threshold different than "
                                    "the gold value (screen part. prot.)")

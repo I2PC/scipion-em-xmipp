@@ -31,7 +31,6 @@ from .protocol_preprocess import *
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
 from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
-from .protocol_angular_resolution_alignment import XmippProtResolutionAlignment
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
@@ -40,6 +39,7 @@ from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMa
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
+from .protocol_cl2d_clustering import XmippProtCL2DClustering
 from .protocol_classify_pca import XmippProtClassifyPca
 from .protocol_classify_pca_streaming import XmippProtClassifyPcaStreaming
 #from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
@@ -69,7 +69,6 @@ from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
 from .protocol_movie_alignment_consensus import XmippProtConsensusMovieAlignment
 from .protocol_flexalign import XmippProtFlexAlign
-from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
 from .protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
 from .protocol_movie_split_frames import XmippProtSplitFrames
@@ -138,3 +137,4 @@ from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
 from .protocol_deep_center import XmippProtDeepCenter
 from .protocol_compute_likelihood import XmippProtComputeLikelihood
+from .protocol_deep_center_predict import XmippProtDeepCenterPredict

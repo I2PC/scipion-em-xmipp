@@ -30,14 +30,12 @@ from pwem.viewers import showj, EmProtocolViewer, ObjectView
 from pwem.objects import SetOfMicrographs, SetOfMovies
 
 from xmipp3.protocols.protocol_movie_alignment_consensus import XmippProtConsensusMovieAlignment
-from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
-                                                 OBJCMD_MOVIE_ALIGNCARTESIAN)
 from xmipp3.protocols.protocol_flexalign import XmippProtFlexAlign
 from xmipp3.protocols.protocol_movie_max_shift import XmippProtMovieMaxShift
 from .viewer_ctf_consensus import getStringIfActive
 
 class XmippMovieAlignViewer(Viewer):
-    _targets = [XmippProtOFAlignment, XmippProtFlexAlign]
+    _targets = [XmippProtFlexAlign]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
     _label = 'viewer optical/correlation alignment'
@@ -117,9 +115,7 @@ def getViewParams():
                   showj.ORDER: 'id ' + labels,
                   showj.VISIBLE: 'id ' + labels,
                   showj.RENDER: plotLabels,
-                  showj.ZOOM: 20,
-                  showj.OBJCMDS: "'%s'" % OBJCMD_MOVIE_ALIGNCARTESIAN
-                  }
+                  showj.ZOOM: 20}
 
     return viewParams
 
@@ -158,8 +154,6 @@ def getViewParamsConsensus():
                   showj.ORDER: 'id ' + labels,
                   showj.VISIBLE: 'id ' + labels,
                   showj.RENDER: plotLabels,
-                  showj.ZOOM: 10,
-                  showj.OBJCMDS: "'%s'" % OBJCMD_MOVIE_ALIGNCARTESIAN
-                  }
+                  showj.ZOOM: 10}
 
     return viewParams
