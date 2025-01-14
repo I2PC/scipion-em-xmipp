@@ -39,6 +39,8 @@ from pwem import emlib
 from xmipp3.convert import setXmippAttributes
 import xmippLib
 
+import os
+
 class XmippProtComputeLikelihood(ProtAnalysis3D):
     """This protocol computes the likelihood of a set of particles with assigned angles when compared to a
        set of maps or atomic models"""
@@ -172,7 +174,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         if self.useGpu:
             args+=" --nThreads %d"%self.binThreads.get()
-            # args+=" --device %(GPU)s"
+            os.environ["CUDA_VISIBLE_DEVICES"] = "%(GPU)s"
             self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
         else:
             self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
