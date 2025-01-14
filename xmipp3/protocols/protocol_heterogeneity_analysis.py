@@ -101,7 +101,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                       choices=['SDP', 'Burer-Monteiro'], expertLevel=LEVEL_ADVANCED,
                       default=1 )
         form.addParam('averagingIterations', IntParam, label='Averaging iterations',
-                      expertLevel=LEVEL_ADVANCED, default=64 )
+                      expertLevel=LEVEL_ADVANCED, default=32 )
         
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
@@ -807,9 +807,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         
         result = np.empty((m, p))
         correlations = np.empty(m)
-        powers = np.empty(m)
+        counts = np.empty(m, dtype=np.int64)
         for k in range(p):
             plane = data[k]
+            power = np.dot(averages[:,k], averages[:,k]) / n
+            sigma2 = noise2[:,k]
             for j in range(m):
                 start = plane.indptr[j]
                 end = plane.indptr[j+1]
@@ -817,13 +819,11 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                 y = plane.data[start:end]
                 x = averages[indices,k]
                 
-                correlations[j] = np.dot(x, y)
-                powers[j] = np.dot(x, x)
+                correlations[j] = np.dot(x, y) / len(x)
+                counts[j] = len(x)
 
-            sigma2 = noise2[:,k]
-            inversePowers = 1/powers
-            l = (np.dot(correlations, inversePowers) - m) / np.dot(sigma2, inversePowers)
-            result[:,k] = (correlations - l*sigma2) * inversePowers
+            l = (np.sum(correlations) - m*power) / np.sum(sigma2/counts)
+            result[:,k] = (correlations - l*sigma2/counts) / power
             
         return result
     
