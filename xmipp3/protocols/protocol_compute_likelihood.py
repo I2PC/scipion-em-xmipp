@@ -170,6 +170,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         if self.useGpu:
             args+=" --nThreads %d"%self.binThreads.get()
+            print('GPUs %(GPU)s')
             os.environ["CUDA_VISIBLE_DEVICES"] = "%(GPU)s"
             self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
         else:
@@ -195,7 +196,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             elements_between_circles = I.getData()[self.getMasks()[1]]
             var = np.var(elements_between_circles)
 
-            LL = -sum_of_squares/(2*var) - Npix/2 * np.log(2*np.pi*var)
+            term1 = -sum_of_squares/(2*var)
+            term2 = Npix/2 * np.log(2*np.pi*var)
+            LL = term1 - term2
+            print('{0}\t{1}\t{2}\n'.format(term1, term2, LL))
 
             newRow = md.Row()
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
