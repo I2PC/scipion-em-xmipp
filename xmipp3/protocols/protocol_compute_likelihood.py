@@ -55,17 +55,16 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        form.addSection(label='Input')
-
         form.addParam('binThreads', IntParam,
-                      label='Xmipp MPIs or threads',
+                      label='threads',
                       default=2,
-                      help='Number of MPIs or threads used by Xmipp each time it is called in the protocol execution. For '
+                      help='Number of threads used by Xmipp each time it is called in the protocol execution. For '
                            'example, if 3 Scipion threads and 3 Xmipp threads are set, the tomograms will be '
                            'processed in groups of 2 at the same time with a call of Xmipp with 3 threads each, so '
                            '6 threads will be used at the same time. Beware the memory of your machine has '
                            'memory enough to load together the number of tomograms specified by Scipion threads.')
         
+        form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, label="Input images", important=True,
                       pointerClass='SetOfParticles', pointerCondition='hasAlignmentProj')
         form.addParam('inputRefs', PointerParam, label="References", important=True,
@@ -90,7 +89,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         form.addParam('residualNoise', BooleanParam, label="Estimate noise from residual: ", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Whether to write residual and estimate noise there. Otherwise, use original image')
         
-        form.addParallelSection(threads=2, mpi=0)
+        form.addParallelSection(threads=2, mpi=2)
 
         form.addHidden(USE_GPU, BooleanParam, default=False,
                        label="Use GPU for execution",
@@ -113,13 +112,13 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         i=1
         if isinstance(inputRefs, Volume):
             prodId = self._insertFunctionStep(self.produceResiduals, inputRefs.getFileName(), i,
-                                              prerequisites=convId, needsGPU=False)
+                                              prerequisites=convId, needsGPU=self.useGpu)
             i += 1
             stepIds.append(prodId)
         else:
             for volume in inputRefs:
                 prodId = self._insertFunctionStep(self.produceResiduals, volume.getFileName(), i,
-                                                  prerequisites=convId, needsGPU=False)
+                                                  prerequisites=convId, needsGPU=self.useGpu)
                 i += 1
                 stepIds.append(prodId)
 
@@ -133,24 +132,26 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         imgSet = self.inputParticles.get()
         writeSetOfParticles(imgSet, self._getExtraPath("images.xmd"))
 
-        # prepare masks
-        # TODO: register or save them to allow continuing
-        Xdim = self.inputParticles.get().getDimensions()[0]
-        Y, X = np.ogrid[:Xdim, :Xdim]
-        dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
+    def getMasks(self):
+        if not (hasattr(self, 'mask') and hasattr(self, 'noiseMask')):
+            Xdim = self.inputParticles.get().getDimensions()[0]
+            Y, X = np.ogrid[:Xdim, :Xdim]
+            dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
 
-        particleRadius = self.particleRadius.get()
-        if particleRadius<0:
-            particleRadius=Xdim/2
-        self.mask = dist_from_center <= particleRadius
+            particleRadius = self.particleRadius.get()
+            if particleRadius<0:
+                particleRadius=Xdim/2
+            self.mask = dist_from_center <= particleRadius
 
-        noiseRadius = self.noiseRadius.get()
-        if noiseRadius == -1:
-            noiseRadius = Xdim/2
-        if noiseRadius > particleRadius:
-            self.noiseMask = (dist_from_center > particleRadius) & (dist_from_center <= noiseRadius)
-        else:
-            self.noiseMask = self.mask
+            noiseRadius = self.noiseRadius.get()
+            if noiseRadius == -1:
+                noiseRadius = Xdim/2
+            if noiseRadius > particleRadius:
+                self.noiseMask = (dist_from_center > particleRadius) & (dist_from_center <= noiseRadius)
+            else:
+                self.noiseMask = self.mask
+
+        return self.mask, self.noiseMask
 
     def produceResiduals(self, fnVol, i):
         fnAngles = self._getExtraPath("images.xmd")
@@ -171,9 +172,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         if self.useGpu:
             args+=" --nThreads %d"%self.binThreads.get()
+            # args+=" --device %(GPU)s"
             self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
         else:
-            self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.binThreads.get())
+            self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
 
         mdResults = md.MetaData(self._getExtraPath("anglesCont%03d.xmd"%i))
         mdOut = md.MetaData()
@@ -184,7 +186,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 fnResidual = mdResults.getValue(emlib.MDL_IMAGE_RESIDUAL,objId)
                 I = xmippLib.Image(fnResidual)
 
-                elements_within_circle = I.getData()[self.mask]
+                elements_within_circle = I.getData()[self.getMasks()[0]]
                 sum_of_squares = np.sum(elements_within_circle**2)
                 Npix = elements_within_circle.size
 
@@ -192,11 +194,11 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 fnOriginal = mdResults.getValue(emlib.MDL_IMAGE,objId)
                 I = xmippLib.Image(fnOriginal)
 
-                elements_within_circle = I.getData()[self.mask]
+                elements_within_circle = I.getData()[self.getMasks()[0]]
                 sum_of_squares = mdResults.getValue(emlib.MDL_IMED, objId)**2
                 Npix = elements_within_circle.size
 
-            elements_between_circles = I.getData()[self.noiseMask]
+            elements_between_circles = I.getData()[self.getMasks()[1]]
             var = np.var(elements_between_circles)
 
             LL = -sum_of_squares/(2*var) - Npix/2 * np.log(2*np.pi*var)
