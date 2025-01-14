@@ -161,11 +161,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
 
         Ts = self.inputParticles.get().getSamplingRate()
-        
-        if self.residualNoise.get():
-            args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s" % (fnAngles, anglesOutFn, fnVol, Ts, fnResiduals)
-        else:
-            args = "-i %s -o %s --ref %s --sampling %f" % (fnAngles, anglesOutFn, fnVol, Ts)
+        args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s" % (fnAngles, anglesOutFn, fnVol, Ts, fnResiduals)
 
         if self.resol.get()>0:
             args+=" --max_resolution %f"%self.resol
@@ -184,21 +180,17 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         for objId in mdResults:
             itemId = mdResults.getValue(emlib.MDL_ITEM_ID,objId)
             
-            if self.residualNoise.get():
-                fnResidual = mdResults.getValue(emlib.MDL_IMAGE_RESIDUAL,objId)
-                I = xmippLib.Image(fnResidual)
+            fnResidual = mdResults.getValue(emlib.MDL_IMAGE_RESIDUAL,objId)
+            I = xmippLib.Image(fnResidual)
 
-                elements_within_circle = I.getData()[self.getMasks()[0]]
-                sum_of_squares = np.sum(elements_within_circle**2)
-                Npix = elements_within_circle.size
+            elements_within_circle = I.getData()[self.getMasks()[0]]
+            sum_of_squares = np.sum(elements_within_circle**2)
+            Npix = elements_within_circle.size
 
-            else:
+            if not self.residualNoise.get():
+                # replace image from between circles calculation
                 fnOriginal = mdResults.getValue(emlib.MDL_IMAGE,objId)
                 I = xmippLib.Image(fnOriginal)
-
-                elements_within_circle = I.getData()[self.getMasks()[0]]
-                sum_of_squares = mdResults.getValue(emlib.MDL_IMED, objId)**2
-                Npix = elements_within_circle.size
 
             elements_between_circles = I.getData()[self.getMasks()[1]]
             var = np.var(elements_between_circles)
@@ -210,8 +202,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             newRow.setValue(emlib.MDL_LL, float(LL))
             newRow.setValue(emlib.MDL_IMAGE_REF, fnVol)
             # newRow.setValue(emlib.MDL_RESIDUAL_VARIANCE, var)
-            if self.residualNoise.get():
-                newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
+            newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
             newRow.addToMd(mdOut)
         mdOut.write(self._getExtraPath("logLikelihood%03d.xmd"%i))
 
