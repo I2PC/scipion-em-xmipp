@@ -28,6 +28,8 @@ import numpy as np
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import (PointerParam, StringParam, USE_GPU, GPU_LIST,
                                         FloatParam, BooleanParam, IntParam)
+from pyworkflow.protocol import STEPS_PARALLEL
+
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Volume, SetOfParticles
 import pwem.emlib.metadata as md
@@ -45,6 +47,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     _lastUpdateVersion = VERSION_1_1
     _possibleOutputs = {"reprojections": SetOfParticles}
     
+    stepsExecutionMode = STEPS_PARALLEL
+
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
         self._classesInfo = dict()
@@ -52,6 +56,16 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
+
+        form.addParam('binThreads', IntParam,
+                      label='Xmipp MPIs or threads',
+                      default=2,
+                      help='Number of MPIs or threads used by Xmipp each time it is called in the protocol execution. For '
+                           'example, if 3 Scipion threads and 3 Xmipp threads are set, the tomograms will be '
+                           'processed in groups of 2 at the same time with a call of Xmipp with 3 threads each, so '
+                           '6 threads will be used at the same time. Beware the memory of your machine has '
+                           'memory enough to load together the number of tomograms specified by Scipion threads.')
+        
         form.addParam('inputParticles', PointerParam, label="Input images", important=True,
                       pointerClass='SetOfParticles', pointerCondition='hasAlignmentProj')
         form.addParam('inputRefs', PointerParam, label="References", important=True,
@@ -76,24 +90,42 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         form.addParam('residualNoise', BooleanParam, label="Estimate noise from residual: ", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Whether to write residual and estimate noise there. Otherwise, use original image')
         
-        form.addParallelSection(threads=0, mpi=8)
+        form.addParallelSection(threads=2, mpi=0)
 
         form.addHidden(USE_GPU, BooleanParam, default=False,
                        label="Use GPU for execution",
                        help="This protocol has both CPU and GPU implementation.\
                        Select the one you want to use. Be aware that the GPU program is new and may have problems")
 
-        form.addHidden(GPU_LIST, StringParam, default='0',
+        form.addHidden(GPU_LIST, StringParam, default='',
                        expertLevel=LEVEL_ADVANCED,
                        label="Choose GPU IDs",
                        help="Add a list of GPU devices that can be used")
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        """ Convert input images if necessary """
-        self._insertFunctionStep(self.convertStep)
-        self._insertFunctionStep(self.produceAllResiduals)
-        self._insertFunctionStep(self.createOutputStep)
+        """ Convert input images then run continuous_assign2 then create output """
+        
+        convId = self._insertFunctionStep(self.convertStep, prerequisites=[], needsGPU=False)
+
+        stepIds = []
+        inputRefs = self.inputRefs.get()
+        i=1
+        if isinstance(inputRefs, Volume):
+            prodId = self._insertFunctionStep(self.produceResiduals, inputRefs.getFileName(), i,
+                                              prerequisites=convId, needsGPU=False)
+            i += 1
+            stepIds.append(prodId)
+        else:
+            for volume in inputRefs:
+                prodId = self._insertFunctionStep(self.produceResiduals, volume.getFileName(), i,
+                                                  prerequisites=convId, needsGPU=False)
+                i += 1
+                stepIds.append(prodId)
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=stepIds,
+                                 needsGPU=False)
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
@@ -101,7 +133,26 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         imgSet = self.inputParticles.get()
         writeSetOfParticles(imgSet, self._getExtraPath("images.xmd"))
 
-    def produceResiduals(self, fnVol, i, mask, noiseMask):
+        # prepare masks
+        # TODO: register or save them to allow continuing
+        Xdim = self.inputParticles.get().getDimensions()[0]
+        Y, X = np.ogrid[:Xdim, :Xdim]
+        dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
+
+        particleRadius = self.particleRadius.get()
+        if particleRadius<0:
+            particleRadius=Xdim/2
+        self.mask = dist_from_center <= particleRadius
+
+        noiseRadius = self.noiseRadius.get()
+        if noiseRadius == -1:
+            noiseRadius = Xdim/2
+        if noiseRadius > particleRadius:
+            self.noiseMask = (dist_from_center > particleRadius) & (dist_from_center <= noiseRadius)
+        else:
+            self.noiseMask = self.mask
+
+    def produceResiduals(self, fnVol, i):
         fnAngles = self._getExtraPath("images.xmd")
         anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
         fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
@@ -119,10 +170,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             args+=" --optimizeGray --max_gray_scale %f"%self.maxGrayChange
 
         if self.useGpu:
-            args+=" --nThreads %d"%self.numberOfMpi.get()
+            args+=" --nThreads %d"%self.binThreads.get()
             self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
         else:
-            self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
+            self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.binThreads.get())
 
         mdResults = md.MetaData(self._getExtraPath("anglesCont%03d.xmd"%i))
         mdOut = md.MetaData()
@@ -133,19 +184,19 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 fnResidual = mdResults.getValue(emlib.MDL_IMAGE_RESIDUAL,objId)
                 I = xmippLib.Image(fnResidual)
 
-                elements_within_circle = I.getData()[mask]
-                sum_of_squares = np.sum(elements_within_circle ** 2)
+                elements_within_circle = I.getData()[self.mask]
+                sum_of_squares = np.sum(elements_within_circle**2)
                 Npix = elements_within_circle.size
 
             else:
                 fnOriginal = mdResults.getValue(emlib.MDL_IMAGE,objId)
                 I = xmippLib.Image(fnOriginal)
 
-                elements_within_circle = I.getData()[mask]
-                sum_of_squares = mdResults.getValue(emlib.MDL_IMED,objId)
+                elements_within_circle = I.getData()[self.mask]
+                sum_of_squares = mdResults.getValue(emlib.MDL_IMED, objId)**2
                 Npix = elements_within_circle.size
 
-            elements_between_circles = I.getData()[noiseMask]
+            elements_between_circles = I.getData()[self.noiseMask]
             var = np.var(elements_between_circles)
 
             LL = -sum_of_squares/(2*var) - Npix/2 * np.log(2*np.pi*var)
@@ -159,34 +210,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
             newRow.addToMd(mdOut)
         mdOut.write(self._getExtraPath("logLikelihood%03d.xmd"%i))
-
-    def produceAllResiduals(self):
-        Xdim = self.inputParticles.get().getDimensions()[0]
-        Y, X = np.ogrid[:Xdim, :Xdim]
-        dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
-
-        particleRadius = self.particleRadius.get()
-        if particleRadius<0:
-            particleRadius=Xdim/2
-        mask = dist_from_center <= particleRadius
-
-        noiseRadius = self.noiseRadius.get()
-        if noiseRadius == -1:
-            noiseRadius = Xdim/2
-        if noiseRadius > particleRadius:
-            noiseMask = (dist_from_center > particleRadius) & (dist_from_center <= noiseRadius)
-        else:
-            noiseMask = mask
-
-        inputRefs = self.inputRefs.get()
-        i=1
-        if isinstance(inputRefs, Volume):
-            self.produceResiduals(inputRefs.getFileName(), i, mask, noiseMask)
-            i += 1
-        else:
-            for volume in inputRefs:
-                self.produceResiduals(volume.getFileName(), i, mask, noiseMask)
-                i += 1
 
     def appendRows(self, outputSet, fnXmd):
         self.iterMd = md.iterRows(fnXmd, md.MDL_ITEM_ID)
