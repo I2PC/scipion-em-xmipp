@@ -170,8 +170,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         if self.useGpu:
             args+=" --nThreads %d"%self.binThreads.get()
-            print('GPUs %(GPU)s')
-            os.environ["CUDA_VISIBLE_DEVICES"] = "%(GPU)s"
+            # print('GPUs %(GPU)s')
+            # os.environ["CUDA_VISIBLE_DEVICES"] = "%(GPU)s"
             self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
         else:
             self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
