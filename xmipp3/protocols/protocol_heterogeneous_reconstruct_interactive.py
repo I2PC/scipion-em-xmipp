@@ -106,7 +106,7 @@ class XmippProtHetReconstructInteractive(ProtClassify3D, xmipp3.XmippProtocol):
         particlesMd = emlib.MetaData(self._getInputParticleMdFilename())
         points = np.array(particlesMd.getColumnValues(emlib.MDL_DIMRED))
         
-        ax.hist2d(points[:,0], points[:,1], bins=64)
+        ax.hist2d(points[:,0], points[:,1], bins=96)
         
         centroids = []
         scatter = ax.scatter([], [], picker=True, c='white')
