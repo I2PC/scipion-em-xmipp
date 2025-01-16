@@ -88,7 +88,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       condition='optimizeGray',
                       help='The actual gray value can be at most as small as 1-change or as large as 1+change')
         
-        form.addParam('residualNoise', BooleanParam, label="Estimate noise from residual: ", default=True, expertLevel=LEVEL_ADVANCED,
+        form.addParam('residualNoise', BooleanParam, label="Estimate noise from residual: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to write residual and estimate noise there. Otherwise, use original image')
         
         form.addParallelSection(threads=2, mpi=2)
