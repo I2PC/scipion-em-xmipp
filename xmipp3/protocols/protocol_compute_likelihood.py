@@ -215,7 +215,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 LL = term1
 
             if self.printTerms.get():
-                print('{0:6.3f}\t{1}\t{2}\t{3}\n'.format(term1, term2, LL, var))
+                print('{0:6.3f}\t{1:6.3f}\t{2:6.3f}\t{3:6.3f}\n'.format(term1, term2, LL, var))
 
             newRow = md.Row()
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
