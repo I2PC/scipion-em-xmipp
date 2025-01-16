@@ -369,7 +369,7 @@ class XmippViewerHetAnalysis(ProtocolViewer):
                 f.write("open %s\n" % os.path.abspath(consensusVol))
                 f.write("open %s\n" % os.path.abspath(self.protocol._getEigenVolumeFilename(i+1)))
                 f.write("vol #%d hide\n" % mapId)
-                f.write("color sample #%d map #%d palette bwr\n" % (volId, mapId))
+                f.write("color sample #%d map #%d\n" % (volId, mapId))
             f.write("tile\n")
         return scriptFile
     
