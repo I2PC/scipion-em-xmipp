@@ -90,6 +90,12 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         
         form.addParam('residualNoise', BooleanParam, label="Estimate noise from residual: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to write residual and estimate noise there. Otherwise, use original image')
+
+        form.addParam('printTerms', BooleanParam, label="Print terms of LL: ", default=False, expertLevel=LEVEL_ADVANCED,
+                      help='Whether to print terms 1 and 2, LL and noise variance')
+
+        form.addParam('useBothTerms', BooleanParam, label="Use both terms: ", default=True, expertLevel=LEVEL_ADVANCED,
+                      help='Whether to use both terms. Otherwise, just use term 1')
         
         form.addParallelSection(threads=2, mpi=2)
 
@@ -202,8 +208,14 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
             term1 = -sum_of_squares/(2*var)
             term2 = Npix/2 * np.log(2*np.pi*var)
-            LL = term1 - term2
-            print('{0}\t{1}\t{2}\n'.format(term1, term2, LL))
+
+            if self.useBothTerms.get():
+                LL = term1 - term2
+            else:
+                LL = term1
+
+            if self.printTerms.get():
+                print('{0:6.3f}\t{1}\t{2}\t{3}\n'.format(term1, term2, LL, var))
 
             newRow = md.Row()
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
