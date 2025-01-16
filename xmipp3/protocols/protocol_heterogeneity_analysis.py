@@ -38,7 +38,6 @@ from pyworkflow.protocol.params import (Form, PointerParam, EnumParam,
                                         StringParam, BooleanParam,
                                         GE, GT, Range,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
-import scipy.optimize
 
 import xmipp3
 from xmipp3.convert import (writeSetOfParticles, setXmippAttributes, 
@@ -47,10 +46,9 @@ import xmippLib
 
 import os.path
 import itertools
-import collections
 import numpy as np
+import pickle as pkl
 import scipy.sparse
-import scipy.stats
 import sklearn.decomposition
 
 class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
@@ -140,11 +138,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('classifyDirectionsStep')
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('basisSynchronizationStep')
-        #self._insertFunctionStep('correctBasisStep')
         self._insertFunctionStep('combineDirectionsStep')
-        self._insertFunctionStep('diagonalizeStep')
-        #self._insertFunctionStep('correctEigenImagesStep')
-        #self._insertFunctionStep('reconstructEigenVolumesStep')
+        self._insertFunctionStep('reconstructEigenVolumesStep')
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions -------------------------------
@@ -420,12 +415,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['-k', k]
         args += ['--pairwise', self._getPairwiseFilename()]
         args += ['--eigenvalues', self._getEigenvaluesFilename()]
+        args += ['--auto_trim', 0.99]
         #args += ['--verbose']
-
-        if p > 0:
-            args += ['-p', p]
-        else:
-            args += ['--auto_trim', 0.99]
 
         if self.optimizationMethod == 0:
             args += ['--method', 'sdp']
@@ -467,6 +458,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         particlesMd = emlib.MetaData(self._getInputParticleMdFilename())
         itemIdToIndex = dict(zip(particlesMd.getColumnValues(emlib.MDL_ITEM_ID), itertools.count()))
         data = self._readDirectionalValues(directionMd, itemIdToIndex, bases)
+        nComponents = self._getOutputPrincipalComponentsCount()
         m, _, p = bases.shape
         
         gains = np.ones((m, p))
@@ -477,6 +469,12 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             noise2 = self._computeNoise(data, averages, gains)
         averages = self._computeAverages(data, gains, noise2)
 
+        if nComponents == 0:
+            pca = sklearn.decomposition.PCA(n_components='mle')
+        else:
+            pca = sklearn.decomposition.PCA(n_components=nComponents)
+        averages = pca.fit_transform(averages)
+        
         # Write PCA projection values to the output metadata
         for objId in particlesMd:
             itemId = particlesMd.getValue(emlib.MDL_ITEM_ID, objId)
@@ -486,74 +484,49 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
 
         self._writeGains(gains)
         self._writeAveragingNoise(noise2)
+        self._writeDiagonalization(pca)
         particlesMd.write(self._getClassificationMdFilename())
         self.outputPrincipalComponentCount = Integer(len(average))
         self._store()
         
-    def diagonalizeStep(self):
-        pca = sklearn.decomposition.PCA()
-        
-        classificationFilename = self._getClassificationMdFilename()
-        classificationMd = emlib.MetaData(classificationFilename)
-        projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
-        projections = pca.fit_transform(projections)
-        classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
-        classificationMd.write(classificationFilename)
-        
+    def reconstructEigenVolumesStep(self):
         bases = self._readBases()
-        bases = bases @ pca.components_.T
-        self._writeBases(bases)
+        pca = self._readDiagonalization()
+        nComponents = self.outputPrincipalComponentCount.get()
 
-        """
-        directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
-        for directionId in directionMd:
-            classificationFilename = directionMd.getValue(emlib.MDL_SELFILE, directionId)
-            classificationMd = emlib.MetaData(classificationFilename)
-            projections = np.array(classificationMd.getColumnValues(emlib.MDL_DIMRED))
-            projections = pca.transform(projections)
-            classificationMd.setColumnValues(emlib.MDL_DIMRED, projections.tolist())
-            classificationMd.write(classificationFilename)
-        """
-             
-    def correctEigenImagesStep(self):
-        bases = self._readBases()
-        inverseBases = bases.transpose(0, 2, 1)
-
-        directionMd = emlib.MetaData(self._getCorrectedDirectionalMdFilename())
+        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         eigenimageHandler = emlib.Image()
         for i, directionId in enumerate(directionMd):
-            inverseBasis = inverseBases[i]
+            transform = pca.components_ @ bases[i].T
+            
             eigenimageHandler.read(self._getDirectionalEigenImagesFilename(directionId))
             eigenimages = eigenimageHandler.getData()
-            eigenvectors = eigenimages.reshape(inverseBasis.shape[1], -1)
-            eigenvectors = inverseBasis @ eigenvectors
-            eigenimages = eigenvectors.reshape(inverseBasis.shape[0], 1, *eigenimages.shape[-2:])
+            eigenvectors = eigenimages.reshape(transform.shape[1], -1)
+            eigenvectors = transform @ eigenvectors
+            eigenimages = eigenvectors.reshape(transform.shape[0], 1, *eigenimages.shape[-2:])
             eigenimageHandler.setData(eigenimages)
             eigenimageHandler.write(self._getCorrectedDirectionalEigenImagesFilename(directionId))
         
-    def reconstructEigenVolumesStep(self):
-        ko = self.outputPrincipalComponentCount.get()
-        
-        correctedDirectionMd = emlib.MetaData()
         eigenImagesMd = emlib.MetaData()
-        for directionId in range(1, 1+ko):
+        row = emlib.metadata.Row()
+        for i in range(1, 1+nComponents):
             eigenImagesMd.clear()
-            correctedDirectionMd.read(self._getCorrectedDirectionalMdFilename())
-            for row in emlib.metadata.iterRows(correctedDirectionMd):
-                pcaImages = row.getValue(emlib.MDL_IMAGE_RESIDUAL)
-                pcaImage = locationToXmipp(directionId, pcaImages)
-                row.setValue(emlib.MDL_IMAGE, pcaImage)
+            for directionId in directionMd:
+                row.readFromMd(directionMd, directionId)
+                pcaImagesFilename = self._getCorrectedDirectionalEigenImagesFilename(directionId)
+                pcaImageFilename = locationToXmipp(i, pcaImagesFilename)
+                row.setValue(emlib.MDL_IMAGE, pcaImageFilename)
                 row.removeLabel(emlib.MDL_MASK)
                 row.removeLabel(emlib.MDL_SELFILE)
                 row.removeLabel(emlib.MDL_IMAGE_RESIDUAL)
                 row.addToMd(eigenImagesMd)
                 
-            eigenImagesMd.write(self._getEigenImageMdFilename(directionId))
+            eigenImagesMd.write(self._getEigenImageMdFilename(i))
             
             program = 'xmipp_reconstruct_fourier'
             args = []
-            args += ['-i', self._getEigenImageMdFilename(directionId)]
-            args += ['-o', self._getEigenVolumeFilename(directionId)]
+            args += ['-i', self._getEigenImageMdFilename(i)]
+            args += ['-o', self._getEigenVolumeFilename(i)]
             args += ['--sym', self._getSymmetryGroup()]
             
             self.runJob(program, args)
@@ -710,6 +683,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _getAveragingNoiseFilename(self):
         return self._getExtraPath('noise.npy')
 
+    def _getPcaFilename(self):
+        return self._getExtraPath('pca.pkl')
+
     def _writeAdjacencyGraph(self, adjacency: scipy.sparse.csr_matrix) -> str:
         path = self._getAdjacencyGraphFilename()
         scipy.sparse.save_npz(path, adjacency)
@@ -750,6 +726,13 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def _writeAveragingNoise(self, noise):
         return np.save(self._getAveragingNoiseFilename(), noise)
 
+    def _readDiagonalization(self) -> sklearn.decomposition.PCA:
+        with open(self._getPcaFilename(), 'rb') as f:
+            return pkl.load(f)
+        
+    def _writeDiagonalization(self, pca: sklearn.decomposition.PCA):
+        with open(self._getPcaFilename(), 'wb') as f:
+            return pkl.dump(pca, f)
 
     def _readDirectionalValues(self, 
                                directionMd: emlib.MetaData,
