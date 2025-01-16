@@ -64,8 +64,7 @@ class XmippViewerHetAnalysis(ProtocolViewer):
                       help='Shows the 2D histograms of pairwise principal components')
         form.addParam('displayInformationCriterion', LabelParam, label='Information criterion',
                       help='Shows Akaike and Bayesian information criterions')
-        form.addParam('displayEigenvalues', LabelParam, label='Eigen-values')
-        form.addParam('displayEigenVolume', IntParam, label='Eigen-volumes')
+        form.addParam('displayEigenVolume', LabelParam, label='Eigen-volumes')
 
         form.addSection(label='Directional data')
         form.addParam('displayDirectionalMd', LabelParam, label='Directional metadata',
@@ -149,11 +148,7 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         return [fig]
         
     def _displayEigenVolume(self, e):
-        command = self._writeChimeraScript(
-            self.consensusVolume.get().getFileName(),
-            self.displayEigenVolume.get()
-        )
-        
+        command = self._writeChimeraScript(self.consensusVolume.get().getFileName())
         return [ChimeraView(command)]
         
     def _displayDirectionalMd(self, e):
@@ -363,16 +358,18 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     
         return [fig]
         
-    def _writeChimeraScript(self, consensusVol: str, i: int) -> str:
+    def _writeChimeraScript(self, consensusVol: str) -> str:
         scriptFile = self.protocol._getExtraPath('fusion_chimera.cxc')
-        sampling = self.protocol.inputParticles.get().getSamplingRate()
-        sampling = 1.0 / sampling
+        n = self.protocol.outputPrincipalComponentCount.get()
         
         with open(scriptFile, 'w') as f:
-            f.write("open %s\n" % os.path.abspath(consensusVol))
-            f.write("open %s\n" % os.path.abspath(self.protocol._getEigenVolumeFilename(i)))
-            f.write("vol #2 hide\n")
-            f.write("color sample #1 map #2 palette bwr\n")
-        
+            for i in range(n):
+                volId = i*2 + 1
+                mapId = volId + 1
+                f.write("open %s\n" % os.path.abspath(consensusVol))
+                f.write("open %s\n" % os.path.abspath(self.protocol._getEigenVolumeFilename(i+1)))
+                f.write("vol #%d hide\n" % mapId)
+                f.write("color sample #%d map #%d palette bwr\n" % (volId, mapId))
+            f.write("tile\n")
         return scriptFile
     

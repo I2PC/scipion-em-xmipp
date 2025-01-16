@@ -417,6 +417,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         args += ['--eigenvalues', self._getEigenvaluesFilename()]
         args += ['--auto_trim', 0.99]
         #args += ['--verbose']
+        #args += ['--group', 'O']
 
         if self.optimizationMethod == 0:
             args += ['--method', 'sdp']
@@ -528,8 +529,13 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             args += ['-i', self._getEigenImageMdFilename(i)]
             args += ['-o', self._getEigenVolumeFilename(i)]
             args += ['--sym', self._getSymmetryGroup()]
-            
             self.runJob(program, args)
+            
+            program = 'xmipp_image_header'
+            args = []
+            args += ['-i',  self._getEigenVolumeFilename(i)]
+            args += ['--sampling_rate', self._getSamplingRate()]
+            self.runJob(program, args, numberOfMpi=1)
         
     def createOutputStep(self):
         classification = emlib.MetaData(self._getClassificationMdFilename())
