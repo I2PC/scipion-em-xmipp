@@ -175,7 +175,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 gpuStr = str(gpuId)
             else:
                 gpuStr = ','.join([str(g) for g in gpuId])
-            print("gpuStr: ", gpuStr)
+            os.environ["CUDA_VISIBLE_DEVICES"] = gpuStr
             self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
         else:
             self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
