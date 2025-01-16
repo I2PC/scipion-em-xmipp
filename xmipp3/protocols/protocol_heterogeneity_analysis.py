@@ -545,13 +545,13 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             itemDataIterator=emlib.metadata.iterRows(classification, sortByLabel=emlib.MDL_ITEM_ID)
         )
         
-        ko = self.outputPrincipalComponentCount.get()
+        nComponents = self.outputPrincipalComponentCount.get()
         eigenVolumes: SetOfVolumes = self._createSetOfVolumes()
         eigenVolumes.setSamplingRate(self._getInputParticles().getSamplingRate())
-        for directionId in range(1, 1+ko):
+        for i in range(1, 1+nComponents):
             eigenVolume = Volume(
-                objId=directionId, 
-                location=self._getEigenVolumeFilename(directionId)
+                objId=i, 
+                location=self._getEigenVolumeFilename(i)
             )
             eigenVolumes.append(eigenVolume)
         
