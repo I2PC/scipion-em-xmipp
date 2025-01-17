@@ -121,7 +121,7 @@ class XmippProtSimulateCTF(Prot2D):
             if self.noiseBefore>0:
                 I=xmippLib.Image(fnIn)
                 Idata = I.getData()
-                I.setData(Idata+self.noiseBefore.get()*np.numpy.random.Generator.normal(size=Idata.shape))
+                I.setData(Idata+self.noiseBefore.get()*np.random.Generator.normal(size=Idata.shape))
                 I.write(fnOut)
                 fnIn=fnOut
 
