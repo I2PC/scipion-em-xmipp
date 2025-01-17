@@ -209,13 +209,15 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             elements_between_circles = I.getData()[self.getMasks()[1]]
             var = np.var(elements_between_circles)
 
-            term1 = -sum_of_squares/(2*var)
+            if self.useNegSos.get():
+                term1 = -sum_of_squares
+            else:
+                term1 = -sum_of_squares/(2*var)
+
             term2 = Npix/2 * np.log(2*np.pi*var)
 
             if self.useBothTerms.get():
                 LL = term1 - term2
-            elif self.useNegSos.get():
-                LL = -sum_of_squares
             else:
                 LL = term1
 
