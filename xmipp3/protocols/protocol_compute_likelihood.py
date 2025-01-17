@@ -96,7 +96,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         form.addParam('useBothTerms', BooleanParam, label="Use both terms: ", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Whether to use both terms. Otherwise, just use term 1')
-        
+
+        form.addParam('useNegSos', BooleanParam, label="Use negative sum of squares: ", default=True, expertLevel=LEVEL_ADVANCED,
+                      condition='useBothTerms==False',
+                      help='Whether to use negative sum of squares instead of full variance-adjusted term 1')
         form.addParallelSection(threads=2, mpi=2)
 
         form.addHidden(USE_GPU, BooleanParam, default=False,
@@ -211,11 +214,14 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
             if self.useBothTerms.get():
                 LL = term1 - term2
+            elif self.useNegSos.get():
+                LL = -sum_of_squares
             else:
                 LL = term1
 
             if self.printTerms.get():
-                print('{0:6.3f}\t{1:6.3f}\t{2:6.3f}\t{3:6.3f}\n'.format(term1, term2, LL, var))
+                print('{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:8.5f}\n'.format(-sum_of_squares, term1, term2,
+                                                                                      LL, var, 1/(2*var)))
 
             newRow = md.Row()
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
