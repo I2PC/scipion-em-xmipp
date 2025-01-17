@@ -360,16 +360,22 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         
     def _writeChimeraScript(self, consensusVol: str) -> str:
         scriptFile = self.protocol._getExtraPath('fusion_chimera.cxc')
+        consensusVolFilename = os.path.abspath(consensusVol)
         n = self.protocol.outputPrincipalComponentCount.get()
         
+        ih = emlib.Image()
         with open(scriptFile, 'w') as f:
             for i in range(n):
+                basisFilename = os.path.abspath(self.protocol._getEigenVolumeFilename(i+1))
                 volId = i*2 + 1
                 mapId = volId + 1
-                f.write("open %s\n" % os.path.abspath(consensusVol))
-                f.write("open %s\n" % os.path.abspath(self.protocol._getEigenVolumeFilename(i+1)))
+                ih.read(basisFilename)
+                eigenVolume = ih.getData()
+                limit = abs(eigenVolume).max()
+                f.write("open %s\n" % consensusVolFilename)
+                f.write("open %s\n" % basisFilename)
                 f.write("vol #%d hide\n" % mapId)
-                f.write("color sample #%d map #%d\n" % (volId, mapId))
+                f.write("color sample #%d map #%d range %f,%f\n" % (volId, mapId, -limit, limit))
             f.write("tile\n")
         return scriptFile
     
