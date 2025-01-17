@@ -381,8 +381,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
                     projections0 = np.array(md0.getColumnValues(emlib.MDL_DIMRED)).T
                     projections1 = np.array(md1.getColumnValues(emlib.MDL_DIMRED)).T
                     
-                    projections0 -= projections0.mean(axis=1, keepdims=True)
-                    projections1 -= projections1.mean(axis=1, keepdims=True)
+                    #projections0 -= projections0.mean(axis=1, keepdims=True)
+                    #projections1 -= projections1.mean(axis=1, keepdims=True)
                     
                     # Compute similarity
                     similarity = projections0 @ projections1.T
