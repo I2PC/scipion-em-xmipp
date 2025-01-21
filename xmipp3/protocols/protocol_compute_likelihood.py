@@ -222,7 +222,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 LL = term1
 
             if self.printTerms.get():
-                print('{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:8.5f}\n'.format(-sum_of_squares, term1, term2,
+                print('{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\n'.format(-sum_of_squares, term1, term2,
                                                                                       LL, var, 1/(2*var)))
 
             newRow = md.Row()
