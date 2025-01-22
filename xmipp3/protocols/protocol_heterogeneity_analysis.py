@@ -342,66 +342,38 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
     def buildGraphStep(self):
         # Build graph intersecting direction pairs and calculate the similarity
         # between projection values
-        k = self._getPrincipalComponentsCount()
-        symList = xmippLib.SymList()
-        symList.readSymmetryFile(self._getSymmetryGroup())
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
-        md0 = emlib.MetaData()
-        md1 = emlib.MetaData()
-        objIds = list(directionMd)
-        nDirections = len(objIds)
-        adjacency = scipy.sparse.lil_matrix((nDirections, )*2)
-        similarities = scipy.sparse.lil_matrix((nDirections*k, )*2)
-        for (idx0, directionId0), (idx1, directionId1) in itertools.combinations(enumerate(objIds), r=2):
-            # Obtain the projection angles
-            rot0 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId0)
-            rot1 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId1)
-            tilt0 = directionMd.getValue(emlib.MDL_ANGLE_TILT, directionId0)
-            tilt1 = directionMd.getValue(emlib.MDL_ANGLE_TILT, directionId1)
-            
-            # Only consider direction pairs that are close
-            angularDistance = symList.computeDistanceAngles(
-                rot0, tilt0, 0.0, 
-                rot1, tilt1, 0.0,
-                True, self.checkMirrors.get(), False
-            )
-            if angularDistance <= 2*self.angularDistance.get():
-                # Obtain the intersection of the particles belonging to
-                # both directions
-                md0.read(directionMd.getValue(emlib.MDL_SELFILE, directionId0))
-                md1.read(directionMd.getValue(emlib.MDL_SELFILE, directionId1))
-                
-                md0.intersection(md1, emlib.MDL_ITEM_ID)
-                n = md0.size()
-                if n > 0:
-                    md1.intersection(md0, emlib.MDL_ITEM_ID)
-                    adjacency[idx0,idx1] = adjacency[idx1,idx0] = n
-                    
-                    # Get their PCA projection values
-                    projections0 = np.array(md0.getColumnValues(emlib.MDL_DIMRED)).T
-                    projections1 = np.array(md1.getColumnValues(emlib.MDL_DIMRED)).T
-                    
-                    #projections0 -= projections0.mean(axis=1, keepdims=True)
-                    #projections1 -= projections1.mean(axis=1, keepdims=True)
-                    
-                    # Compute similarity
-                    similarity = projections0 @ projections1.T
-
-                    # Write them in symmetric positions
-                    start0 = idx0*k
-                    end0 = start0+k
-                    start1 = idx1*k
-                    end1 = start1+k
-                    similarities[start0:end0, start1:end1] = similarity
-                    similarities[start1:end1, start0:end0] = similarity.T
-                    
-        # Normalize similarities
-        similarities /= abs(similarities).max()
+        particlesMd = emlib.MetaData(self._getInputParticleMdFilename())
+        itemIdToIndex = dict(zip(particlesMd.getColumnValues(emlib.MDL_ITEM_ID), itertools.count()))
+        nComponents = self._getPrincipalComponentsCount()
+        nDirections = directionMd.size()
+        nImages = particlesMd.size()
         
-        # Store the matrices
-        self._writeAdjacencyGraph(adjacency.tocsr())
-        self._writeCrossCorrelations(similarities.tocsr())
+        data = scipy.sparse.lil_array((nImages, nDirections*nComponents))
+        directionalClassificationMd = emlib.MetaData()
+        for j, directionId in enumerate(directionMd):
+            directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, directionId))
+            itemIds = directionalClassificationMd.getColumnValues(emlib.MDL_ITEM_ID)
+            values = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_DIMRED))
+            start = j*nComponents
+            end = start + nComponents
+            
+            for itemId, value in zip(itemIds, values):
+                i = itemIdToIndex[itemId]
+                data[i, start:end] = value
+                
+        data = data.tocsc()
+        similarities = data.T @ data
+        
+        for j in range(nDirections):
+            start = j*nComponents
+            end = start + nComponents
+            similarities[start:end, start:end] = 0
+        similarities.eliminate_zeros()
 
+        similarities /= abs(similarities).max()
+        self._writeCrossCorrelations(similarities.tocsr())
+             
     def basisSynchronizationStep(self):
         n = self._getDirectionCount()
         k = self._getPrincipalComponentsCount()
