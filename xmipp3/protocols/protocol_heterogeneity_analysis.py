@@ -84,13 +84,22 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('inputMask', PointerParam, label='Mask', important=True,
                       pointerClass=VolumeMask, allowsNull=True,
                       help='Volume mask used for focussing the classification')
+        form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
+                      default=True,
+                      help='Consider the CTF of the particles')
         form.addParam('symmetryGroup', StringParam, label='Symmetry group', default='c1')
-        form.addParam('resize', IntParam, label='Resize', default=0,
-                      validators=[GE(0)])
 
         form.addSection(label='Analysis')
+        form.addParam('angularSampling', FloatParam, label='Angular sampling',
+                      default=5.0, validators=[Range(0,180)],
+                      help='Angular sampling interval in degrees')
+        form.addParam('angularDistance', FloatParam, label='Angular distance',
+                      default=7.5, validators=[Range(0,180)],
+                      help='Maximum angular distance in degrees')
+        form.addParam('checkMirrors', BooleanParam, label='Check mirrors',
+                      default=True)
         form.addParam('principalComponents', IntParam, label='Principal components',
-                      default=6, validators=[GT(0)],
+                      default=8, validators=[GT(0)],
                       help='Number of principal components used for directional classification')
         form.addParam('outputPrincipalComponents', IntParam, label='Output principal components',
                       default=0, validators=[GE(0)], expertLevel=LEVEL_ADVANCED,
@@ -101,23 +110,6 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('averagingIterations', IntParam, label='Averaging iterations',
                       expertLevel=LEVEL_ADVANCED, default=32 )
         
-        form.addSection(label='CTF')
-        form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
-                      default=True,
-                      help='Consider the CTF of the particles')
-
-        form.addSection(label='Angular sampling')
-        form.addParam('angularSampling', FloatParam, label='Angular sampling',
-                      default=7.5, validators=[Range(0,180)],
-                      help='Angular sampling interval in degrees')
-        form.addParam('angularDistance', FloatParam, label='Angular distance',
-                      default=7.5, validators=[Range(0,180)],
-                      help='Maximum angular distance in degrees')
-        form.addParam('checkMirrors', BooleanParam, label='Check mirrors',
-                      default=True)
-        
-        form.addParallelSection(threads=0, mpi=8)
-
         form.addSection(label='Compute')
         form.addParam('batchSize', IntParam, label='Batch size', 
                       default=1024,
@@ -125,6 +117,8 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('copyParticles', BooleanParam, label='Copy particles to scratch', default=False, 
                       help='Copy input particles to scratch directory. Note that if input file format is '
                       'incompatible the particles will be converted into scratch anyway')
+
+        form.addParallelSection(threads=0, mpi=8)
         
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -155,7 +149,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             return ext == '.mrc' or ext == '.mrcs'
         
         # Convert particles to MRC and resize if necessary
-        if self.copyParticles or self.resize > 0 or not all(map(is_mrc, inputParticles.getFiles())):
+        if self.copyParticles or not all(map(is_mrc, inputParticles.getFiles())):
             args = []
             args += ['-i', self._getInputParticleMdFilename()]
             args += ['-o', self._getInputParticleStackFilename()]
@@ -163,16 +157,12 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             args += ['--keep_input_columns']
             args += ['--track_origin']
             
-            if self.resize > 0:
-                args += ['--fourier', self.resize]
-                self.runJob('xmipp_image_resize', args)
-            else:
-                self.runJob('xmipp_image_convert', args, numberOfMpi=1)
+            self.runJob('xmipp_image_convert', args, numberOfMpi=1)
     
         # Convert or create mask
         if inputMask is None:
             # Create a spherical mask
-            dim: int = self.resize.get() if self.resize > 0 else inputParticles.getXDim()
+            dim: int = inputParticles.getXDim()
             emlib.createEmptyFile(self._getInputMaskFilename(), dim, dim, dim)
 
             args = []
@@ -180,22 +170,10 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             args += ['--create_mask', self._getInputMaskFilename()]
             args += ['--mask', 'circular', -dim/2]
             self.runJob('xmipp_transform_mask', args, numberOfMpi=1)
-            
+
         else:
-            # Convert particles to MRC and resize if necessary
-            if self.resize > 0 or not is_mrc(inputMask.getFileName()):
-                args = []
-                args += ['-i', inputMask.getFileName()]
-                args += ['-o', self._getInputMaskFilename()]
-                
-                if self.resize > 0:
-                    args += ['--fourier', self.resize]
-                    self.runJob('xmipp_image_resize', args, numberOfMpi=1)
-                else:
-                    self.runJob('xmipp_image_convert', args, numberOfMpi=1)
-                    
-            else:
-                createLink(inputMask.getFileName(), self._getInputMaskFilename())
+            createLink(inputMask.getFileName(), self._getInputMaskFilename())
+
     
     def correctCtfStep(self):
         particles: SetOfParticles = self.inputParticles.get()
