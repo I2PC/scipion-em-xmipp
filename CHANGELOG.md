@@ -1,3 +1,7 @@
+## Release 3.24.12.3 - Poseidon
+   - More scipion-em-xmipp
+      - New binary version (3.24.12.1)
+      - 
 ## Release 3.24.12.2 - Poseidon
    - More scipion-em-xmipp
       - Updating version for pypi requirements
