@@ -25,11 +25,11 @@
 # *
 # **************************************************************************
 
-type_of_version = 'devel' #'release' 'devel'
+type_of_version = 'release' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
-_binVersion = 'v3.24.12.0' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz)
-_pluginVersion = 'v3.24.12.2' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz) or in scipion-em-xmipp
+_binVersion = 'v3.24.12.1' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz)
+_pluginVersion = 'v3.24.12.3' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz) or in scipion-em-xmipp
 
 _binTagVersion = _binVersion + '-Poseidon' #'devel' or _binVersion + '-Poseidon'
 _pluginTagVersion = _pluginVersion + '-Poseidon'  #'devel' or _pluginVersion + '-Poseidon'
