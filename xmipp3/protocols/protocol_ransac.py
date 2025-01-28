@@ -305,7 +305,10 @@ class XmippProtRansac(ProtInitialVolume):
     def resizeStep(self,fnRoot,Xdim):
         if os.path.exists(fnRoot+".vol"):
             self.runJob("xmipp_image_resize","-i %s.vol -o %s.vol --dim %d %d" %(fnRoot,fnRoot,Xdim,Xdim))
-        
+            self.runJob("xmipp_image_convert","-i %s.vol -o %s.mrc -t vol" %(fnRoot,fnRoot))
+            cleanPath("%s.vol"%fnRoot)
+            self.runJob("xmipp_image_header", "-i %s.mrc --sampling_rate %f" %\
+                        (fnRoot, self.inputSet.get().getSamplingRate()))
      
     def getCorrThreshStep(self):
         corrVector = []
@@ -436,7 +439,7 @@ class XmippProtRansac(ProtInitialVolume):
                 else:
                     avg=0.0
                 id=mdOut.addObject()
-                mdOut.setValue(emlib.MDL_IMAGE,fnRoot+".vol",id)
+                mdOut.setValue(emlib.MDL_IMAGE,fnRoot+".mrc",id)
                 mdOut.setValue(emlib.MDL_VOLUME_SCORE_SUM,float(sum),id)
                 mdOut.setValue(emlib.MDL_VOLUME_SCORE_SUM_TH,float(thresholdedSum),id)
                 mdOut.setValue(emlib.MDL_VOLUME_SCORE_MEAN,float(avg),id)
@@ -474,7 +477,7 @@ class XmippProtRansac(ProtInitialVolume):
         self._counter = 0
         readSetOfVolumes(fn, volumesSet, postprocessImageRow=self._postprocessVolume)
         
-        # Set a meanful comment
+        # Set a meaningful comment
 #         for vol in volumesSet:
 #             vol.setObjComment('ransac volume %02d' % vol.getObjId())
 #             volumesSet.update(vol)

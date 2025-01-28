@@ -38,7 +38,7 @@ from pwem.objects import Volume, SetOfClasses3D
 from pyworkflow.utils import getMemoryAvailable, removeExt, cleanPath, makePath, copyFile
 
 from pwem import emlib
-from xmipp3.convert import createClassesFromImages
+from xmipp3.convert import createClassesFromImages, convertToMrc
 from xmipp3.base import isMdEmpty
 
 
@@ -714,12 +714,12 @@ def runFilterVolumeStep(self, iterN, refN, constantToAddToFiltration):
                   }
         self.runJob("xmipp_transform_filter", args % params)
 
-
 def runCreateOutputStep(self):
     ''' Create standard output results_images, result_classes'''
     #creating results files
     imgSet = self.inputParticles.get()
     lastIter = self.numberOfIterations.get()
+    Ts = imgSet.getSamplingRate()
     if self.numberOfReferences != 1:
         inDocfile = self._getFileName('docfileInputAnglesIters', iter=lastIter)
         ClassFnTemplate = '%(rootDir)s/reconstruction_Ref3D_%(ref)03d.vol'
@@ -738,10 +738,11 @@ def runCreateOutputStep(self):
         classes.appendFromClasses(clsSet)
         
         volumes = self._createSetOfVolumes()
-        volumes.setSamplingRate(imgSet.getSamplingRate())
+        volumes.setSamplingRate(Ts)
         
         for refN in self.allRefs():
             volFn = self._getFileName('reconstructedFileNamesIters', iter=lastIter, ref=refN)
+            volFn = convertToMrc(self, volFn, Ts, True)
             vol = Volume()
             vol.setFileName(volFn)
             volumes.append(vol)
@@ -760,9 +761,13 @@ def runCreateOutputStep(self):
         halfMap2 = self._getFileName('reconstructedFileNamesItersSplit2',
                                      iter=lastIter, ref=1)
 
+        volFn = convertToMrc(self, volFn, Ts, True)
+        halfMap1 = convertToMrc(self, halfMap1, Ts, True)
+        halfMap2 = convertToMrc(self, halfMap2, Ts, True)
+
         vol = Volume()
         vol.setFileName(volFn)
-        vol.setSamplingRate(imgSet.getSamplingRate())
+        vol.setSamplingRate(Ts)
         vol.setHalfMaps([halfMap1, halfMap2])
         self._defineOutputs(outputVolume=vol)
         self._defineSourceRelation(self.inputParticles, vol)

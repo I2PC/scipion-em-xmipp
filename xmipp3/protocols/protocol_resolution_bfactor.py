@@ -41,7 +41,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pyworkflow.object import Float
 from pyworkflow.utils import getExt
-from pwem.objects import Volume, SetOfParticles
+from pwem.objects import Volume, SetOfParticles, AtomStruct
 
 
 FN_METADATA_BFACTOR_RESOLUTION = 'bfactor_resolution.xmd'
@@ -55,6 +55,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
+        self.vol = ''
         ProtAnalysis3D.__init__(self, **args)
 
     # --------------------------- DEFINE param functions ----------------------
@@ -69,13 +70,13 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
 
         form.addParam('normalizeResolution', BooleanParam, default=True,
                       label="Normalize Resolution",
-                      help='The normalizedlocal resolution map is defined as'
-                           '(LR - FSC)/FSC, where LR is the local resolution of a'
+                      help='The normalizedlocal resolution map is defined as '
+                           '(LR - FSC)/FSC, where LR is the local resolution of a '
                            'given voxel, and FSC is the FSC resolution in A. This '
-                           'map provides information about whether the local resolution is'
+                           'map provides information about whether the local resolution is '
                            'greater or lesser than the FSC. The local resolution '
-                           'normalized map is used to carry out the matching with the local'
-                           'bfactor per residue. Yes means that the local resolution will be'
+                           'normalized map is used to carry out the matching with the local '
+                           'bfactor per residue. Yes means that the local resolution will be '
                            'normalized by the algorithm. No means that the input local '
                            'resolution map is already a normalized local resolution map.')
 
@@ -84,7 +85,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
                       condition='normalizeResolution',
                       help='Select a local resolution map. Alternatively, the input.'
                            ' can be a normalized local resolution map, in this case'
-                           'set the Normalize resolution to No')
+                           ' set the Normalize resolution to No')
 
         form.addParam('normalizedMap', PointerParam, pointerClass='Volume',
                       label="Normalized Local Resolution Map", important=True,
@@ -92,7 +93,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
                       help='Select a normalized local resolution map. The local'
                            ' resolution normalized map is defined as '
                            '(LR - FSC)/FSC, where LR is the local resolution of a'
-                           'given voxel, and FSC is the FSC resolution in A')
+                           ' given voxel, and FSC is the FSC resolution in A')
 
         form.addParam('fscResolution', FloatParam,
                       condition = 'normalizeResolution',
@@ -101,8 +102,13 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
 
         form.addParam('medianEstimation', BooleanParam, default=True,
                       label="Use median",
-                      help='The local resolution per residue can be estimated using'
+                      help='The local resolution per residue can be estimated using '
                            'the mean (by default - No) or the median (yes)')
+
+        form.addParam('centered', BooleanParam, default=True,
+                      label="is the atomic centered",
+                      help='True if the atomic model centered in midle of'
+                           ' the local resolution map')
 
         form.addParallelSection(threads=4, mpi=0)
 
@@ -115,6 +121,8 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
 
         # 2 Carry out the matching betweent the local resolution per residue and bfactor
         self._insertFunctionStep('matchingBfactorLocalResolution')
+
+        self._insertFunctionStep('createOutputStep')
 
     def mrc_convert(self, fileName, outputFileName):
         """Check if the extension is .mrc, if not then uses xmipp to convert it
@@ -131,8 +139,13 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
     def convertInputStep(self):
         """ Read the input volume and check the file extension to convert to mrc is it is the case.
         """
-        self.vol = self.mrc_convert(self.localResolutionMap.get().getFileName(),
-                                    self._getTmpPath('localResolutionMap.mrc'))
+        if self.normalizeResolution.get():
+            self.inputMap = self.localResolutionMap
+        else:
+            self.inputMap = self.normalizedMap
+
+        self.vol = self.mrc_convert(self.inputMap.get().getFileName(),
+                                    self._getTmpPath('localResolutionMap.mrc'))        
 
     def matchingBfactorLocalResolution(self):
         """ The local resolution map and the pdb are taken and analyzed to match the
@@ -145,9 +158,16 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         params += ' --vol %s' % self.vol
         if self.normalizeResolution.get():
             params += ' --fscResolution %s' % self.fscResolution.get()
-        params += ' --sampling %f' % self.localResolutionMap.get().getSamplingRate()
+        params += ' --sampling %f' % self.inputMap.get().getSamplingRate()
         if self.medianEstimation.get():
             params += ' --useMedian '
+        if self.centered.get():
+            params += ' --centered '
         params += ' -o %s' % self._getExtraPath()
 
         self.runJob('xmipp_resolution_pdb_bfactor', params)
+
+    def createOutputStep(self):
+        outputPdb = AtomStruct()
+        outputPdb.setFileName(self._getExtraPath("chimeraPDB.pdb"))
+        self._defineOutputs(outputStructure=outputPdb)

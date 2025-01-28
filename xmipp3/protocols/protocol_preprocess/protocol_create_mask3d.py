@@ -75,7 +75,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         # For volume sources
         isVolume = 'source==%d' % SOURCE_VOLUME
         form.addParam('inputVolume', PointerParam, pointerClass="Volume",
-                      label="Input volume",  condition=isVolume,
+                      label="Input volume", allowsNull=True, condition=isVolume,
                       help="Select the volume that will be used to create the mask")
         form.addParam('volumeOperation', EnumParam, default=OPERATION_THRESHOLD,
                       choices=['Threshold', 'Segment', 'Only postprocess'],
@@ -192,7 +192,7 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
-        self.maskFile = self._getPath('mask.vol')
+        self.maskFile = self._getPath('mask.mrc')
         
         if self.source == SOURCE_VOLUME:
             self._insertFunctionStep('createMaskFromVolumeStep')
@@ -208,6 +208,8 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
     def createMaskFromVolumeStep(self):
         volume = self.inputVolume.get()
         fnVol = getImageLocation(volume)
+        if fnVol.endswith(".mrc"):
+            fnVol += ":mrc"
         Ts = volume.getSamplingRate()
         
         if self.volumeOperation == OPERATION_THRESHOLD:
@@ -287,10 +289,12 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
         volMask.setFileName(self.maskFile)
         
         if self.source==SOURCE_VOLUME:
-            volMask.setSamplingRate(self.inputVolume.get().getSamplingRate())
+            Ts = self.inputVolume.get().getSamplingRate()
         else:
-            volMask.setSamplingRate(self.samplingRate.get())
-        
+            Ts = self.samplingRate.get()
+        volMask.setSamplingRate(Ts)
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.maskFile,Ts))
+
         self._defineOutputs(outputMask=volMask)
         
         if self.source==SOURCE_VOLUME:
@@ -390,7 +394,11 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
             messages.append("And, we smoothed it (sigma=%f voxels)."
                             % self.sigmaConvolution.get())
         if self.hasAttribute('outputMask'):
-            messages.append('We refer to the output mask as %s.'
-                            % self.outputMask.getNameId())
+            messages.append('We refer to the output mask as %s.'  % self.outputMask.getNameId())
         return messages
     
+    def _validate(self):
+        errors = []
+        if self.source == SOURCE_VOLUME and not self.inputVolume.get():
+            errors.append("You need to select an input volume")
+            return errors

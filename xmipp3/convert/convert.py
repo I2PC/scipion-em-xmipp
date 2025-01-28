@@ -31,6 +31,7 @@ This module contains converter functions that will serve to:
 """
 
 import os
+from typing import Union
 from os.path import join, exists
 from collections import OrderedDict
 try:
@@ -40,12 +41,13 @@ except ImportError:
 import numpy as np
 
 from pyworkflow.utils import replaceBaseExt
+from pyworkflow.utils.path import cleanPath
 from pyworkflow.object import ObjectWrap, String, Float, Integer, Object
 from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
                             ALIGN_3D)
 from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
                           MovieParticle, CTFModel, Acquisition, SetOfParticles,
-                          Class3D, SetOfVolumes, Transform)
+                          Class3D, SetOfVolumes, Movie, SetOfMovies, Transform)
 from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
 
@@ -829,30 +831,35 @@ def writeSetOfCoordinatesWithState(posDir, coordSet, state, scale=1):
 
     f = None
     lastMicId = None
-    c = 0
 
-    for coord in coordSet.iterItems(orderBy='_micId'):
-        micId = coord.getMicId()
+    try:
+        for coord in coordSet.iterItems(orderBy='_micId'):
+            micId = coord.getMicId()
 
-        if micId != lastMicId:
-            # we need to close previous opened file
-            if f:
-                f.close()
-                c = 0
-            f = openMd(posDict[micId], state)
-            lastMicId = micId
-        c += 1
-        if scale != 1:
-            x = coord.getX() * scale
-            y = coord.getY() * scale
-        else:
-            x = coord.getX()
-            y = coord.getY()
-        f.write(" %06d   1   %d  %d  %d   %06d\n"
-                % (coord.getObjId(), x, y, 1, micId))
+            if micId != lastMicId:
+                # we need to close previous opened file
+                if f:
+                    f.close()
+                f = openMd(posDict[micId], state)
+                lastMicId = micId
 
-    if f:
-        f.close()
+            if scale != 1:
+                x = coord.getX() * scale
+                y = coord.getY() * scale
+            else:
+                x = coord.getX()
+                y = coord.getY()
+
+            f.write(" %06d   1   %d  %d  %d   %06d\n"
+                    % (coord.getObjId(), x, y, 1, micId))
+
+    except (FileNotFoundError, PermissionError) as error:
+        print(f"Error occurred: {error}")
+    except Exception as e:
+        print(f"Unexpected error occurred: {e}")
+    finally:
+        if f:
+            f.close()
 
     # Write config.xmd metadata
     configFn = join(posDir, 'config.xmd')
@@ -1385,7 +1392,7 @@ def rowToAlignment(alignmentRow, alignType):
         else:
             psi = alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)
             rot = alignmentRow.getValue(emlib.MDL_ANGLE_ROT, 0.)
-            if rot != 0. and psi != 0:
+            if not np.isclose(rot, 0., atol=1e-6 ) and not np.isclose(psi, 0., atol=1e-6):
                 print("HORROR rot and psi are different from zero in 2D case")
             angles[0] = \
                 alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)\
@@ -1651,10 +1658,30 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
 
     globalShiftsMD.write(xmdFn)
 
+def makeEerFilename(eer: str, fractioning: int, supersampling: str, datatype: str) -> str:
+    ARG_PREAMLE = '#'
+    SEPARATOR = ','
+    return eer + ARG_PREAMLE + ('%d' % fractioning) + SEPARATOR + supersampling + SEPARATOR + datatype
 
-def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
+def frameToRow(frame, row, firstFrame, eerFrames):
+    frameFilename = ImageHandler.locationToXmipp(frame)
+    
+    if os.path.splitext(frameFilename)[-1] == '.eer':
+        frameFilename = makeEerFilename(frameFilename, eerFrames, '4K', 'uint16')
+    row.setValue(md.MDL_IMAGE, frameFilename)
+
+def isEerMovie(movie: Union[Movie, SetOfMovies]):
+    if movie is not None:
+        files = movie.getFiles()
+        if len(files) > 0:
+            return next(iter(files)).endswith('.eer')
+    
+    return False
+    
+def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False, eerFrames=40):
     movieMd = md.MetaData()
     frame = movie.clone()
+    isEer = isEerMovie(movie)
     # get some info about the movie
     # problem is, that it can come from a movie set, and some
     # values might refer to different movie, e.g. no of frames :(
@@ -1667,19 +1694,20 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
         if frames is not None:
             lastFrame = frames
 
-    if f1 < firstFrame or fN > lastFrame:
-        raise Exception("Frame range could not be greater"
-                        " than the movie one.")
+    if isEer:
+        lastFrame = eerFrames
 
-    ih = ImageHandler()
+    if f1 < firstFrame or fN > lastFrame:
+        raise ValueError(f"Frame range [{f1}-{fN}] could not be greater"
+                         f" than the movie one [{firstFrame}-{lastFrame}].")
 
     if useAlignment:
         alignment = movie.getAlignment()
         if alignment is None:
-            raise Exception("Can not write alignment for movie. ")
+            raise ValueError("Can not write alignment for movie.")
         a0, aN = alignment.getRange()
         if a0 < firstFrame or aN > lastFrame:
-            raise Exception("Trying to write frames which have not been aligned.")
+            raise ValueError("Trying to write frames which have not been aligned.")
         shiftListX, shiftListY = alignment.getShifts()
 
     row = md.Row()
@@ -1687,8 +1715,7 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
 
     for i in range(f1, fN+1):
         frame.setIndex(stackIndex)
-        row.setValue(md.MDL_IMAGE, ih.locationToXmipp(frame))
-
+        frameToRow(frame, row, firstFrame=firstFrame, eerFrames=eerFrames)
         if useAlignment:
             shiftIndex = i - firstFrame
             row.setValue(emlib.MDL_SHIFT_X, shiftListX[shiftIndex])
@@ -1710,3 +1737,11 @@ def createParamPhantomFile(filename, dimX, partSetMd, phFlip=False,
     str += "_applyShift 1\n_noisePixelLevel    '0 0'\n"
     f.write(str)
     f.close()
+
+def convertToMrc(self, fnVol, Ts, deleteVol=False):
+    fnMrc = fnVol.replace(".vol",".mrc")
+    self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnVol, fnMrc), numberOfMpi=1)
+    self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, Ts), numberOfMpi=1)
+    if deleteVol:
+        cleanPath(fnVol)
+    return fnMrc

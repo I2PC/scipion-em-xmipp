@@ -26,7 +26,7 @@
 # *
 # **************************************************************************
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, FloatParam,
+from pyworkflow.protocol.params import (PointerParam, FloatParam, IntParam,
                                         LEVEL_ADVANCED)
 from pwem.protocols import ProtAnalysis3D
 from pwem.emlib.image import ImageHandler
@@ -39,7 +39,7 @@ from pwem.emlib.metadata import (MDL_COST, MDL_ITER, MDL_SCALE)
 from ntpath import dirname
 from os.path import exists
 
-LOCALDEBLUR_METHOD_URL='http://github.com/I2PC/scipion/wiki/XmippProtLocSharp' 
+LOCALDEBLUR_METHOD_URL='https://github.com/I2PC/scipion/wiki/XmippProtLocSharp' 
 
 class XmippProtLocSharp(ProtAnalysis3D):
     """    
@@ -80,7 +80,13 @@ class XmippProtLocSharp(ProtAnalysis3D):
                       help='K = 0.025 works well for all tested cases.'
                       ' K should be in the 0.01-0.05 range.'
                       ' For maps with FSC resolution lower than 6Å,'
-                      ' K = 0.01 can be a good alternative.')        
+                      ' K = 0.01 can be a good alternative.')
+        form.addParam('Niter', IntParam, default=1,
+                      expertLevel=LEVEL_ADVANCED,
+                      label="No. Iterations",
+                      help='If this number is larger than 1, for each iteration, the previous map is sharpened and the '
+                           'local resolution reestimated for a new round. Set to a fixed number or -1 for automatic '
+                           'determination')
         
         form.addParallelSection(threads = 4, mpi = 0)
         
@@ -213,9 +219,10 @@ class XmippProtLocSharp(ProtAnalysis3D):
 
 
     def sharpeningAndMonoResStep(self):
-        last_Niters = -1
+        last_Niters=-1
         last_lambda_sharpening = 1e38
         nextIter = True
+        maxNiters=self.Niter.get()
 
         while nextIter is True:
             self.iteration = self.iteration + 1
@@ -229,11 +236,8 @@ class XmippProtLocSharp(ProtAnalysis3D):
             lambda_sharpening = mtd.getValue(MDL_COST,1)
             Niters = mtd.getValue(MDL_ITER,1)
             
-#             if (Niters == last_Niters):
-#                 nextIter = False
-#                 break
-               
-            if (abs(lambda_sharpening - last_lambda_sharpening)<= 0.2):
+            if (maxNiters<0 and (abs(lambda_sharpening - last_lambda_sharpening)<= 0.2)) or \
+               (maxNiters>0 and self.iteration==maxNiters):
                 nextIter = False   
                 break
 
@@ -249,9 +253,8 @@ class XmippProtLocSharp(ProtAnalysis3D):
             max_res = np.amax(imgData)
             min_res = 2*self.inputVolume.get().getSamplingRate()
         
-            if (max_res-min_res<0.75):
+            if maxNiters<0 and (max_res-min_res<0.75):
                 nextIter = False
-                break
 
         os.rename(self._getExtraPath('sharpenedMap_' + str(self.iteration) + '.mrc'),
                   self._getExtraPath('sharpenedMap_last.mrc'))
@@ -268,23 +271,30 @@ class XmippProtLocSharp(ProtAnalysis3D):
   
              
     def createOutputStep(self):
-
-        volumesSet = self._createSetOfVolumes()
-        volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate())
-        for i in range(self.iteration):
+        if self.iteration>1:
+            volumesSet = self._createSetOfVolumes()
+            volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate())
+            for i in range(self.iteration):
+                vol = Volume()
+                vol.setOrigin(self.inputVolume.get().getOrigin(True))
+                if (self.iteration > (i + 1)):
+                    vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i + 1)))
+                    vol.setObjComment("Sharpened Map, \n Epoch %d" % (i + 1))
+                else:
+                    vol.setLocation(i, self._getExtraPath('sharpenedMap_last.mrc'))
+                    vol.setObjComment("Sharpened Map, \n Epoch last")
+                volumesSet.append(vol)
+                self._defineOutputs(outputVolumes=volumesSet)
+                self._defineSourceRelation(self.inputVolume, volumesSet)
+        else:
             vol = Volume()
+            vol.setSamplingRate(self.inputVolume.get().getSamplingRate())
             vol.setOrigin(self.inputVolume.get().getOrigin(True))
-            if (self.iteration > (i + 1)):
-                vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i + 1)))
-                vol.setObjComment("Sharpened Map, \n Epoch %d" % (i + 1))
-            else:
-                vol.setLocation(i, self._getExtraPath('sharpenedMap_last.mrc'))
-                vol.setObjComment("Sharpened Map, \n Epoch last")
-            volumesSet.append(vol)
+            vol.setLocation(self._getExtraPath('sharpenedMap_last.mrc'))
+            vol.setObjComment("Sharpened Map, \n Epoch last")
+            self._defineOutputs(outputVolume=vol)
+            self._defineSourceRelation(self.inputVolume, vol)
 
-        self._defineOutputs(outputVolumes=volumesSet)
-        self._defineSourceRelation(self.inputVolume, volumesSet)
-                     
     # --------------------------- INFO functions ------------------------------
 
     def _methods(self):

@@ -1,20 +1,70 @@
-name: Build
+name: Build plugin
+
 on:
-  push:
-    branches:
-      - master
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [devel, master]
+
 jobs:
-  sonarcloud:
-    name: SonarCloud
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  build:
+    runs-on: ubuntu-22.04
+    
+    # Avoid send statistics
+    env:
+      SEND_INSTALLATION_STATISTICS: OFF
+
+    steps:    
+    - name: Checkout repository
+      uses: actions/checkout@main
+      with:
+        ref: ${{ github.head_ref }}
+
+    - name: Install dependencies 
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopenmpi-dev make cmake
+        
+    - name: Install CUDA
+      uses: Jimver/cuda-toolkit@master
+      id: cuda-toolkit
+      with:
+        cuda: '11.8.0'
+        method: network
+        sub-packages: '["nvcc", "toolkit"]'
+
+    - name: Install Miniconda
+      uses: conda-incubator/setup-miniconda@main
+      with:
+        miniconda-version: "latest"
+        auto-update-conda: true
+        auto-activate-base: true
+        activate-environment: scipion3
+        python-version: "3.8"
+        
+    - name: Install Scipion
+      working-directory: ${{ github.workspace }}/../
+      run: |
+        pip install --user scipion-installer
+        python -m scipioninstaller -conda -noAsk scipion
+
+        
+    - name: Cloning Xmipp
+      working-directory: ${{ github.workspace }}/../
+      run: git clone https://github.com/I2PC/xmipp.git
+
+    - name: Conditionally checkout Xmipp to ${{ github.head_ref }}
+      working-directory: ${{ github.workspace }}/../xmipp
+      env:
+        BRANCH_NAME: ${{ github.head_ref }}
+      run: |
+        if [ $(git ls-remote --heads https://github.com/I2PC/xmipp.git $BRANCH_NAME | wc -l) -eq 1 ]; then
+          git checkout $BRANCH_NAME
+        fi
+
+      
+    - name: Compile Xmipp and show log
+      working-directory: ${{ github.workspace }}/../xmipp
+      env:
+        BUILD_TESTS: True
+        BRANCH_NAME: ${{ github.head_ref }}
+        SEND_INSTALLATION_STATISTICS: OFF 
+      run: ../scipion/scipion3 run ./xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)

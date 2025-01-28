@@ -29,25 +29,17 @@ import os
 from tkinter import Tk, CENTER, Scrollbar, TOP, BOTH, Y
 
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import cm
-import matplotlib.colors as mcolors
-from pyworkflow.utils import getExt, removeExt
-from os.path import abspath
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
-                          DataView)
+                          ChimeraAttributeViewer)
 from pyworkflow.gui import *
 from pyworkflow.protocol.params import (LabelParam, EnumParam)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from xmipp3.protocols.protocol_validate_fscq import (XmippProtValFit, 
                                                      RESTA_FILE_MRC, 
                                                      OUTPUT_PDBMRC_FILE, 
-                                                     PDB_VALUE_FILE,
-                                                     RESTA_FILE_NORM,
-                                                     PDB_NORM_FILE)
+                                                     RESTA_FILE_NORM)
 
-
-class XmippProtValFitViewer(LocalResolutionViewer):
+class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
     """
     Visualization tools for validation fsc-q.
     
@@ -62,12 +54,12 @@ class XmippProtValFitViewer(LocalResolutionViewer):
     
     def __init__(self, *args, **kwargs):
         ProtocolViewer.__init__(self, *args, **kwargs)
-    
+
     def _defineParams(self, form):
         self._env = os.environ.copy()
         form.addSection(label='FSC-Q results')
         
-        group = form.addGroup('Visualization in Chimera')
+        group = form.addGroup('Chimera visualization')
         
         group.addParam('displayVolume', LabelParam,
                       important=True,
@@ -76,7 +68,6 @@ class XmippProtValFitViewer(LocalResolutionViewer):
         group.addParam('displayNormVolume', LabelParam,
                important=True,
                label='Display FSC-Qr Volume Output')
-
 
         group.addParam('displayPDB', EnumParam,
                       choices=['by residue', 'by atom'],
@@ -105,9 +96,15 @@ class XmippProtValFitViewer(LocalResolutionViewer):
                       label='Amino acids with low resolvability',   
                       help='Amino acids that have atoms with FSC-Q > 1'
                       ' are determined. It is suggested that these amino acids '
-                      ' be re-checked in order to improve the fit.')       
-            
-        
+                      ' be re-checked in order to improve the fit.')
+
+        super()._defineParams(form)
+        from pwem.wizards.wizard import ColorScaleWizardBase
+        group = form.addGroup('Color settings')
+        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=-3, defaultHighest=3, defaultIntervals=21,
+                                                    defaultColorMap='RdBu_r')
+
+
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
         visualizeDict = {'displayVolume': self._visualize_vol,
@@ -116,6 +113,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
                          'displayNormPDB': self._visualize_norm_pdb,
                          'calculateFscqNeg': self._statistics,
                          'calculateFscqPos': self._statistics}
+        visualizeDict.update(ChimeraAttributeViewer._getVisualizeDict(self))
         return visualizeDict     
     
     def _create_legend(self, scale):
@@ -125,10 +123,14 @@ class XmippProtValFitViewer(LocalResolutionViewer):
         f = open(fnCmd, 'w')
         f.write("from chimerax.core.commands import run\n")
         f.write("from chimerax.graphics.windowsize import window_size\n")
-        f.write("from PyQt5.QtGui import QFontMetrics\n")
-        f.write("from PyQt5.QtGui import QFont\n")
+        f.write("try:\n")
+        f.write("    from PyQt5.QtGui import QFontMetrics\n")
+        f.write("    from PyQt5.QtGui import QFont\n")
+        f.write("except ModuleNotFoundError:\n")
+        f.write("    from PyQt6.QtGui import QFontMetrics\n")
+        f.write("    from PyQt6.QtGui import QFont\n")
+
         f.write("run(session, 'set bgColor white')\n")
-                
         # get window size so we can place labels properly
         f.write("v = session.main_view\n")
         f.write("vx,vy=v.window_size\n")
@@ -153,7 +155,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
 
     def _visualize_vol(self, obj, **args):
         
-        self._create_legend(3);
+        self._create_legend(3)
         
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
@@ -176,7 +178,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
     
     def _visualize_norm_vol(self, obj, **args):
         
-        self._create_legend(1.5);
+        self._create_legend(1.5)
         
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
@@ -199,12 +201,12 @@ class XmippProtValFitViewer(LocalResolutionViewer):
     
     def _visualize_pdb(self, obj, **args):
         
-        self._create_legend(3);
+        self._create_legend(3)
         
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
-        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_VALUE_FILE))
+        f.write("run(session, 'open %s')\n" % self.protocol.getFSCQFile())
          
         if self.displayPDB == self.RESIDUE:
             f.write("run(session, 'cartoon')\n")
@@ -227,12 +229,12 @@ class XmippProtValFitViewer(LocalResolutionViewer):
     
     def _visualize_norm_pdb(self, obj, **args):
         
-        self._create_legend(1.5);
+        self._create_legend(1.5)
         
         fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
-        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_NORM_FILE))
+        f.write("run(session, 'open %s')\n" % self.protocol.getNormFSCQFile())
          
         if self.displayNormPDB == self.RESIDUE:
             f.write("run(session, 'cartoon')\n")
@@ -255,62 +257,56 @@ class XmippProtValFitViewer(LocalResolutionViewer):
  
     def _calculate_fscq(self, obj, **args):
 
-        fnRoot = os.path.abspath(self.protocol._getExtraPath())
-        bool = 0
-        overfitting_list = []
-        poorfitting_list = []
-        with open(fnRoot + '/' + PDB_VALUE_FILE) as f:
-
-            lines_data = f.readlines()
-            for j, lin in enumerate(lines_data):
+        status = False
+        overfittingList = []
+        poorfittingList = []
+        with open(os.path.abspath(self.protocol.getFSCQFile())) as f:
+            linesData = f.readlines()
+            for j, lin in enumerate(linesData):
                 if lin.startswith('ATOM') or lin.startswith('HETATM'):
                     resnumber = int(lin[22:26])
 
-                    if bool == 1 and resnumber == resnumber_ctl:
-                        resatomname = lin[12:16].strip()
+                    if status and resnumber == resnumberCtl:
                         resname = lin[17:20].strip()
                         chain = lin[21]
                         fscq = float(lin[54:60])
-                        current_frag.append(fscq)
+                        currentFrag.append(fscq)
 
-                    elif bool == 1 and resnumber != resnumber_ctl:
-                        meanFscq = np.mean(current_frag)
-                        current_frag.sort()
+                    elif status and resnumber != resnumberCtl:
+                        meanFscq = np.mean(currentFrag)
+                        currentFrag.sort()
 
-                        if current_frag[0] <= -1:
-                            overfitting_list.append((resname, resnumber_ctl, chain,
-                                                     current_frag[0], meanFscq))
+                        if currentFrag[0] <= -1:
+                            overfittingList.append((resname, resnumberCtl, chain,
+                                                     currentFrag[0], meanFscq))
 
-                        if current_frag[-1] >= 1:
-                            poorfitting_list.append((resname, resnumber_ctl, chain,
-                                                     current_frag[-1],
+                        if currentFrag[-1] >= 1:
+                            poorfittingList.append((resname, resnumberCtl, chain,
+                                                     currentFrag[-1],
                                                      meanFscq))
                      
-                        current_frag = []
-                        resnumber_ctl = resnumber
-                        resatomname = lin[12:16].strip()
+                        currentFrag = []
+                        resnumberCtl = resnumber
                         resname = lin[17:20].strip()
                         chain = lin[21]
                         fscq = float(lin[54:60])
 
-                        current_frag.append(fscq)
+                        currentFrag.append(fscq)
 
                     else:
-                        bool = 1
-                        current_frag = []
-                        lines_aa = []
-                        resnumber_ctl = resnumber
-                        resatomname = lin[12:16].strip()
+                        status = True
+                        currentFrag = []
+                        resnumberCtl = resnumber
                         resname = lin[17:20].strip()
                         chain = lin[21]
                         fscq = float(lin[54:60])
 
-                        current_frag.append(fscq)
+                        currentFrag.append(fscq)
                         
         if obj == 'calculateFscqNeg':
-            return overfitting_list
+            return overfittingList
         else:
-            return poorfitting_list
+            return poorfittingList
 
     def _statistics(self, obj, **args):
         mainFrame = Tk()

@@ -58,7 +58,7 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
                       label='Symmetry order',
                       help="3 for a three-fold symmetry axis, "
                            "4 for a four-fold symmetry axis, ...")
-        form.addParam('searchMode', EnumParam,
+        form.addParam('searchMode', EnumParam,label='Search mode',
                       choices=['Global','Local','Global+Local'],
                       default=self.GLOBAL_LOCAL_SEARCH)
 
@@ -102,7 +102,7 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
         self._insertFunctionStep('symmetrize')
         self._insertFunctionStep('createOutput')
         self.fnVol = getImageLocation(self.inputVolume.get())
-        self.fnVolSym=self._getPath('volume_symmetrized.vol')
+        self.fnVolSym=self._getPath('volume_symmetrized.mrc')
         [self.height,_,_]=self.inputVolume.get().getDim()
     
     #--------------------------- STEPS functions -------------------------------
@@ -150,6 +150,9 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
                     (self.fnVolSym,self.symOrder.get()))
 
     def createOutput(self):
+        Ts = self.inputVolume.get().getSamplingRate()
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f" %(self.fnVolSym,Ts))
+
         volume = Volume()
         volume.setFileName(self.fnVolSym)
         volume.copyInfo(self.inputVolume.get())

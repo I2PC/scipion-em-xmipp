@@ -38,6 +38,8 @@ from pyworkflow.object import Set
 from pwem.protocols import ProtPreprocessMicrographs
 from pwem.objects import SetOfMicrographs, Micrograph
 
+OUTPUT_MICROGRAPHS = 'outputMicrographs'
+
 
 class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
     """Protocol to preprocess a set of micrographs in the project.
@@ -260,12 +262,15 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
             # so we exit from the function here
             return
 
-        outSet = self._loadOutputSet(SetOfMicrographs, 'micrographs.sqlite')
+        outSet = self.getOutputMics()
 
         def tryToAppend(outSet, micOut, tries=1):
             """ When micrograph is very big, sometimes it's not ready to be read
             Then we will wait for it up to a minute in 6 time-growing tries. """
             try:
+                if outSet.isEmpty():
+                    outSet.setDim(micOut.getDim())
+
                 outSet.append(micOut)
             except Exception as ex:
                 micFn = micOut.getFileName()  # Runs/..../extra/filename.mrc
@@ -289,7 +294,7 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
             micOut.setMicName(mic.getMicName())
             tryToAppend(outSet, micOut)
 
-        self._updateOutputSet('outputMicrographs', outSet, streamMode)
+        self._updateOutputSet(OUTPUT_MICROGRAPHS, outSet, streamMode)
         
         if len(doneList)==0: #firstTime
             self._defineTransformRelation(self.inputMicrographs, outSet) 
@@ -300,40 +305,36 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
                 outputStep.setStatus(cons.STATUS_NEW)
 
 
-    def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+    def getOutputMics(self):
 
-        inputs = self.inputMicrographs.get()
-        outputSet.copyInfo(inputs)
-        if self.doDownsample:
-            outputSet.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
-                                      * self.downFactor.get())
+        if not hasattr(self, OUTPUT_MICROGRAPHS):
+
+            outputSet = SetOfMicrographs(filename=self.getPath('micrographs.sqlite'))
+            outputSet.setStreamState(outputSet.STREAM_OPEN)
+            inputs = self.inputMicrographs.get()
+            outputSet.copyInfo(inputs)
+            if self.doDownsample:
+                outputSet.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
+                                          * self.downFactor.get())
+
+            self._defineOutputs(**{OUTPUT_MICROGRAPHS: outputSet})
+            self._defineTransformRelation(inputs, outputSet)
+            self.info("Storing set 1rst time: %s" % outputSet)
+            # self._store(outputSet)
+        else:
+            outputSet = getattr(self, OUTPUT_MICROGRAPHS)
+
         return outputSet
 
 
     def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
+
         outputSet.setStreamState(state)
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protcol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            # Here the defineOutputs function will call the write() method
-            self._defineOutputs(**{outputName: outputSet})
-            self._defineTransformRelation(self.inputMicrographs, outputSet)
-            self._store(outputSet)
-        # Close set databaset to avoid locking it
-        outputSet.close()
+        outputSet.write()  # Write to commit changes
+        self._store(outputSet)
+
+        # Close set dataset to avoid locking it
+        # outputSet.close()
 
     
     def _insertStepsForMicrograph(self, inputMic, outputMic):

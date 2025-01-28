@@ -45,6 +45,7 @@ from xmipp3.base import isMdEmpty
 from xmipp3.convert import readCTFModel
 
 from pwem.emlib import Image
+from pyworkflow.utils.path import copyFile
 
 class XmippProtCTFMicrographs(ProtCTFMicrographs):
     """ Protocol to estimate CTF on a set of micrographs using Xmipp. """
@@ -121,6 +122,10 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                            'will find additional phase shift due to phase '
                            'plate',
                       expertLevel=params.LEVEL_ADVANCED)
+        form.addParam('accel1D', params.BooleanParam, default=True,
+                      label="1D Acceleration",
+                      help='1D acceleration is much faster, but it may have accuracy problems',
+                      expertLevel=params.LEVEL_ADVANCED)
 
         form.addParam('doCTFAutoDownsampling', params.BooleanParam,
                       default=True,
@@ -132,7 +137,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                            'and if it fails, -1.')
         form.addParam('refineAmplitudeContrast', params.BooleanParam, default=False,
                       label='Allow amplitude constrast refinement',
-                      help = 'The amplitude contrast is normally kept fixed, but in'
+                      help = 'The amplitude contrast is normally kept fixed, but in '
                              'some experiments it has been found that refining it '
                              'might result in some improvement in the final FSC. '
                              'This is not a standard practice, and should be used with caution')
@@ -256,6 +261,10 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                     if min(psd.shape) < self.windowSize.get():
                         localParams['pieceDim'] = self.windowSize.get()/2
                         localParams['ctfmodelSize'] = self.windowSize.get()/2
+                else:
+                    # This is needed to make sure that the micrograph has the correct sampling
+                    # Otherwise, it brings the last sampling tested
+                    copyFile(micFn, finalName)
 
                 # Update _params dictionary with mic and micDir
                 localParams['micFn'] = finalName
@@ -288,14 +297,6 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
         except Exception as ex:
             sys.stderr.write("xmipp_ctf_estimate_from_micrograph has " \
                              "failed with micrograph %s" % finalName)
-
-    def _reEstimateCTF(self, mic, ctfModel):
-        """ Run the estimate CTF program """
-        self._prepareRecalCommand(ctfModel)
-        # CTF estimation with Xmipp
-        self.runJob(self._program, self._args % self._params)
-        mic = ctfModel.getMicrograph()
-        self.evaluateSingleMicrograph(mic)
 
     def _createOutputStep(self):
         pass
@@ -341,7 +342,9 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                       "--sampling_rate %(samplingRate)s --defocusU %("
                       "defocusU)f --defocus_range %(defocus_range)f "
                       "--overlap 0.7 --pieceDim %(pieceDim)s "
-                      "--ctfmodelSize %(ctfmodelSize)s --acceleration1D ")
+                      "--ctfmodelSize %(ctfmodelSize)s ")
+        if self.accel1D:
+            self._args+="--acceleration1D "
 
         if self.findPhaseShift:
             self._args += "--phase_shift %(phaseShift0)f --VPP_radius 0.005"

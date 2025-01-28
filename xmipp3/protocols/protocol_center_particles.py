@@ -1,6 +1,7 @@
 # ******************************************************************************
 # *
 # * Authors:     Amaya Jimenez Moreno (ajimenez@cnb.csic.es)
+# *              Alberto García Mena (alberto.garcia@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -25,10 +26,10 @@
 # ******************************************************************************
 
 import numpy as np
-
+import os
 from pyworkflow import VERSION_2_0
 from pwem.constants import ALIGN_2D
-from pwem.objects import Class2D, Particle, Coordinate, Transform
+from pwem.objects import Class2D, Particle, Coordinate, Transform, SetOfClasses2D, SetOfParticles
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
@@ -37,11 +38,14 @@ from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, alignmentToRow,
                             rowToParticle, writeSetOfClasses2D, xmippToLocation)
 
+OUTPUT_CLASSES = 'outputClasses'
+OUTPUT_PARTICLES = 'outputParticles'
 
 class XmippProtCenterParticles(ProtClassify2D):
     """ Realignment of un-centered particles. """
     _label = 'center particles'
     _lastUpdateVersion = VERSION_2_0
+    _possibleOutputs = {OUTPUT_CLASSES:SetOfClasses2D, OUTPUT_PARTICLES:SetOfParticles}
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -50,15 +54,15 @@ class XmippProtCenterParticles(ProtClassify2D):
                       pointerClass='SetOfClasses2D',
                       important=True,
                       label="Input Classes",
-                      help='Set of classes to be realing')
+                      help='Set of classes to be read')
         form.addParam('inputMics', params.PointerParam,
                       pointerClass='SetOfMicrographs',
                       important=True,
                       label="Set of micrographs",
                       help='Set of micrographs related to the selected input '
                            'classes')
-        form.addParallelSection(threads=0, mpi=0)
 
+        form.addParallelSection(threads=0, mpi=0)
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('realignStep')
@@ -84,7 +88,7 @@ class XmippProtCenterParticles(ProtClassify2D):
         centeredStack = md.MetaData(centeredStackName)
 
         listName = []
-        listTransform=[]
+        listTransform = []
         for rowStk in md.iterRows(centeredStack):
             listName.append(rowStk.getValue(md.MDL_IMAGE))
         for rowMd in md.iterRows(centeredMd):
@@ -103,19 +107,27 @@ class XmippProtCenterParticles(ProtClassify2D):
                            MD_APPEND)
 
         mdImages = md.MetaData()
-        i=0
+        i = 0
         mdBlocks = md.getBlocksInMetaDataFile(inputMdName)
         resultMat = Transform()
+        listDisplacament = []
+        centerSummary = self._getPath("summary.txt")
+        centerSummary = open(centerSummary, "w")
+        particlesCentered = 0
+        totalParticles = 0
+
         for block in mdBlocks:
             if block.startswith('class00'):
                 newMat = listTransform[i]
                 newMatrix = newMat.getMatrix()
                 mdClass = md.MetaData(block + "@" + inputMdName)
                 mdNewClass = md.MetaData()
-                i+=1
+                i += 1
+                flag_psi = True
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
+                    totalParticles += 1
                     if rowIn.getValue(md.MDL_ANGLE_PSI)!=0:
                         flag_psi=True
                     if rowIn.getValue(md.MDL_ANGLE_ROT)!=0:
@@ -136,41 +148,47 @@ class XmippProtCenterParticles(ProtClassify2D):
                     inPoint = np.array([[0.],[0.],[0.],[1.]])
                     invResultMat = np.linalg.inv(resultMatrix)
                     centerPoint = np.dot(invResultMat,inPoint)
+
+                    if int(centerPoint[0]) > 1 or int(centerPoint[1]) > 1:
+                        particlesCentered += 1
+                        listDisplacament.append([int(centerPoint[0]), int(centerPoint[1])])
+
                     rowOut.setValue(md.MDL_XCOOR, rowOut.getValue(
                         md.MDL_XCOOR)+int(centerPoint[0]))
                     rowOut.setValue(md.MDL_YCOOR, rowOut.getValue(
                         md.MDL_YCOOR)+int(centerPoint[1]))
+
                     rowOut.addToMd(mdNewClass)
+
                 mdNewClass.write(block + "@" + self._getExtraPath(
                     'final_classes.xmd'), MD_APPEND)
                 mdImages.unionAll(mdNewClass)
+
+        listModule = [(np.sqrt((x[0] * x[0]) + (x[1] * x[1]))) for x in listDisplacament]
+        moduleDisp = round(sum(listModule) / len(listModule), 1)
+        centerSummary.write("Particles centered: {} \t({}%) "
+                            "\nAverage module displacement: {}px\n".
+                            format(particlesCentered,
+                            round((100 * particlesCentered/totalParticles ), 1),
+                            moduleDisp))
+        centerSummary.close()
         mdImages.write(self._getExtraPath('final_images.xmd'))
 
 
     def createOutputStep(self):
         inputParticles = self.inputClasses.get().getImages()
-        outputClasses = self._createSetOfClasses2D(inputParticles)
+        outputClasses = self._createSetOfClasses2D(self.inputClasses.get().getImagesPointer())
         self._fillClasses(outputClasses)
-        result = {'outputClasses': outputClasses}
-        self._defineOutputs(**result)
-        self._defineSourceRelation(self.inputClasses, outputClasses)
-
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(inputParticles)
-        outputCoords = self._createSetOfCoordinates(self.inputMics.get())
+        self._fillParticles(outputParticles)
 
-        self._fillParticles(outputParticles, outputCoords, inputParticles)
-        result = {'outputParticles': outputParticles}
+        result = {OUTPUT_CLASSES: outputClasses, OUTPUT_PARTICLES: outputParticles}
         self._defineOutputs(**result)
+        self._defineSourceRelation(self.inputClasses, outputClasses)
         self._defineSourceRelation(self.inputClasses, outputParticles)
 
-        result = {'outputCoordinates': outputCoords}
-        self._defineOutputs(**result)
-        self._defineSourceRelation(self.inputClasses, outputCoords)
-
-
     # --------------------------- UTILS functions ------------------------------
-
     def _fillClasses(self, outputClasses):
         """ Create the SetOfClasses2D """
         inputSet = self.inputClasses.get().getImages()
@@ -189,80 +207,54 @@ class XmippProtCenterParticles(ProtClassify2D):
             newClass.setRepresentative(rep)
             outputClasses.append(newClass)
 
-        i=1
+        i = 1
         mdBlocks = md.getBlocksInMetaDataFile(self._getExtraPath(
             'final_classes.xmd'))
         for block in mdBlocks:
             if block.startswith('class00'):
                 mdClass = md.MetaData(block + "@" + self._getExtraPath(
-                                      'final_classes.xmd'))
+                    'final_classes.xmd'))
                 imgClassId = i
                 newClass = outputClasses[imgClassId]
                 newClass.enableAppend()
                 for row in md.iterRows(mdClass):
                     part = rowToParticle(row)
                     newClass.append(part)
-                i+=1
+                i += 1
                 newClass.setAlignment2D()
                 outputClasses.update(newClass)
 
-    def _fillParticles(self, outputParticles, outputCoords, inputParticles):
-        """ Create the SetOfParticles and SetOfCoordinates"""
+    def _fillParticles(self, outputParticles):
+        """ Create the SetOfParticles"""
         myParticles = md.MetaData(self._getExtraPath('final_images.xmd'))
         outputParticles.enableAppend()
-        outputCoords.enableAppend()
-
-        #Calculating the scale that relates the coordinates with the actual
-        # position in the mic
-        scale = inputParticles.getSamplingRate() / \
-                self.inputMics.get().getSamplingRate()
-        #Dictionary with the name and id of the inpt mics
-        micDictname = {}
-        micDictId = {}
-        for mic in self.inputMics.get():
-            micKey = mic.getMicName()
-            micDictname[micKey] = mic.clone()
-            micKey2 = mic.getObjId()
-            micDictId[micKey2] = mic.clone()
-
         for row in md.iterRows(myParticles):
             #To create the new particle
             p = rowToParticle(row)
-
-            #To create the new coordinate
-            newCoord = Coordinate()
-            coord = p.getCoordinate()
-            if coord.getMicName() is not None:
-                micKey = coord.getMicName()
-                micDict = micDictname
-            else:
-                micKey = coord.getMicId()
-                micDict = micDictId
-            mic = micDict.get(micKey, None)
-            if mic is None:
-                print("Skipping particle, key %s not found" % micKey)
-            else:
-                newCoord.copyObjId(p)
-                x, y = coord.getPosition()
-                newCoord.setPosition(x * scale, y * scale)
-                newCoord.setMicrograph(mic)
-                outputCoords.append(newCoord)
-                p.setCoordinate(newCoord)
-            #Storing the new particle
             outputParticles.append(p)
 
-        boxSize = inputParticles.getXDim() * scale
-        outputCoords.setBoxSize(boxSize)
-
-
-
     # --------------------------- INFO functions -------------------------------
-    def _validate(self):
-        pass
-
     def _summary(self):
         summary = []
         summary.append("Realignment of %s classes."
                        % self.inputClasses.get().getSize())
+
+        centerSummary = self._getPath("summary.txt")
+        if not os.path.exists(centerSummary):
+            summary.append("No summary file yet.")
+        else:
+            centerSummary = open(centerSummary, "r")
+            for line in centerSummary.readlines():
+                summary.append(line.rstrip())
+            centerSummary.close()
         return summary
+
+    def _validate(self):
+        errors = []
+        try:
+            self.inputClasses.get().getImages()
+        except AttributeError:
+            errors.append('Try and catch InputClasses has no particles.')
+
+        return errors
 
