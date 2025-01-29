@@ -87,9 +87,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         form.addParam('maxGrayChange', FloatParam, label="Max. gray change: ", default=0.99, expertLevel=LEVEL_ADVANCED,
                       condition='optimizeGray',
                       help='The actual gray value can be at most as small as 1-change or as large as 1+change')
-        
-        form.addParam('residualNoise', BooleanParam, label="Estimate noise from residual: ", default=False, expertLevel=LEVEL_ADVANCED,
-                      help='Whether to write residual and estimate noise there. Otherwise, use original image')
 
         form.addParam('printTerms', BooleanParam, label="Print terms of LL: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to print terms 1 and 2, LL and noise variance')
@@ -200,11 +197,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             elements_within_circle = I.getData()[self.getMasks()[0]]
             sum_of_squares = np.sum(elements_within_circle**2)
             Npix = elements_within_circle.size
-
-            if not self.residualNoise.get():
-                # replace image from between circles calculation
-                fnOriginal = mdResults.getValue(emlib.MDL_IMAGE,objId)
-                I = xmippLib.Image(fnOriginal)
 
             elements_between_circles = I.getData()[self.getMasks()[1]]
             var = np.var(elements_between_circles)
