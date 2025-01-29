@@ -95,7 +95,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='Whether to use both terms. Otherwise, just use term 1')
 
         form.addParam('useNegSos', BooleanParam, label="Use negative sum of squares: ", default=False, expertLevel=LEVEL_ADVANCED,
-                      condition='useBothTerms==False',
                       help='Whether to use negative sum of squares instead of full variance-adjusted term 1')
         form.addParallelSection(threads=2, mpi=2)
 
