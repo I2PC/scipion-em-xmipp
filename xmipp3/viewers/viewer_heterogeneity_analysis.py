@@ -62,18 +62,12 @@ class XmippViewerHetAnalysis(ProtocolViewer):
                       pointerClass=Volume, allowsNull=True)
         form.addParam('displayHistograms', LabelParam, label='Histograms',
                       help='Shows the 2D histograms of pairwise principal components')
-        form.addParam('displayInformationCriterion', LabelParam, label='Information criterion',
-                      help='Shows Akaike and Bayesian information criterions')
         form.addParam('displayEigenVolume', LabelParam, label='Eigen-volumes')
 
         form.addSection(label='Directional data')
         form.addParam('displayDirectionalMd', LabelParam, label='Directional metadata',
                       help='Shows a metadata with the directional averages and eigenimages')
-        form.addParam('displayCorrectedDirectionalMd', LabelParam, label='Corrected directional metadata',
-                      help='Shows a metadata with the directional averages and eigenimages')
         form.addParam('displayDirectionalHistograms', IntParam, label='Directional histograms',
-                      default=1 )
-        form.addParam('displayCorrectedDirectionalHistograms', IntParam, label='Corrected directional histograms',
                       default=1 )
         
         form.addSection(label='Graph')
@@ -83,12 +77,6 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         form.addSection(label='Cross correlations')
         form.addParam('displayCrossCorrelations', LabelParam, label='Cross correlations',
                       help='Shows a block matrix with cross correlations')
-        form.addParam('displayWeights', LabelParam, label='Weights',
-                      help='Shows a block matrix with weights')
-        form.addParam('displayWeightedCrossCorrelation', LabelParam, label='Weighted cross correlation',
-                      help='Shows a block matrix with weighted cross correlations')
-        form.addParam('displayReconstructedCrossCorrelations', LabelParam, label='Reconstructed cross correlation',
-                      help='Shows a block matrix with estimated cross correlations')
 
     #--------------------------- INFO functions ----------------------------------------------------
 
@@ -96,19 +84,13 @@ class XmippViewerHetAnalysis(ProtocolViewer):
     def _getVisualizeDict(self):
         return {
             'displayHistograms': self._displayHistograms,
-            'displayInformationCriterion': self._displayInformationCriterion,
             'displayEigenvalues': self._displayEigenvalues,
             'displayEigenVolume': self._displayEigenVolume,
             'displayDirectionalMd': self._displayDirectionalMd,
+            'displayDirectionalHistograms': self._displayDirectionalHistograms,
             'display3dGraph': self._display3dGraph,
             'displayAdjacencyMatrix': self._displayAdjacencyMatrix,
-            'displayCorrectedDirectionalMd': self._displayCorrectedDirectionalMd,
-            'displayDirectionalHistograms': self._displayDirectionalHistograms,
-            'displayCorrectedDirectionalHistograms': self._displayCorrectedDirectionalHistograms,
             'displayCrossCorrelations': self._displayCrossCorrelations,
-            'displayWeights': self._displayWeights,
-            'displayWeightedCrossCorrelation': self._displayWeightedCrossCorrelations,
-            'displayReconstructedCrossCorrelations': self._displayReconstructedCrossCorrelations,
         }
 
     def _displayHistograms(self, e):
