@@ -327,6 +327,7 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         nDirections = directionMd.size()
         nImages = particlesMd.size()
         
+        sparsity = scipy.sparse.lil_array((nImages, nDirections), dtype=np.uint)
         data = scipy.sparse.lil_array((nImages, nDirections*nComponents))
         directionalClassificationMd = emlib.MetaData()
         for j, directionId in enumerate(directionMd):
@@ -338,18 +339,25 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             
             for itemId, value in zip(itemIds, values):
                 i = itemIdToIndex[itemId]
+                sparsity[i, j] = 1
                 data[i, start:end] = value
                 
+        sparsity = sparsity.tocsc()
         data = data.tocsc()
+        adjacency = sparsity.T @ sparsity
         similarities = data.T @ data
         
         for j in range(nDirections):
             start = j*nComponents
             end = start + nComponents
+            adjacency[j, j] = 0
             similarities[start:end, start:end] = 0
+        adjacency.eliminate_zeros()
         similarities.eliminate_zeros()
 
         similarities /= abs(similarities).max()
+
+        self._writeAdjacencyGraph(adjacency.tocsr())
         self._writeCrossCorrelations(similarities.tocsr())
              
     def basisSynchronizationStep(self):
