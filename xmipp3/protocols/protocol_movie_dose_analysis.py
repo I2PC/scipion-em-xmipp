@@ -49,8 +49,12 @@ OUTPUT_MOVIES = "outputMovies"
 OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 
 class XmippProtMovieDoseAnalysis(ProtProcessMovies):
-    """ Protocol for the dose analysis """
+    """
+    Protocol for dose analysis. It will calculate the average and statistics of the electrons impacts per movie over time.
+     Also, it will use a moving window to check if there is any faulty condition in the dose that is maintained over time.
+    """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
+
     _devStatus = UPDATED
     _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0
@@ -89,8 +93,8 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                            'compute the global median.')
         form.addParam('window', IntParam, default=50,
                       label="Window step (movies)", expertLevel=LEVEL_ADVANCED,
-                      help='By default, every 50 movies (window=50) we '
-                           'compute the percentage of incorrect dose analysis to check if there '
+                      help='By default, every 50 movies (window=50) '
+                           'the percentage of incorrect dose analysis is computed to check if there '
                            'is any anomally in the dose.')
         form.addParam('percentage_window', FloatParam, default=30,
                       label="Maximum faulty percentage (%)", expertLevel=LEVEL_ADVANCED,
@@ -214,7 +218,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             stats = computeStats(np.asarray(mean_frames))
             self.meanDoseList.append(stats['mean'])
         except Exception as e:
-            self.info(e)
+            self.error(e)
             self.info('Skipping movie with ID: %d' %movie.getObjId())
             stats = None # If it fails, then Stats should be empty as it could not be read
         return stats
@@ -439,11 +443,11 @@ def plotDoseAnalysis(filename, doseValues, medianGlobal, lower, upper):
     x = np.arange(start=1, stop=len(doseValues)+1, step=1)
     plt.figure()
     plt.scatter(x, doseValues,s=10)
-    plt.axhline(y=medianGlobal, color='r', linestyle='-', label='Median dose')
-    plt.axhline(y=upper, color='b', linestyle='-.', label='Upper limit dose')
-    plt.axhline(y=lower, color='g', linestyle='-.', label='Lower limit dose')
+    plt.axhline(y=upper, color='r', linestyle='-.', label='Upper limit dose')
+    plt.axhline(y=medianGlobal, color='g', linestyle='-', label='Median dose')
+    plt.axhline(y=lower, color='r', linestyle='-.', label='Lower limit dose')
     plt.xlabel("Movies ID")
-    plt.ylabel("Dose (electrons impacts per angstrom**2 )")
+    plt.ylabel("Dose (e- impacts per A²)")
     plt.title('Dose vs time')
     plt.legend()
     plt.grid()
@@ -454,7 +458,9 @@ def plotDoseAnalysisDiff(filename, medianDifferences):
     x = np.arange(start=1+1, stop=len(medianDifferences)+2, step=1)
     plt.figure()
     plt.scatter(x, medianDifferences, s=10)
-    plt.axhline(y=medianDiff, color='r', linestyle='-',  label='Median dose difference')
+    plt.axhline(y=5, color='r', linestyle='-.', label='Upper limit dose')
+    plt.axhline(y=medianDiff, color='g', linestyle='-',  label='Median dose difference')
+    plt.axhline(y=-5, color='r', linestyle='-.', label='Upper limit dose')
     plt.xlabel("Movies ID")
     plt.ylabel("Dose differences (%)")
     plt.title('Dose differences with respect to the global median vs time')
