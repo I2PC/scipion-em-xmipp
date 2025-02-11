@@ -110,7 +110,7 @@ class TestHighres(BaseTest):
         else:
             md = emlib.MetaData("resolution@" + fnResolution)
             R = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
-            self.assertTrue(R < 12.5, "Resolution is not below 10A")
+            self.assertTrue(R < 12.5, "Resolution is not below 12.5A")
 
         highresLocal = self.newProtocol(XmippProtReconstructHighRes,
                                    inputParticles=subset.outputParticles,
@@ -139,4 +139,4 @@ class TestHighres(BaseTest):
         else:
             md = emlib.MetaData("resolution@" + fnResolution)
             R = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
-            self.assertTrue(R < 12.5, "Resolution is not below 10A")
+            self.assertTrue(R < 12.5, "Resolution is not below 12.5A")
