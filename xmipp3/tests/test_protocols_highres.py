@@ -115,6 +115,8 @@ class TestHighres(BaseTest):
         highresLocal = self.newProtocol(XmippProtReconstructHighRes,
                                    inputParticles=subset.outputParticles,
                                    inputVolumes=self.protImportVol.outputVolume,
+                                   continueRun=highres,
+                                   doContinue=True,
                                    particleRadius=180,
                                    symmetryGroup="i1",
                                    nextResolutionCriterion=0.143,
