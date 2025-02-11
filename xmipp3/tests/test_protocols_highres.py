@@ -104,7 +104,7 @@ class TestHighres(BaseTest):
         self.assertIsNotNone(highres.outputParticles,
                              "There was a problem with Highres")
 
-        fnResolution = highres._getExtraPath("Iter005/iterInfo.xmd")
+        fnResolution = highres._getExtraPath("Iter001/iterInfo.xmd")
         if not exists(fnResolution):
             self.assertTrue(False, fnResolution + " does not exist")
         else:
