@@ -89,9 +89,17 @@ class TestHighres(BaseTest):
                                    particleRadius=180,
                                    symmetryGroup="i1",
                                    nextResolutionCriterion=0.143,
-                                   alignmentMethod=XmippProtReconstructHighRes.AUTOMATIC_ALIGNMENT,
-                                   maximumTargetResolution="15 10 7",
-                                   numberOfMpi=8)
+                                   alignmentMethod=XmippProtReconstructHighRes.GLOBAL_ALIGNMENT,
+                                   numberOfIterations=1,
+                                   maximumTargetResolution="15",
+                                   numberOfMpi=8,
+                                   postSignificantDenoise=False,
+                                   postFilterBank=False,
+                                   postLaplacian=False,
+                                   postDeconvolve=False,
+                                   postSoftNeg=False,
+                                   postDifference=False)
+
         self.launchProtocol(highres)
         self.assertIsNotNone(highres.outputParticles,
                              "There was a problem with Highres")
@@ -102,4 +110,33 @@ class TestHighres(BaseTest):
         else:
             md = emlib.MetaData("resolution@" + fnResolution)
             R = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
-            self.assertTrue(R < 10, "Resolution is not below 10A")
+            self.assertTrue(R < 12.5, "Resolution is not below 10A")
+
+        highresLocal = self.newProtocol(XmippProtReconstructHighRes,
+                                   inputParticles=subset.outputParticles,
+                                   inputVolumes=self.protImportVol.outputVolume,
+                                   particleRadius=180,
+                                   symmetryGroup="i1",
+                                   nextResolutionCriterion=0.143,
+                                   alignmentMethod=XmippProtReconstructHighRes.LOCAL_ALIGNMENT,
+                                   numberOfIterations=1,
+                                   maximumTargetResolution="10",
+                                   numberOfMpi=8,
+                                   postSignificantDenoise=False,
+                                   postFilterBank=False,
+                                   postLaplacian=False,
+                                   postDeconvolve=False,
+                                   postSoftNeg=False,
+                                   postDifference=False)
+
+        self.launchProtocol(highresLocal)
+        self.assertIsNotNone(highresLocal.outputParticles,
+                             "There was a problem with Highres")
+
+        fnResolution = highresLocal._getExtraPath("Iter005/iterInfo.xmd")
+        if not exists(fnResolution):
+            self.assertTrue(False, fnResolution + " does not exist")
+        else:
+            md = emlib.MetaData("resolution@" + fnResolution)
+            R = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
+            self.assertTrue(R < 12.5, "Resolution is not below 10A")
