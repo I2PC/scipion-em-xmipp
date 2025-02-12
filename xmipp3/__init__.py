@@ -152,14 +152,14 @@ class Plugin(pwem.Plugin):
         
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
+            'c-compiler',
+            'cxx-compiler',
             'cmake>=3.17',
+            'make',
+            'mpi',
             'hdf5>=1.18',
             'sqlite>=3',
             'fftw>=3',
-            'mpich-mpicxx',
-            'c-compiler',
-            'cxx-compiler',
-            'make',
             'openjdk',
             'libtiff',
             'libjpeg-turbo'
@@ -172,7 +172,7 @@ class Plugin(pwem.Plugin):
                 tar='void.tgz',
                 commands=commands.getCommands(),
                 neededProgs=['conda'],
-                default=False
+                default=True
             )
         
         if develMode:
