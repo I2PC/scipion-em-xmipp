@@ -162,7 +162,8 @@ class Plugin(pwem.Plugin):
             'fftw>=3',
             'openjdk',
             'libtiff',
-            'libjpeg-turbo'
+            'libjpeg-turbo',
+            'libstdcxx-ng'
         ]
         
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
