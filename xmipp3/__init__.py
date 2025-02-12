@@ -152,8 +152,8 @@ class Plugin(pwem.Plugin):
         
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
-            'c-compiler',
-            'cxx-compiler',
+            'gcc=10',
+            'gxx=10',
             'cmake>=3.17',
             'make',
             'mpi',
