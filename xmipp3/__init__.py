@@ -162,7 +162,7 @@ class Plugin(pwem.Plugin):
             'sqlite>=3',
             'fftw>=3',
             'libtiff',
-            'zlib'
+            'zlib',
             'libjpeg-turbo',
         ]
         
