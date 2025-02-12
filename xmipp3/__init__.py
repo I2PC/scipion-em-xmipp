@@ -156,7 +156,7 @@ class Plugin(pwem.Plugin):
             'gxx=10',
             'cmake>=3.17',
             'make',
-            'mpi',
+            'openmpi=3',
             'openjdk',
             'hdf5>=1.18',
             'sqlite>=3',
