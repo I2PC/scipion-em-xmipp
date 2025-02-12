@@ -157,7 +157,6 @@ class Plugin(pwem.Plugin):
             'cmake>=3.17',
             'make',
             'mpi',
-            'libstdcxx-ng',
             'hdf5>=1.18',
             'sqlite>=3',
             'fftw>=3',
