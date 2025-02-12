@@ -162,7 +162,8 @@ class Plugin(pwem.Plugin):
             'sqlite>=3',
             'fftw>=3',
             'libtiff',
-            'libjpeg-turbo'
+            'zlib'
+            'libjpeg-turbo',
         ]
         
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
