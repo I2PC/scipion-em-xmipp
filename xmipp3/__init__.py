@@ -157,10 +157,10 @@ class Plugin(pwem.Plugin):
             'cmake>=3.17',
             'make',
             'mpi',
+            'openjdk',
             'hdf5>=1.18',
             'sqlite>=3',
             'fftw>=3',
-            'openjdk',
             'libtiff',
             'libjpeg-turbo'
         ]
