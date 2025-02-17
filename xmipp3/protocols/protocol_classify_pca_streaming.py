@@ -139,9 +139,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                     self.finish = True
                     continue  # To avoid waiting
 
-            # TODO
-            self.inputParticles.get().close() # If this is not close then it blocks the input protocol
-            # However it will block the iterItems of the classify if it is too long
+            with self._lock: # Add this lock so it will not block the iterItems of the classify method
+                self.inputParticles.get().close() # If this is not close then it blocks the input protocol
             sys.stdout.flush()
             time.sleep(30)
 
