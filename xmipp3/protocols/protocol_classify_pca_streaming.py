@@ -80,7 +80,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                       label="particles for initial classification",
                       help='Number of particles for an initial classification to compute the 2D references')
 
-        form.addParallelSection(threads=3, mpi=1)
+        form.addParallelSection(threads=3)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -139,8 +139,9 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                     self.finish = True
                     continue  # To avoid waiting
 
+            # TODO
             self.inputParticles.get().close() # If this is not close then it blocks the input protocol
-            # However if you put it it will block the iterItems of the classify if it is long
+            # However it will block the iterItems of the classify if it is too long
             sys.stdout.flush()
             time.sleep(30)
 
@@ -233,7 +234,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                 args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
                        '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
                       (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
-                       self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), int(self.gpuList.get()))
+                       self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), 0) # CUDA_VISIBLE_DEVICES is set then only id "0" available
                 env = self.getCondaEnv()
                 env = self._setEnvVariables(env)
                 self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
@@ -336,7 +337,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         # Limit the number of threads
         env['OMP_NUM_THREADS'] = '12'
         env['MKL_NUM_THREADS'] = '12'
-        env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
         return env
 
     def _updateFnClassification(self):
