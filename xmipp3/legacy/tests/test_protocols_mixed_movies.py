@@ -30,7 +30,7 @@ from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtImportMovies
 
-from xmipp3.protocols import (XmippProtFlexAlign, XmippProtOFAlignment)
+from xmipp3.protocols import XmippProtFlexAlign
 
 
 class TestMixedMovies(BaseTest):
@@ -96,54 +96,53 @@ class TestMixedMovies(BaseTest):
         """ Sum all shifts a a movie set """
         xx, yy = movieSet.getFirstItem().getAlignment().getShifts()
         return sum([abs(x) for x in xx]) + sum([abs(y) for y in yy])
-
-    def test_CorrelationOpticalFlow(self):
-        from xmipp3 import Plugin
-        protMovieImport = self._importMovies()
-
-        mc1 = self.newProtocol(XmippProtFlexAlign,
-                               objLabel='CC (no-write)',
-                               alignFrame0=2, alignFrameN=10,
-                               useAlignToSum=True,
-                               doLocalAlignment=False)
-        mc1.inputMovies.set(protMovieImport.outputMovies)
-        self.launchProtocol(mc1)
-
-        # Shifts should be different from zero
-        self.assertNotAlmostEqual(0, self._sumShifts(mc1.outputMovies))
-
-        mc2 = self.newProtocol(XmippProtFlexAlign,
-                               objLabel='CC (write)',
-                               alignFrame0=2, alignFrameN=10,
-                               useAlignToSum=True,
-                               doLocalAlignment=False,
-                               doSaveMovie=True)
-        mc2.inputMovies.set(protMovieImport.outputMovies)
-        self.launchProtocol(mc2)
-
-        # All shifts should be zero, since we have written the move and the
-        # shifts have been already applied
-        self.assertAlmostEqual(0, self._sumShifts(mc2.outputMovies))
-
-        of1 = self.newProtocol(XmippProtOFAlignment,
-                               objLabel='OF (1)',
-                               alignFrame0=2, alignFrameN=10,
-                               useAlignment=True,
-                               numberOfThreads=4)
-        of1.inputMovies.set(mc1.outputMovies)
-        self.launchProtocol(of1)
-
-        of2 = self.newProtocol(XmippProtOFAlignment,
-                               objLabel='OF (2)',
-                               alignFrame0=2, alignFrameN=10,
-                               useAlignment=True,
-                               useAlignToSum=True,
-                               numberOfThreads=4,)
-        of2.inputMovies.set(mc2.outputMovies)
-        self.launchProtocol(of2)
-
-        # manual diff statistics:
-        # diff.mrc min=-41.368896 max= 51.489990 avg=  0.006643 stddev=  4.867714
-        # diff.mrc min=-35.405273 max= 40.189209 avg=  0.005545 stddev=  3.395741
-        # diff.mrc min=-37.708740 max= 46.209473 avg=  0.006600 stddev=  4.477785
-        self._compareMovies(of1.outputMicrographs, of2.outputMicrographs, 51.49)
+	
+    # def test_CorrelationOpticalFlow(self):
+    #     from xmipp3 import Plugin
+    #     protMovieImport = self._importMovies()
+    #     mc1 = self.newProtocol(XmippProtFlexAlign,
+    #                            objLabel='CC (no-write)',
+    #                            alignFrame0=2, alignFrameN=10,
+    #                            useAlignToSum=True,
+    #                            doLocalAlignment=False)
+    #     mc1.inputMovies.set(protMovieImport.outputMovies)
+    #     self.launchProtocol(mc1)
+	#
+    #     # Shifts should be different from zero
+    #     self.assertNotAlmostEqual(0, self._sumShifts(mc1.outputMovies))
+	#
+    #     mc2 = self.newProtocol(XmippProtFlexAlign,
+    #                            objLabel='CC (write)',
+    #                            alignFrame0=2, alignFrameN=10,
+    #                            useAlignToSum=True,
+    #                            doLocalAlignment=False,
+    #                            doSaveMovie=True)
+    #     mc2.inputMovies.set(protMovieImport.outputMovies)
+    #     self.launchProtocol(mc2)
+	#
+    #     # All shifts should be zero, since we have written the move and the
+    #     # shifts have been already applied
+    #     self.assertAlmostEqual(0, self._sumShifts(mc2.outputMovies))
+	#
+    #     of1 = self.newProtocol(XmippProtOFAlignment,
+    #                            objLabel='OF (1)',
+    #                            alignFrame0=2, alignFrameN=10,
+    #                            useAlignment=True,
+    #                            numberOfThreads=4)
+    #     of1.inputMovies.set(mc1.outputMovies)
+    #     self.launchProtocol(of1)
+	#
+    #     of2 = self.newProtocol(XmippProtOFAlignment,
+    #                            objLabel='OF (2)',
+    #                            alignFrame0=2, alignFrameN=10,
+    #                            useAlignment=True,
+    #                            useAlignToSum=True,
+    #                            numberOfThreads=4,)
+    #     of2.inputMovies.set(mc2.outputMovies)
+    #     self.launchProtocol(of2)
+	#
+    #     # manual diff statistics:
+    #     # diff.mrc min=-41.368896 max= 51.489990 avg=  0.006643 stddev=  4.867714
+    #     # diff.mrc min=-35.405273 max= 40.189209 avg=  0.005545 stddev=  3.395741
+    #     # diff.mrc min=-37.708740 max= 46.209473 avg=  0.006600 stddev=  4.477785
+    #     self._compareMovies(of1.outputMicrographs, of2.outputMicrographs, 51.49)

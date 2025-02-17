@@ -57,6 +57,8 @@ from pwem.constants import ALIGN_PROJ
 from pwem import emlib
 from xmipp3.base import HelicalFinder, isXmippCudaPresent
 from xmipp3.convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
+from pyworkflow import UPDATED, PROD
+
 
 def getPreviousQuality(img, imgRow):
     if hasattr(img,"_xmipp_cost"):
@@ -86,6 +88,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
        defocus group. You may want to perform iterations one by one, and remove from one
        iteration to the next, those particles that worse fit the model."""
     _label = 'highres'
+    _devStatus = UPDATED
+
     _lastUpdateVersion = VERSION_1_1
     
     SPLIT_STOCHASTIC = 0
@@ -542,7 +546,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                maxFreq=0.25
             else:
                maxFreq=0.45
-        self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete %f"%(fnVol1,fnVol2,maxFreq),numberOfMpi=1)
+            self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete %f"%(fnVol1,fnVol2,maxFreq),numberOfMpi=1)
 
         # Compare both reconstructions
         self.evaluateReconstructions(0)
@@ -1098,7 +1102,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     args+=" --phaseFlipped"
                 #if self.weightResiduals:
                 #    args+=" --oresiduals %s"%join(fnDirLocal,"residuals%02i.stk"%i)
-                self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get())
+                # 
+                if self.useGpu:
+                    args+=" --nThreads %d"%self.numberOfMpi.get()
+                    self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
+                else:
+                    self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
                 self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnLocalStk,R),numberOfMpi=min(self.numberOfMpi.get(),24))
                 self.writeInfoField(fnDirLocal,"count",emlib.MDL_COUNT,int(2+i))
 

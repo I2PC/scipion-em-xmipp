@@ -45,7 +45,7 @@ from pyworkflow import UPDATED, PROD
 class XmippProtConvertPdb(ProtInitialVolume):
     """ Convert atomic structure(s) into volume(s) """
     _label = 'convert pdbs to volumes'
-    _devStatus = PROD
+    _devStatus = UPDATED
     OUTPUT_NAME1 = "outputVolume"
     OUTPUT_NAME2 = "outputVolumes"
     OUTPUT_NAME3 = "outputPdb"

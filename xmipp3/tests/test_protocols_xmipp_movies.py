@@ -94,139 +94,6 @@ class TestXmippBase(BaseTest):
                                   magnification=61000)
 
 
-class TestOFAlignment(TestXmippBase):
-    """This class check if the preprocessing micrographs protocol
-    in Xmipp works properly."""
-
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData()
-        cls.protImport1 = cls.runImportMovie1(cls.movie1)
-        cls.protImport2 = cls.runImportMovie2(cls.movie2)
-    
-    def runOFProtocol(self, movies, label="Default", saveMic=True,
-                      saveMovie=False, useAlign=False):
-        protOF = XmippProtOFAlignment(doSaveAveMic=saveMic,
-                                      doSaveMovie=saveMovie,
-                                      useAlignment=useAlign)
-        protOF.setObjLabel(label)
-        protOF.inputMovies.set(movies)
-        self.launchProtocol(protOF)
-        return protOF
-    
-    def testAlignOF1(self):
-        protOF1 = self.runOFProtocol(self.protImport1.outputMovies,
-                                     label="Movie MRC")
-        self.assertIsNotNone(protOF1.outputMicrographs,
-                             "SetOfMicrographs has not been created.")
-    
-    def testAlignOF2(self):
-        protOF2 = self.runOFProtocol(self.protImport2.outputMovies,
-                                     label="Movie EM")
-        self.assertIsNotNone(protOF2.outputMicrographs,
-                             "SetOfMicrographs has not been created.")
-    
-    def testAlignOFSaveMovieAndMic(self):
-        protOF3 = self.runOFProtocol(self.protImport1.outputMovies,
-                                     label="Save Movie", saveMovie=True)
-        self.assertIsNotNone(protOF3.outputMovies,
-                             "SetOfMovies has not been created.")
-    
-    def testAlignOFSaveMovieNoMic(self):
-        protOF4 = self.runOFProtocol(self.protImport1.outputMovies,
-                                     label="Save Movie", saveMic=False,
-                                     saveMovie=True)
-        self.assertIsNotNone(protOF4.outputMovies,
-                             "SetOfMovies has not been created.")
-    
-    def testAlignOFWAlignment(self):
-        prot = XmippProtFlexAlign(doSaveAveMic=False)
-        prot.inputMovies.set(self.protImport1.outputMovies)
-        self.launchProtocol(prot)
-        
-        protOF5 = self.runOFProtocol(prot.outputMovies,
-                                     label="Movie w Alignment",
-                                     saveMic=False, 
-                                     saveMovie=True)
-        self.assertIsNotNone(protOF5.outputMovies,
-                             "SetOfMovies has not been created.")
-
-
-class TestOFAlignment2(TestXmippBase):
-    """This class check if the optical flow protocol in Xmipp works properly."""
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        cls.dsMovies = DataSet.getDataSet('movies')
-
-    def getArgs(self, filesPath, pattern=''):
-        return {'importFrom': ProtImportMovies.IMPORT_FROM_FILES,
-                'filesPath': self.dsMovies.getFile(filesPath),
-                'filesPattern': pattern,
-                'amplitudConstrast': 0.1,
-                'sphericalAberration': 2.,
-                'voltage': 300,
-                'samplingRate': 3.54,
-                'dosePerFrame' : 2.0,
-                }
-
-    def _checkOutput(self, prot, args, moviesId=[], size=None, dim=None):
-        movies = getattr(prot, 'outputMovies', None)
-        self.assertIsNotNone(movies)
-        self.assertEqual(movies.getSize(), size)
-
-        for i, m in enumerate(movies):
-            if moviesId:
-                self.assertEqual(m.getObjId(), moviesId[i])
-            self.assertAlmostEqual(m.getSamplingRate(),
-                                   args['samplingRate'])
-            a = m.getAcquisition()
-            self.assertAlmostEqual(a.getVoltage(), args['voltage'])
-
-            if dim is not None: # Check if dimensions are the expected ones
-                x, y, n = m.getDim()
-                self.assertEqual(dim, (x, y, n))
-
-    def _importMovies(self):
-        args = self.getArgs('ribo/', pattern='*movie.mrcs')
-
-        # Id's should be set increasing from 1 if ### is not in the pattern
-        protMovieImport = self.newProtocol(ProtImportMovies, **args)
-        protMovieImport.setObjLabel('from files')
-        self.launchProtocol(protMovieImport)
-
-        self._checkOutput(protMovieImport, args, [1, 2, 3], size=3,
-                          dim=(1950, 1950, 16))
-        return protMovieImport
-
-    def test_OpticalFlow(self):
-        protMovieImport = self._importMovies()
-
-        mc1 = self.newProtocol(XmippProtFlexAlign,
-                               objLabel='CC (no-write)',
-                               alignFrame0=2, alignFrameN=10,
-                               useAlignToSum=True,
-                               numberOfThreads=1)
-        mc1.inputMovies.set(protMovieImport.outputMovies)
-        self.launchProtocol(mc1)
-
-        of1 = self.newProtocol(XmippProtOFAlignment,
-                               objLabel='OF DW',
-                               alignFrame0=2, alignFrameN=10,
-                               useAlignment=True,
-                               doApplyDoseFilter=True,
-                               doSaveUnweightedMic=True,
-                               numberOfThreads=1)
-        of1.inputMovies.set(mc1.outputMovies)
-        self.launchProtocol(of1)
-        self.assertIsNotNone(of1.outputMicrographs,
-                             "SetOfMicrographs has not been created.")
-        self.assertIsNotNone(of1.outputMicrographsDoseWeighted,
-                             "SetOfMicrographs with dose correction has not "
-                             "been created.")
-
-
 class TestCorrelationAlignment(BaseTest):
     @classmethod
     def setData(cls):
@@ -555,17 +422,6 @@ class TestMaxShift(BaseTest):
         return protImport
 
     @classmethod
-    def runAlignMovies(cls):  # do NOT save averaged mics
-        protAlign = cls.newProtocol(XmippProtFlexAlign,
-                                    alignFrame0=1, alignFrameN=0,
-                                    doLocalAlignment=False, useGpu=False,
-                                    objLabel='Movie alignment (NO save mic)',
-                                    doSaveAveMic=False)
-        protAlign.inputMovies.set(cls.protImport.outputMovies)
-        cls.launchProtocol(protAlign)
-        return protAlign.outputMovies
-
-    @classmethod
     def runAlignMovMics(cls):  # do SAVE averaged mics and dose weighted mics
         protAlign = cls.newProtocol(XmippProtFlexAlign,
                                     alignFrame0=1, alignFrameN=0,
@@ -584,7 +440,6 @@ class TestMaxShift(BaseTest):
         cls.setData()
         fn = 'Falcon_2012_06_12-*0_movie.mrcs'
         cls.protImport = cls.runImportMovies(cls.ds.getFile(fn))
-        cls.alignedMovies = cls.runAlignMovies()
         cls.alignedMovMics = cls.runAlignMovMics()
 
     def _checkMaxShiftFiltering(self, protocol, label, hasMic, hasDw=False, noBin=False, results=[]):
@@ -690,9 +545,6 @@ class TestMaxShift(BaseTest):
         label = 'maxShift by Frame'
         rejType = XmippProtMovieMaxShift.REJ_FRAME
 
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label)
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
-
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[False, True])
 
@@ -701,9 +553,6 @@ class TestMaxShift(BaseTest):
         """
         label = 'maxShift by Movie'
         rejType = XmippProtMovieMaxShift.REJ_MOVIE
-
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label)
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.158) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
@@ -714,9 +563,6 @@ class TestMaxShift(BaseTest):
         label = 'maxShift AND'
         rejType = XmippProtMovieMaxShift.REJ_AND
 
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label) 
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
-
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.1, 0.158) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
 
@@ -725,9 +571,6 @@ class TestMaxShift(BaseTest):
         """
         label = 'maxShift OR (by frame)'
         rejType = XmippProtMovieMaxShift.REJ_OR
-
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label, mxMo=1)
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 1.0) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True,  hasMic=True, results=[False, True])
@@ -738,9 +581,6 @@ class TestMaxShift(BaseTest):
         label = 'maxShift OR (by movie)'
         rejType = XmippProtMovieMaxShift.REJ_OR
 
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label, mxFm=1)
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
-
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 1.0, 0.158) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
 
@@ -749,9 +589,6 @@ class TestMaxShift(BaseTest):
         """
         label = 'maxShift OR (by both)'
         rejType = XmippProtMovieMaxShift.REJ_OR
-
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label)
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version)
         self._checkMaxShiftFiltering(protDoMic, label,  noBin=True, hasMic=True, results=[False, True])
@@ -762,9 +599,6 @@ class TestMaxShift(BaseTest):
         label = 'maxShift REJECT both'
         rejType = XmippProtMovieMaxShift.REJ_OR
 
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label, mxMo=0.01)
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, False])
-
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label, mxMo=0.01)
         self._checkMaxShiftFiltering(protDoMic, label,  noBin=True, hasMic=True, results=[False, False])
 
@@ -773,9 +607,6 @@ class TestMaxShift(BaseTest):
         """
         label = 'maxShift ACCEPT both'
         rejType = XmippProtMovieMaxShift.REJ_AND
-
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label, mxMo=5)
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[True, True])
 
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label, mxMo=5)
         self._checkMaxShiftFiltering(protDoMic, label,  noBin=True, hasMic=True, results=[True, True])

@@ -35,7 +35,7 @@ from pyworkflow import UPDATED
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
-from pyworkflow.protocol.constants import STATUS_NEW, STEPS_PARALLEL
+from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
 
@@ -84,7 +84,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
+        #self.stepsExecutionMode = STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -119,7 +119,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                        help='Maximum total travel to evaluate the whole movie '
                             'condition.')
 
-        form.addParallelSection(threads=2, mpi=1)
         
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -328,12 +327,16 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
             inputMovies = self._loadInputSet(self.movsFn)
             inputMics = self._loadMicAssociatedInputSet()
+            inputMicsIds = inputMics.getIdSet()
 
             for movieId in newDoneList:
                 movie = inputMovies.getItem("id", movieId).clone()
-                mic = inputMics.getItem("id", movieId).clone()
                 tryToAppend(movieSet, movie)
-                tryToAppend(micsSet, mic)
+                if movieId in inputMicsIds:
+                    mic = inputMics.getItem("id", movieId).clone()
+                    tryToAppend(micsSet, mic)
+                else:
+                    self.info("Movie with id %d has not a micrograph associated" %movieId)
             
             if movieSet.getSize() > 0:
                 self._updateOutputSet(OUTPUT_MOVIES + suffix, movieSet,

@@ -27,7 +27,6 @@
 from .viewer import XmippViewer
 from .plotter import XmippPlotter
 
-from .viewer_angular_resolution_alignment import XmippProtAngResAlignViewer
 from .viewer_apply_tilt_to_ctf import XmippApplyTiltToCTFViewer
 from .viewer_cl2d import XmippCL2DViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
@@ -56,6 +55,7 @@ from .viewer_local_sharpening import viewerXmippProtLocSharp
 from .viewer_volume_subtraction import XmippProtVolSubtractionViewer
 from .viewer_volume_consensus import XmippVolumeConsensusViewer
 from .viewer_dose_analysis import XmippMovieDoseAnalysisViewer
+from .viewer_cl2d_clustering import XmippCL2DClusteringViewer
 
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 

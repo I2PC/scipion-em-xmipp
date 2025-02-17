@@ -39,7 +39,7 @@ from pwem.emlib.image import ImageHandler
 from pwem import emlib
 
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow import UPDATED
+from pyworkflow import UPDATED, PROD
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, BooleanParam, EnumParam)
 from pyworkflow.utils.path import cleanPath, cleanPattern
@@ -63,7 +63,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
 
     _label = 'compare reprojections'
     _lastUpdateVersion = VERSION_3_0
-    _devStatus = UPDATED
+    _devStatus = PROD
     _possibleOutputs = {}
 
     PARTICLES = 0
