@@ -39,7 +39,8 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
 
     _label = 'classify partial occupancy'
     INPUT_PARTICLES = "input_particles.xmd"
-    OUTPUT_PARTICLES = "output_particles.xmd"
+    OUTPUT_PARTICLES_XMD = "output_particles.xmd"
+    OUTPUT_PARTICLES_MRCS = "output_particles.mrcs"
     OROOT_PREFIX = "subtracted_part"
     _devStatus = NEW
 
@@ -76,6 +77,12 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
                       help='The volume is zero padded by this factor to produce projections',
                       condition='realSpaceProjection==0')
         
+        form.addParam('maskProtein',
+                      PointerParam,
+                      pointerClass='VolumeMask',
+                      label='Specimen mask ',
+                      help='Specify a 3D mask for the specimen of study ')
+        
         form.addParam('maskRoi',
                       PointerParam,
                       pointerClass='VolumeMask',
@@ -107,14 +114,22 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         if fnMaskRoi.endswith('.mrc'):
             fnMaskRoi += ':mrc'
 
+
+        maskProtein = self.maskProtein.get()
+        fnMaskProtein = maskProtein.getFileName()
+        if fnMaskProtein.endswith('.mrc'):
+            fnMaskProtein += ':mrc'
+
         params = {
            "-i":  self._getExtraPath(self.INPUT_PARTICLES),
            "--ref": fnVol,
-           "-o": self._getExtraPath(self.OUTPUT_PARTICLES),
+           "-o": self._getExtraPath(self.OUTPUT_PARTICLES_MRCS),
            "--padding": self.pad.get(),
            "--save": self._getExtraPath(),
-           "--oroot": self._getExtraPath(self.OROOT_PREFIX),
+           "--save_metadata_stack ": self._getExtraPath(self.OUTPUT_PARTICLES_MRCS),
+           "--mask_protein": fnMaskProtein,
            "--mask_roi": fnMaskRoi,
+           "--keep_input_columns": ' '
         }
 
         if self.realSpaceProjection.get() == 1:
@@ -128,7 +143,7 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath(self.OUTPUT_PARTICLES), 
+        readSetOfParticles(self._getExtraPath(self.OUTPUT_PARTICLES_XMD), 
                            outputSet,
                            extraLabels=[emlib.MDL_ZSCORE, 
                                         emlib.MDL_AVG,
