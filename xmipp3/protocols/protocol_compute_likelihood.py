@@ -96,6 +96,11 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         form.addParam('useNegSos', BooleanParam, label="Use negative sum of squares: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to use negative sum of squares instead of full variance-adjusted term 1')
+
+        form.addParam('newProg', BooleanParam, label="Use new program: ", default=False, expertLevel=LEVEL_ADVANCED,
+                      help='Whether to use new program xmipp_continuous_create_residuals (still under development).'
+                            'So far, this just removes the low-pass filter')
+
         form.addParallelSection(threads=2, mpi=2)
 
         form.addHidden(USE_GPU, BooleanParam, default=False,
@@ -183,6 +188,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 gpuStr = ','.join([str(g) for g in gpuId])
             os.environ["CUDA_VISIBLE_DEVICES"] = gpuStr
             self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
+        elif self.newProg:
+            self.runJob("xmipp_continuous_create_residuals", args, numberOfMpi=self.numberOfMpi.get())
         else:
             self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
 
@@ -273,3 +280,11 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             except StopIteration:
                 self.lastRow = None
         particle._appendItem = count > 0
+
+    def _validate(self):
+        errors = []
+
+        if self.useGpu.get() and self.newProg.get():
+            errors.append("You need to use the new program without GPU")
+
+        return errors
