@@ -99,7 +99,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         form.addParam('newProg', BooleanParam, label="Use new program: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to use new program xmipp_continuous_create_residuals (still under development).'
-                            'So far, this just removes the low-pass filter')
+                            'This removes the low-pass filter and applies transformations to the projection')
 
         form.addParallelSection(threads=2, mpi=2)
 
