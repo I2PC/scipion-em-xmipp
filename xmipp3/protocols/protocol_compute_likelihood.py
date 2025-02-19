@@ -195,6 +195,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         mdResults = md.MetaData(self._getExtraPath("anglesCont%03d.xmd"%i))
         mdOut = md.MetaData()
+
+        if self.printTerms.get():
+                print('{:9s}\t{:9s}\t{:9s}\t{:9s}\t{:9s}\t{:9s}\t{:9s}\n'.format('-sos', 'term1', 'term2',
+                                                                                 'LL', 'var', '1/(2*var)', 'std'))
         for objId in mdResults:
             itemId = mdResults.getValue(emlib.MDL_ITEM_ID,objId)
             
