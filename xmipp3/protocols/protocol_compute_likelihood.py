@@ -164,9 +164,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         fnAngles = self._getExtraPath("images.xmd")
         anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
         fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
+        fnProjections = self._getExtraPath("projections%03d.stk"%i)
 
         Ts = self.inputParticles.get().getSamplingRate()
-        args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s" % (fnAngles, anglesOutFn, fnVol, Ts, fnResiduals)
+        args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s --oprojections %s" % (fnAngles, anglesOutFn, fnVol, Ts, fnResiduals, fnProjections)
 
         if self.resol.get()>0:
             args+=" --max_resolution %f"%self.resol
