@@ -72,8 +72,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       pointerClass='SetOfParticles', pointerCondition='hasAlignmentProj')
         form.addParam('inputRefs', PointerParam, label="References", important=True,
                       pointerClass='Volume,SetOfVolumes',
-                      help='Volume, set of volumes or set of atomic structures to which the set of '\
-                           'particles will be compared to')
+                      help='Volume or set of volumes to which the set of particles will be compared')
         form.addParam('particleRadius', IntParam, label="Particle radius (px): ", default=-1,
                       help='This radius should include the particle but be small enough to leave room to create a ring for estimating noise\n'
                             'If left at -1, this will take half the image width. In this case, the whole circle will be used to estimate noise')
