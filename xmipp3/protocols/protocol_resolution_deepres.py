@@ -37,13 +37,13 @@ from pyworkflow.utils import getExt
 from pwem.objects import Volume
 import xmipp3
 
-# def updateEnviron(gpuNum):
-#     """ Create the needed environment for TensorFlow programs. """
-#     print("updating environ to select gpu %s" % (gpuNum))
-#     if gpuNum == '':
-#         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-#     else:
-#         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+def updateEnviron(gpuNum):
+    """ Create the needed environment for TensorFlow programs. """
+    print("updating environ to select gpu %s" % (gpuNum))
+    if gpuNum == '':
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    else:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 
 DEEPRES_METHOD_URL = 'https://github.com/I2PC/scipion/wiki/XmippProtDeepRes'
 RESIZE_MASK = 'binaryMask.vol' 
@@ -125,8 +125,8 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
     def _insertAllSteps(self):
             # Convert input into xmipp Metadata format
 
-        # if not self.useQueueForSteps() and not self.useQueue():
-        #     updateEnviron(self.gpuList.get())
+        if not self.useQueueForSteps() and not self.useQueue():
+            updateEnviron(self.gpuList.get())
             
         self._createFilenameTemplates() 
         self._insertFunctionStep('convertInputStep')
