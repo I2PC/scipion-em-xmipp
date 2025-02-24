@@ -47,12 +47,12 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version=__version__,  # Required
+    version=__version__[3:],  # Remove the "3" from the number version
 
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
-    description='Plugin to use Xmipp programs within the Scipion framework (see https://scipion-em.github.io/docs/).',
+    description='Plugin to use Xmipp programs within the Scipion framework (see https://xmipp.i2pc.es/).',
 
     # This is an optional longer description of your project that represents
     # the body of text which users will see when they visit PyPI.
@@ -76,7 +76,7 @@ setup(
 
     # This should be a valid email address corresponding to the author listed
     # above.
-    author_email='scipion@cnb.csic.es',  # Optional
+    author_email='xmipp@cnb.csic.es',  # Optional
 
     # Classifiers help users find your project by categorizing it.
     #

@@ -65,17 +65,8 @@ class XmippProtFlexAlign(ProtAlignMovies):
     #--------------------------- DEFINE param functions ------------------------
 
     def _defineAlignmentParams(self, form):
-        form.addParallelSection(threads=1, mpi=1)
-        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
-                       expertLevel=cons.LEVEL_ADVANCED,
-                       label="Choose GPU IDs",
-                       help="Add a list of GPU devices that can be used")
-        form.addHidden(params.USE_GPU, params.BooleanParam, default=True, label="Use GPU or CPU implementation of the algorithm.")
-
         ProtAlignMovies._defineAlignmentParams(self, form)
-
         EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and next(iter(inputMovies.getFiles())).endswith(".eer")'
-
         form.addParam('nFrames', params.IntParam, label='Number of EER frames',
                       condition=EER_CONDITION, default=40, validators=[params.GT(0, "Number of EER frames must be a positive integer (> 0).")],
                       help='Number of frames to be generated. EER files contain subframes, that will be grouped into the selected number of frames.')
@@ -83,23 +74,6 @@ class XmippProtFlexAlign(ProtAlignMovies):
         # FlexAlign does not support cropping
         form._paramsDict['Alignment']._paramList.remove('Crop_offsets__px_')
         form._paramsDict['Alignment']._paramList.remove('Crop_dimensions__px_')
-
-        
-
-        form.addParam('maxResForCorrelation', params.FloatParam, default=30,
-                       label='Maximum resolution (A)',
-                       help="Maximum resolution in A that will be preserved during correlation.")
-
-        form.addParam('doComputePSD', params.BooleanParam, default=True,
-                      label="Compute PSD?",
-                      help="If Yes, the protocol will compute PSD for each movie "
-                           "before and after the alignment")
-
-        form.addParam('maxShift', params.IntParam, default=50,
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      label="Maximum shift (A)",
-                      help='Maximum allowed distance (in A) that each '
-                           'frame can be shifted with respect to the next.')
 
         #Local alignment params
         group = form.addGroup('Local alignment')
@@ -113,6 +87,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       condition='doLocalAlignment',
                       help="If on, protocol will automatically determine necessary number of control points.")
+
         line = group.addLine('Number of control points',
                     expertLevel=cons.LEVEL_ADVANCED,
                     help='Number of control points use for BSpline.',
@@ -126,6 +101,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       condition='doLocalAlignment',
                       help="If on, protocol will automatically determine necessary number of patches.")
+
         line = group.addLine('Number of patches',
                     expertLevel=cons.LEVEL_ADVANCED,
                     help='Number of patches used for local alignment.',
@@ -144,7 +120,22 @@ class XmippProtFlexAlign(ProtAlignMovies):
                     help='Group every specified number of frames by adding them together. \
                         The alignment is then performed on the summed frames.',
                     condition='doLocalAlignment')
+        form.addParam('maxResForCorrelation', params.FloatParam, default=30,
+                      label='Maximum resolution (A)',
+                      help="Maximum resolution in A that will be preserved during correlation.")
 
+        form.addParam('doComputePSD', params.BooleanParam, default=True,
+                      label="Compute PSD?",
+                      help="If Yes, the protocol will compute PSD for each movie "
+                           "before and after the alignment")
+
+        form.addParam('maxShift', params.IntParam, default=50,
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      label="Maximum shift (A)",
+                      help='Maximum allowed distance (in A) that each '
+                           'frame can be shifted with respect to the next.')
+
+        #Gain Section
         form.addSection(label="Gain orientation")
         form.addParam('gainRot', params.EnumParam,
                       choices=['no rotation', '90 degrees',
@@ -161,7 +152,14 @@ class XmippProtFlexAlign(ProtAlignMovies):
                       help="Flip gain reference after rotation. "
                            "For tiff movies, gain is automatically upside-down flipped")
 
-        
+        form.addParallelSection(threads=1, mpi=1)
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True, label="Use GPU or CPU implementation of the algorithm.")
+
+
 
     #--------------------------- STEPS functions -------------------------------
     def _processMovie(self, movie):

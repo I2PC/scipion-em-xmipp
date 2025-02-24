@@ -32,6 +32,8 @@ import pwem
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from scipion.install.funcs import CommandDef
+from scipion import __version__ as scipionAppVersion
+from packaging.version import Version
 from .base import *
 from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
@@ -44,8 +46,8 @@ NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
 type_of_version = version.type_of_version
 _logo = version._logo
-_current_xmipp_tag = version._current_xmipp_tag
-_currentBinVersion = version._currentBinVersion
+_binTagVersion = version._binTagVersion
+_pluginTagVersion= version._pluginTagVersion
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
 
@@ -56,7 +58,23 @@ class Plugin(pwem.Plugin):
     _supportedVersions = []
     _url = XMIPP_URL
     _condaRootPath = None
-
+    # Refressing the plugin
+    # Inspects the call stack to find 'installPipModule' and sets 'self._plugin' to None.
+    # Uses CPython's internal API 'PyFrame_LocalsToFast' to sync changes.
+    # Risky and CPython-specific; use only if redesign is not possible.
+    try:
+        import inspect
+        import ctypes
+        for frameInfo in inspect.stack():
+            if frameInfo.function == "installPipModule":
+                frame = frameInfo[0]
+                frame.f_locals['self']._plugin = None
+                ctypes.pythonapi.PyFrame_LocalsToFast(
+				    ctypes.py_object(frame),
+				    ctypes.c_int(1))
+    except Exception as e:
+        print(e)
+    
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
@@ -127,7 +145,6 @@ class Plugin(pwem.Plugin):
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
         
-        nproc = env.getProcessors()
         COMPILE_TARGETS = [
             'dist/bin/xmipp_image_header', 
             'dist/xmipp.bashrc'
@@ -162,32 +179,31 @@ class Plugin(pwem.Plugin):
             env.addPackage(
                 'xmippDev',
                 tar='void.tgz',
-                commands=[(f'cd {bundleDir} && ./xmipp -j {nproc}', COMPILE_TARGETS)],
+                commands=[(f'cd {bundleDir} && ./xmipp', COMPILE_TARGETS)],
                 neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
                 updateCuda=True,
                 default=False
             )
         
-        tag = version._current_xmipp_tag
-        xmippSrc = f'xmippSrc-{tag}'
+        xmippSrc = f'xmippSrc-{version._binTagVersion}'
         installCommands = [
             (f'cd .. && rm -rf {xmippSrc} && '
-            f'git clone --depth 1 --branch {tag} {XMIPP_GIT_URL} {xmippSrc} && '
+            f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
             f'cd {xmippSrc} && '
-            f'./xmipp -b {tag} -j {nproc}', COMPILE_TARGETS)   
+            f'git checkout {version._binTagVersion} && '
+            f'./xmipp --production True ', COMPILE_TARGETS)
         ]
         env.addPackage(
-            'xmippSrc', version=tag,
+            'xmippSrc', version=version._binTagVersion,
             tar='void.tgz',
             commands=installCommands,
             neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
             updateCuda=True,
             default=not develMode
         )
-
+        
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
-
 
     @classmethod
     def __getBundleDirectory(cls):
