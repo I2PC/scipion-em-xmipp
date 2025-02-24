@@ -125,7 +125,6 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
            "--ref": fnVol,
            "-o": self._getExtraPath(self.OUTPUT_PARTICLES_MRCS),
            "--padding": self.pad.get(),
-           "--save": self._getExtraPath(),
            "--save_metadata_stack ": self._getExtraPath(self.OUTPUT_PARTICLES_MRCS),
            "--mask_protein": fnMaskProtein,
            "--mask_roi": fnMaskRoi,
