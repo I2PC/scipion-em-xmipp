@@ -231,7 +231,6 @@ def getNvidiaDriverVersion(plugin):
             return nvidiaDriverVer
         except (ValueError, TypeError, FileNotFoundError):
             continue
-    return None
     
 def installDeepLearningToolkit(plugin, env):
 
