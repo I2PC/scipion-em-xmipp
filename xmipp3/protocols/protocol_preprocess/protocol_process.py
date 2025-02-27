@@ -162,6 +162,13 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
                 else:
                     samplingRate = volInput.getSamplingRate()
                 self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk, samplingRate))
+                if volInput.hasHalfMaps():
+                    halfMap1 = self._getExtraPath("output_half1.mrc")
+                    halfMap2 = self._getExtraPath("output_half2.mrc")
+                    self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(halfMap1, samplingRate))
+                    self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(halfMap2, samplingRate))
+                    vol.setHalfMaps([halfMap1, halfMap2])
+
             if volInput.hasOrigin():
                 vol.setOrigin(volInput.getOrigin())
             self._postprocessOutput(vol)
@@ -191,6 +198,6 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             self.outputStk = self._getExtraPath("output_volume.mrc")
         else:
             self.inputFn = self._getTmpPath('input_volumes.xmd')
-            self.outputStk = self._getExtraPath("output_volumes.stk")
+            self.outputStk = self._getExtraPath("output_volumes.mrcs")
             self.outputMd = self._getExtraPath('output_volumes.xmd')
 
