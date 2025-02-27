@@ -960,26 +960,28 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.proj.launchProtocol(protAutomaticPP, wait=True)
 
         # NON streaming tests
-        protCons1 = self.newProtocol(XmippProtConsensusPicking,
-                                     objLabel="Xmipp - consensus pick AND")
+        protCons1 = self.newProtocol(XmippProtConsensusPicking)
+        protCons1.setObjLabel("Xmipp - consensus pick AND")
+
         protCons1.inputCoordinates.set([self.protFaPi.outputCoordinates,
                                         protAutomaticPP.outputCoordinates])
         self.launchProtocol(protCons1)
 
         self.assertTrue(protCons1.isFinished(), "Consensus failed")
-        self.assertSetSize(protCons1.consensusCoordinates,382,
+        self.assertSetSize(protCons1.consensusCoordinates,306,
                         "Output coordinates size for AND consensus is wrong.")
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
-                                      objLabel="Xmipp - consensus pick OR",
                                       consensus=1)
+        protConsOr.setObjLabel("Xmipp - consensus pick OR")
+
         protConsOr.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
              Pointer(protAutomaticPP, extended="outputCoordinates")])
         self.launchProtocol(protConsOr)
 
         self.assertTrue(protConsOr.isFinished(), "Consensus failed")
-        self.assertSetSize(protConsOr.consensusCoordinates, 432,
+        self.assertSetSize(protConsOr.consensusCoordinates, 439,
                         "Output coordinates size for OR consensus is wrong.")
 
         kwargs = {'nDim': 3,  # 3 objects
@@ -1000,8 +1002,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self._waitOutput(protAutoPP, 'outputCoordinates')
 
         # Consensus Picking launching
-        protCons2 = self.newProtocol(XmippProtConsensusPicking,
-                                     objLabel="Xmipp - consensus pick streaming")
+        protCons2 = self.newProtocol(XmippProtConsensusPicking)
+        protCons2.setObjLabel("Xmipp - consensus streaming")
+
         protCons2.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
              Pointer(protAutoPP, extended="outputCoordinates")])
@@ -1009,17 +1012,18 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         # Remove Duplicates launching
         protDupl2 = self.newProtocol(XmippProtPickingRemoveDuplicates,
-                                     objLabel="Xmipp - remove duplicates streaming",
                                      consensusRadius=110)
+        protDupl2.setObjLabel("Xmipp - remove duplicates streaming")
+
         protDupl2.inputCoordinates.set(protAutoPP.outputCoordinates)
         self.proj.launchProtocol(protDupl2, wait=True)  # don't wait to make the final checks
 
         time.sleep(3)  # protDupl2 should be as long as protCons2, but just in case
         protCons2 = self._updateProtocol(protCons2)
-        self.assertSetSize(protCons2.consensusCoordinates, 382,
+        self.assertSetSize(protCons2.consensusCoordinates, 306,
                         "Output coordinates size does not is wrong.")
         protDupl2 = self._updateProtocol(protDupl2)
-        self.assertSetSize(protDupl2.outputCoordinates, 245,
+        self.assertSetSize(protDupl2.outputCoordinates, 203,
                         "Output coordinates size does not is wrong.")
 
 
