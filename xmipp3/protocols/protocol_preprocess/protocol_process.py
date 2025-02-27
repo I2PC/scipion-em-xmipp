@@ -148,6 +148,10 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             
     def createOutputStep(self):
         volInput = self.inputVolumes.get()
+        if hasattr(self, 'resizeOption') and self.doResize:
+            samplingRate = self.resizeSamplingRate.get()
+        else:
+            samplingRate = volInput.getSamplingRate()
         if self._isSingleInput():
             # Create the output with the same class as
             # the input, that should be Volume or a subclass
@@ -157,10 +161,6 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             vol.copyInfo(volInput)
             vol.setLocation(self.outputStk)
             if self.outputStk.endswith(".mrc"):
-                if hasattr(self, 'resizeOption') and self.doResize:
-                    samplingRate = self.resizeSamplingRate.get()
-                else:
-                    samplingRate = volInput.getSamplingRate()
                 self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk, samplingRate))
                 if volInput.hasHalfMaps():
                     vol.setHalfMaps("")
@@ -176,8 +176,12 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             self._preprocessOutput(volumes)
             for i, obj in enumerate(volInput.iterItems()):
                 vol = obj
-                vol.setLocation(i+1, self.outputStk)
+                fnSingle = self._getExtraPath("output_volume%03d.mrc"%(i+1))
+                self.runJob("xmipp_image_convert","-i %d@%s  -o %s -t vol"%(i+1,self.outputStk, fnSingle))
+                self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnSingle, samplingRate))
+                vol.setLocation(fnSingle)
                 volumes.append(vol)
+            self.runJob("rm",self.outputStk)
             self._postprocessOutput(volumes)
             self._defineOutputs(outputVol=volumes)
             
@@ -194,6 +198,6 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             self.outputStk = self._getExtraPath("output_volume.mrc")
         else:
             self.inputFn = self._getTmpPath('input_volumes.xmd')
-            self.outputStk = self._getExtraPath("output_volumes.mrcs")
+            self.outputStk = self._getExtraPath("output_volume.mrcs")
             self.outputMd = self._getExtraPath('output_volumes.xmd')
 
