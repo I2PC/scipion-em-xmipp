@@ -89,16 +89,13 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       help="This will generate a plot for each movie where the reference and the secondary trajectory"
                            "will be plot in the same graph with its correlation value.")
 
-        form.addParallelSection(threads=4, mpi=1)
+        form.addParallelSection(threads=4)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
         self.initializeParams()
-        movieSteps = self._insertNewMovieSteps(self.allMovies1.keys(),
-                                               self.allMovies2.keys(),
-                                               self.insertedDict)
         self._insertFunctionStep('createOutputStep',
-                                 prerequisites=movieSteps, wait=True)
+                                 prerequisites=[], wait=True)
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -149,7 +146,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       pwutils.prettyTime(mTime)))
         # If the input movies.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck is not None and self.lastCheck > mTime:
+        if self.lastCheck > mTime and self.processedDict: # If this is empty it is due to a static "continue" action or it is the first round
             return None
 
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
@@ -284,7 +281,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
         # We have finished when there is not more input movies (stream closed)
         # and the number of processed movies is equal to the number of inputs
-        maxMovieSize = min(len(self.allMovies1), len(self.allMovies2))
+        maxMovieSize = len(set(self.allMovies1).intersection(set(self.allMovies2)))
         self.finished = (self.isStreamClosed and allDone == maxMovieSize)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
