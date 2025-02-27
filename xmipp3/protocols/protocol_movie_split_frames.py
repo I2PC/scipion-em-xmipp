@@ -66,6 +66,8 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         
         for movie in self.inputMovies.get():
             fnMovie = movie.getFileName()
+            if fnMovie.endswith(".mrc"):
+                fnMovie+=":mrcs"
 
             fnMovieOdd = pwutils.removeExt(basename(fnMovie)) + "_odd.xmd"
             fnMovieEven = pwutils.removeExt(basename(fnMovie)) + "_even.xmd"
@@ -87,8 +89,8 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             fnMovieOdd = pwutils.removeExt(basename(fnMovie)) + "_odd.xmd"
             fnMovieEven = pwutils.removeExt(basename(fnMovie)) + "_even.xmd"
 
-            fnMovieOddMrc = pwutils.removeExt(basename(fnMovieOdd)) + ".mrc"
-            fnMovieEvenMrc = pwutils.removeExt(basename(fnMovieEven)) + ".mrc"
+            fnMovieOddMrc = pwutils.removeExt(basename(fnMovieOdd)) + ".mrcs"
+            fnMovieEvenMrc = pwutils.removeExt(basename(fnMovieEven)) + ".mrcs"
 
             args = '-i "%s" ' % self._getExtraPath(fnMovieOdd)
             args += '-o "%s" ' % self._getExtraPath(fnMovieOddMrc)
@@ -109,8 +111,8 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         for movie in self.inputMovies.get():
             fnMovie = movie.getFileName()
 
-            fnMovieOddMrc = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_odd.mrc")
-            fnMovieEvenMrc = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_even.mrc")
+            fnMovieOddMrc = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_odd.mrcs")
+            fnMovieEvenMrc = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_even.mrcs")
             
             imgOutOdd = Movie()
             imgOutEven = Movie()
