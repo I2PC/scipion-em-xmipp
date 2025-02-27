@@ -452,21 +452,12 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
     #--------------------------- STEPS functions ---------------------------------------------------
     def filterStep(self, isFirstStep, args):
         XmippResizeHelper.filterStep(self, self._ioArgs(isFirstStep)+args)
-        if self.inputVolumes.get().hasHalfMaps():
-            XmippResizeHelper.filterStep(self, self._ioArgs(isFirstStep,1)+args)
-            XmippResizeHelper.filterStep(self, self._ioArgs(isFirstStep,2)+args)
     
     def resizeStep(self, isFirstStep, args):
         XmippResizeHelper.resizeStep(self, self._ioArgs(isFirstStep)+args)
-        if self.inputVolumes.get().hasHalfMaps():
-            XmippResizeHelper.resizeStep(self, self._ioArgs(isFirstStep,1)+args)
-            XmippResizeHelper.resizeStep(self, self._ioArgs(isFirstStep,2)+args)
     
     def windowStep(self, isFirstStep, args):
         XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep)+args)
-        if self.inputVolumes.get().hasHalfMaps():
-            XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep,1)+args)
-            XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep,2)+args)
         
     def _preprocessOutput(self, volumes):
         # We use the preprocess only when input is a set
@@ -551,24 +542,14 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
         return XmippResizeHelper._validate(self)
     
     #--------------------------- UTILS functions ---------------------------------------------------
-    def _ioArgs(self, isFirstStep, whichHalf=0):
-        if self.inputVolumes.get().hasHalfMaps() and whichHalf>0:
-            halfNames=self.inputVolumes.get().getHalfMaps().split(',')
-            fnIn=halfNames[whichHalf-1]
-            if fnIn.endswith(".mrc"):
-                fnIn+=":mrc"
-            fnOut=self._getExtraPath(f"output_half{whichHalf}.mrc")
-        else:
-            fnIn=self.inputFn
-            fnOut=self.outputStk
-
+    def _ioArgs(self, isFirstStep):
         if isFirstStep:
             if self._isSingleInput():
-                return "-i %s -o %s " % (fnIn, fnOut)
+                return "-i %s -o %s " % (self.inputFn, self.outputStk)
             else:
-                return "-i %s -o %s --save_metadata_stack %s --keep_input_columns " % (fnIn, fnOut, self.outputMd)
+                return "-i %s -o %s --save_metadata_stack %s --keep_input_columns " % (self.inputFn, self.outputStk, self.outputMd)
         else:
-            return "-i %s" % fnOut
+            return "-i %s" % self.outputStk
 
     def _filterArgs(self):
         return XmippResizeHelper._filterCommonArgs(self)
