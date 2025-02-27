@@ -178,7 +178,6 @@ class XmippProtMonoRes(ProtAnalysis3D):
     def _insertAllSteps(self):
         # Convert input into xmipp Metadata format
         self._createFilenameTemplates()
-        print('caca2')
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('resolutionMonogenicSignalStep')
         self._insertFunctionStep('createOutputStep')
