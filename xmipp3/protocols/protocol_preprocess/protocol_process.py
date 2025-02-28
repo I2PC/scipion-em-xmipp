@@ -162,6 +162,7 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             vol.setLocation(self.outputStk)
             if self.outputStk.endswith(".mrc"):
                 self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk, samplingRate))
+                self.setHeader(self.outputStk, samplingRate)
                 if volInput.hasHalfMaps():
                     vol.setHalfMaps("")
 
@@ -178,7 +179,7 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
                 vol = obj
                 fnSingle = self._getExtraPath("output_volume%03d.mrc"%(i+1))
                 self.runJob("xmipp_image_convert","-i %d@%s  -o %s -t vol"%(i+1,self.outputStk, fnSingle))
-                self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnSingle, samplingRate))
+                self.setHeader(fnSingle, samplingRate)
                 vol.setLocation(fnSingle)
                 volumes.append(vol)
             self.runJob("rm",self.outputStk)
@@ -186,6 +187,11 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             self._defineOutputs(outputVol=volumes)
             
         self._defineTransformRelation(self.inputVolumes, self.outputVol)
+    
+    def setHeader(self, filename, samplingRate):
+        ccp4header = Ccp4Header(filename, readHeader=True)
+        ccp4header.setSampling(samplingRate)
+        ccp4header.writeHeader()
     
     #--------------------------- UTILS functions ------------------------------
     def _isSingleInput(self):
