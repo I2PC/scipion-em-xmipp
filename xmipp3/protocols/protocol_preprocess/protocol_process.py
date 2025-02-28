@@ -161,7 +161,6 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             vol.copyInfo(volInput)
             vol.setLocation(self.outputStk)
             if self.outputStk.endswith(".mrc"):
-                self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk, samplingRate))
                 self.setHeader(self.outputStk, samplingRate)
                 if volInput.hasHalfMaps():
                     vol.setHalfMaps("")
