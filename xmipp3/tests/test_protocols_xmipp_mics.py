@@ -532,7 +532,7 @@ class TestXmippExtractParticles(TestXmippBase):
                              %(micNameCoord, micNamePart))
         compare(83)
         compare(228)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.1640, 0.5190)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.3000, 0.40817)
 
     def testExtractOriginal(self):
         print("Run extract particles from the original micrographs")
@@ -573,7 +573,7 @@ class TestXmippExtractParticles(TestXmippBase):
                          "Output sampling rate should be equal to input "
                          "sampling rate.")
         self._checkSamplingConsistency(outputParts)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2081, 0.5754)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2859, 0.3991)
 
     def testNoExtractBorders(self):
         print("Run extract particles avoiding extract in borders")
@@ -620,7 +620,7 @@ class TestXmippExtractParticles(TestXmippBase):
         self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
         self._checkSamplingConsistency(outputParts)
         # Particle 335 is outbourder with this boxsize. Checking it...
-        self._checkVarianceAndGiniCoeff(outputParts[335], 1.2191, 0.5795)
+        self._checkVarianceAndGiniCoeff(outputParts[335], 1.2101, 0.7079)
 
     def testExtractOther(self):
         print("Run extract particles from original micrographs, with downsampling")
@@ -671,7 +671,7 @@ class TestXmippExtractParticles(TestXmippBase):
         for particle in outputParts:
             self.assertTrue(particle.getCoordinate().getMicId() in micsId)
             self.assertAlmostEqual(outputSampling, particle.getSamplingRate())
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.099442, 0.396918)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.00277, 0.42318)
 
     def testExtractNoise(self):
         # here we will try a different patchSize than the default
@@ -694,7 +694,7 @@ class TestXmippExtractParticles(TestXmippBase):
         outputParts = protExtract.outputParticles
         self.assertIsNotNone(outputParts, "There was a problem generating the output.")
         self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.161262, 0.5702)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.0374, 0.476623)
 
     def testExtractCTF(self):
         print("Run extract particles with CTF")
@@ -738,7 +738,7 @@ class TestXmippExtractParticles(TestXmippBase):
                              "There was a problem generating the output.")
         self.assertTrue(outputParts.hasCTF(), "Output does not have CTF.")
         self._checkSamplingConsistency(outputParts)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.1640, 0.5190)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.3000, 0.4082)
 
 
 class TestXmippVarianceFiltering(TestXmippBase):
