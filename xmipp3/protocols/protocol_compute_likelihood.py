@@ -123,13 +123,13 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         inputRefs = self.inputRefs.get()
         i=1
         if isinstance(inputRefs, Volume):
-            prodId = self._insertFunctionStep(self.produceResiduals, inputRefs.getFileName(), i,
+            prodId = self._insertFunctionStep(self.produceResidualsStep, inputRefs.getFileName(), i,
                                               prerequisites=convId, needsGPU=self.useGpu)
             i += 1
             stepIds.append(prodId)
         else:
             for volume in inputRefs:
-                prodId = self._insertFunctionStep(self.produceResiduals, volume.getFileName(), i,
+                prodId = self._insertFunctionStep(self.produceResidualsStep, volume.getFileName(), i,
                                                   prerequisites=convId, needsGPU=self.useGpu)
                 i += 1
                 stepIds.append(prodId)
@@ -165,7 +165,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         return self.mask, self.noiseMask
 
-    def produceResiduals(self, fnVol, i):
+    def produceResidualsStep(self, fnVol, i):
         fnAngles = self._getExtraPath("images.xmd")
         anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
         fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
