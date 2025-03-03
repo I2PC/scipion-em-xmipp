@@ -29,6 +29,7 @@ from pwem.protocols import ProtProcessParticles, ProtPreprocessVolumes
 from pwem.objects import Volume
 import pwem.emlib.metadata as md
 from pyworkflow import BETA, UPDATED, NEW, PROD
+from pwem.convert import headers
 
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             writeSetOfVolumes, getImageLocation)
@@ -188,7 +189,7 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
         self._defineTransformRelation(self.inputVolumes, self.outputVol)
     
     def setHeader(self, filename, samplingRate):
-        ccp4header = Ccp4Header(filename, readHeader=True)
+        ccp4header = headers.Ccp4Header(filename, readHeader=True)
         ccp4header.setSampling(samplingRate)
         ccp4header.writeHeader()
     
