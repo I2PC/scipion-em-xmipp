@@ -73,10 +73,14 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
 
         group = form.addGroup('Values range')
 
-        group.addParam('normalise', BooleanParam, default=True,
+        group.addParam('normalise', BooleanParam, default=False,
                       label='Normalise LL matrix by dividing by mean value of each column?',
                       help='This may increase the contrast to help with interpretability. '
                            'Note: we keep the sign negative to keep the order of values.')
+
+        group.addParam('subtract', BooleanParam, default=True,
+                      label='Shift LL matrix by subtracting mean value of each column?',
+                      help='This may increase the contrast to help with interpretability. ')
 
         group.addParam('vmin', FloatParam, default=-1,
                       label='Minimum blue value',
@@ -117,7 +121,13 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
             matrix = np.load(filename)
 
         if self.normalise.get():
+            if self.subtract.get():
+                return [self.errorMessage("Please select normalise or subtract, not both",
+                                        title=_invalidInputStr)]
             matrix = np.divide(matrix, np.mean(matrix, axis=0)) * np.sign(np.mean(matrix))
+
+        elif self.subtract.get():
+            matrix = np.subtract(matrix, np.mean(matrix, axis=0))
 
         if volNumber1 != -1 and volNumber2 != -1:
             matrix = matrix[volNumber1:volNumber2]
