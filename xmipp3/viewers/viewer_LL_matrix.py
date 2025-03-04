@@ -112,13 +112,7 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         if isinstance(self.refs, Volume):
             self.refs = [self.refs]
         
-        filename = self.protocol._getExtraPath('matrix.npy')
-        if not os.path.exists(filename):
-            matrix = np.array([particle._xmipp_logLikelihood.get() for particle in self.outputs])
-            matrix = matrix.reshape((len(self.refs),-1))
-            np.save(filename, matrix)
-        else:
-            matrix = np.load(filename)
+        matrix = np.load(self.protocol._getExtraPath('matrix.npy'))
 
         if self.normalise.get():
             if self.subtract.get():
