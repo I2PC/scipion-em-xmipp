@@ -219,6 +219,10 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         args = ' -i  %s -o %s --save_metadata_stack '%(outputOrig, outputConvert)
         self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
+        #positivity
+        # self._positivity(outputConvert)
+        # blur
+        # self._applyBlurring(outputConvert)
                 
    
     def createGallery(self, angle, refVol, refIm):
@@ -280,7 +284,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         # self._filterVolume(output, output, self.resolution.get())
         self._filterVolume(output, output, resol)
         #positivity
-        self._positivityVolume(output)
+        self._positivity(output)
         #automatic mask
         if iter < 7:
             self._applyMaskThreshold(output)
@@ -362,10 +366,13 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         return resolution
     
     def _filterVolume(self, input, output, resolution):
-        args = ' -i %s -o %s --fourier low_pass %s --sampling %s -v 0'%(input, output, resolution, self.sampling)
+        res = self.sampling / resolution
+        raisedw = self.sampling / 100
+        # args = ' -i %s -o %s --fourier low_pass %s --sampling %s -v 0'%(input, output, resolution, self.sampling)
+        args = ' -i %s -o %s --fourier low_pass %s %s -v 0'%(input, output, res, raisedw)
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
         
-    def _positivityVolume(self, input):
+    def _positivity(self, input):
         program = 'xmipp_transform_threshold'
         args = '-i %s --select below 0 --substitute value 0'%input
         self.runJob(program,args,numberOfMpi=1)
@@ -373,6 +380,11 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
     def _applyCicularMask(self, input):
         program = 'xmipp_transform_mask'
         args = '-i %s --mask circular -50'%input
+        self.runJob(program,args,numberOfMpi=1)
+        
+    def _applyBlurring(self, input):
+        program = 'xmipp_transform_filter'
+        args = '-i %s --fourier real_gaussian 1'%(input)
         self.runJob(program,args,numberOfMpi=1)
         
     def _applyMaskThreshold(self, input):
