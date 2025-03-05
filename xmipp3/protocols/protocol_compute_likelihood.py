@@ -79,9 +79,14 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         form.addParam('noiseRadius', IntParam, label="Noise radius (px): ", default=-1,
                       help='This radius should be larger than the particle radius to create a ring for estimating noise\n'
                             'If left at -1, this will take half the image width.')
+
+        form.addParam('newProg', BooleanParam, label="Use new program: ", default=True, expertLevel=LEVEL_ADVANCED,
+                      help='Whether to use new program xmipp_continuous_create_residuals. This removes the low-pass filter and '
+                      'applies transformations to the projection, not the original image.')
+
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=0, expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
-                           'Value 0 implies no filtering.')
+                           'Value 0 implies no filtering.', condition='newProg==False')
         form.addParam('optimizeGray', BooleanParam, label="Optimize gray: ", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Optimize the gray value between the map reprojection and the experimental image')
         form.addParam('maxGrayChange', FloatParam, label="Max. gray change: ", default=0.99, expertLevel=LEVEL_ADVANCED,
@@ -96,10 +101,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         form.addParam('useNegSos', BooleanParam, label="Use negative sum of squares: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to use negative sum of squares instead of full variance-adjusted term 1')
-
-        form.addParam('newProg', BooleanParam, label="Use new program: ", default=False, expertLevel=LEVEL_ADVANCED,
-                      help='Whether to use new program xmipp_continuous_create_residuals (still under development).'
-                            'This removes the low-pass filter and applies transformations to the projection')
 
         form.addParallelSection(threads=2, mpi=2)
 
