@@ -105,7 +105,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
                            expertLevel=LEVEL_ADVANCED,
                            label='Show slice number')
 
-        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=0.0, defaultHighest=1.0)
+        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=-1, defaultHighest=-1)
 
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
@@ -273,8 +273,6 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         okToPlot = True
         resInterp = []
         if not idx_x.any():
-            okToPlot = False
-        else:
             if len(idx_x) > 1:
                 idx_2 = idx_x[0]
                 idx_1 = idx_2 - 1
@@ -290,6 +288,8 @@ class XmippProtFSOViewer(LocalResolutionViewer):
                 resInterp = 1.0 / (slope * thr + ny)
             else:
                 okToPlot = False
+        else:
+            okToPlot = False
 
         return resInterp, okToPlot
 
@@ -353,6 +353,9 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         if not okToPlot_01:
            res_01 = 2*sampling
 
+        if not okToPlot_09:
+           res_09 = 2*sampling
+
         a.axes.axvspan(1.0 / res_09, 1.0 / res_01, alpha=0.3, color='green')
 
         return plt.show()
@@ -396,11 +399,19 @@ class XmippProtFSOViewer(LocalResolutionViewer):
 
         # ------ Plot ------
         stp = 0.1
-        lowlim = max(0.0, values.min())
+        # the names are wrong in the base class
+        formLowLim = self.highest.get()
+        formHighLim = self.lowest.get()
 
-        highlim = values.max() + stp
+        if formLowLim>0 or formHighLim>0:
+            lowlim = formLowLim
+            highlim = formHighLim
+        else:
+            lowlim = max(0.0, values.min())
+            highlim = values.max() + stp
+
         fig, ax = plt.subplots(subplot_kw=dict(projection='polar'))
-        pc = plt.contourf(theta, r, values, np.arange(lowlim, highlim, stp), cmap=self.getColorMap())
+        pc = plt.contourf(theta, r, values, np.arange(lowlim, highlim, stp), cmap=self.getColorMap(), extend="max")
 
         plt.colorbar(pc)
         plt.show()
@@ -413,3 +424,4 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         if cmap is None:
             cmap = cm.jet
         return cmap
+
