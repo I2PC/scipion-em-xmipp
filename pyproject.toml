@@ -26,6 +26,8 @@ Issues = "https://github.com/I2PC/scipion-em-xmipp/issues"
 version = {attr = "xmipp3.version.__version__"}
 dependencies = {file = ["requirements.txt"]}
 
-
 [project.entry-points."pyworkflow.plugin"]
 xmipp3 = "xmipp3"
+
+[tool.setuptools.package-data]
+xmipp3 = ["protocols.conf", "xmipp_logo_devel.png"]
