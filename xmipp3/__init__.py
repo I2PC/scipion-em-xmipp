@@ -216,6 +216,21 @@ class Plugin(pwem.Plugin):
                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
         
         return bundleDir if isBundle else None
+
+def getNvidiaDriverVersion(plugin):
+    """ Several ways to retrieve NVIDIA driver version.
+    """
+    commands = [["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                ["cat", "/sys/module/nvidia/version"]]
+    for cmd in commands:
+        try:
+            nvidiaDriverVer = subprocess.Popen(cmd,
+                                               env=plugin.getEnviron(),
+                                               stdout=subprocess.PIPE
+                                               ).stdout.read().decode('utf-8').split(".")[0]
+            return nvidiaDriverVer
+        except (ValueError, TypeError, FileNotFoundError):
+            continue
     
 def installDeepLearningToolkit(plugin, env):
 
@@ -223,38 +238,32 @@ def installDeepLearningToolkit(plugin, env):
     cudaMsgs = []
     nvidiaDriverVer = None
     if os.environ.get('CUDA', 'True') == 'True':
-        try:
-            nvidiaDriverVer = subprocess.Popen(["nvidia-smi",
-                                                "--query-gpu=driver_version",
-                                                "--format=csv,noheader"],
-                                               env=plugin.getEnviron(),
-                                               stdout=subprocess.PIPE
-                                               ).stdout.read().decode('utf-8').split(".")[0]
-            if int(nvidiaDriverVer) < NVIDIA_DRIVERS_MINIMUM_VERSION:
-                preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
-                cudaMsgs.append(f"Your NVIDIA drivers are too old (<{NVIDIA_DRIVERS_MINIMUM_VERSION}). "
-                                "Tensorflow was installed without GPU support. "
-                                "Just CPU computations enabled (slow computations)."
-                                f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
-                                "set CUDA=True in 'scipion.conf' file")
-                nvidiaDriverVer = None
-        except (ValueError, TypeError, FileNotFoundError):
-            nvidiaDriverVer = None
-            preMsgs.append("Not nvidia driver found. Type: "
-                           " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
-            preMsgs.append(
-                "CUDA will NOT be USED. (not found or incompatible)")
-            msg = ("Tensorflow installed without GPU. Just CPU computations "
-                   "enabled (slow computations).")
-            cudaMsgs.append(msg)
-            useGpu = False
+        nvidiaDriverVer = getNvidiaDriverVersion(plugin)
 
-    if nvidiaDriverVer is not None:
-        preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
-        msg = "Tensorflow will be installed with CUDA SUPPORT."
+    if nvidiaDriverVer is None:
+        preMsgs.append("Not nvidia driver found. Type: "
+                       " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
+        preMsgs.append(
+            "CUDA will NOT be USED. (not found or incompatible)")
+        msg = ("Tensorflow installed without GPU. Just CPU computations "
+               "enabled (slow computations).")
         cudaMsgs.append(msg)
-        useGpu = True
+        useGpu = False
 
+    else:
+        if int(nvidiaDriverVer) < NVIDIA_DRIVERS_MINIMUM_VERSION:
+            preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
+            cudaMsgs.append(f"Your NVIDIA drivers are too old (<{NVIDIA_DRIVERS_MINIMUM_VERSION}). "
+                            "Tensorflow was installed without GPU support. "
+                            "Just CPU computations enabled (slow computations)."
+                            f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
+                            "set CUDA=True in 'scipion.conf' file")
+            useGpu = False
+        else:
+            preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
+            msg = "Tensorflow will be installed with CUDA SUPPORT."
+            cudaMsgs.append(msg)
+            useGpu = True
 
     # commands  = [(command, target), (cmd, tgt), ...]
     cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))

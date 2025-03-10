@@ -4,19 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scipion-em-xmipp"
-dynamic = ["version"]
-dependencies = [
-    "scipion-em",
-    "scipion-pyworkflow>=3.0.31",
-    "scikit-learn>=1.2",
-    "scipion-app",
-    "scikit-image",
-    "scipy<=1.10.0",
-    "joblib",
-    "peppercorn",
-    "plotter",
-    "PyWavelets",
-]
+dynamic = ["version", "dependencies"]
 
 authors = [
     {name = "Oier Lauzirika Zarrabeitia", email = "oierlauzi@bizkaia.eu"},
@@ -35,8 +23,11 @@ Homepage = "https://github.com/I2PC/scipion-em-xmipp"
 Issues = "https://github.com/I2PC/scipion-em-xmipp/issues"
 
 [tool.setuptools.dynamic]
-version = {attr = "xmipp3.version.__version__[3:]"}
-
+version = {attr = "xmipp3.version.__version__"}
+dependencies = {file = ["requirements.txt"]}
 
 [project.entry-points."pyworkflow.plugin"]
 xmipp3 = "xmipp3"
+
+[tool.setuptools.package-data]
+xmipp3 = ["protocols.conf", "xmipp_logo_devel.png"]

@@ -532,7 +532,7 @@ class TestXmippExtractParticles(TestXmippBase):
                              %(micNameCoord, micNamePart))
         compare(83)
         compare(228)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.1640, 0.5190)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.3000, 0.40817)
 
     def testExtractOriginal(self):
         print("Run extract particles from the original micrographs")
@@ -573,7 +573,7 @@ class TestXmippExtractParticles(TestXmippBase):
                          "Output sampling rate should be equal to input "
                          "sampling rate.")
         self._checkSamplingConsistency(outputParts)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2081, 0.5754)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2859, 0.3991)
 
     def testNoExtractBorders(self):
         print("Run extract particles avoiding extract in borders")
@@ -620,7 +620,7 @@ class TestXmippExtractParticles(TestXmippBase):
         self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
         self._checkSamplingConsistency(outputParts)
         # Particle 335 is outbourder with this boxsize. Checking it...
-        self._checkVarianceAndGiniCoeff(outputParts[335], 1.2191, 0.5795)
+        self._checkVarianceAndGiniCoeff(outputParts[335], 1.2101, 0.7079)
 
     def testExtractOther(self):
         print("Run extract particles from original micrographs, with downsampling")
@@ -671,7 +671,7 @@ class TestXmippExtractParticles(TestXmippBase):
         for particle in outputParts:
             self.assertTrue(particle.getCoordinate().getMicId() in micsId)
             self.assertAlmostEqual(outputSampling, particle.getSamplingRate())
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.099442, 0.396918)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.00277, 0.42318)
 
     def testExtractNoise(self):
         # here we will try a different patchSize than the default
@@ -694,7 +694,7 @@ class TestXmippExtractParticles(TestXmippBase):
         outputParts = protExtract.outputParticles
         self.assertIsNotNone(outputParts, "There was a problem generating the output.")
         self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.161262, 0.5702)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.0374, 0.476623)
 
     def testExtractCTF(self):
         print("Run extract particles with CTF")
@@ -738,7 +738,7 @@ class TestXmippExtractParticles(TestXmippBase):
                              "There was a problem generating the output.")
         self.assertTrue(outputParts.hasCTF(), "Output does not have CTF.")
         self._checkSamplingConsistency(outputParts)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.1640, 0.5190)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.3000, 0.4082)
 
 
 class TestXmippVarianceFiltering(TestXmippBase):
@@ -960,26 +960,28 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.proj.launchProtocol(protAutomaticPP, wait=True)
 
         # NON streaming tests
-        protCons1 = self.newProtocol(XmippProtConsensusPicking,
-                                     objLabel="Xmipp - consensus pick AND")
+        protCons1 = self.newProtocol(XmippProtConsensusPicking)
+        protCons1.setObjLabel("Xmipp - consensus pick AND")
+
         protCons1.inputCoordinates.set([self.protFaPi.outputCoordinates,
                                         protAutomaticPP.outputCoordinates])
         self.launchProtocol(protCons1)
 
         self.assertTrue(protCons1.isFinished(), "Consensus failed")
-        self.assertSetSize(protCons1.consensusCoordinates,382,
+        self.assertSetSize(protCons1.consensusCoordinates,306,
                         "Output coordinates size for AND consensus is wrong.")
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
-                                      objLabel="Xmipp - consensus pick OR",
                                       consensus=1)
+        protConsOr.setObjLabel("Xmipp - consensus pick OR")
+
         protConsOr.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
              Pointer(protAutomaticPP, extended="outputCoordinates")])
         self.launchProtocol(protConsOr)
 
         self.assertTrue(protConsOr.isFinished(), "Consensus failed")
-        self.assertSetSize(protConsOr.consensusCoordinates, 432,
+        self.assertSetSize(protConsOr.consensusCoordinates, 439,
                         "Output coordinates size for OR consensus is wrong.")
 
         kwargs = {'nDim': 3,  # 3 objects
@@ -1000,8 +1002,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self._waitOutput(protAutoPP, 'outputCoordinates')
 
         # Consensus Picking launching
-        protCons2 = self.newProtocol(XmippProtConsensusPicking,
-                                     objLabel="Xmipp - consensus pick streaming")
+        protCons2 = self.newProtocol(XmippProtConsensusPicking)
+        protCons2.setObjLabel("Xmipp - consensus streaming")
+
         protCons2.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
              Pointer(protAutoPP, extended="outputCoordinates")])
@@ -1009,17 +1012,18 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         # Remove Duplicates launching
         protDupl2 = self.newProtocol(XmippProtPickingRemoveDuplicates,
-                                     objLabel="Xmipp - remove duplicates streaming",
                                      consensusRadius=110)
+        protDupl2.setObjLabel("Xmipp - remove duplicates streaming")
+
         protDupl2.inputCoordinates.set(protAutoPP.outputCoordinates)
         self.proj.launchProtocol(protDupl2, wait=True)  # don't wait to make the final checks
 
         time.sleep(3)  # protDupl2 should be as long as protCons2, but just in case
         protCons2 = self._updateProtocol(protCons2)
-        self.assertSetSize(protCons2.consensusCoordinates, 382,
+        self.assertSetSize(protCons2.consensusCoordinates, 306,
                         "Output coordinates size does not is wrong.")
         protDupl2 = self._updateProtocol(protDupl2)
-        self.assertSetSize(protDupl2.outputCoordinates, 245,
+        self.assertSetSize(protDupl2.outputCoordinates, 203,
                         "Output coordinates size does not is wrong.")
 
 

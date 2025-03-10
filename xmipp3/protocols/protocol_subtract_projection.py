@@ -35,7 +35,8 @@ from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 from pyworkflow import PROD, UPDATED
 
-OUTPUT = "output_particles.xmd"
+OUTPUT_MRCS = "output_particles.mrcs"
+OUTPUT_XMD = "output_particles.xmd"
 CITE = 'Fernandez-Gimenez2023a'
 
 class XmippProtSubtractProjectionBase(EMProtocol):
@@ -133,9 +134,11 @@ class XmippProtSubtractProjectionBase(EMProtocol):
         inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath(OUTPUT), outputSet,
-                           extraLabels=[emlib.MDL_SUBTRACTION_R2, emlib.MDL_SUBTRACTION_BETA0,
-                                        emlib.MDL_SUBTRACTION_BETA1])
+        readSetOfParticles(self._getExtraPath(OUTPUT_XMD), outputSet,
+                           extraLabels=[emlib.MDL_SUBTRACTION_R2,
+                                        emlib.MDL_SUBTRACTION_BETA0,
+                                        emlib.MDL_SUBTRACTION_BETA1,
+                                        emlib.MDL_SUBTRACTION_B])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
@@ -172,10 +175,10 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f ' \
-               '--sigma %d --save %s --oroot %s' % \
-               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
+               '--sigma %d --save %s --save_metadata_stack %s --keep_input_columns ' % \
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT_MRCS),
                 vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
-                self._getExtraPath(), self._getExtraPath("subtracted_part"))
+                self._getExtraPath(), self._getExtraPath(OUTPUT_XMD))
         
         if self.maskOption.get() == 0:
             args += " --cirmaskrad %d " % self.cirmaskrad.get()
@@ -272,10 +275,10 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f --sigma %d ' \
-               '--cirmaskrad %d --boost --save %s --oroot %s'\
-               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
+               '--cirmaskrad %d --boost --save %s --save_metadata_stack %s --keep_input_columns '\
+               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT_MRCS),
                   vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
-                  self.cirmaskrad.get(), self._getExtraPath(), self._getExtraPath("subtracted_part"))
+                  self.cirmaskrad.get(), self._getExtraPath(), self._getExtraPath(OUTPUT_XMD))
 
         if self.nonNegative.get():
             args += ' --nonNegative'
