@@ -46,7 +46,7 @@ class XmippProtVolAdjBase(EMProtocol):
     @classmethod
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('vol1', PointerParam, pointerClass='Volume', label="Volume 1 ", help='Specify a volume.')
+        form.addParam('vol1', PointerParam, pointerClass='Volume', label="Volume 1 (reference)", help='Specify a volume.')
         form.addParam('masks', BooleanParam, label='Mask volumes?', default=True,
                       help='The masks are not mandatory but highly recommendable.')
         form.addParam('mask1', PointerParam, pointerClass='VolumeMask', label="Mask for volume 1",
@@ -125,7 +125,7 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
         form.addParam('pdbFile', FileParam,
                       label="File path", condition='inputPdbData == IMPORT_FROM_FILES and pdb', allowsNull=True,
                       help='Specify a path to desired PDB structure.')
-        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Volume 2 ", condition='pdb == False',
+        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Volume 2", condition='pdb == False',
                       help='Specify a volume.')
         form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
                       condition='masks and pdb==False', help='Specify a mask for volume 1.')
@@ -271,7 +271,7 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         XmippProtVolAdjBase._defineParams(form)
-        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Volume 2 ", help='Specify a volume.')
+        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Volume 2 (to modify)", help='Specify a volume.')
         form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
                       condition='masks', help='Specify a mask for volume 1.')
 
