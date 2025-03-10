@@ -168,7 +168,12 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
     def produceResidualsStep(self, fnVol, i):
         fnAngles = self._getExtraPath("images.xmd")
-        anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
+
+        if self.newProg:
+            anglesOutFn = self._getExtraPath("anglesCont%03d.xmd"%i)
+        else:
+            anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
+
         fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
         fnProjections = self._getExtraPath("projections%03d.stk"%i)
 
