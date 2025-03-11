@@ -101,12 +101,12 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
 
     def _viewLL(self, paramName):
         """ visualization of log likelihood matrix for all the particles and ref volumes or the range of both selected. """   
-        partNumber1 = self.partNumber1.get()-1 if self.partNumber1.get() != -1 else -1
-        partNumber2 = self.partNumber2.get() # no subtraction as end of range
+        partNumber1 = self.partNumber1.get() if self.partNumber1.get() != -1 else 1
+        partNumber2 = self.partNumber2.get() if self.partNumber2.get() != -1 else len(self.particles)
         self._checkNumbers(partNumber1, partNumber2, 'particle')        
 
-        volNumber1 = self.volNumber1.get()-1 if self.volNumber1.get() != -1 else -1
-        volNumber2 = self.volNumber2.get() # no subtraction as end of range
+        volNumber1 = self.volNumber1.get() if self.volNumber1.get() != -1 else 1
+        volNumber2 = self.volNumber2.get() if self.volNumber2.get() != -1 else len(self.refs)
         self._checkNumbers(volNumber1, volNumber2, 'volume')
 
         if isinstance(self.refs, Volume):
@@ -123,49 +123,12 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         elif self.subtract.get():
             matrix = np.subtract(matrix, np.mean(matrix, axis=0))
 
-        if volNumber1 != -1 and volNumber2 != -1:
-            matrix = matrix[volNumber1:volNumber2]
-            volMin = volNumber1
-            volMax = volNumber2
-        elif volNumber1 != -1:
-            matrix = matrix[volNumber1:]
-            volMin = volNumber1
-            volMax = len(self.refs)+1
-        elif volNumber2 != -1:
-            matrix = matrix[:volNumber2]
-            volMin = 1
-            volMax = volNumber2
+        if self.percentile.get() != -1:
+            vmin = np.percentile(matrix, self.percentile.get()) if self.vmin.get() == -1 else vmin
+            vmax = np.percentile(matrix, 100-self.percentile.get()) if self.vmax.get() == -1 else vmax
         else:
-            volMin = 1
-            volMax = len(self.refs)+1
-
-        if partNumber1 != -1 and partNumber2 != -1:
-            matrix = matrix[:, partNumber1:partNumber2]
-            partMin = partNumber1
-        elif partNumber1 != -1:
-            matrix = matrix[:, partNumber1:]
-            partMin = partNumber1
-        elif partNumber2 != -1:
-            matrix = matrix[:, :partNumber2]
-            partMin = 1
-        else:
-            partMin = 1
-
-        vmin = self.vmin.get()
-        if vmin == -1:
-            vmin = None
-
-        vmax = self.vmax.get()
-        if vmax == -1:
-            vmax = None
-
-        p = self.percentile.get()
-        if p == -1:
-            p = None
-
-        if p is not None:
-            vmin = np.percentile(matrix, p) if vmin is None else vmin
-            vmax = np.percentile(matrix, 100-p) if vmax is None else vmax
+            vmin = None if self.vmin.get() == -1 else self.vmin.get()
+            vmax = None if self.vmax.get() == -1 else self.vmax.get()
 
         plotter = EmPlotter()
         im = plt.imshow(matrix, aspect='auto',
@@ -173,12 +136,16 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         plt.colorbar(mappable=im)
 
         plt.ylabel('Reference volumes')
-        plt.yticks(range(volMax-volMin), range(volMin, volMax))
+        plt.ylim([volNumber1-1.5, volNumber2-0.5])
+        ylocs, _ = plt.yticks()
+        plt.yticks([int(loc) for loc in ylocs[:-1] if loc >= volNumber1-1],
+                   [str(int(loc)+1) for loc in ylocs[:-1] if loc >= volNumber1-1])
 
         plt.xlabel('Input particles')
-        xticks = plt.xticks()
-        plt.xticks(xticks[0][1:-1], np.array(xticks[0][1:-1], dtype=int)+partMin)
-        
+        plt.xlim([partNumber1-1.5, partNumber2-0.5])
+        xlocs, _ = plt.xticks()
+        plt.xticks([int(loc) for loc in xlocs[:-1] if loc >= partNumber1-1],
+                   [str(int(loc)+1) for loc in xlocs[:-1] if loc >= partNumber1-1])
 
         return [plotter]
 
