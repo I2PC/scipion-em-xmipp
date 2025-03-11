@@ -142,18 +142,14 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         if partNumber1 != -1 and partNumber2 != -1:
             matrix = matrix[:, partNumber1:partNumber2]
             partMin = partNumber1
-            partMax = partNumber2
         elif partNumber1 != -1:
             matrix = matrix[:, partNumber1:]
             partMin = partNumber1
-            partMax = len(self.particles)+1
         elif partNumber2 != -1:
             matrix = matrix[:, :partNumber2]
             partMin = 1
-            partMax = partNumber2
         else:
             partMin = 1
-            partMax = len(self.particles)+1
 
         vmin = self.vmin.get()
         if vmin == -1:
