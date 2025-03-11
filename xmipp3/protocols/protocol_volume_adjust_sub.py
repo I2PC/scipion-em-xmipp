@@ -42,6 +42,8 @@ class XmippProtVolAdjBase(EMProtocol):
     """ Helper class that contains some Protocol utilities methods
     used by both  XmippProtVolSubtraction and XmippProtVolAdjust."""
 
+    _possibleOutputs = {"outputVolume": Volume}
+
     # --------------------------- DEFINE param functions --------------------------------------------
     @classmethod
     def _defineParams(self, form):
