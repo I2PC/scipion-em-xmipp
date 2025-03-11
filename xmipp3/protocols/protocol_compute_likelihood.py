@@ -96,12 +96,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         form.addParam('printTerms', BooleanParam, label="Print terms of LL: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to print terms 1 and 2, LL and noise variance')
 
-        form.addParam('useBothTerms', BooleanParam, label="Use both terms: ", default=True, expertLevel=LEVEL_ADVANCED,
-                      help='Whether to use both terms. Otherwise, just use term 1')
-
-        form.addParam('useNegSos', BooleanParam, label="Use negative sum of squares: ", default=False, expertLevel=LEVEL_ADVANCED,
-                      help='Whether to use negative sum of squares instead of full variance-adjusted term 1')
-
         form.addParallelSection(threads=2, mpi=2)
 
         form.addHidden(USE_GPU, BooleanParam, default=False,
@@ -171,8 +165,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         if self.newProg:
             anglesOutFn = self._getExtraPath("anglesCont%03d.xmd"%i)
+            prog = "xmipp_continuous_create_residuals"
         else:
             anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
+            prog = "xmipp_angular_continuous_assign2"
 
         fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
         fnProjections = self._getExtraPath("projections%03d.stk"%i)
@@ -193,11 +189,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             else:
                 gpuStr = ','.join([str(g) for g in gpuId])
             os.environ["CUDA_VISIBLE_DEVICES"] = gpuStr
-            self.runJob('xmipp_cuda_angular_continuous_assign2', args, numberOfMpi=1)
-        elif self.newProg:
-            self.runJob("xmipp_continuous_create_residuals", args, numberOfMpi=self.numberOfMpi.get())
+            self.runJob(prog, args, numberOfMpi=1)
+
         else:
-            self.runJob("xmipp_angular_continuous_assign2", args, numberOfMpi=self.numberOfMpi.get())
+            self.runJob(prog, args, numberOfMpi=self.numberOfMpi.get())
 
         mdResults = md.MetaData(self._getExtraPath("anglesCont%03d.xmd"%i))
         mdOut = md.MetaData()
@@ -218,21 +213,13 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             elements_between_circles = I.getData()[self.getMasks()[1]]
             var = np.var(elements_between_circles)
 
-            if self.useNegSos.get():
-                term1 = -sum_of_squares
-            else:
-                term1 = -sum_of_squares/(2*var)
-
+            term1 = -sum_of_squares/(2*var)
             term2 = Npix/2 * np.log(2*np.pi*var)
-
-            if self.useBothTerms.get():
-                LL = term1 - term2
-            else:
-                LL = term1
+            LL = term1 - term2
 
             if self.printTerms.get():
                 print('{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\n'.format(-sum_of_squares, term1, term2,
-                                                                                      LL, var, 1/(2*var), var**0.5))
+                                                                                                LL, var, 1/(2*var), var**0.5))
 
             newRow = md.Row()
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
