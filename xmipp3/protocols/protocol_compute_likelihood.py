@@ -67,10 +67,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       label='threads',
                       default=2,
                       help='Number of threads used by Xmipp each time it is called in the protocol execution. For '
-                           'example, if 3 Scipion threads and 3 Xmipp threads are set, the tomograms will be '
+                           'example, if 3 Scipion threads and 3 Xmipp threads are set, the particles will be '
                            'processed in groups of 2 at the same time with a call of Xmipp with 3 threads each, so '
                            '6 threads will be used at the same time. Beware the memory of your machine has '
-                           'memory enough to load together the number of tomograms specified by Scipion threads.')
+                           'memory enough to load together the number of particles specified by Scipion threads.')
         
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, label="Input images", important=True,
