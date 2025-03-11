@@ -123,12 +123,19 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         elif self.subtract.get():
             matrix = np.subtract(matrix, np.mean(matrix, axis=0))
 
-        if self.percentile.get() != -1:
-            vmin = np.percentile(matrix, self.percentile.get()) if self.vmin.get() == -1 else vmin
-            vmax = np.percentile(matrix, 100-self.percentile.get()) if self.vmax.get() == -1 else vmax
+        if self.vmin.get() != -1:
+            vmin = self.vmin.get()
+        elif self.percentile.get() != -1:
+            vmin = np.percentile(matrix, self.percentile.get())
         else:
-            vmin = None if self.vmin.get() == -1 else self.vmin.get()
-            vmax = None if self.vmax.get() == -1 else self.vmax.get()
+            vmin = None
+
+        if self.vmax.get() != -1:
+            vmax = self.vmin.get()
+        elif self.percentile.get() != -1:
+            vmax = np.percentile(matrix, 100-self.percentile.get())
+        else:
+            vmax = None
 
         plotter = EmPlotter()
         im = plt.imshow(matrix, aspect='auto',
