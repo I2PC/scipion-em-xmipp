@@ -261,7 +261,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             if row.getValue(md.MDL_ITEM_ID) == id:
                 return row
 
-        raise Exception("Missing row %s at %s" % (id, mdFile))
+        raise ValueError("Missing row %s at %s" % (id, mdFile))
 
     def _processRow(self, particle, row):
         count = 0
