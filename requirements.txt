@@ -8,4 +8,4 @@ joblib
 peppercorn
 plotter
 PyWavelets
-
+xmipp3-installer
