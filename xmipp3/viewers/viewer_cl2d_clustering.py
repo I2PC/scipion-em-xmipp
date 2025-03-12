@@ -26,55 +26,54 @@
 
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
-from pwem.viewers import showj, EmProtocolViewer, ObjectView
-from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER
-from xmipp3.protocols.protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
+from pwem.viewers import EmProtocolViewer, ObjectView, ClassesView
+from xmipp3.protocols.protocol_cl2d_clustering import XmippProtCL2DClustering
 import matplotlib.pyplot as plt
 import os
 
 
 
-class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
-    """ This viewer is intended to visualize the selection made by
-        the Xmipp - Movie poisson count protocol.
+class XmippCL2DClusteringViewer(EmProtocolViewer):
+    """ This viewer is intended to visualize the selection made by the Xmipp - clustering 2d classes protocol.
     """
-    _label = 'viewer Movie Dose Analysis'
+    _label = 'viewer Clustering 2D Classes'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [XmippProtMovieDoseAnalysis]
+    _targets = [XmippProtCL2DClustering]
 
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
-        form.addParam('visualizeMovies', LabelParam,
-                      label="Visualize accepted movies",
-                      help="Visualize movies with the respective dose scores.")
-        form.addParam('visualizeDiscardedMovies', LabelParam,
-                      label="Visualize discarded movies",
-                      help="Visualize discarded movies with the respective dose scores.")
-        form.addParam('visualizeDoseVsTime', LabelParam,
-                      label="Visualize Dose vs Time",
-                      help="Visualize plot dose vs time.")
-        form.addParam('visualizeDoseDiffVsTime', LabelParam,
-                      label="Visualize Dose difference vs Time",
-                      help="Visualize plot dose difference against median dose vs time.")
+        form.addParam('visualizeOutput', LabelParam,
+                      label="Visualize output",
+                      help="Visualize the aggregated 2D classes, 2D averages or both.")
+        form.addParam('visualizeCluster', LabelParam,
+                      label="Visualize a 2D representation of the clustering",
+                      help="This will show a 2D representation of the clustering operation. "
+                              "The clustering operation is done on a multidimensional space, meaning that this"
+                              "2D representation (using TSNE) might not capture the real difference between some clusters.")
+        form.addParam('visualizeClusterImages', LabelParam,
+                      label="Visualize the clusters distribution",
+                      help="Visualize the clusters images.")
 
     def _getVisualizeDict(self):
         return {
-                 'visualizeMovies': self._visualizeMoviesF,
-                 'visualizeDiscardedMovies' : self._visualizeDiscardedMoviesF,
-                 'visualizeDoseVsTime': self._visualizeDoseTime,
-                 'visualizeDoseDiffVsTime': self._visualizeDoseDiffTime
+                 'visualizeOutput': self._visualizeOutputs,
+                 'visualizeCluster': self._visualizeCluster,
+                 'visualizeClusterImages': self._visualizeClusterImages
                 }
 
-    def _visualizeMoviesF(self, e=None):
-        return self._visualizeMovies("outputMovies")
+    def _visualizeOutputs(self, e=None):
+        outputList = []
 
-    def _visualizeDiscardedMoviesF(self, e=None):
-        return self._visualizeMovies("outputMoviesDiscarded")
+        for objName in ["outputClasses", "outputAverages"]:
+            if self.protocol.hasAttribute(objName):
+                outputList.append(objName)
 
-    def _visualizeDoseTime(self, e=None):
-        if os.path.exists(self.protocol.getDosePlot()):
-            image = plt.imread(self.protocol.getDosePlot())
+        return self._visualizeMultipleOutputs(outputList)
+
+    def _visualizeCluster(self, e=None):
+        if os.path.exists(self.protocol.getClusterPlot()):# Load the image
+            image = plt.imread(self.protocol.getClusterPlot())
             # Get the image dimensions (height, width)
             height, width, _ = image.shape
             # Convert pixels to inches for the figure size (assuming 100 DPI)
@@ -89,9 +88,10 @@ class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
             # Show the image
             plt.show()
 
-    def _visualizeDoseDiffTime(self, e=None):
-        if os.path.exists(self.protocol.getDoseDiffPlot()):
-            image = plt.imread(self.protocol.getDoseDiffPlot())
+    def _visualizeClusterImages(self, e=None):
+        if os.path.exists(self.protocol.getClusterImagesPlot()):
+            # Load the image
+            image = plt.imread(self.protocol.getClusterImagesPlot())
             # Get the image dimensions (height, width)
             height, width, _ = image.shape
             # Convert pixels to inches for the figure size (assuming 100 DPI)
@@ -106,24 +106,26 @@ class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
             # Show the image
             plt.show()
 
-    def _visualizeMovies(self, objName):
+    def _visualizeMultipleOutputs(self, objList):
         views = []
+        classView = "outputClasses"
 
-        labels = 'id _filename _samplingRate _acquisition._dosePerFrame ' \
-                 '_acquisition._doseInitial _MEAN_DOSE_PER_ANGSTROM2 _STD_DOSE_PER_ANGSTROM2 ' \
-                 '_DIFF_TO_DOSE_PER_ANGSTROM2 '
-
-        if self.protocol.hasAttribute(objName):
-            setMovies = getattr(self.protocol, objName)
-            views.append(ObjectView(
-                self._project, setMovies.getObjId(), setMovies.getFileName(),
-                viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels})) # FIXME: DO NOT RENDER THE FILENAME
+        if objList:
+            for objName in objList:
+                if self.protocol.hasAttribute(objName):
+                    outputSet = getattr(self.protocol, objName)
+                    outputId = outputSet.strId()
+                    outputFn = outputSet.getFileName()
+                    if objName == classView:
+                        views.append(ClassesView(self._project, outputId, outputFn))
+                    else:
+                        views.append(ObjectView(self._project, outputId, outputFn))
         else:
-            self.infoMessage('%s does not have %s%s'
-                             % (self.protocol.getObjLabel(), objName,
+            self.infoMessage('%s does not have output %s'
+                             % (self.protocol.getObjLabel(),
                                 getStringIfActive(self.protocol)),
                              title='Info message').show()
         return views
 
 def getStringIfActive(prot):
-    return ', yet.' if prot.isActive() else '.'
+    return 'yet.' if prot.isActive() else '.'

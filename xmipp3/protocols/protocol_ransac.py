@@ -346,6 +346,7 @@ class XmippProtRansac(ProtInitialVolume):
         mdCorr= emlib.MetaData(fnCorr)
         objId = mdCorr.firstObject()    
         CorrThresh = mdCorr.getValue(emlib.MDL_WEIGHT,objId)
+        numValid=0
         for n in range(self.nRansac.get()):        
             fnRoot="ransac%05d"%n              
             fnAngles=self._getTmpPath("angles_"+fnRoot+".xmd")    
@@ -360,7 +361,12 @@ class XmippProtRansac(ProtInitialVolume):
             md= emlib.MetaData()
             objId = md.addObject()
             md.setValue(emlib.MDL_WEIGHT,float(numInliers),objId)
+            if numInliers>0:
+                numValid+=1
             md.write("inliers@"+fnAngles,emlib.MD_APPEND)
+        if numValid==0:
+            raise ValueError("There are no valid map. Consider lowering the threshold to have more inliers. "\
+                             "Current threshold %f"%CorrThresh)
     
     def getBestVolumesStep(self):
         volumes = []

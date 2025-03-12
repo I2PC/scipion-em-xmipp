@@ -67,7 +67,7 @@ class XmippProtCL2D(ProtClassify2D):
     the original dataset into a given number of classes. """
     
     _label = 'cl2d'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     _possibleOutputs = {OUTPUTCLASSES: SetOfClasses2D,
                         OUTPUTCLASSES+CLASSES_CORE: SetOfClasses2D,
