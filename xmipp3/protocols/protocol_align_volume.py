@@ -54,7 +54,10 @@ class XmippProtAlignVolume(ProtAlignVolume):
     _label = 'align volume'
     nVols = 0
     _devStatus = PROD
-
+    OUTPUT_NAME1 = "outputVolume"
+    OUTPUT_NAME2 = "outputVolumes"
+    _possibleOutputs = {OUTPUT_NAME1: Volume,
+                        OUTPUT_NAME2: SetOfVolumes}
     
     def __init__(self, **args):
         ProtAlignVolume.__init__(self, **args)
