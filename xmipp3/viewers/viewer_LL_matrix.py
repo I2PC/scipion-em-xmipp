@@ -175,11 +175,11 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
             self.refs = [self.refs]
 
         matrix = np.load(self.protocol._getExtraPath('matrix.npy'))
-        matrix = np.subtract(matrix[partNumber1-1:partNumber2, volNumber1-1],
-                             matrix[partNumber1-1:partNumber2, volNumber2-1])
+        matrix = np.subtract(matrix[volNumber1-1, partNumber1-1:partNumber2],
+                             matrix[volNumber2-1, partNumber1-1:partNumber2])
 
         plotter = EmPlotter()
-        _ = plt.hist(matrix, bins=100)
+        _ = plt.hist(matrix, bins=30)
         plt.xlabel('Relative log likelihood')
 
         return [plotter]
