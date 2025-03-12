@@ -264,7 +264,7 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
     The volume with the best resolution should be the first one.
     The volumes should be aligned previously and they have to be equal in size"""
 
-    _label = 'volumes adjust'
+    _label = 'volume adjust'
     IMPORT_OBJ = 0
     IMPORT_FROM_FILES = 1
 
