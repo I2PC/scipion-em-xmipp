@@ -96,14 +96,19 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
                 label="Plot log likelihood matrix?",
                 help="Matrices are shown as heatmaps.")
         
+        form.addParam('displayRelativeLL', LabelParam, default=False,
+                label="Plot relative log likelihood histogram?",
+                help="Subtracted log likelihood is shown as a histogram.")
+
     def _getVisualizeDict(self):
-        return {'displayLL': self._viewLL} 
+        return {'displayLL': self._viewLL,
+                'displayRelativeLL': self._viewRelativeLL}
 
     def _viewLL(self, paramName):
-        """ visualization of log likelihood matrix for all the particles and ref volumes or the range of both selected. """   
+        """ visualization of log likelihood matrix for selected particles and ref volumes."""
         partNumber1 = self.partNumber1.get() if self.partNumber1.get() != -1 else 1
         partNumber2 = self.partNumber2.get() if self.partNumber2.get() != -1 else len(self.particles)
-        self._checkNumbers(partNumber1, partNumber2, 'particle')        
+        self._checkNumbers(partNumber1, partNumber2, 'particle')
 
         volNumber1 = self.volNumber1.get() if self.volNumber1.get() != -1 else 1
         volNumber2 = self.volNumber2.get() if self.volNumber2.get() != -1 else len(self.refs)
@@ -153,6 +158,29 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         xlocs, _ = plt.xticks()
         plt.xticks([int(loc) for loc in xlocs[:-1] if loc >= partNumber1-1],
                    [str(int(loc)+1) for loc in xlocs[:-1] if loc >= partNumber1-1])
+
+        return [plotter]
+
+    def _viewRelativeLL(self, paramName):
+        """ visualization of relative log likelihood histogram for  for selected particles and ref volumes."""
+        partNumber1 = self.partNumber1.get() if self.partNumber1.get() != -1 else 1
+        partNumber2 = self.partNumber2.get() if self.partNumber2.get() != -1 else len(self.particles)
+        self._checkNumbers(partNumber1, partNumber2, 'particle')
+
+        volNumber1 = self.volNumber1.get() if self.volNumber1.get() != -1 else 1
+        volNumber2 = self.volNumber2.get() if self.volNumber2.get() != -1 else len(self.refs)
+        self._checkNumbers(volNumber1, volNumber2, 'volume')
+
+        if isinstance(self.refs, Volume):
+            self.refs = [self.refs]
+
+        matrix = np.load(self.protocol._getExtraPath('matrix.npy'))
+        matrix = np.subtract(matrix[partNumber1-1:partNumber2, volNumber1-1],
+                             matrix[partNumber1-1:partNumber2, volNumber2-1])
+
+        plotter = EmPlotter()
+        _ = plt.hist(matrix, bins=100)
+        plt.xlabel('Relative log likelihood')
 
         return [plotter]
 
