@@ -71,8 +71,7 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         group.addParam('volNumber2', IntParam, default=-1,
                       label='Final volume number')
 
-        group = form.addGroup('Values range')
-
+        group = form.addGroup('Values range for matrix plot')
         group.addParam('normalise', BooleanParam, default=False,
                       label='Normalise LL matrix by dividing by mean value of each column?',
                       help='This may increase the contrast to help with interpretability. '
@@ -92,10 +91,11 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
                       label='Percentile alternative to vmin and vmax',
                       help='If either of the above values is -1, they will be estimated as this percentile')
 
-        form.addParam('displayLL', LabelParam, default=False,
+        group.addParam('displayLL', LabelParam, default=False,
                 label="Plot log likelihood matrix?",
                 help="Matrices are shown as heatmaps.")
         
+        form.addParam('nBins', IntParam, default=100, label='Number of bins for histogram')
         form.addParam('displayRelativeLL', LabelParam, default=False,
                 label="Plot relative log likelihood histogram?",
                 help="Subtracted log likelihood is shown as a histogram.")
@@ -179,7 +179,7 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
                              matrix[volNumber2-1, partNumber1-1:partNumber2])
 
         plotter = EmPlotter()
-        _ = plt.hist(matrix, bins=30)
+        _ = plt.hist(matrix, bins=self.nBins.get())
         plt.xlabel('Relative log likelihood')
 
         return [plotter]
