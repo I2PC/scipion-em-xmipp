@@ -71,7 +71,7 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         group.addParam('volNumber2', IntParam, default=-1,
                       label='Final volume number')
 
-        group = form.addGroup('Values range for matrix plot')
+        group = form.addGroup('Values for matrix plot')
         group.addParam('normalise', BooleanParam, default=False,
                       label='Normalise LL matrix by dividing by mean value of each column?',
                       help='This may increase the contrast to help with interpretability. '
@@ -136,7 +136,7 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
             vmin = None
 
         if self.vmax.get() != -1:
-            vmax = self.vmin.get()
+            vmax = self.vmax.get()
         elif self.percentile.get() != -1:
             vmax = np.percentile(matrix, 100-self.percentile.get())
         else:
