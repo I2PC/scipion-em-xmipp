@@ -95,8 +95,20 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
                 label="Plot log likelihood matrix?",
                 help="Matrices are shown as heatmaps.")
         
-        form.addParam('nBins', IntParam, default=100, label='Number of bins for histogram')
-        form.addParam('displayRelativeLL', LabelParam, default=False,
+        group = form.addGroup('Values for histogram')
+        group.addParam('nBins', IntParam, default=100, label='Number of bins for histogram')
+
+        group.addParam('vminH', FloatParam, default=-1,
+                      label='Minimum axis value',
+                      help='All values below this will be cropped off the axis if not -1')
+        group.addParam('vmaxH', FloatParam, default=-1,
+                      label='Maximum axis value',
+                      help='All values above this will be cropped off the axis if not -1')
+        group.addParam('percentileH', FloatParam, default=-1,
+                      label='Percentile alternative to axis vmin and vmax',
+                      help='If either of the above values is -1, they will be estimated as this percentile')
+
+        group.addParam('displayRelativeLL', LabelParam, default=False,
                 label="Plot relative log likelihood histogram?",
                 help="Subtracted log likelihood is shown as a histogram.")
 
@@ -181,6 +193,22 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         plotter = EmPlotter()
         _ = plt.hist(matrix, bins=self.nBins.get())
         plt.xlabel('Relative log likelihood')
+
+        if self.vminH.get() != -1:
+            vmin = self.vminH.get()
+        elif self.percentileH.get() != -1:
+            vmin = np.percentile(matrix, self.percentileH.get())
+        else:
+            vmin = None
+
+        if self.vmaxH.get() != -1:
+            vmax = self.vmaxH.get()
+        elif self.percentileH.get() != -1:
+            vmax = np.percentile(matrix, 100-self.percentileH.get())
+        else:
+            vmax = None
+
+        plt.xlim([vmin, vmax])
 
         return [plotter]
 
