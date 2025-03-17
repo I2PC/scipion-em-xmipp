@@ -46,6 +46,8 @@ jobs:
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
+    - name: Install Plugin
+      run: ../scipion/scipion3 install . --devel
         
     - name: Cloning Xmipp
       working-directory: ${{ github.workspace }}/../
@@ -59,7 +61,6 @@ jobs:
         if [ $(git ls-remote --heads https://github.com/I2PC/xmipp.git $BRANCH_NAME | wc -l) -eq 1 ]; then
           git checkout $BRANCH_NAME
         fi
-
       
     - name: Compile Xmipp and show log
       working-directory: ${{ github.workspace }}/../xmipp
