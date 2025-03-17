@@ -29,10 +29,20 @@ type_of_version = 'devel' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _binVersion = 'v3' # Increase it if major release is generated in xmipp
-_pluginVersion = 'v3.25.0' # Increase according to SemVer rules
+# Increase according to SemVer rules:
+# Rules with initial package version of vX.Y.Z
+# - If the change consists of fixing a bug (that does not change at all
+#   how the protocols are used), increase Z by 1.
+# - If the change is adding new functionality (extra params for a protocol,
+#   or new protocols), increase Y by 1.
+# - If the change deprecates existing functionality (remove a protocol,
+#   or a param), increase X by 1
+# - If several of the above are true, only change the biggest one applicable (
+#   for example, if a fix is made and a new protocol are included in the same
+#   pull request, increase the one related to the new protocol).
+__version__ = 'v24.23.0'
 
 _binTagVersion = _binVersion + '-Poseidon' #'devel' or _binVersion + '-Poseidon'
-_pluginTagVersion = _pluginVersion + '-Poseidon'  #'devel' or _pluginVersion + '-Poseidon'
+_pluginTagVersion = __version__ + '-Poseidon'  #'devel' or _pluginVersion + '-Poseidon'
 
 _currentDepVersion = '1.0'
-__version__ = _pluginVersion[3:] # Name of the pypi package
