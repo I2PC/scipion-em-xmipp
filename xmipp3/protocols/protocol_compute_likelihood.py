@@ -31,21 +31,23 @@ except ImportError:
     izip = zip
 
 import numpy as np
-from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, USE_GPU, GPU_LIST,
-                                        FloatParam, BooleanParam, IntParam)
-from pyworkflow.protocol import STEPS_PARALLEL
+import os
 
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Volume, SetOfParticles, SetOfClasses3D
-import pwem.emlib.metadata as md
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-
 from pwem import emlib
+import pwem.emlib.metadata as md
+
+from pyworkflow import VERSION_1_1
+from pyworkflow.protocol.params import (PointerParam, StringParam, USE_GPU, GPU_LIST,
+                                        FloatParam, BooleanParam, IntParam)
+from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
+
+
 from xmipp3.convert import setXmippAttributes
 import xmippLib
 
-import os
+
 
 class XmippProtComputeLikelihood(ProtAnalysis3D):
     """This protocol computes the likelihood of a set of particles with assigned angles when compared to a
@@ -316,8 +318,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             if count:
                 particle.setObjId(None)
                 setXmippAttributes(particle, self.lastRow,
-                                   emlib.MDL_LL, emlib.MDL_IMAGE_REF)
-                setXmippAttributes(particle, self.lastRow, emlib.MDL_IMAGE_RESIDUAL)
+                                   emlib.MDL_LL, emlib.MDL_IMAGE_REF,
+                                   emlib.MDL_IMAGE_RESIDUAL)
             try:
                 self.lastRow = next(self.iterMd)
             except StopIteration:
