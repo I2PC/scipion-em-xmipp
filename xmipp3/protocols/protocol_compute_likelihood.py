@@ -212,17 +212,17 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputPartSet)
 
-        volumes = []
+        refsDict = {}
         i=1
         if isinstance(self.inputRefs.get(), Volume):
             self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
+            refsDict[i] = self.inputRefs.get()
             i += 1
-            volumes.append(self.inputRefs.get())
         else:
             for volume in self.inputRefs.get():
                 self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
+                refsDict[i] = volume.clone()
                 i += 1
-                volumes.append(volume)
 
         self._defineOutputs(reprojections=outputSet)
         self._defineSourceRelation(self.inputParticles, outputSet)
@@ -231,18 +231,14 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         matrix = matrix.reshape((i-1,-1))
         np.save(self._getExtraPath('matrix.npy'), matrix)
 
-        classIds = np.argmax(matrix, axis=0)
-
-        refsDict = {}
-        for i, volume in enumerate(volumes):
-            refsDict[i] = volume
+        classIds = np.argmax(matrix, axis=0)+1
 
         clsSet = SetOfClasses3D.create(self._getExtraPath())
         clsSet.setImages(inputPartSet)
 
         clsDict = {}  # Dictionary to store the (classId, classSet) pairs
 
-        cls_prev = 0
+        cls_prev = 1
         rep = refsDict[cls_prev]
         for img, ref in izip(inputPartSet, classIds):
             if ref != cls_prev:
