@@ -161,8 +161,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         Ts = self.inputParticles.get().getSamplingRate()
         args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s --oprojections %s" % (fnAngles, anglesOutFn, fnVol, Ts, fnResiduals, fnProjections)
 
-        if self.resol.get()>0:
-            args+=" --max_resolution %f"%self.resol
         if self.optimizeGray:
             args+=" --optimizeGray --max_gray_scale %f"%self.maxGrayChange
 
