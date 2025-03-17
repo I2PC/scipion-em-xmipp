@@ -40,7 +40,7 @@ _binVersion = 'v3' # Increase it if major release is generated in xmipp
 # - If several of the above are true, only change the biggest one applicable (
 #   for example, if a fix is made and a new protocol are included in the same
 #   pull request, increase the one related to the new protocol).
-__version__ = 'v24.23.0'
+__version__ = 'v24.13.0'
 
 _binTagVersion = _binVersion + '-Poseidon' #'devel' or _binVersion + '-Poseidon'
 _pluginTagVersion = __version__ + '-Poseidon'  #'devel' or _pluginVersion + '-Poseidon'
