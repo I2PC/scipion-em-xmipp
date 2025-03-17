@@ -25,6 +25,11 @@
 # *
 # **************************************************************************
 
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
+
 import numpy as np
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import (PointerParam, StringParam, USE_GPU, GPU_LIST,
@@ -32,7 +37,7 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, USE_GPU, GPU_
 from pyworkflow.protocol import STEPS_PARALLEL
 
 from pwem.protocols import ProtAnalysis3D
-from pwem.objects import Volume, SetOfParticles
+from pwem.objects import Volume, SetOfParticles, SetOfClasses3D
 import pwem.emlib.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
@@ -236,17 +241,21 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         outputSet.copyItems(self.inputParticles.get(), updateItemCallback=self._processRow)
 
     def createOutputStep(self):
+        inputPartSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
-        outputSet.copyInfo(self.inputParticles.get())
+        outputSet.copyInfo(inputPartSet)
 
+        volumes = []
         i=1
         if isinstance(self.inputRefs.get(), Volume):
             self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
             i += 1
+            volumes.append(self.inputRefs.get())
         else:
-            for _ in self.inputRefs.get():
+            for volume in self.inputRefs.get():
                 self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
                 i += 1
+                volumes.append(volume)
 
         self._defineOutputs(reprojections=outputSet)
         self._defineSourceRelation(self.inputParticles, outputSet)
@@ -254,6 +263,43 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         matrix = np.array([particle._xmipp_logLikelihood.get() for particle in outputSet])
         matrix = matrix.reshape((i-1,-1))
         np.save(self._getExtraPath('matrix.npy'), matrix)
+
+        classIds = np.argmax(matrix, axis=0)
+
+        refsDict = {}
+        for i, volume in enumerate(volumes):
+            refsDict[i] = volume
+
+        clsSet = SetOfClasses3D.create(self._getExtraPath())
+        clsSet.setImages(inputPartSet)
+
+        clsDict = {}  # Dictionary to store the (classId, classSet) pairs
+
+        cls_prev = 0
+        rep = refsDict[cls_prev]
+        for img, ref in izip(inputPartSet, classIds):
+            if ref != cls_prev:
+                cls_prev = ref
+                rep = refsDict[cls_prev]
+
+            if ref not in clsDict:
+                classItem = clsSet.ITEM_TYPE.create(self._getExtraPath(), suffix=ref+1)
+                classItem.setRepresentative(rep)
+                clsDict[ref] = classItem
+                clsSet.append(classItem)
+            else:
+                classItem = clsDict[ref]
+
+            classItem.append(img)
+
+        for classItem in clsDict.values():
+            clsSet.update(classItem)
+
+        clsSet.write()
+
+        self._defineOutputs(outputClasses=clsSet)
+        self._defineSourceRelation(self.inputParticles, clsSet)
+        self._defineSourceRelation(self.inputRefs, clsSet)
 
     def _getMdRow(self, mdFile, id):
         """ To get a row. Maybe there is way to request a specific row."""
