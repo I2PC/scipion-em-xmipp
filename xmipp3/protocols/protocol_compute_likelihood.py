@@ -39,7 +39,9 @@ from pwem import emlib
 import pwem.emlib.metadata as md
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, IntParam
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, 
+                                        BooleanParam, IntParam, 
+                                        USE_GPU, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 
 
