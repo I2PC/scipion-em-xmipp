@@ -47,7 +47,7 @@ jobs:
         python -m scipioninstaller -conda -noAsk scipion
 
     - name: Install Plugin
-      run: ../scipion/scipion3 install . --devel
+      run: ../scipion/scipion3 installp -p . --devel
         
     - name: Cloning Xmipp
       working-directory: ${{ github.workspace }}/../
