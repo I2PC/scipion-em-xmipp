@@ -61,27 +61,30 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep(self.pairwiseAlignStep)
-        self._insertFunctionStep(self.synchronizationStep)
-        self._insertFunctionStep(self.createOutputStep)
+        self._insertFunctionStep(self.alignRotationsStep)
+        self._insertFunctionStep(self.synchronizeRotationsStep)
+        self._insertFunctionStep(self.applyRotationsStep)
+        self._insertFunctionStep(self.alignTraslationsStep)
+        self._insertFunctionStep(self.synchronizeTraslationsStep)
+        self._insertFunctionStep(self.applyTransformationsStep)
     
     #------------------------------- STEPS functions ---------------------------
-    def pairwiseAlignStep(self):
+    def alignRotationsStep(self):
         volumes = self._getInputVolumes()
-        rotations = np.empty((3*len(volumes), 3*len(volumes)))
-        shifts = np.empty((3, len(volumes), len(volumes)))
+        n = len(volumes)
+        rotations = np.empty((3*n, 3*n))
         
         program = 'xmipp_volume_align'
-        for index0, index1 in itertools.combinations(range(len(volumes)), r=2):
+        matrixFilename = self._getPairTransformMatrixFilename()
+        for index0, index1 in itertools.combinations(range(n), r=2):
             volume0 = volumes[index0]
             volume1 = volumes[index1]
-            matrixFilename = self._getPairTransformMatrixFilename(index0, index1)
             
             args = []
             args += ['--i1', emlib.ImageHandler.locationToXmipp(volume0.getLocation())]
             args += ['--i2', emlib.ImageHandler.locationToXmipp(volume1.getLocation())]
-            args += ['--frm'] # TODO input parameter
-            args += ['--copyGeo', matrixFilename ]
+            args += ['--frm', 0.25, 16]
+            args += ['--copyGeo', matrixFilename]
             self.runJob(program, args)
             matrix = np.loadtxt(matrixFilename).reshape(4, 4)
             
@@ -89,38 +92,35 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             end0 = start0 + 3
             start1 = 3*index1
             end1 = start1 + 3
-            rotations[start0:end0, start1:end1] = matrix[:3,:3]
-            rotations[start1:end1, start0:end0] = matrix[:3,:3].T
+            rotation = matrix[:3,:3]
             
-            shifts[:,index0,index1] = matrix[:3, 3]
-            shifts[:,index1,index0] = -matrix[:3, 3]
+            rotations[start0:end0, start1:end1] = rotation
+            rotations[start1:end1, start0:end0] = rotation.T
             
-        for index in range(len(volumes)):
+        for index in range(n):
             start = 3*index
             end = start + 3
             rotations[start:end,start:end] = np.eye(3)
-            shifts[:,index,index] = 0
             
         np.save(self._getPairwiseRotationMatrixFilename(), rotations)
-        np.save(self._getPairwiseShiftMatrixFilename(), shifts)
         
-    def synchronizationStep(self):
+    def synchronizeRotationsStep(self):
         volumes = self._getInputVolumes()
-        rotations = np.load(self._getPairwiseRotationMatrixFilename())
-        shifts = np.load(self._getPairwiseShiftMatrixFilename())
+        pairwiseRotations = np.load(self._getPairwiseRotationMatrixFilename())
         n = len(volumes)
         
-        np.save(self._getSynchronizedRotationMatrixFilename(), self._decomposeRotations(rotations, n))
-        np.save(self._getSynchronizedShiftsMatrixFilename(), self._decomposeShifts(rotations, n, np.array([64, 64, 64])))
+        rotations = self._decomposeRotations(pairwiseRotations, n)
+
+        np.save(self._getSynchronizedRotationMatrixFilename(), rotations)
         
-    def createOutputStep(self):
+    def applyRotationsStep(self):
         volumes = self._getInputVolumes()
         rotations = np.load(self._getSynchronizedRotationMatrixFilename())
         
         program = 'xmipp_transform_geometry'
         for i, volume, rotation in zip(itertools.count(), volumes, rotations):
             inputVolumeFilename = emlib.ImageHandler.locationToXmipp(volume.getLocation())
-            outputVolumeFilename = self._getTransoformedVolumeFilename(i)
+            outputVolumeFilename = self._getRotatedVolumeFilename(i)
             transform = np.zeros((4, 4))
             transform[:3, :3] = rotation.T
             transform[3, 3] = 1
@@ -131,9 +131,64 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             args += ['--matrix']
             args += [','.join(map(str, transform.flatten()))]
             self.runJob(program, args)
+        
+    def alignTraslationsStep(self):
+        n = self._getVolumeCount()
+        shifts = np.empty((3, n, n))
+        
+        program = 'xmipp_volume_align'
+        matrixFilename = self._getPairTransformMatrixFilename()
+        for index0, index1 in itertools.combinations(range(n), r=2):
             
+            args = []
+            args += ['--i1', self._getRotatedVolumeFilename(index0)]
+            args += ['--i2', self._getRotatedVolumeFilename(index1)]
+            args += ['--frm', 0.25, 16]
+            args += ['--copyGeo', matrixFilename]
+            self.runJob(program, args)
+            matrix = np.loadtxt(matrixFilename).reshape(4, 4)
             
+            shift = matrix[:3, 3]
+            
+            shifts[:,index0,index1] = shift
+            shifts[:,index1,index0] = -shift
+            
+        for index in range(n):
+            shifts[:,index,index] = 0
+        
+        np.save(self._getPairwiseShiftMatrixFilename(), shifts)
+        
+    def synchronizeTraslationsStep(self):
+        volumes = self._getInputVolumes()
+        pairwiseShifts = np.load(self._getPairwiseShiftMatrixFilename())
+        dim = volumes[0].getDimensions()
+        n = len(volumes)
+        
+        shifts = self._decomposeShifts(pairwiseShifts, n, np.array(dim))
 
+        np.save(self._getSynchronizedShiftsFilename(), shifts)
+        
+    def applyTransformationsStep(self):
+        volumes = self._getInputVolumes()
+        rotations = np.load(self._getSynchronizedRotationMatrixFilename())
+        shifts = np.load(self._getSynchronizedShiftsFilename())
+        
+        program = 'xmipp_transform_geometry'
+        for i, volume, rotation, shift in zip(itertools.count(), volumes, rotations, shifts):
+            inputVolumeFilename = emlib.ImageHandler.locationToXmipp(volume.getLocation())
+            outputVolumeFilename = self._getTransoformedVolumeFilename(i)
+            transform = np.zeros((4, 4))
+            transform[:3, :3] = rotation.T
+            transform[:3, 3] = shift
+            transform[3, 3] = 1
+            
+            args = []
+            args += ['-i', inputVolumeFilename]
+            args += ['-o', outputVolumeFilename]
+            args += ['--matrix']
+            args += [','.join(map(str, transform.flatten()))]
+            self.runJob(program, args)
+            
     # ------------------------------ INFO functions ----------------------------
     def _methods(self):
         messages = []
@@ -157,33 +212,45 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         return result
 
-    def _getPairTransformMatrixFilename(self, i: int, j: int) -> str:
-        return self._getExtraPath('transform_%06d_%06d.txt' % (i, j))
+    def _getPairTransformMatrixFilename(self) -> str:
+        return self._getTmpPath('matrix.txt')
     
     def _getPairwiseRotationMatrixFilename(self) -> str:
         return self._getExtraPath('pairwise_rotations.npy')
     
     def _getPairwiseShiftMatrixFilename(self) -> str:
-        return self._getExtraPath('pairwise_rotations.npy')
+        return self._getExtraPath('pairwise_shifts.npy')
     
     def _getSynchronizedRotationMatrixFilename(self) -> str:
         return self._getExtraPath('synchronized_rotations.npy')
     
-    def _getSynchronizedShiftsMatrixFilename(self) -> str:
+    def _getSynchronizedShiftsFilename(self) -> str:
         return self._getExtraPath('synchronized_shifts.npy')
+    
+    def _getRotatedVolumeFilename(self, i: int) -> str:
+        return self._getExtraPath('transformed_volume_%06d.mrc' % i)
     
     def _getTransoformedVolumeFilename(self, i: int) -> str:
         return self._getExtraPath('transformed_volume_%06d.mrc' % i)
+    
+    def _getVolumeCount(self) -> int:
+        volumes = self._getInputVolumes()
+        return len(volumes)
     
     def _decomposeRotations(self, pairwise: np.ndarray, n: int):
         w, v = np.linalg.eigh(pairwise)
         w = w[-3:]
         v = v[:,-3:]
         v *= np.sqrt(w)
-        return v.reshape(n, 3, 3)
+        
+        matrices = v.reshape(n, 3, 3)
+        u, _, vh = np.linalg.svd(matrices, full_matrices=True)
+        matrices = u @ vh
+        
+        return matrices
     
     def _decomposeShifts(self, pairwise: np.ndarray, n: int, dimensions: np.ndarray):
-        angles = (pairwise / dimensions[:,None,None]) * 2*np.pi
+        angles = pairwise * ((2*np.pi) / dimensions[:,None,None])
         s = np.sin(angles)
         c = np.cos(angles)
         
@@ -197,6 +264,13 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         w = w[:,-2:]
         v = v[:,:,-2:]
         v *= np.sqrt(w[:,None,:])
+        print(w)
         
-        shifts = np.arctan2(v[:,1::2,0], v[:,0::2,0])
+        phases = (v[:,0::2,0] + 1j*v[:,1::2,0]).T
+        phases /= abs(phases)
+        center = phases.mean(axis=0, keepdims=True)
+        center /= abs(center)
+        phases *= center.conj()
+        
+        shifts = -np.angle(phases) * (dimensions / (2*np.pi))
         return shifts
