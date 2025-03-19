@@ -28,18 +28,19 @@
 from typing import List
 import itertools
 import numpy as np
-import scipy
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.object import Float
 from pyworkflow.utils import getExt
-from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
+from pyworkflow.protocol.params import (PointerParam, FloatParam, GE,
                                         LEVEL_ADVANCED)
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.objects import Volume, SetOfVolumes
 from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.image as emlib
+
+import xmippLib
 
 class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     """    
@@ -57,6 +58,8 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         form.addSection(label='Input')
         form.addParam('inputVolumes', PointerParam, pointerClass=SetOfVolumes, 
                       label='Input volumes')
+        form.addParam('maxShift', FloatParam, validators=[GE(0)], default=16,
+                      label='Maximum shift (px)')
         form.addParallelSection(threads=4, mpi=0)
 
     # --------------------------- INSERT steps functions -----------------------
@@ -67,6 +70,8 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         self._insertFunctionStep(self.alignTraslationsStep)
         self._insertFunctionStep(self.synchronizeTraslationsStep)
         self._insertFunctionStep(self.applyTransformationsStep)
+        self._insertFunctionStep(self.averageVolumesStep)
+        self._insertFunctionStep(self.createOutputStep)
     
     #------------------------------- STEPS functions ---------------------------
     def alignRotationsStep(self):
@@ -83,7 +88,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             args = []
             args += ['--i1', emlib.ImageHandler.locationToXmipp(volume0.getLocation())]
             args += ['--i2', emlib.ImageHandler.locationToXmipp(volume1.getLocation())]
-            args += ['--frm', 0.25, 16]
+            args += ['--frm', 0.25, self.maxShift]
             args += ['--copyGeo', matrixFilename]
             self.runJob(program, args)
             matrix = np.loadtxt(matrixFilename).reshape(4, 4)
@@ -143,7 +148,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             args = []
             args += ['--i1', self._getRotatedVolumeFilename(index0)]
             args += ['--i2', self._getRotatedVolumeFilename(index1)]
-            args += ['--frm', 0.25, 16]
+            args += ['--frm', 0.25, self.maxShift]
             args += ['--copyGeo', matrixFilename]
             self.runJob(program, args)
             matrix = np.loadtxt(matrixFilename).reshape(4, 4)
@@ -189,6 +194,34 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             args += [','.join(map(str, transform.flatten()))]
             self.runJob(program, args)
             
+    def averageVolumesStep(self):
+        n = self._getVolumeCount()
+        
+        volume = xmippLib.Image()
+        average = 0
+        for i in range(n):
+            volume.read(self._getTransoformedVolumeFilename(i))
+            average += volume.getData()
+        average /= n
+        
+        volume.setData(average)
+        volume.write(self._getAverageFilename())
+                    
+    def createOutputStep(self):
+        samplingRate = self._getSamplingRate()
+        volumes = self._createSetOfVolumes()
+        volumes.setSamplingRate(samplingRate)
+        n = self._getVolumeCount()
+        
+        for i in range(n):
+            volume = Volume(location=self._getTransoformedVolumeFilename(i))
+            volumes.append(volume)
+        
+        average = Volume(location=self._getAverageFilename())
+        average.setSamplingRate(samplingRate)
+        
+        self._defineOutputs(volumes=volumes, average=average)
+            
     # ------------------------------ INFO functions ----------------------------
     def _methods(self):
         messages = []
@@ -202,7 +235,6 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         summary = []
         return summary
 
-
     #--------------------------- UTILS functions -------------------------------
     def _getInputVolumes(self) -> List[Volume]:
         result = []
@@ -212,6 +244,13 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         return result
 
+    def _getSamplingRate(self) -> float:
+        return self.inputVolumes.get().getSamplingRate()
+            
+    def _getVolumeCount(self) -> int:
+        volumes = self._getInputVolumes()
+        return len(volumes)
+    
     def _getPairTransformMatrixFilename(self) -> str:
         return self._getTmpPath('matrix.txt')
     
@@ -228,14 +267,13 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         return self._getExtraPath('synchronized_shifts.npy')
     
     def _getRotatedVolumeFilename(self, i: int) -> str:
-        return self._getExtraPath('transformed_volume_%06d.mrc' % i)
+        return self._getExtraPath('rotated_volume_%06d.mrc' % i)
     
     def _getTransoformedVolumeFilename(self, i: int) -> str:
         return self._getExtraPath('transformed_volume_%06d.mrc' % i)
     
-    def _getVolumeCount(self) -> int:
-        volumes = self._getInputVolumes()
-        return len(volumes)
+    def _getAverageFilename(self):
+        return self._getExtraPath('average.mrc')
     
     def _decomposeRotations(self, pairwise: np.ndarray, n: int):
         w, v = np.linalg.eigh(pairwise)

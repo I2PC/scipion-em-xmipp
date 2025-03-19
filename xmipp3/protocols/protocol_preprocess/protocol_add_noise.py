@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-from os.path import basename
+from os.path import basename, relpath
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils import removeExt
@@ -175,17 +175,16 @@ class XmippProtAddNoiseVolumes(XmippProtAddNoise):
     def convertInputStep(self):
         pass
         
-    def _getNoisyOutputPath(self, fnvol):
-        fnNoisy = self._getExtraPath(removeExt(basename(fnvol)) + '_Noisy.mrc')
-        return fnNoisy
+    def _getNoisyOutputPath(self, vol):
+        return self._getExtraPath('noisy_volume_%06d.mrc' % vol.getObjId())
 
     def _addNoisetoVolumeStep(self, kindNoise, noiseParams, vol):
         fnvol = vol.getFileName()
-        fnNoisy = self._getNoisyOutputPath(fnvol)
+        fnNoisy = self._getNoisyOutputPath(vol)
         params = " -i %s --type %s %s -o %s" % (fnvol, kindNoise, noiseParams, 
                                                     fnNoisy)
         self.runJob('xmipp_transform_add_noise', params, numberOfMpi=1)
-        self.runJob('xmipp_image_header', '-i %s --sampling_rate %f'%(fnvol, vol.getSamplingRate()), numberOfMpi=1)
+        self.runJob('xmipp_image_header', '-i %s --sampling_rate %f'%(fnNoisy, vol.getSamplingRate()), numberOfMpi=1)
 
     def addNoiseStep(self):
         kindNoise, noiseParams = self._getTypeOfNoise()
@@ -222,8 +221,7 @@ class XmippProtAddNoiseVolumes(XmippProtAddNoise):
             
 #         self._defineTransformRelation(self.inputVolumes, self.outputVol)
     def _updateNoisyPath(self, vol, row):
-        fnvol = vol.getFileName()
-        fnOutVol = self._getNoisyOutputPath(fnvol)
+        fnOutVol = self._getNoisyOutputPath(vol)
         vol.setFileName(fnOutVol)
         
     def _isSingleVolume(self):
