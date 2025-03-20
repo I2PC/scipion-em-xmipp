@@ -155,6 +155,12 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         volume.setData(average)
         volume.write(self._getAverageFilename())
+        
+        program = 'xmipp_image_header'
+        args = []
+        args += ['-i', self._getAverageFilename()]
+        args += ['--sampling_rate', self._getSamplingRate()]
+        self.runJob(program, args)
                     
     def createOutputStep(self):
         samplingRate = self._getSamplingRate()
