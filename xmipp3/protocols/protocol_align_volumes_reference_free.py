@@ -255,7 +255,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         return result
 
     def _getSamplingRate(self) -> float:
-        return self.inputVolumes[0].get().setSamplingRate()
+        return self.inputVolumes[0].get().getSamplingRate()
             
     def _getVolumeCount(self) -> int:
         count = 0
