@@ -225,6 +225,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
 
     def _validate(self):
         errors = []
+        # TODO validate that all volumes have the same sampling rate
         return errors
 
     def _summary(self):
