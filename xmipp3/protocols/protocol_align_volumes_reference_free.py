@@ -29,11 +29,7 @@ from typing import List
 import itertools
 import numpy as np
 
-from pyworkflow import VERSION_2_0
-from pyworkflow.object import Float
-from pyworkflow.utils import getExt
-from pyworkflow.protocol.params import (PointerParam, FloatParam, GE,
-                                        LEVEL_ADVANCED)
+from pyworkflow.protocol.params import (MultiPointerParam, FloatParam, GE)
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.objects import Volume, SetOfVolumes
@@ -56,10 +52,10 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputVolumes', PointerParam, pointerClass=SetOfVolumes, 
-                      label='Input volumes')
-        form.addParam('maxShift', FloatParam, validators=[GE(0)], default=16,
-                      label='Maximum shift (px)')
+        form.addParam('inputVolumes', MultiPointerParam, label='Input volumes',
+                      pointerClass=[SetOfVolumes, Volume], minNumObjects=1 )
+        form.addParam('maxShift', FloatParam, label='Maximum shift (px)',
+                      validators=[GE(0)], default=16 )
         form.addParallelSection(threads=4, mpi=0)
 
     # --------------------------- INSERT steps functions -----------------------
@@ -239,17 +235,39 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     def _getInputVolumes(self) -> List[Volume]:
         result = []
         
-        for volume in self.inputVolumes.get():
-            result.append(volume.clone())
+        objId = 1
+        for pointer in self.inputVolumes:
+            obj = pointer.get()
+            if isinstance(obj, Volume):
+                volume: Volume = obj.clone()
+                volume.setObjId(objId)
+                result.append(volume)
+                objId += 1
+            elif isinstance(obj, SetOfVolumes):
+                volumes: SetOfVolumes = obj
+                for volume in volumes:
+                    volume = volume.clone()
+                    volume.setObjId(objId)
+                    result.append(volume)
+                    objId += 1
         
         return result
 
     def _getSamplingRate(self) -> float:
-        return self.inputVolumes.get().getSamplingRate()
+        return self.inputVolumes[0].get().setSamplingRate()
             
     def _getVolumeCount(self) -> int:
-        volumes = self._getInputVolumes()
-        return len(volumes)
+        count = 0
+        
+        for pointer in self.inputVolumes:
+            obj = pointer.get()
+            if isinstance(obj, Volume):
+                count += 1
+            elif isinstance(obj, SetOfVolumes):
+                volumes: SetOfVolumes = obj
+                count += len(volumes)
+        
+        return count
     
     def _getPairTransformMatrixFilename(self) -> str:
         return self._getTmpPath('matrix.txt')
@@ -302,7 +320,6 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         w = w[:,-2:]
         v = v[:,:,-2:]
         v *= np.sqrt(w[:,None,:])
-        print(w)
         
         phases = (v[:,0::2,0] + 1j*v[:,1::2,0]).T
         phases /= abs(phases)
@@ -312,3 +329,4 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         shifts = -np.angle(phases) * (dimensions / (2*np.pi))
         return shifts
+    
