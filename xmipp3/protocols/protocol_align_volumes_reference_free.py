@@ -61,15 +61,14 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep(self.alignRotationsStep)
-        self._insertFunctionStep(self.synchronizeRotationsStep)
-        self._insertFunctionStep(self.synchronizeTraslationsStep)
+        self._insertFunctionStep(self.pairwiseAlignStep)
+        self._insertFunctionStep(self.synchronizeStep)
         self._insertFunctionStep(self.applyTransformationsStep)
         self._insertFunctionStep(self.averageVolumesStep)
         self._insertFunctionStep(self.createOutputStep)
     
     #------------------------------- STEPS functions ---------------------------
-    def alignRotationsStep(self):
+    def pairwiseAlignStep(self):
         volumes = self._getInputVolumes()
         n = len(volumes)
         rotations = np.empty((3*n, 3*n))
@@ -111,59 +110,31 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         np.save(self._getPairwiseRotationMatrixFilename(), rotations)
         np.save(self._getPairwiseShiftMatrixFilename(), shifts)
         
-    def synchronizeRotationsStep(self):
-        volumes = self._getInputVolumes()
+    def synchronizeStep(self):
+        n = self._getVolumeCount()
         pairwiseRotations = np.load(self._getPairwiseRotationMatrixFilename())
-        n = len(volumes)
+        pairwiseShifts = np.load(self._getPairwiseShiftMatrixFilename())
         
         rotations = self._decomposeRotations(pairwiseRotations, n)
-
-        np.save(self._getSynchronizedRotationMatrixFilename(), rotations)
+        shifts = self._decomposeShifts(pairwiseShifts, rotations)
         
-    def synchronizeTraslationsStep(self):
-        pairwiseShifts = np.load(self._getPairwiseShiftMatrixFilename())
-        rotations = np.load(self._getSynchronizedRotationMatrixFilename())
-        n = self._getVolumeCount()
-
-        nCols = 3*n
-        nRows = 3*n*(n-1) // 2
-        desing = scipy.sparse.lil_array((nRows, nCols))
-        y = np.empty(nRows)
-        for i, (index0, index1) in enumerate(itertools.combinations(range(n), r=2)):
-            startRow = 3*i
-            endRow = startRow + 3
-            start0 = 3*index0
-            end0 = start0 + 3
-            start1 = 3*index1
-            end1 = start1 + 3
-            
-            desing[startRow:endRow,start0:end0] = -rotations[index1] @ rotations[index0].T
-            desing[startRow:endRow,start1:end1] = np.eye(3)
-            y[startRow:endRow] = pairwiseShifts[:,index0,index1]
-        desing = desing.tocoo()
+        transforms = np.empty((n, 4, 4))
+        transforms[:,:3,:3] = rotations
+        transforms[:,:3,3] = shifts
+        transforms[:,3,:3] = 0
+        transforms[:,3,3] = 1
         
-        x = scipy.sparse.linalg.lsqr(desing, y)[0]
-        shifts = x.reshape((n, 3))
-        print(shifts)
+        np.save(self._getTransformationMatrixFilename(), transforms)
         
-        np.save(self._getSynchronizedShiftsFilename(), shifts)
-        
-    def applyRotationsStep(self):
-        pass
-    
     def applyTransformationsStep(self):
         volumes = self._getInputVolumes()
-        rotations = np.load(self._getSynchronizedRotationMatrixFilename())
-        shifts = np.load(self._getSynchronizedShiftsFilename())
+        transforms = np.load(self._getTransformationMatrixFilename())
+        transforms = np.linalg.inv(transforms)
         
         program = 'xmipp_transform_geometry'
-        for i, volume, rotation, shift in zip(itertools.count(), volumes, rotations, shifts):
+        for i, volume, transform in zip(itertools.count(), volumes, transforms):
             inputVolumeFilename = emlib.ImageHandler.locationToXmipp(volume.getLocation())
             outputVolumeFilename = self._getTransoformedVolumeFilename(i)
-            transform = np.zeros((4, 4))
-            transform[:3, :3] = rotation.T
-            transform[:3, 3] = -(rotation.T @ shift)
-            transform[3, 3] = 1
             
             args = []
             args += ['-i', inputVolumeFilename]
@@ -261,11 +232,8 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     def _getPairwiseShiftMatrixFilename(self) -> str:
         return self._getExtraPath('pairwise_shifts.npy')
     
-    def _getSynchronizedRotationMatrixFilename(self) -> str:
-        return self._getExtraPath('synchronized_rotations.npy')
-    
-    def _getSynchronizedShiftsFilename(self) -> str:
-        return self._getExtraPath('synchronized_shifts.npy')
+    def _getTransformationMatrixFilename(self) -> str:
+        return self._getExtraPath('transforms.npy')
     
     def _getRotatedVolumeFilename(self, i: int) -> str:
         return self._getExtraPath('rotated_volume_%06d.mrc' % i)
@@ -288,28 +256,28 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         return matrices
     
-    def _decomposeShifts(self, pairwise: np.ndarray, n: int, dimensions: np.ndarray):
-        angles = pairwise * ((2*np.pi) / dimensions[:,None,None])
-        s = np.sin(angles)
-        c = np.cos(angles)
+    def _decomposeShifts(self, pairwise: np.ndarray, rotations: np.ndarray):
+        n = len(rotations)
+        nCols = 3*n
+        nRows = 3*n*(n-1) // 2
+
+        desing = scipy.sparse.lil_array((nRows, nCols))
+        y = np.empty(nRows)
+        for i, (index0, index1) in enumerate(itertools.combinations(range(n), r=2)):
+            startRow = 3*i
+            endRow = startRow + 3
+            start0 = 3*index0
+            end0 = start0 + 3
+            start1 = 3*index1
+            end1 = start1 + 3
+            
+            desing[startRow:endRow,start0:end0] = -rotations[index1] @ rotations[index0].T
+            desing[startRow:endRow,start1:end1] = np.eye(3)
+            y[startRow:endRow] = pairwise[:,index0,index1]
+        desing = desing.tocoo()
         
-        matrix = np.empty((3, 2*n, 2*n))
-        matrix[:, 0::2, 0::2] = c
-        matrix[:, 0::2, 1::2] = -s
-        matrix[:, 1::2, 0::2] = s
-        matrix[:, 1::2, 1::2] = c
+        x = scipy.sparse.linalg.lsqr(desing, y)[0]
+        shifts = x.reshape((n, 3))
         
-        w, v = np.linalg.eigh(matrix)
-        w = w[:,-2:]
-        v = v[:,:,-2:]
-        v *= np.sqrt(w[:,None,:])
-        
-        phases = (v[:,0::2,0] + 1j*v[:,1::2,0]).T
-        phases /= abs(phases)
-        center = phases.mean(axis=0, keepdims=True)
-        center /= abs(center)
-        phases *= center.conj()
-        
-        shifts = -np.angle(phases) * (dimensions / (2*np.pi))
         return shifts
     
