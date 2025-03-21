@@ -33,17 +33,14 @@ import numpy as np
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, EnumParam,
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, IntParam, GPU_LIST)
 from pyworkflow.utils.path import (moveFile)
 from pwem.protocols import ProtRefine3D
 from pwem.objects import SetOfVolumes, Volume
-from pwem.emlib.metadata import getFirstRow, getSize
 from pyworkflow.object import Float
-from pyworkflow.utils.utils import getFloatListFromValues
 from pyworkflow.utils import getExt
 from pwem.emlib.image import ImageHandler
-import pwem.emlib.metadata as md
 import xmipp3
 import xmippLib
 
@@ -83,8 +80,11 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addSection(label='Input')
 
         form.addParam('inputParticles', PointerParam, label="Experimental Images", important=True,
-                      pointerClass='SetOfParticles, SetOfClasses2D, SetOfAverages', allowsNull=True,
+                      pointerClass='SetOfParticles, SetOfClasses2D, SetOfAverages',
                       help='Select a set of images at full resolution')
+        form.addParam('inputVolumes', PointerParam, label="Reference volumes", allowsNull=True,
+                      pointerClass='Volume', expertLevel=LEVEL_ADVANCED,
+                      help='Reference volume')
         form.addParam('classes', IntParam, default="1",
                       label='Number of classes',
                       help='The number of classes for a multi reference refinement')
@@ -135,9 +135,14 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn)
         self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get())
-        for cl in range (self.classes):   
+        for cl in range (self.classes):
             refVol = self._getTmpPath('randomVol_class%s.mrc'%cl)+ ':mrc'
-            self._insertFunctionStep('initRandomVol', self.imgsOrigXmd, self._getTmpPath('random_class%s.xmd'%(cl)), refVol)
+            if self.inputVolumes.get() is None:
+                self._insertFunctionStep('initRandomVol', self.imgsOrigXmd, self._getTmpPath('random_class%s.xmd'%(cl)), refVol)
+            else:
+                img=ImageHandler()
+                vol=self.inputVolumes.get()
+                img.convert(vol, refVol)
         
         
         for iter in range(self.iterations):
@@ -145,12 +150,16 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
 
             if iter < 10:
                 angleGallery, angle, shift, maxShift = 12, 8, 3, 12
+                # angleGallery, angle, shift, maxShift = 12, 8, 4, 20
             elif iter < 14:
                 angleGallery, angle, shift, maxShift = 8, 6, 3, 12
+                # angleGallery, angle, shift, maxShift = 8, 6, 3, 12
             elif iter < 17:
                 angleGallery, angle, shift, maxShift = 6, 5, 3, 12
+                # angleGallery, angle, shift, maxShift = 6, 5, 3, 9
             elif iter < 20:
                 angleGallery, angle, shift, maxShift = 5, 5, 3, 12
+                # angleGallery, angle, shift, maxShift = 5, 5, 2, 6
                 
                 
             
@@ -159,12 +168,13 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                 
 
             if self.classify and iter > 3:
-                    saveClass = True
+                saveClass = True
             else:
                 saveClass = False
-            
+            # saveClass = False
         
             applyShift = False
+            # applyShift = True
                           
             refVol = [None] * self.classes  
             refIm = [None] * self.classes
@@ -195,8 +205,6 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                     refIm[cl] = self._getTmpPath('references_class%s'%(cl))
                     select[cl] = self._getExtraPath('output_select_iter%s_class%s.xmd'%(iter+1, cl))
             
-            # resol = 20 - ( (iter+1)/2 )
-            # self._insertFunctionStep("pcaTraining", self.imgsFn, resol)
                 
             for cl in range(self.classes):
                 self._insertFunctionStep("createGallery", angleGallery, refVol[cl], refIm[cl])
@@ -204,6 +212,8 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
             self._insertFunctionStep("globalAlign", inputXmd, refIm[cl], outXmd[0], angle, shift, maxShift, applyShift, saveClass, radius, iter)   
             
             for cl in range(self.classes):
+                # self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get())
+
                 if saveClass or iter < 5:
                     self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get())
                 else:
@@ -267,6 +277,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         env=self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
         self.runJob("xmipp_initVol_pca", args, numberOfMpi=1, env=env)
+        # self.runJob("xmipp_global_align", args, numberOfMpi=1, env=env)
         # self._extract_select_xmd(iter)
         #Select class and create xmds
         if saveClass:
@@ -366,10 +377,10 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         return resolution
     
     def _filterVolume(self, input, output, resolution):
-        res = self.sampling / resolution
-        raisedw = self.sampling / 100
-        # args = ' -i %s -o %s --fourier low_pass %s --sampling %s -v 0'%(input, output, resolution, self.sampling)
-        args = ' -i %s -o %s --fourier low_pass %s %s -v 0'%(input, output, res, raisedw)
+        # res = self.sampling / resolution
+        # raisedw = self.sampling / 100
+        args = ' -i %s -o %s --fourier low_pass %s --sampling %s -v 0'%(input, output, resolution, self.sampling)
+        # args = ' -i %s -o %s --fourier low_pass %s %s -v 0'%(input, output, res, raisedw)
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
         
     def _positivity(self, input):
