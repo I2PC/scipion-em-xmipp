@@ -27,6 +27,7 @@
 
 from typing import List
 import itertools
+import multiprocessing.dummy as mp
 import numpy as np
 import scipy.sparse
 
@@ -71,21 +72,29 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     def pairwiseAlignStep(self):
         volumes = self._getInputVolumes()
         n = len(volumes)
-        rotations = np.empty((3*n, 3*n))
-        shifts = np.empty((3, n, n))
         
+        pool = mp.Pool(processes=int(self.numberOfThreads))
         program = 'xmipp_volume_align'
-        matrixFilename = self._getPairTransformMatrixFilename()
+        futures = []
         for index0, index1 in itertools.combinations(range(n), r=2):
             volume0 = volumes[index0]
             volume1 = volumes[index1]
+            matrixFilename = self._getPairTransformMatrixFilename(index0, index1)
             
             args = []
             args += ['--i1', emlib.ImageHandler.locationToXmipp(volume0.getLocation())]
             args += ['--i2', emlib.ImageHandler.locationToXmipp(volume1.getLocation())]
             args += ['--frm', 0.25, self.maxShift]
             args += ['--copyGeo', matrixFilename]
-            self.runJob(program, args)
+            futures.append(pool.apply_async(self.runJob, args=(program, args)))
+
+        for future in futures:
+            future.wait()
+        
+        rotations = np.empty((3*n, 3*n))
+        shifts = np.empty((3, n, n))
+        for index0, index1 in itertools.combinations(range(n), r=2):
+            matrixFilename = self._getPairTransformMatrixFilename(index0, index1)
             matrix = np.loadtxt(matrixFilename).reshape(4, 4)
             
             start0 = 3*index0
@@ -115,8 +124,11 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         pairwiseRotations = np.load(self._getPairwiseRotationMatrixFilename())
         pairwiseShifts = np.load(self._getPairwiseShiftMatrixFilename())
         
-        rotations = self._decomposeRotations(pairwiseRotations, n)
-        shifts = self._decomposeShifts(pairwiseShifts, rotations)
+        rotations, w = self._decomposeRotations(pairwiseRotations, n)
+        shifts, err = self._decomposeShifts(pairwiseShifts, rotations)
+
+        print('Rotation consistency: %f' % (w.sum() / (3*n)))
+        print('Shift consistency: %f' % err)
         
         transforms = np.empty((n, 4, 4))
         transforms[:,:3,:3] = rotations
@@ -229,8 +241,8 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         return count
     
-    def _getPairTransformMatrixFilename(self) -> str:
-        return self._getTmpPath('matrix.txt')
+    def _getPairTransformMatrixFilename(self, index0: int, index1: int) -> str:
+        return self._getTmpPath('matrix_%06d_%06d.txt' % (index0, index1))
     
     def _getPairwiseRotationMatrixFilename(self) -> str:
         return self._getExtraPath('pairwise_rotations.npy')
@@ -260,7 +272,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         u, _, vh = np.linalg.svd(matrices, full_matrices=True)
         matrices = u @ vh
         
-        return matrices
+        return matrices, w
     
     def _decomposeShifts(self, pairwise: np.ndarray, rotations: np.ndarray):
         n = len(rotations)
@@ -282,8 +294,10 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             y[startRow:endRow] = pairwise[:,index0,index1]
         desing = desing.tocoo()
         
-        x = scipy.sparse.linalg.lsqr(desing, y)[0]
+        result = scipy.sparse.linalg.lsqr(desing, y)
+        x = result[0]
+        err = result[3]
         shifts = x.reshape((n, 3))
         
-        return shifts
+        return shifts, err
     
