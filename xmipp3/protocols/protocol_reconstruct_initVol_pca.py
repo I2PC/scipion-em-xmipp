@@ -212,12 +212,12 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
             self._insertFunctionStep("globalAlign", inputXmd, refIm[cl], outXmd[0], angle, shift, maxShift, applyShift, saveClass, radius, iter)   
             
             for cl in range(self.classes):
-                # self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get(), radius)
+                # self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get())
 
                 if saveClass or iter < 5:
-                    self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get(), radius)
+                    self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get())
                 else:
-                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, self.resolution.get(), radius)
+                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, self.resolution.get())
                     
 
         # self._insertFunctionStep("createOutput", iter)
@@ -285,7 +285,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         elif iter > 4:    
             self._extract_select_xmd(iter)
         
-    def reconstructVolume(self, input, output, iter, resol, radius):
+    def reconstructVolume(self, input, output, iter, resol):
         
         program = 'xmipp_cuda_reconstruct_fourier'    
         args = '-i %s -o %s --sym %s  --max_resolution %s  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
@@ -300,7 +300,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         #positivity
         self._positivity(output)
         #mask
-        self._applyCicularMask(output, radius)      
+        self._applyCicularMask(output)      
     
 
     def createOutput(self, iter):      
@@ -388,9 +388,9 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         args = '-i %s --select below 0 --substitute value 0'%input
         self.runJob(program,args,numberOfMpi=1)
         
-    def _applyCicularMask(self, input, radius):
+    def _applyCicularMask(self, input):
         program = 'xmipp_transform_mask'
-        args = '-i %s --mask circular -%s'%(input, radius)
+        args = '-i %s --mask circular -50'%input
         self.runJob(program,args,numberOfMpi=1)
         
     def _applyBlurring(self, input):
