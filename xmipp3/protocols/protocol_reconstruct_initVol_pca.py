@@ -217,7 +217,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                 if saveClass or iter < 5:
                     self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get(), radius)
                 else:
-                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, self.resolution.get(),radius)
+                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, self.resolution.get(), radius)
                     
 
         # self._insertFunctionStep("createOutput", iter)
@@ -390,7 +390,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
     def _applyCicularMask(self, input, radius):
         program = 'xmipp_transform_mask'
-        args = '-i %s --mask circular %s'%(input,radius) 
+        args = '-i %s --mask circular -%s'%(input, radius)
         self.runJob(program,args,numberOfMpi=1)
         
     def _applyBlurring(self, input):
