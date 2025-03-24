@@ -72,6 +72,9 @@ class XmippProtAlignVolume(ProtAlignVolume):
                            'to be aligned againt the reference volume.')
         form.addParam('computeAvg', params.BooleanParam, label='Create average', default=False,
                       help='Average all the volumes once aligned')
+        form.addParam('considerRefForAvg', params.BooleanParam, label='Consider reference for average', default=False,
+                      condition='computeAvg',
+                      help='Average all the volumes once aligned')
         
         group1 = form.addGroup('Mask')
         group1.addParam('applyMask', params.BooleanParam, default=False, 
@@ -201,7 +204,15 @@ class XmippProtAlignVolume(ProtAlignVolume):
 
         vols = []
         idx=1
-        Vavg=None
+        
+        if self.considerRefForAvg:
+            fnRefVol = getImageLocation(self.inputReference.get())
+            Vavg=xmippLib.Image(fnRefVol).getData()
+            count=1
+        else:
+            Vavg=None
+            count=0
+            
         for vol in self._iterInputVolumes():
             outVol = Volume()
             fnOutVol = self._getExtraPath("vol%02d.mrc"%idx)
@@ -227,6 +238,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
                     Vavg=Vi
                 else:
                     Vavg+=Vi
+                count += 1
 
             idx+=1
 
@@ -241,7 +253,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
             outputArgs = {'outputVolume': vols[0]}
         
         if self.computeAvg:
-            Vavg/=len(vols)
+            Vavg/=count
             Vsave=xmippLib.Image()
             Vsave.setData(Vavg)
             fnAvg=self._getExtraPath("averageVolume.mrc")
