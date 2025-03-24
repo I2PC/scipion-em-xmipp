@@ -7,10 +7,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    
-    # Avoid send statistics
-    env:
-      SEND_INSTALLATION_STATISTICS: OFF
 
     steps:    
     - name: Checkout repository
@@ -63,6 +59,8 @@ jobs:
           git checkout $BRANCH_NAME
         fi
 
+      # Do not send installation statistics
+      # Build with tests
     - name: Set config variables
       working-directory: ${{ github.workspace }}/../xmipp
       run: echo "SEND_INSTALLATION_STATISTICS=OFF\nBUILD_TESTING=ON" > xmipp.conf
