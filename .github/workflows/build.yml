@@ -48,7 +48,7 @@ jobs:
 
     - name: Install Plugin
       working-directory: ${{ github.workspace }}/../
-      run: scipion/scipion3 installp -p scipion-em-xmipp/ --devel
+      run: scipion/scipion3 pip install ./scipion-em-xmipp
         
     - name: Cloning Xmipp
       working-directory: ${{ github.workspace }}/../
