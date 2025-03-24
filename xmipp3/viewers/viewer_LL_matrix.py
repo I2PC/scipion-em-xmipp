@@ -120,11 +120,15 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         """ visualization of log likelihood matrix for selected particles and ref volumes."""
         partNumber1 = self.partNumber1.get() if self.partNumber1.get() != -1 else 1
         partNumber2 = self.partNumber2.get() if self.partNumber2.get() != -1 else len(self.particles)
-        self._checkNumbers(partNumber1, partNumber2, 'particle')
+        x = self._checkNumbers(partNumber1, partNumber2, 'particle')
+        if x is not True:
+            return x
 
         volNumber1 = self.volNumber1.get() if self.volNumber1.get() != -1 else 1
         volNumber2 = self.volNumber2.get() if self.volNumber2.get() != -1 else len(self.refs)
-        self._checkNumbers(volNumber1, volNumber2, 'volume')
+        x = self._checkNumbers(volNumber1, volNumber2, 'volume')
+        if x is not True:
+            return x
 
         if isinstance(self.refs, Volume):
             self.refs = [self.refs]
@@ -132,9 +136,6 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         matrix = np.load(self.protocol._getExtraPath('matrix.npy'))
 
         if self.normalise.get():
-            if self.subtract.get():
-                return [self.errorMessage("Please select normalise or subtract, not both",
-                                        title=_invalidInputStr)]
             matrix = np.divide(matrix, np.mean(matrix, axis=0)) * np.sign(np.mean(matrix))
 
         elif self.subtract.get():
@@ -177,11 +178,15 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         """ visualization of relative log likelihood histogram for  for selected particles and ref volumes."""
         partNumber1 = self.partNumber1.get() if self.partNumber1.get() != -1 else 1
         partNumber2 = self.partNumber2.get() if self.partNumber2.get() != -1 else len(self.particles)
-        self._checkNumbers(partNumber1, partNumber2, 'particle')
+        x = self._checkNumbers(partNumber1, partNumber2, 'particle')
+        if x is not True:
+            return x
 
         volNumber1 = self.volNumber1.get() if self.volNumber1.get() != -1 else 1
         volNumber2 = self.volNumber2.get() if self.volNumber2.get() != -1 else len(self.refs)
-        self._checkNumbers(volNumber1, volNumber2, 'volume')
+        x = self._checkNumbers(volNumber1, volNumber2, 'volume')
+        if x is not True:
+            return x
 
         if isinstance(self.refs, Volume):
             self.refs = [self.refs]
@@ -214,6 +219,10 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
 
 
     def _checkNumbers(self, number1, number2, string):
+
+        if self.normalise.get() and self.subtract.get():
+                return [self.errorMessage("Please select normalise or subtract, not both",
+                                        title=_invalidInputStr)]
 
         if string == 'particle':
             items = self.particles
@@ -255,3 +264,5 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
                                          "Display the output {0}s to see "
                                          "the availables ones.".format(string, number2),
                                          title=_invalidInputStr)]
+
+        return True
