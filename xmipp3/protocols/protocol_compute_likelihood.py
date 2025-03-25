@@ -86,6 +86,10 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='This radius should be larger than the particle radius to create a ring for estimating noise\n'
                             'If left at -1, this will take half the image width.')
 
+        form.addParam('newProg', BooleanParam, label="Use new program: ", default=True, expertLevel=LEVEL_ADVANCED,
+                      help='Whether to use new program xmipp_continuous_create_residuals. This removes the low-pass filter and '
+                      'applies transformations to the projection, not the original image.')
+
         form.addParam('optimizeGray', BooleanParam, label="Optimize gray: ", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Optimize the gray value between the map reprojection and the experimental image')
         form.addParam('maxGrayChange', FloatParam, label="Max. gray change: ", default=0.99, expertLevel=LEVEL_ADVANCED,
@@ -152,8 +156,12 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     def produceResidualsStep(self, fnVol, i):
         fnAngles = self._getExtraPath("images.xmd")
 
-        anglesOutFn = self._getExtraPath("anglesCont%03d.xmd"%i)
-        prog = "xmipp_continuous_create_residuals"
+        if self.newProg:
+            anglesOutFn = self._getExtraPath("anglesCont%03d.xmd"%i)
+            prog = "xmipp_continuous_create_residuals"
+        else:
+            anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
+            prog = "xmipp_angular_continuous_assign2"
 
         fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
         fnProjections = self._getExtraPath("projections%03d.stk"%i)
