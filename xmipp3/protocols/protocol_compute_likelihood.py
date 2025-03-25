@@ -39,8 +39,7 @@ from pwem import emlib
 import pwem.emlib.metadata as md
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, USE_GPU, GPU_LIST,
-                                        FloatParam, BooleanParam, IntParam)
+from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, IntParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 
 
@@ -87,13 +86,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='This radius should be larger than the particle radius to create a ring for estimating noise\n'
                             'If left at -1, this will take half the image width.')
 
-        form.addParam('newProg', BooleanParam, label="Use new program: ", default=True, expertLevel=LEVEL_ADVANCED,
-                      help='Whether to use new program xmipp_continuous_create_residuals. This removes the low-pass filter and '
-                      'applies transformations to the projection, not the original image.')
-
-        form.addParam('resol', FloatParam, label="Filter at resolution: ", default=0, expertLevel=LEVEL_ADVANCED,
-                      help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
-                           'Value 0 implies no filtering.', condition='newProg==False')
         form.addParam('optimizeGray', BooleanParam, label="Optimize gray: ", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Optimize the gray value between the map reprojection and the experimental image')
         form.addParam('maxGrayChange', FloatParam, label="Max. gray change: ", default=0.99, expertLevel=LEVEL_ADVANCED,
@@ -104,16 +96,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='Whether to print terms 1 and 2, LL and noise variance')
 
         form.addParallelSection(threads=2, mpi=2)
-
-        form.addHidden(USE_GPU, BooleanParam, default=False,
-                       label="Use GPU for execution",
-                       help="This protocol has both CPU and GPU implementation.\
-                       Select the one you want to use. Be aware that the GPU program is new and may have problems")
-
-        form.addHidden(GPU_LIST, StringParam, default='',
-                       expertLevel=LEVEL_ADVANCED,
-                       label="Choose GPU IDs",
-                       help="Add a list of GPU devices that can be used")
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -126,13 +108,13 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         i=1
         if isinstance(inputRefs, Volume):
             prodId = self._insertFunctionStep(self.produceResidualsStep, inputRefs.getFileName(), i,
-                                              prerequisites=convId, needsGPU=self.useGpu)
+                                              prerequisites=convId, needsGPU=False)
             i += 1
             stepIds.append(prodId)
         else:
             for volume in inputRefs:
                 prodId = self._insertFunctionStep(self.produceResidualsStep, volume.getFileName(), i,
-                                                  prerequisites=convId, needsGPU=self.useGpu)
+                                                  prerequisites=convId, needsGPU=False)
                 i += 1
                 stepIds.append(prodId)
 
@@ -170,12 +152,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     def produceResidualsStep(self, fnVol, i):
         fnAngles = self._getExtraPath("images.xmd")
 
-        if self.newProg:
-            anglesOutFn = self._getExtraPath("anglesCont%03d.xmd"%i)
-            prog = "xmipp_continuous_create_residuals"
-        else:
-            anglesOutFn = self._getExtraPath("anglesCont%03d.stk"%i)
-            prog = "xmipp_angular_continuous_assign2"
+        anglesOutFn = self._getExtraPath("anglesCont%03d.xmd"%i)
+        prog = "xmipp_continuous_create_residuals"
 
         fnResiduals = self._getExtraPath("residuals%03d.stk"%i)
         fnProjections = self._getExtraPath("projections%03d.stk"%i)
@@ -186,18 +164,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         if self.optimizeGray:
             args+=" --optimizeGray --max_gray_scale %f"%self.maxGrayChange
 
-        if self.useGpu:
-            args+=" --nThreads %d"%self.binThreads.get()
-            gpuId = self._stepsExecutor.getGpuList()
-            if isinstance(gpuId, int):
-                gpuStr = str(gpuId)
-            else:
-                gpuStr = ','.join([str(g) for g in gpuId])
-            os.environ["CUDA_VISIBLE_DEVICES"] = gpuStr
-            self.runJob(prog, args, numberOfMpi=1)
-
-        else:
-            self.runJob(prog, args, numberOfMpi=self.numberOfMpi.get())
+        self.runJob(prog, args, numberOfMpi=self.numberOfMpi.get())
 
         mdResults = md.MetaData(self._getExtraPath("anglesCont%03d.xmd"%i))
         mdOut = md.MetaData()
@@ -319,11 +286,3 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             except StopIteration:
                 self.lastRow = None
         particle._appendItem = count > 0
-
-    def _validate(self):
-        errors = []
-
-        if self.useGpu.get() and self.newProg.get():
-            errors.append("You need to use the new program without GPU")
-
-        return errors
