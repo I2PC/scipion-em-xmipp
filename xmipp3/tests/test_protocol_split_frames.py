@@ -89,13 +89,13 @@ class TestSplitFramesMovies(TestSplitFramesMoviesBase):
         oddMovie = getattr(SplitFrames, 'oddMovie', None)
         evenMovie = getattr(SplitFrames, 'evenMovie', None)
 
-        self.assertIsNotNone(oddMovie,"OddMovie didn't generate correctly")
+        self.assertIsNotNone(oddMovie, "OddMovie didn't generate correctly")
         self.assertIsNotNone(evenMovie, "EvenMovie didn't generate correctly")
 
         oddSR = oddMovie.getSamplingRate()
         evenSR = evenMovie.getSamplingRate()
 
-        self.assertAlmostEqual(oddSR,1.14)
+        self.assertAlmostEqual(oddSR, 1.14)
         self.assertAlmostEqual(evenSR, 1.14)
 
         oddImage = oddMovie.getFirstItem().getFileName()

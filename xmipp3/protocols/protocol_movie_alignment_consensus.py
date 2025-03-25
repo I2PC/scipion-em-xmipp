@@ -228,6 +228,19 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         S2[0, :] = shiftX_2
         S2[2, :] = shiftY_2
 
+        # Translation through substraction of the center of mass
+        '''S11 = S1 - np.mean(S1, axis=1, keepdims=True)
+        S22 = S2 - np.mean(S2, axis=1, keepdims=True)
+
+        # SVD Decomposition
+        H = np.dot(S22, S11.T)
+        U, _, VT = np.linalg.svd(H)
+        R = np.dot(VT.T, U.T)
+        if np.linalg.det(R)<0:
+            VT[-1, :] = -VT[-1,:]
+            R = np.dot(VT.T, U.T)
+        S1 = np.dot(R, S2) + np.mean(S1, axis=1, keepdims=True) - np.dot(R, np.mean(S2, axis=1, keepdims=True))'''
+
         A = np.dot(np.dot(S1, S2.T), np.linalg.inv(np.dot(S2, S2.T)))
         S2_p = np.dot(A, S2)
 
