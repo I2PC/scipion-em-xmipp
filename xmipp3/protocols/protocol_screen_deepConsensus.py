@@ -1215,7 +1215,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.USING_INPUT_COORDS = False
       else:
         # Micrographs of the set removed because there might be new ones in streaming
-        self.outputCoordinates.setMicrographs(self.coordinatesDict['OR'].getMicrographs(asPointer=True))
+        self.outputCoordinates.setMicrographs(self.coordinatesDict['OR'].getMicrographs(asPointer=False))
       return self.outputCoordinates
 
     def getPreParticlesOutput(self, partSet):
