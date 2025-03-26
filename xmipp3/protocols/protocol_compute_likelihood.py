@@ -49,8 +49,7 @@ import xmippLib
 
 
 class XmippProtComputeLikelihood(ProtAnalysis3D):
-    """This protocol computes the likelihood of a set of particles with assigned angles when compared to a
-       set of maps or atomic models"""
+    """This protocol computes the likelihood of a set of particles with assigned angles when compared to a set of maps or atomic models"""
 
     _label = 'compute likelihood'
     _lastUpdateVersion = VERSION_1_1
