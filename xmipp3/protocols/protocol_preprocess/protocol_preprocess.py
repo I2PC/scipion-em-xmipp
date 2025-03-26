@@ -124,11 +124,13 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         apply threshold, etc """
     _label = 'preprocess particles'
     _devStatus = PROD
+    _possibleOutputs = {"outputParticles": SetOfParticles}
+
     # Normalization enum constants
     NORM_OLD = 0
     NORM_NEW = 1
     NORM_RAMP =2
-    
+
     def __init__(self, **kwargs):
         XmippProcessParticles.__init__(self, **kwargs)
     
