@@ -229,38 +229,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         S2[0, :] = shiftX_2
         S2[2, :] = shiftY_2
 
-        # Translation through subtraction of the center of mass
-        S1c1 = np.mean(S1[0, :], axis=1, keepdims=True)
-        S1c2 = np.mean(S1[1, :], axis=1, keepdims=True)
-        S2c1 = np.mean(S2[0, :], axis=1, keepdims=True)
-        S2c2 = np.mean(S2[2, :], axis=1, keepdims=True)
-
-        S11 = S1[0, :] - S1c1
-        S12 = S1[1, :] - S1c2
-        S21 = S2[0, :] - S2c1
-        S22 = S2[2, :] - S2c2
-
-        S1n = np.array([S11, S12, np.ones(len(shiftX_1))])
-        S2n = np.array([S21, np.ones(len(shiftX_2)), S22])
-
-        print("S1= ", S1)
-        print("S2= ", S2)
-        print("S11= ", S11)
-        print("S22= ", S22)
-        print("S11= ", S1n)
-        print("S22= ", S2n)
-
-        # SVD Decomposition
-        H = np.dot(S2n, S1n.T)
-        U, _, VT = np.linalg.svd(H)
-        R = np.dot(VT.T, U.T)
-        if np.linalg.det(R)<0:
-            VT[-1, :] = -VT[-1, :]
-            R = np.dot(VT.T, U.T)
-        S1 = np.dot(R, S2) + S1c - np.dot(R, S2c)
-
-        print("H= ", np.linalg.det(H))
-
         A = np.dot(np.dot(S1, S2.T), np.linalg.inv(np.dot(S2, S2.T)))
         S2_p = np.dot(A, S2)
 
