@@ -56,6 +56,9 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         self.refs = self.protocol.inputRefs.get()
         self.outputs = self.protocol.reprojections
 
+        if isinstance(self.refs, Volume):
+            self.refs = [self.refs]
+
         form.addSection(label='Visualization')
 
         group = form.addGroup('Particles range')
@@ -118,20 +121,13 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
 
     def _viewLL(self, paramName):
         """ visualization of log likelihood matrix for selected particles and ref volumes."""
-        partNumber1 = self.partNumber1.get() if self.partNumber1.get() != -1 else 1
-        partNumber2 = self.partNumber2.get() if self.partNumber2.get() != -1 else len(self.particles)
-        x = self._checkNumbers(partNumber1, partNumber2, 'particle')
+        x = self._checkNumbers('particle')
         if x is not True:
             return x
 
-        volNumber1 = self.volNumber1.get() if self.volNumber1.get() != -1 else 1
-        volNumber2 = self.volNumber2.get() if self.volNumber2.get() != -1 else len(self.refs)
-        x = self._checkNumbers(volNumber1, volNumber2, 'volume')
+        x = self._checkNumbers('volume')
         if x is not True:
             return x
-
-        if isinstance(self.refs, Volume):
-            self.refs = [self.refs]
         
         matrix = np.load(self.protocol._getExtraPath('matrix.npy'))
 
@@ -161,30 +157,26 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         plt.colorbar(mappable=im)
 
         plt.ylabel('Reference volumes')
-        plt.ylim([volNumber1-1.5, volNumber2-0.5])
+        plt.ylim([self.volNum1-1.5, self.volNum2-0.5])
         ylocs, _ = plt.yticks()
-        plt.yticks([int(loc) for loc in ylocs[:-1] if loc >= volNumber1-1],
-                   [str(int(loc)+1) for loc in ylocs[:-1] if loc >= volNumber1-1])
+        plt.yticks([int(loc) for loc in ylocs[:-1] if loc >= self.volNum1-1],
+                   [str(int(loc)+1) for loc in ylocs[:-1] if loc >= self.volNum1-1])
 
         plt.xlabel('Input particles')
-        plt.xlim([partNumber1-1.5, partNumber2-0.5])
+        plt.xlim([self.partNum1-1.5, self.partNum2-0.5])
         xlocs, _ = plt.xticks()
-        plt.xticks([int(loc) for loc in xlocs[:-1] if loc >= partNumber1-1],
-                   [str(int(loc)+1) for loc in xlocs[:-1] if loc >= partNumber1-1])
+        plt.xticks([int(loc) for loc in xlocs[:-1] if loc >= self.partNum1-1],
+                   [str(int(loc)+1) for loc in xlocs[:-1] if loc >= self.partNum1-1])
 
         return [plotter]
 
     def _viewRelativeLL(self, paramName):
         """ visualization of relative log likelihood histogram for  for selected particles and ref volumes."""
-        partNumber1 = self.partNumber1.get() if self.partNumber1.get() != -1 else 1
-        partNumber2 = self.partNumber2.get() if self.partNumber2.get() != -1 else len(self.particles)
-        x = self._checkNumbers(partNumber1, partNumber2, 'particle')
+        x = self._checkNumbers('particle')
         if x is not True:
             return x
 
-        volNumber1 = self.volNumber1.get() if self.volNumber1.get() != -1 else 1
-        volNumber2 = self.volNumber2.get() if self.volNumber2.get() != -1 else len(self.refs)
-        x = self._checkNumbers(volNumber1, volNumber2, 'volume')
+        x = self._checkNumbers('volume')
         if x is not True:
             return x
 
@@ -192,8 +184,8 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
             self.refs = [self.refs]
 
         matrix = np.load(self.protocol._getExtraPath('matrix.npy'))
-        matrix = np.subtract(matrix[volNumber1-1, partNumber1-1:partNumber2],
-                             matrix[volNumber2-1, partNumber1-1:partNumber2])
+        matrix = np.subtract(matrix[self.volNum1-1, self.partNum1-1:self.partNum2],
+                             matrix[self.volNum2-1, self.partNum1-1:self.partNum2])
 
         plotter = EmPlotter()
         _ = plt.hist(matrix, bins=self.nBins.get())
@@ -218,16 +210,16 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
         return [plotter]
 
 
-    def _checkNumbers(self, number1, number2, string):
+    def _checkNumbers(self, string):
 
         if self.normalise.get() and self.subtract.get():
                 return [self.errorMessage("Please select normalise or subtract, not both",
                                         title=_invalidInputStr)]
 
-        if string == 'particle':
-            items = self.particles
-        else:
-            items = self.refs
+        items, number1, number2 = self._setNumbers(string)
+
+        if len(self.refs) == 1:
+            return True
 
         if number1+1 > number2:
             return [self.errorMessage("Invalid {0} range\n"
@@ -266,3 +258,16 @@ class XmippLogLikelihoodViewer(ProtocolViewer):
                                          title=_invalidInputStr)]
 
         return True
+
+    def _setNumbers(self, string):
+
+        if string == 'particle':
+            items = self.particles
+            number1 = self.partNum1 = self.partNumber1.get() if self.partNumber1.get() != -1 else 1
+            number2 = self.partNum2 = self.partNumber2.get() if self.partNumber2.get() != -1 else len(self.particles)
+        else:
+            items = self.refs
+            number1 = self.volNum1 = self.volNumber1.get() if self.volNumber1.get() != -1 else 1
+            number2 = self.volNum2 = self.volNumber2.get() if self.volNumber2.get() != -1 else len(self.refs)
+
+        return items, number1, number2
