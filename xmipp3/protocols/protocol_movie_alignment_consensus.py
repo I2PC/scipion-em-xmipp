@@ -54,9 +54,7 @@ DISCARDED = 'Discarded'
 
 class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
-    Protocol to estimate the agreement between different movie alignment
-    algorithms in the Global Shifts such as MotionCorr or FlexAlign. It is estimated to indicate differences between them
-    and likely to plot them in case their Global Shifts are noticeable.
+    The protocol compares two sets of aligned movies (reference and secondary) to evaluate their alignment consistency. It calculates the correlation between shift trajectories, allowing for a minimum correlation threshold to be set. Movies with correlations below this threshold can be discarded. The protocol can also generate plots showing the trajectories and correlations for each movie. This helps in identifying and validating the quality of movie alignments based on consensus among different alignment runs.
     """
 
     _label = 'movie alignment consensus'
