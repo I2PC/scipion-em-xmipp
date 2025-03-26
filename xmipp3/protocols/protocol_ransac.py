@@ -138,14 +138,14 @@ class XmippProtRansac(ProtInitialVolume):
         deps = [] # Store all steps ids, final step createOutput depends on all of them    
         for n in range(self.nRansac.get()):
             # CTF estimation with Xmipp
-            stepId = self._insertFunctionStep('ransacIterationStep', n,
-                                    prerequisites=[initialStepId]) # Make estimation steps indepent between them
+            stepId = self._insertFunctionStep(self.ransacIterationStep, n,
+                                    prerequisites=[initialStepId], needsGPU=self.usesGpu()) # Make estimation steps indepent between them
             deps.append(stepId)
         
         # Look for threshold, evaluate volumes and get the best
-        self._insertFunctionStep("getCorrThreshStep", prerequisites=deps) # Make estimation steps indepent between them)
-        self._insertFunctionStep("evaluateVolumesStep")
-        bestVolumesStepId = self._insertFunctionStep("getBestVolumesStep")        
+        self._insertFunctionStep(self.getCorrThreshStep, prerequisites=deps, needsGPU=False) # Make estimation steps indepent between them)
+        self._insertFunctionStep(self.evaluateVolumesStep, needsGPU=False)
+        bestVolumesStepId = self._insertFunctionStep(self.getBestVolumesStep, needsGPU=False)
         
         deps = [] # Store all steps ids, final step createOutput depends on all of them
         # Refine the best volumes
@@ -155,25 +155,25 @@ class XmippProtRansac(ProtInitialVolume):
                     
             for it in range(self.numIter.get()):    
                 if it==0:
-                    self._insertFunctionStep('reconstructStep',fnRoot, prerequisites=[bestVolumesStepId])
+                    self._insertFunctionStep(self.reconstructStep,fnRoot, needsGPU=self.usesGpu(),prerequisites=[bestVolumesStepId])
                 else:
-                    self._insertFunctionStep('reconstructStep',fnRoot)
-                self._insertFunctionStep('projMatchStep',fnBase)
+                    self._insertFunctionStep(self.reconstructStep,fnRoot, needsGPU=self.usesGpu())
+                self._insertFunctionStep(self.projMatchStep,fnBase, needsGPU=False)
             
-            stepId =  self._insertFunctionStep("resizeStep",fnRoot,self.Xdim)
+            stepId =  self._insertFunctionStep(self.resizeStep,fnRoot,self.Xdim, needsGPU=False)
             
             deps.append(stepId)
         
         # Score each of the final volumes
-        self._insertFunctionStep("scoreFinalVolumes",
-                                 prerequisites=deps) # Make estimation steps indepent between them
+        self._insertFunctionStep(self.scoreFinalVolumes,
+                                 prerequisites=deps, needsGPU=False) # Make estimation steps indepent between them
         
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep(self.createOutputStep,needsGPU=False)
     
     def _insertInitialSteps(self):
         # Convert the input classes to a metadata ready for xmipp
         self.imgsFn = self._getExtraPath('input_classes.xmd')
-        self._insertFunctionStep('convertInputStep', self.imgsFn)
+        self._insertFunctionStep(self.convertInputStep, self.imgsFn, needsGPU=False)
         
         inputSet = self.inputSet.get()
         self.Xdim = inputSet.getDimensions()[0]
@@ -195,13 +195,18 @@ class XmippProtRansac(ProtInitialVolume):
         freq = ts / maxFreq
         ts = K * ts
 
-        self._insertRunJobStep("xmipp_transform_filter","-i %s -o %s --fourier low_pass %f --oroot %s"
-                                                %(self.imgsFn,fnOutputReducedClass,freq,fnOutputReducedClassNoExt))
-        lastId = self._insertRunJobStep("xmipp_image_resize","-i %s --fourier %d -o %s" %(fnOutputReducedClass,self.Xdim2,fnOutputReducedClassNoExt))
+        self._insertRunJobStep("xmipp_transform_filter",
+                               "-i %s -o %s --fourier low_pass %f --oroot %s"
+                                %(self.imgsFn,fnOutputReducedClass,freq,fnOutputReducedClassNoExt),
+                               needsGPU=False)
+        lastId = self._insertRunJobStep("xmipp_image_resize",
+                                        "-i %s --fourier %d -o %s"
+                                        %(fnOutputReducedClass,self.Xdim2,fnOutputReducedClassNoExt),
+                                        needsGPU=False)
 
         # Generate projection gallery from the initial volume
         if self.initialVolume.hasValue():
-            lastId = self._insertFunctionStep("projectInitialVolume")
+            lastId = self._insertFunctionStep(self.projectInitialVolume, needsGPU=False)
             
         return lastId
 
@@ -274,25 +279,16 @@ class XmippProtRansac(ProtInitialVolume):
                         N_GPUs = len((self.gpuList.get()).split(','))
                         args += ' -gpusPerNode %d' % N_GPUs
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-                    count=0
-                    GpuListCuda=''
-                    if self.useQueueForSteps() or self.useQueue():
-                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                        GpuList = GpuList.split(",")
-                        for elem in GpuList:
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            count+=1
-                    else:
-                        GpuListAux = ''
-                        for elem in self.getGpuList():
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            GpuListAux = GpuListAux+str(elem)+','
-                            count+=1
-                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-                    if self.numberOfMpi.get()==1:
-                        args += " --device %s" %GpuListCuda
-                    if self.numberOfMpi.get()>1:
-                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+
+                    gpuList = list(map(str, self._stepsExecutor.getGpuList()))
+                    gpuListArg = " ".join(gpuList)
+                    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpuList)
+                    self.info("GPUs used in CUDA_VISIBLE_DEVICES: %s" % gpuListArg)
+
+                    if self.numberOfMpi.get() == 1:
+                        args += " --device " + gpuListArg
+                    if self.numberOfMpi.get() > 1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len(gpuList)+1)
                     else:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
