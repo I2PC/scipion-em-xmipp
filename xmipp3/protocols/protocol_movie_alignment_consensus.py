@@ -55,7 +55,8 @@ DISCARDED = 'Discarded'
 class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
     Protocol to estimate the agreement between different movie alignment
-    algorithms in the Global Shifts.
+    algorithms in the Global Shifts such as MotionCorr or FlexAlign. It is estimated to indicate differences between them
+    and likely to plot them in case their Global Shifts are noticeable.
     """
 
     _label = 'movie alignment consensus'
@@ -82,7 +83,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       help="Minimum value for the consensus correlations between shifts trajectories."
                            "\nIf there are noticeable discrepancies between the two estimations below this correlation,"
                            " it will be discarded. If this value is set to -1 no movies will be discarded."
-                           "\n Reasonable values are from 0.5 to 1 meaning consistency between estimations.")
+                           "\n Values near 1 will indicate that there are noticeable discrepancies.")
 
         form.addParam('trajectoryPlot', params.BooleanParam, default=False,
                       label='Global Alignment Trajectory Plot',
@@ -229,23 +230,42 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         S2[2, :] = shiftY_2
 
         # Translation through substraction of the center of mass
-        '''S11 = S1 - np.mean(S1, axis=1, keepdims=True)
-        S22 = S2 - np.mean(S2, axis=1, keepdims=True)
+        S1c1 = np.mean(S1[0, :], axis=1, keepdims=True)
+        S1c2 = np.mean(S1[1, :], axis=1, keepdims=True)
+        S2c1 = np.mean(S2[0, :], axis=1, keepdims=True)
+        S2c2 = np.mean(S2[2, :], axis=1, keepdims=True)
+
+        S11 = S1[0, :] - S1c1
+        S12 = S1[1, :] - S1c2
+        S21 = S2[0, :] - S2c1
+        S22 = S2[2, :] - S2c2
+
+        S1n = np.array([S11, S12, np.ones(len(shiftX_1))])
+        S2n = np.array([S21, np.ones(len(shiftX_2)), S22])
+
+        print("S1= ", S1)
+        print("S2= ", S2)
+        print("S11= ", S11)
+        print("S22= ", S22)
 
         # SVD Decomposition
         H = np.dot(S22, S11.T)
         U, _, VT = np.linalg.svd(H)
         R = np.dot(VT.T, U.T)
-        if np.linalg.det(R)<0:
-            VT[-1, :] = -VT[-1,:]
-            R = np.dot(VT.T, U.T)
-        S1 = np.dot(R, S2) + np.mean(S1, axis=1, keepdims=True) - np.dot(R, np.mean(S2, axis=1, keepdims=True))'''
+        '''if np.linalg.det(R)<0:
+            VT[-1, :] = -VT[-1, :]
+            R = np.dot(VT.T, U.T)'''
+        S1 = np.dot(R, S2) + S1c - np.dot(R, S2c)
+
+        print("H= ", np.linalg.det(H))
 
         A = np.dot(np.dot(S1, S2.T), np.linalg.inv(np.dot(S2, S2.T)))
         S2_p = np.dot(A, S2)
 
         S1_cart = np.array([S1[0, :]/S1[2, :], S1[1, :]/S1[2, :]])
+        print("S1cart= ", S1_cart)
         S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
+        print("S2pcart= ", S2_p_cart)
         rmse_cart = np.sqrt((np.square(S1_cart - S2_p_cart)).mean())
         maxe_cart = np.max(S1_cart - S2_p_cart)
         corrX_cart = np.corrcoef(S1_cart[0, :], S2_p_cart[0, :])[0, 1]

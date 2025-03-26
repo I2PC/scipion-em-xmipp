@@ -50,7 +50,8 @@ from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtFlexAlign(ProtAlignMovies):
     """
-    Wrapper protocol to Xmipp Movie Alignment by cross-correlation
+    Wrapper protocol to Xmipp Movie Alignment by cross-correlation. Its main goal is set to give aligned sets of movies
+    hich frames tend to have shifts between them from a cross-correlation basis and alignment parameters.
     """
     NO_ROTATION = 0
     NO_FLIP = 0

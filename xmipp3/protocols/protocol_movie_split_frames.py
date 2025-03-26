@@ -37,7 +37,8 @@ from pwem.objects import Movie, Micrograph, SetOfMovies
 
 class XmippProtSplitFrames(ProtPreprocessMicrographs):
     """
-    Wrapper protocol to Xmipp split Odd Even
+    Wrapper protocol to Xmipp split Odd Even. Applies the possibility of creating 2 different outputs of movies with
+    a quantity of frames related to their odd or even nature (that is, if each frame represents an odd or even number).
     """
     _label = 'split frames'
     _lastUpdateVersion = VERSION_1_1
