@@ -68,9 +68,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         ProtAnalysis3D.__init__(self, **args)
         self._classesInfo = dict()
 
-        self.imagesXmd = self._getExtraPath("images.xmd")
-        self.imagesStk = self._getExtraPath("images.stk")
-
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addParam('binThreads', IntParam,
@@ -130,7 +127,9 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     def _insertAllSteps(self):
         """ Convert input images then run continuous_assign2 then create output """
         
-        
+        self.imagesXmd = self._getExtraPath("images.xmd")
+        self.imagesStk = self._getExtraPath("images.stk")
+
         convId = self._insertFunctionStep(self.convertStep, prerequisites=[], needsGPU=False)
         stepIds = [convId]
         if self.doNorm:
