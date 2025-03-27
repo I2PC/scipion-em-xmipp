@@ -114,6 +114,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='OldXmipp: mean(Image)=0, stddev(Image)=1\n'
                            'NewXmipp: mean(background)=0, stddev(background)=1\n'
                            'Ramp: subtract background + NewXmipp')
+
         form.addParam('ignoreCTF', BooleanParam, label="Do not apply CTF: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='This should be used when images are treated with a Weiner filter instead')
 
