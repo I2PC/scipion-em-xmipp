@@ -35,7 +35,7 @@ from pwem.protocols import (ProtImportParticles, ProtImportVolumes, ProtSubSet,
 from xmipp3.protocols import (XmippProtComputeLikelihood, XmippProtCropResizeVolumes,
                               XmippProtPreprocessParticles, XmippProtPreprocessVolumes)
 
-class TestComputeLikelihood(BaseTest):
+class TestXmippComputeLikelihood(BaseTest):
     """ Test protocol for compute log likelihood protocol. """
     @classmethod
     def setUpClass(cls):
