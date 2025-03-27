@@ -264,6 +264,13 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
             classItem.append(img)
 
+        for ref, rep in refsDict.items():
+            if ref not in clsDict:
+                classItem = clsSet.ITEM_TYPE.create(self._getExtraPath(), suffix=ref+1)
+                classItem.setRepresentative(rep)
+                clsDict[ref] = classItem
+                clsSet.append(classItem)
+
         for classItem in clsDict.values():
             clsSet.update(classItem)
 
