@@ -387,6 +387,9 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
     SEG_DALTON=2
     SEG_AUTO=3
 
+    # Normalization enum constants
+    NORM_OLD = 0
+    NORM_NEW = 1
 
     def __init__(self, **kwargs):
         XmippProcessVolumes.__init__(self, **kwargs)
@@ -474,6 +477,13 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
         form.addParam('backRadius', FloatParam, default=-1,
                       label="Mask Radius", condition='doNormalize',
                       help='In pixels. Set to -1 for half of the size of the volume.')
+        form.addParam('normType', EnumParam, condition='doNormalize',
+                      label='Volume normalization type', expertLevel=LEVEL_ADVANCED,
+                      choices=['OldXmipp','NewXmipp'],
+                      default=self.NORM_NEW, display=EnumParam.DISPLAY_COMBO,
+                      help='OldXmipp: mean(Image)=0, stddev(Image)=1\n'
+                           'NewXmipp: mean(background)=0, stddev(background)=1')
+
         XmippPreprocessHelper._defineProcessParams(form)
 
     #--------------------------- INSERT steps functions ------------------------
@@ -812,7 +822,10 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
             size = self._getSize()
             maskRadius = size/2
         
-        args += " --method NewXmipp --background circle %d" % int(maskRadius)
+        if self.normType.get() == self.NORM_NEW:
+            args += " --method NewXmipp --background circle %d" % int(maskRadius)
+        else:
+            args += " --method OldXmipp"
         return args
     
     def _argsInvert(self):
