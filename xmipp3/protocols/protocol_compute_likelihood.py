@@ -68,6 +68,9 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         ProtAnalysis3D.__init__(self, **args)
         self._classesInfo = dict()
 
+        self.imagesXmd = self._getExtraPath("images.xmd")
+        self.imagesStk = self._getExtraPath("images.stk")
+
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addParam('binThreads', IntParam,
@@ -156,7 +159,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
         imgSet = self.inputParticles.get()
-        writeSetOfParticles(imgSet, self._getExtraPath("images.xmd"))
+        writeSetOfParticles(imgSet, self.imagesXmd)
 
     def normalizeParticlesStep(self):
         argsNorm = self._argsNormalize(particles=True)
@@ -191,8 +194,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             self.runJob("xmipp_transform_normalize", argsNorm)
             fnVol = fnVolOut
 
-        fnAngles = self._getExtraPath("images.xmd")
-
         if self.newProg:
             anglesOutFn = self._getExtraPath("anglesCont%03d.xmd"%i)
             prog = "xmipp_continuous_create_residuals"
@@ -204,7 +205,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         fnProjections = self._getExtraPath("projections%03d.stk"%i)
 
         Ts = self.inputParticles.get().getSamplingRate()
-        args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s --oprojections %s" % (fnAngles, anglesOutFn,
+        args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s --oprojections %s" % (self.imagesXmd, anglesOutFn,
                                                                                          fnVol, Ts,
                                                                                          fnResiduals, fnProjections)
 
@@ -293,11 +294,9 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             clsSet.append(classItem)
 
         cls_prev = 1
-        rep = refsDict[cls_prev]
         for img, ref in izip(inputPartSet, classIds):
             if ref != cls_prev:
                 cls_prev = ref
-                rep = refsDict[cls_prev]
 
             classItem = clsDict[ref]
             classItem.append(img)
@@ -338,8 +337,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         args = ""
         if particles:
             args += "-i %s -o %s --save_metadata_stack %s --keep_input_columns" \
-                   % (self._getExtraPath("images.xmd"), self._getExtraPath("images.stk"),
-                      self._getExtraPath("images.xmd"))
+                   % (self.imagesXmd, self.imagesStk, self.imagesXmd)
 
         normType = self.normType.get()
         bgRadius = self.particleRadius.get()
