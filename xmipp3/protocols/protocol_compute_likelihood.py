@@ -282,6 +282,13 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         clsDict = {}  # Dictionary to store the (classId, classSet) pairs
 
+        for ref, rep in refsDict.items():
+            # add empty classes
+            classItem = clsSet.ITEM_TYPE.create(self._getExtraPath(), suffix=ref+1)
+            classItem.setRepresentative(rep)
+            clsDict[ref] = classItem
+            clsSet.append(classItem)
+
         cls_prev = 1
         rep = refsDict[cls_prev]
         for img, ref in izip(inputPartSet, classIds):
@@ -289,22 +296,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 cls_prev = ref
                 rep = refsDict[cls_prev]
 
-            if ref not in clsDict:
-                classItem = clsSet.ITEM_TYPE.create(self._getExtraPath(), suffix=ref+1)
-                classItem.setRepresentative(rep)
-                clsDict[ref] = classItem
-                clsSet.append(classItem)
-            else:
-                classItem = clsDict[ref]
-
+            classItem = clsDict[ref]
             classItem.append(img)
-
-        for ref, rep in refsDict.items():
-            if ref not in clsDict:
-                classItem = clsSet.ITEM_TYPE.create(self._getExtraPath(), suffix=ref+1)
-                classItem.setRepresentative(rep)
-                clsDict[ref] = classItem
-                clsSet.append(classItem)
 
         for classItem in clsDict.values():
             clsSet.update(classItem)
