@@ -274,15 +274,15 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                            'Examples: \n'
                            'xmipp_transform_filter -i %(volume)s --fourier low_pass 15 --sampling %(sampling)s\n' 
                            '/home/joe/myScript %(volume)s sampling=%(sampling)s dim=%(dim)s')
-        form.addParam('postSignificantDenoise', BooleanParam, label="Significant denoising Real space", expertLevel=LEVEL_ADVANCED, default=True)
-        form.addParam('postFilterBank', BooleanParam, label="Significant denoising Fourier space", expertLevel=LEVEL_ADVANCED, default=True)
-        form.addParam('postLaplacian', BooleanParam, label="Laplacian denoising", expertLevel=LEVEL_ADVANCED, default=True,
+        form.addParam('postSignificantDenoise', BooleanParam, label="Significant denoising Real space", expertLevel=LEVEL_ADVANCED, default=False)
+        form.addParam('postFilterBank', BooleanParam, label="Significant denoising Fourier space", expertLevel=LEVEL_ADVANCED, default=False)
+        form.addParam('postLaplacian', BooleanParam, label="Laplacian denoising", expertLevel=LEVEL_ADVANCED, default=False,
                       help="It can only be used if there is a mask")
-        form.addParam('postDeconvolve', BooleanParam, label="Blind deconvolution", expertLevel=LEVEL_ADVANCED, default=True)
-        form.addParam('postSoftNeg', BooleanParam, label="Attenuate undershooting", expertLevel=LEVEL_ADVANCED, default=True)
+        form.addParam('postDeconvolve', BooleanParam, label="Blind deconvolution", expertLevel=LEVEL_ADVANCED, default=False)
+        form.addParam('postSoftNeg', BooleanParam, label="Attenuate undershooting", expertLevel=LEVEL_ADVANCED, default=False)
         form.addParam('postSoftNegK', FloatParam, label="Attenuate undershooting (K)", expertLevel=LEVEL_ADVANCED, default=9,
                       help="Values below avg-K*sigma are attenuated")
-        form.addParam('postDifference', BooleanParam, label="Evaluate difference", expertLevel=LEVEL_ADVANCED, default=True)
+        form.addParam('postDifference', BooleanParam, label="Evaluate difference", expertLevel=LEVEL_ADVANCED, default=False)
 
         form.addParallelSection(threads=1, mpi=8)
 
@@ -346,7 +346,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         # get last iteration
         fnIterDir=glob(self._getExtraPath("Iter*"))
         lastIter=len(fnIterDir)-1
+        # fnFirstDir=self._getExtraPath("Iter000")
         fnLastDir=self._getExtraPath("Iter%03d"%lastIter)
+        # fnFirstVol=join(fnFirstDir,"volume000.mrc")
         fnLastVol=join(fnLastDir,"volumeAvg.mrc")
         Ts=self.readInfoField(fnLastDir,"sampling",emlib.MDL_SAMPLINGRATE)
         if exists(fnLastVol):
