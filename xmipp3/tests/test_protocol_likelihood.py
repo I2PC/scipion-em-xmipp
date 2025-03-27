@@ -29,14 +29,16 @@ import os
 from os.path import exists
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pwem.protocols import (ProtImportParticles, ProtImportVolumes, ProtSubSet,
+from pwem.protocols import (ProtImportParticles, ProtImportVolumes,ProtSubSet,
                             ProtUnionSet)
 
-from xmipp3.protocols import (XmippProtComputeLikelihood, XmippProtCropResizeVolumes,
+from xmipp3.protocols import (XmippProtComputeLikelihood,XmippProtCropResizeVolumes,
                               XmippProtPreprocessParticles, XmippProtPreprocessVolumes)
 
 class TestXmippComputeLikelihood(BaseTest):
     """ Test protocol for compute log likelihood protocol. """
+    _numberOfParticles = 20
+
     @classmethod
     def setUpClass(cls):
         # Create a new project
@@ -57,53 +59,64 @@ class TestXmippComputeLikelihood(BaseTest):
 
     @classmethod
     def importRibosomeVolume(cls):
-        prot = cls.newProtocol(ProtImportVolumes, 
+        cls.protRiboIni = cls.newProtocol(ProtImportVolumes,
                                 objLabel='import ribo volume', 
                                 filesPath=cls.dsRelion.getFile('volumes/reference.mrc'),
                                 samplingRate=7.08)
-        cls.launchProtocol(prot)
+        cls.launchProtocol(cls.protRiboIni)
 
 
-        prot = cls.newProtocol(XmippProtPreprocessVolumes, 
+        prot = cls.newProtocol(XmippProtPreprocessVolumes,
                                 objLabel='norm ribo volume',
                                 doNormalize=True,
-                                inputVolumes=prot.outputVolume)
+                                inputVolumes=cls.protRiboIni.outputVolume)
         cls.launchProtocol(prot)
         
         return prot
 
     @classmethod
     def importSpikeVolume(cls):
-        prot = cls.newProtocol(ProtImportVolumes, 
+        cls.protSpike0 = cls.newProtocol(ProtImportVolumes,
                                 objLabel='import spike volume',
                                 importFrom=1,
                                 emdbId='12229')
-        cls.launchProtocol(prot)
+        cls.launchProtocol(cls.protSpike0)
 
-        prot = cls.newProtocol(XmippProtCropResizeVolumes, 
+        cls.protSpikeIni = cls.newProtocol(XmippProtCropResizeVolumes,
                                 objLabel='resize spike volume',
                                 doResize=True, resizeSamplingRate=7.08,
                                 doWindow=True, windowSize=60,
-                                inputVolumes=prot.outputVolume)
-        cls.launchProtocol(prot)
+                                inputVolumes=cls.protSpike0.outputVolume)
+        cls.launchProtocol(cls.protSpikeIni)
 
-        prot = cls.newProtocol(XmippProtPreprocessVolumes, 
+        prot = cls.newProtocol(XmippProtPreprocessVolumes,
                                 objLabel='norm spike volume',
                                 doNormalize=True,
-                                inputVolumes=prot.outputVol)
+                                inputVolumes=cls.protSpikeIni.outputVol)
         cls.launchProtocol(prot)
-        
+
         return prot
 
     @classmethod
     def joinVolumes(cls):
         prot = cls.newProtocol(ProtUnionSet, 
-                                objLabel='join volumes',
+                                objLabel='join volumes norm',
                                 inputType=3,
                                 inputSets=[cls.protRiboVol.outputVol,
                                            cls.protSpikeVol.outputVol])
         cls.launchProtocol(prot)
-        
+
+        return prot
+
+    @classmethod
+    def joinVolumesIni(cls):
+        prot = cls.newProtocol(ProtUnionSet,
+                                objLabel='join volumes ini',
+                                inputType=3,
+                                inputSets=[cls.protRiboIni.outputVolume,
+                                           cls.protSpikeIni.outputVolume])
+        cls.launchProtocol(prot)
+
         return prot
 
     @classmethod
@@ -119,26 +132,19 @@ class TestXmippComputeLikelihood(BaseTest):
                                  haveDataBeenPhaseFlipped=True
                                  )
         cls.launchProtocol(prot)
-        cls.checkOutput(prot, 'outputParticles', 
-                         ['outputParticles.hasAlignmentProj()',
-                          'outputParticles.isPhaseFlipped()'])
+
         # We are going to make a subset to speed-up following processes
-        protSubset = cls.newProtocol(ProtSubSet, 
+        cls.protSubset = cls.newProtocol(ProtSubSet,
                                       objLabel='subset of particles',
                                       chooseAtRandom=True,
                                       nElements=numberOfParticles)
-        protSubset.inputFullSet.set(prot.outputParticles)
-        
-        cls.launchProtocol(protSubset)
-        cls.checkOutput(protSubset, 'outputParticles', 
-                         ['outputParticles.getSize() == %d' 
-                          % numberOfParticles])
-        
+        cls.protSubset.inputFullSet.set(prot.outputParticles)
+        cls.launchProtocol(cls.protSubset)
 
         protNorm = cls.newProtocol(XmippProtPreprocessParticles, 
                                 objLabel='norm ribo particles',
                                 doNormalize=True,
-                                inputParticles=protSubset.outputParticles)
+                                inputParticles=cls.protSubset.outputParticles)
         cls.launchProtocol(protNorm)
 
         return protNorm
@@ -148,76 +154,140 @@ class TestXmippComputeLikelihood(BaseTest):
         cls.protRiboVol = cls.importRibosomeVolume()
         cls.protSpikeVol = cls.importSpikeVolume()
         cls.protJoinedVols = cls.joinVolumes()
+        cls.protJoinedVolsIni = cls.joinVolumesIni()
 
         pathNoCTF = 'import/refine3d/extra/relion_it001_data.star'
-        cls.protImportPars = cls.importParticles(20, pathNoCTF)
+        cls.protImportPars = cls.importParticles(cls._numberOfParticles,
+                                                 pathNoCTF)
 
     def testDefault(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood, 
+        prot = self.newProtocol(XmippProtComputeLikelihood,
                                 objLabel='log likelihood',
                                 inputParticles=self.protImportPars.outputParticles,
                                 inputRefs=self.protJoinedVols.outputSet)
         self.launchProtocol(prot)
-        # TODO: add output checks and asserts
-
-    def testRad(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood, 
-                                objLabel='log likelihood',
-                                inputParticles=self.protImportPars.outputParticles,
-                                inputRefs=self.protJoinedVols.outputSet,
-                                particleRadius=29, noiseRadius=30)
-        self.launchProtocol(prot)
-        # TODO: add output checks and asserts
+        self.checkOutput(prot, 'reprojections',
+                         ['reprojections.getSize() == %d'
+                          % (self._numberOfParticles * 2)])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getSize() == %d' % 2])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getFirstItem().getSize() == %d'
+                          % self._numberOfParticles])
 
     def testOneVol(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood, 
+        prot = self.newProtocol(XmippProtComputeLikelihood,
                                 objLabel='log likelihood',
                                 inputParticles=self.protImportPars.outputParticles,
-                                inputRefs=self.protRiboVol.outputVolume)
+                                inputRefs=self.protRiboVol.outputVol,
+                                particleRadius=29, noiseRadius=30)
         self.launchProtocol(prot)
-        # TODO: add output checks and asserts
+        self.checkOutput(prot, 'reprojections',
+                         ['reprojections.getSize() == %d'
+                          % self._numberOfParticles])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getSize() == %d' % 1])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getFirstItem().getSize() == %d'
+                          % self._numberOfParticles])
 
     def testOldProg(self):
         prot = self.newProtocol(XmippProtComputeLikelihood,
                                 objLabel='log likelihood',
                                 inputParticles=self.protImportPars.outputParticles,
                                 inputRefs=self.protJoinedVols.outputSet,
+                                particleRadius=29, noiseRadius=30,
                                 newProg=False)
         self.launchProtocol(prot)
-        # TODO: add output checks and asserts
+        self.checkOutput(prot, 'reprojections',
+                         ['reprojections.getSize() == %d'
+                          % (self._numberOfParticles * 2)])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getSize() == %d' % 2])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getFirstItem().getSize() == %d'
+                          % self._numberOfParticles])
 
     def testBinThreads(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood, 
+        prot = self.newProtocol(XmippProtComputeLikelihood,
                                 objLabel='log likelihood',
                                 inputParticles=self.protImportPars.outputParticles,
                                 inputRefs=self.protJoinedVols.outputSet,
+                                particleRadius=29, noiseRadius=30,
                                 binThreads=3)
         self.launchProtocol(prot)
-        # TODO: add output checks and asserts
-
-    def testMPI(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood, 
-                                objLabel='log likelihood',
-                                inputParticles=self.protImportPars.outputParticles,
-                                inputRefs=self.protJoinedVols.outputSet,
-                                mpi=2)
-        self.launchProtocol(prot)
-        # TODO: add output checks and asserts
+        self.checkOutput(prot, 'reprojections',
+                         ['reprojections.getSize() == %d'
+                          % (self._numberOfParticles * 2)])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getSize() == %d' % 2])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getFirstItem().getSize() == %d'
+                          % self._numberOfParticles])
 
     def testOldIgnoreCTF(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood, 
+        prot = self.newProtocol(XmippProtComputeLikelihood,
                                 objLabel='log likelihood',
                                 inputParticles=self.protImportPars.outputParticles,
                                 inputRefs=self.protJoinedVols.outputSet,
+                                particleRadius=29, noiseRadius=30,
                                 newProg=False, ignoreCTF=True)
         self.launchProtocol(prot)
-        # TODO: add output checks and asserts
+        self.checkOutput(prot, 'reprojections',
+                         ['reprojections.getSize() == %d'
+                          % (self._numberOfParticles * 2)])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getSize() == %d' % 2])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getFirstItem().getSize() == %d'
+                          % self._numberOfParticles])
 
     def testIgnoreCTF(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood, 
+        prot = self.newProtocol(XmippProtComputeLikelihood,
                                 objLabel='log likelihood',
                                 inputParticles=self.protImportPars.outputParticles,
                                 inputRefs=self.protJoinedVols.outputSet,
+                                particleRadius=29, noiseRadius=30,
                                 ignoreCTF=True)
         self.launchProtocol(prot)
-        # TODO: add output checks and asserts
+        self.checkOutput(prot, 'reprojections',
+                         ['reprojections.getSize() == %d'
+                          % (self._numberOfParticles * 2)])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getSize() == %d' % 2])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getFirstItem().getSize() == %d'
+                          % self._numberOfParticles])
+
+    def testNoNorm(self):
+        prot = self.newProtocol(XmippProtComputeLikelihood,
+                                objLabel='log likelihood',
+                                inputParticles=self.protSubset.outputParticles,
+                                inputRefs=self.protJoinedVolsIni.outputSet,
+                                particleRadius=29, noiseRadius=30)
+        self.launchProtocol(prot)
+        self.checkOutput(prot, 'reprojections',
+                         ['reprojections.getSize() == %d'
+                          % (self._numberOfParticles * 2)])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getSize() == %d' % 2])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getFirstItem().getSize() != %d'
+                          % self._numberOfParticles]) # bad result expected
+
+    def testDoNorm(self):
+        prot = self.newProtocol(XmippProtComputeLikelihood,
+                                objLabel='log likelihood',
+                                inputParticles=self.protSubset.outputParticles,
+                                inputRefs=self.protJoinedVolsIni.outputSet,
+                                particleRadius=29, noiseRadius=30,
+                                doNorm=True)
+        self.launchProtocol(prot)
+        self.checkOutput(prot, 'reprojections',
+                         ['reprojections.getSize() == %d'
+                          % (self._numberOfParticles * 2)])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getSize() == %d' % 2])
+        self.checkOutput(prot, 'outputClasses',
+                         ['outputClasses.getFirstItem().getSize() == %d'
+                          % self._numberOfParticles])
