@@ -298,7 +298,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self._positivity(output)
         #automatic mask
         # if iter < 7:
-        if iter > 2 < 9:
+        if iter > 2 and iter < 9:
             self._applyMaskThreshold(output)
         #mask
         self._applyCicularMask(output)      
