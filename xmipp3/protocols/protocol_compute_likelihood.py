@@ -39,13 +39,13 @@ from pwem import emlib
 import pwem.emlib.metadata as md
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam, 
+from pyworkflow.protocol.params import (PointerParam, EnumParam, FloatParam,
                                         BooleanParam, IntParam, 
                                         USE_GPU, GPU_LIST)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 
 
-from xmipp3.convert import setXmippAttributes
+from xmipp3.convert import setXmippAttributes, writeSetOfParticles
 import xmippLib
 
 
@@ -58,6 +58,11 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     _possibleOutputs = {"reprojections": SetOfParticles}
     
     stepsExecutionMode = STEPS_PARALLEL
+
+    # Normalization enum constants
+    NORM_OLD = 0
+    NORM_NEW = 1
+    NORM_RAMP =2
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -97,6 +102,19 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       condition='optimizeGray',
                       help='The actual gray value can be at most as small as 1-change or as large as 1+change')
 
+        form.addParam('doNorm', BooleanParam, default=False,
+                      label='Normalize',
+                      help='It subtract a ramp in the gray values and normalizes'
+                           'so that in the background there is 0 mean and'
+                           'standard deviation 1.')
+        form.addParam('normType', EnumParam, condition='doNorm',
+                      label='Normalization type', expertLevel=LEVEL_ADVANCED,
+                      choices=['OldXmipp','NewXmipp','Ramp'],
+                      default=self.NORM_RAMP, display=EnumParam.DISPLAY_COMBO,
+                      help='OldXmipp: mean(Image)=0, stddev(Image)=1\n'
+                           'NewXmipp: mean(background)=0, stddev(background)=1\n'
+                           'Ramp: subtract background + NewXmipp')
+
         form.addParam('printTerms', BooleanParam, label="Print terms of LL: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Whether to print terms 1 and 2, LL and noise variance')
 
@@ -106,20 +124,25 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     def _insertAllSteps(self):
         """ Convert input images then run continuous_assign2 then create output """
         
+        
         convId = self._insertFunctionStep(self.convertStep, prerequisites=[], needsGPU=False)
+        stepIds = [convId]
+        if self.doNorm:
+            normPsId = self._insertFunctionStep(self.normalizeParticlesStep, prerequisites=convId,
+                                                needsGPU=False)
+            stepIds.append(normPsId)
 
-        stepIds = []
         inputRefs = self.inputRefs.get()
         i=1
         if isinstance(inputRefs, Volume):
             prodId = self._insertFunctionStep(self.produceResidualsStep, inputRefs.getFileName(), i,
-                                              prerequisites=convId, needsGPU=False)
+                                              prerequisites=stepIds, needsGPU=False)
             i += 1
             stepIds.append(prodId)
         else:
             for volume in inputRefs:
                 prodId = self._insertFunctionStep(self.produceResidualsStep, volume.getFileName(), i,
-                                                  prerequisites=convId, needsGPU=False)
+                                                  prerequisites=stepIds, needsGPU=False)
                 i += 1
                 stepIds.append(prodId)
 
@@ -129,13 +152,16 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
-        from ..convert import writeSetOfParticles
         imgSet = self.inputParticles.get()
         writeSetOfParticles(imgSet, self._getExtraPath("images.xmd"))
 
+    def normalizeParticlesStep(self):
+        argsNorm = self._argsNormalize(particles=True)
+        self.runJob("xmipp_transform_normalize", argsNorm)
+
     def getMasks(self):
         if not (hasattr(self, 'mask') and hasattr(self, 'noiseMask')):
-            Xdim = self.inputParticles.get().getDimensions()[0]
+            Xdim = self._getSize()
             Y, X = np.ogrid[:Xdim, :Xdim]
             dist_from_center = np.sqrt((X - Xdim/2) ** 2 + (Y - Xdim/2) ** 2)
 
@@ -155,6 +181,13 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         return self.mask, self.noiseMask
 
     def produceResidualsStep(self, fnVol, i):
+
+        if self.doNorm:
+            fnVolOut = self._getExtraPath('%03d_' % (i) + os.path.split(fnVol)[1])
+            argsNorm = "-i %s -o %s" % (fnVol, fnVolOut) + self._argsNormalize()
+            self.runJob("xmipp_transform_normalize", argsNorm)
+            fnVol = fnVolOut
+
         fnAngles = self._getExtraPath("images.xmd")
 
         if self.newProg:
@@ -168,7 +201,9 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         fnProjections = self._getExtraPath("projections%03d.stk"%i)
 
         Ts = self.inputParticles.get().getSamplingRate()
-        args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s --oprojections %s" % (fnAngles, anglesOutFn, fnVol, Ts, fnResiduals, fnProjections)
+        args = "-i %s -o %s --ref %s --sampling %f --oresiduals %s --oprojections %s" % (fnAngles, anglesOutFn,
+                                                                                         fnVol, Ts,
+                                                                                         fnResiduals, fnProjections)
 
         if self.optimizeGray:
             args+=" --optimizeGray --max_gray_scale %f"%self.maxGrayChange
@@ -302,3 +337,27 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
             except StopIteration:
                 self.lastRow = None
         particle._appendItem = count > 0
+
+    def _argsNormalize(self, particles=False):
+        args = ""
+        if particles:
+            args += "-i %s -o %s --save_metadata_stack %s --keep_input_columns" \
+                   % (self._getExtraPath("images.xmd"), self._getExtraPath("images.stk"),
+                      self._getExtraPath("images.xmd"))
+
+        normType = self.normType.get()
+        bgRadius = self.particleRadius.get()
+        radii = self._getSize()
+        if bgRadius <= 0:
+            bgRadius = int(radii)
+
+        if normType == self.NORM_OLD:
+            args += " --method OldXmipp"
+        elif normType == self.NORM_NEW or not particles:
+            args += " --method NewXmipp --background circle %d" % bgRadius
+        else:
+            args += " --method Ramp --background circle %d" % bgRadius
+        return args
+
+    def _getSize(self):
+        return self.inputParticles.get().getDimensions()[0]
