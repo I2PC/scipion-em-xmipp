@@ -54,8 +54,7 @@ DISCARDED = 'Discarded'
 
 class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
-    Protocol to estimate the agreement between different movie alignment
-    algorithms in the Global Shifts.
+    The protocol compares two sets of aligned movies (reference and secondary) to evaluate their alignment consistency. It calculates the correlation between shift trajectories, allowing for a minimum correlation threshold to be set. Movies with correlations below this threshold can be discarded. The protocol can also generate plots showing the trajectories and correlations for each movie. This helps in identifying and validating the quality of movie alignments based on consensus among different alignment runs.
     """
 
     _label = 'movie alignment consensus'
@@ -82,7 +81,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       help="Minimum value for the consensus correlations between shifts trajectories."
                            "\nIf there are noticeable discrepancies between the two estimations below this correlation,"
                            " it will be discarded. If this value is set to -1 no movies will be discarded."
-                           "\n Reasonable values are from 0.5 to 1 meaning consistency between estimations.")
+                           "\n Values near 1 will indicate that there are a clear correlation between shifts trajectories.")
 
         form.addParam('trajectoryPlot', params.BooleanParam, default=False,
                       label='Global Alignment Trajectory Plot',
@@ -229,7 +228,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         S2_p = np.dot(A, S2)
 
         S1_cart = np.array([S1[0, :]/S1[2, :], S1[1, :]/S1[2, :]])
+        print("S1cart= ", S1_cart)
         S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
+        print("S2pcart= ", S2_p_cart)
         rmse_cart = np.sqrt((np.square(S1_cart - S2_p_cart)).mean())
         maxe_cart = np.max(S1_cart - S2_p_cart)
         corrX_cart = np.corrcoef(S1_cart[0, :], S2_p_cart[0, :])[0, 1]

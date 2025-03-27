@@ -50,7 +50,8 @@ from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtFlexAlign(ProtAlignMovies):
     """
-    Wrapper protocol to Xmipp Movie Alignment by cross-correlation
+    Wrapper protocol to Xmipp Movie Alignment by cross-correlation. Its main goal is set to give aligned sets of movies
+    hich frames tend to have shifts between them from a cross-correlation basis and alignment parameters.
     """
     NO_ROTATION = 0
     NO_FLIP = 0
@@ -268,7 +269,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
     #--------------------------- UTILS functions ------------------------------
     def transformGain(self, gainFn, outFn=None):
-      '''Transforms the gain image with the user especifications'''
+      '''Transforms the gain image with the user specifications'''
       if outFn == None:
         ext = pwutils.getExt(gainFn)
         baseName = os.path.basename(gainFn).replace(ext, '_transformed' + ext)
@@ -371,7 +372,6 @@ class XmippProtFlexAlign(ProtAlignMovies):
         alignedMovie = ProtAlignMovies._createOutputMovie(self, movie)
         self._setAlignmentInfo(movie, alignedMovie)
         return alignedMovie
-
 
     def _validateParallelProcessing(self):
         nGpus = len(self.gpuList.get().split())
