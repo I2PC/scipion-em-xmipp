@@ -194,13 +194,18 @@ class TestXmippComputeLikelihood(BaseTest):
     def testDoNormNeeded(self):
        self.runProtLikelihood(doNorm=True, normedInputs=False)
 
+    def testDoOldNormNeeded(self):
+       self.runProtLikelihood(doNorm=True, normedInputs=False,
+                              normType=0)
+
     def testDoNormUnneeded(self):
        self.runProtLikelihood(doNorm=True, normedInputs=True)
 
 
     def runProtLikelihood(self, particleRadius=29, noiseRadius=30,
                           doNorm=False, ignoreCTF=False, newProg=True,
-                          normedInputs=True, badResults=False):
+                          normedInputs=True, badResults=False,
+                          normType=1):
         """Run the protocol and check the outputs"""
         if normedInputs:
             inputParticles=self.protImportPars.outputParticles
@@ -215,7 +220,8 @@ class TestXmippComputeLikelihood(BaseTest):
                                 inputRefs=inputRefs,
                                 particleRadius=particleRadius,
                                 noiseRadius=noiseRadius,
-                                doNorm=doNorm, newProg=newProg,
+                                doNorm=doNorm, normType=normType,
+                                newProg=newProg,
                                 ignoreCTF=ignoreCTF)
         self.launchProtocol(prot)
         self.checkOutput(prot, 'reprojections',

@@ -104,16 +104,18 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         form.addParam('doNorm', BooleanParam, default=False,
                       label='Normalize',
-                      help='It subtract a ramp in the gray values and normalizes'
+                      help='Whether to subtract background gray values and normalize'
                            'so that in the background there is 0 mean and'
-                           'standard deviation 1.')
+                           'standard deviation 1. This is applied to particles and volumes')
         form.addParam('normType', EnumParam, condition='doNorm',
-                      label='Normalization type', expertLevel=LEVEL_ADVANCED,
+                      label='Particle normalization type', expertLevel=LEVEL_ADVANCED,
                       choices=['OldXmipp','NewXmipp','Ramp'],
                       default=self.NORM_RAMP, display=EnumParam.DISPLAY_COMBO,
                       help='OldXmipp: mean(Image)=0, stddev(Image)=1\n'
                            'NewXmipp: mean(background)=0, stddev(background)=1\n'
-                           'Ramp: subtract background + NewXmipp')
+                           'Ramp: subtract background + NewXmipp\n'
+                           'Only New and Old Xmipp are supported for volumes.'
+                           'If Ramp is selected then New is used for volumes')
 
         form.addParam('ignoreCTF', BooleanParam, label="Do not apply CTF: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='This should be used when images are treated with a Weiner filter instead')
