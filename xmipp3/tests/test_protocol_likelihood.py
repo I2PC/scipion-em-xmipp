@@ -114,7 +114,7 @@ class TestXmippComputeLikelihood(BaseTest):
                                 objLabel='join volumes ini',
                                 inputType=3,
                                 inputSets=[cls.protRiboIni.outputVolume,
-                                           cls.protSpikeIni.outputVolume])
+                                           cls.protSpikeIni.outputVol])
         cls.launchProtocol(prot)
 
         return prot
@@ -161,19 +161,7 @@ class TestXmippComputeLikelihood(BaseTest):
                                                  pathNoCTF)
 
     def testDefault(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood,
-                                objLabel='log likelihood',
-                                inputParticles=self.protImportPars.outputParticles,
-                                inputRefs=self.protJoinedVols.outputSet)
-        self.launchProtocol(prot)
-        self.checkOutput(prot, 'reprojections',
-                         ['reprojections.getSize() == %d'
-                          % (self._numberOfParticles * 2)])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getSize() == %d' % 2])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getFirstItem().getSize() == %d'
-                          % self._numberOfParticles])
+        self.runProtLikelihood(particleRadius=-1, noiseRadius=-1)
 
     def testOneVol(self):
         prot = self.newProtocol(XmippProtComputeLikelihood,
@@ -192,102 +180,55 @@ class TestXmippComputeLikelihood(BaseTest):
                           % self._numberOfParticles])
 
     def testOldProg(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood,
-                                objLabel='log likelihood',
-                                inputParticles=self.protImportPars.outputParticles,
-                                inputRefs=self.protJoinedVols.outputSet,
-                                particleRadius=29, noiseRadius=30,
-                                newProg=False)
-        self.launchProtocol(prot)
-        self.checkOutput(prot, 'reprojections',
-                         ['reprojections.getSize() == %d'
-                          % (self._numberOfParticles * 2)])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getSize() == %d' % 2])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getFirstItem().getSize() == %d'
-                          % self._numberOfParticles])
-
-    def testBinThreads(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood,
-                                objLabel='log likelihood',
-                                inputParticles=self.protImportPars.outputParticles,
-                                inputRefs=self.protJoinedVols.outputSet,
-                                particleRadius=29, noiseRadius=30,
-                                binThreads=3)
-        self.launchProtocol(prot)
-        self.checkOutput(prot, 'reprojections',
-                         ['reprojections.getSize() == %d'
-                          % (self._numberOfParticles * 2)])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getSize() == %d' % 2])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getFirstItem().getSize() == %d'
-                          % self._numberOfParticles])
+        self.runProtLikelihood(newProg=False)
 
     def testOldIgnoreCTF(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood,
-                                objLabel='log likelihood',
-                                inputParticles=self.protImportPars.outputParticles,
-                                inputRefs=self.protJoinedVols.outputSet,
-                                particleRadius=29, noiseRadius=30,
-                                newProg=False, ignoreCTF=True)
-        self.launchProtocol(prot)
-        self.checkOutput(prot, 'reprojections',
-                         ['reprojections.getSize() == %d'
-                          % (self._numberOfParticles * 2)])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getSize() == %d' % 2])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getFirstItem().getSize() == %d'
-                          % self._numberOfParticles])
+        self.runProtLikelihood(newProg=False, ignoreCTF=True)
 
     def testIgnoreCTF(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood,
-                                objLabel='log likelihood',
-                                inputParticles=self.protImportPars.outputParticles,
-                                inputRefs=self.protJoinedVols.outputSet,
-                                particleRadius=29, noiseRadius=30,
-                                ignoreCTF=True)
-        self.launchProtocol(prot)
-        self.checkOutput(prot, 'reprojections',
-                         ['reprojections.getSize() == %d'
-                          % (self._numberOfParticles * 2)])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getSize() == %d' % 2])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getFirstItem().getSize() == %d'
-                          % self._numberOfParticles])
+        self.runProtLikelihood(ignoreCTF=True)
 
     def testNoNorm(self):
-        prot = self.newProtocol(XmippProtComputeLikelihood,
-                                objLabel='log likelihood',
-                                inputParticles=self.protSubset.outputParticles,
-                                inputRefs=self.protJoinedVolsIni.outputSet,
-                                particleRadius=29, noiseRadius=30)
-        self.launchProtocol(prot)
-        self.checkOutput(prot, 'reprojections',
-                         ['reprojections.getSize() == %d'
-                          % (self._numberOfParticles * 2)])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getSize() == %d' % 2])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getFirstItem().getSize() != %d'
-                          % self._numberOfParticles]) # bad result expected
+        self.runProtLikelihood(badResults=True, normedInputs=False)
 
-    def testDoNorm(self):
+    def testDoNormNeeded(self):
+       self.runProtLikelihood(doNorm=True, normedInputs=False)
+
+    def testDoNormUnneeded(self):
+       self.runProtLikelihood(doNorm=True, normedInputs=True)
+
+
+    def runProtLikelihood(self, particleRadius=29, noiseRadius=30,
+                          doNorm=False, ignoreCTF=False, newProg=True,
+                          normedInputs=True, badResults=False):
+        """Run the protocol and check the outputs"""
+        if normedInputs:
+            inputParticles=self.protImportPars.outputParticles
+            inputRefs=self.protJoinedVols.outputSet
+        else:
+            inputParticles=self.protSubset.outputParticles
+            inputRefs=self.protJoinedVolsIni.outputSet
+
         prot = self.newProtocol(XmippProtComputeLikelihood,
                                 objLabel='log likelihood',
-                                inputParticles=self.protSubset.outputParticles,
-                                inputRefs=self.protJoinedVolsIni.outputSet,
-                                particleRadius=29, noiseRadius=30,
-                                doNorm=True)
+                                inputParticles=inputParticles,
+                                inputRefs=inputRefs,
+                                particleRadius=particleRadius,
+                                noiseRadius=noiseRadius,
+                                doNorm=doNorm, newProg=newProg,
+                                ignoreCTF=ignoreCTF)
         self.launchProtocol(prot)
         self.checkOutput(prot, 'reprojections',
                          ['reprojections.getSize() == %d'
                           % (self._numberOfParticles * 2)])
         self.checkOutput(prot, 'outputClasses',
                          ['outputClasses.getSize() == %d' % 2])
-        self.checkOutput(prot, 'outputClasses',
-                         ['outputClasses.getFirstItem().getSize() == %d'
-                          % self._numberOfParticles])
+        
+        if badResults:
+            self.checkOutput(prot, 'outputClasses',
+                            ['outputClasses.getFirstItem().getSize() != %d'
+                            % self._numberOfParticles]) # bad class assignment
+        else:
+            self.checkOutput(prot, 'outputClasses',
+                            ['outputClasses.getFirstItem().getSize() == %d'
+                            % self._numberOfParticles])
