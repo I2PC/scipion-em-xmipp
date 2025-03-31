@@ -153,14 +153,12 @@ class Plugin(pwem.Plugin):
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
             'cmake>=3.17',
-            #'hdf5>=1.18',
+            'hdf5>=1.18',
             #'sqlite>=3',
             #'fftw>=3',
             #'mpich-mpicxx',
-            #'c-compiler',
-            #'cxx-compiler',
             #'make',
-            #'openjdk',
+            'openjdk',
             #'libtiff',
             #'libjpeg-turbo'
 	    'gcc>=10,<=13',
