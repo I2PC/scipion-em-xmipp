@@ -302,7 +302,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         #gaussian mask
         # self._applyGaussianMask(output)
         #mask
-        self._applyCicularMask(output)      
+        self._applyCicularMask(output, iter)      
     
 
     def createOutput(self, iter):      
@@ -390,9 +390,13 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         args = '-i %s --select below 0 --substitute value 0'%input
         self.runJob(program,args,numberOfMpi=1)
         
-    def _applyCicularMask(self, input):
+    def _applyCicularMask(self, input, iter):
+        if iter == 0:
+            radius = 30
+        else:
+            radius = 50
         program = 'xmipp_transform_mask'
-        args = '-i %s --mask circular -50'%input
+        args = '-i %s --mask circular -%s'%(input, radius)
         self.runJob(program,args,numberOfMpi=1)
         
     def _applyGaussianMask(self, input):
