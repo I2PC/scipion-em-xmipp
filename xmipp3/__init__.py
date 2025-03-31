@@ -154,13 +154,13 @@ class Plugin(pwem.Plugin):
         CONDA_DEPENDENCIES = [
             'cmake>=3.17',
             'hdf5>=1.18',
-            #'sqlite>=3',
-            #'fftw>=3',
+            'sqlite>=3',
+            'fftw>=3',
             #'mpich-mpicxx',
             'make',
             'openjdk',
-            #'libtiff',
-            #'libjpeg-turbo'
+            'libtiff',
+            'libjpeg-turbo'
 	    'gcc>=10,<=13',
             'gxx>=10,<=13'
         ]
