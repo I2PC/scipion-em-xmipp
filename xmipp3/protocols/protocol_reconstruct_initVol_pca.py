@@ -294,12 +294,13 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         #filter
         # self._filterVolume(output, output, self.resolution.get())
         self._filterVolume(output, output, resol)
+        #automatic mask
+        if iter < 7:
+            self._applyMaskThreshold(output)
         #positivity
         self._positivity(output)
-        #automatic mask
-        # if iter < 7:
-        if iter > 2 and iter < 9:
-            self._applyMaskThreshold(output)
+        #gaussian mask
+        # self._applyGaussianMask(output)
         #mask
         self._applyCicularMask(output)      
     
@@ -392,6 +393,11 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
     def _applyCicularMask(self, input):
         program = 'xmipp_transform_mask'
         args = '-i %s --mask circular -50'%input
+        self.runJob(program,args,numberOfMpi=1)
+        
+    def _applyGaussianMask(self, input):
+        program = 'xmipp_transform_mask'
+        args = '-i %s --mask gaussian -64'%input
         self.runJob(program,args,numberOfMpi=1)
         
     def _applyBlurring(self, input):
