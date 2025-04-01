@@ -51,9 +51,9 @@ import xmippLib
 
 
 class XmippProtComputeLikelihood(ProtAnalysis3D):
-    """This protocol computes the likelihood of a set of particles with assigned angles when compared to a set of maps or atomic models"""
+    """This protocol computes the log likelihood or correlation of a set of particles with assigned angles when compared to a set of maps or atomic models"""
 
-    _label = 'compute likelihood'
+    _label = 'log likelihood'
     _lastUpdateVersion = VERSION_1_1
     _possibleOutputs = {"reprojections": SetOfParticles}
     
