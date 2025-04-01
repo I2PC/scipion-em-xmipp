@@ -101,7 +101,7 @@ def runExecuteCtfGroupsStep(self, **kwargs):
     self._store(self.numberOfCtfGroups)
 
 
-# # Functions outside th loop loop for xmipp_projection_matching
+# # Functions outside the loop loop for xmipp_projection_matching
 def runInitAngularReferenceFileStep(self):
     '''Create Initial angular file. Either fill it with zeros or copy input'''
     #NOTE: if using angles, self.selFileName file should contain angles info
