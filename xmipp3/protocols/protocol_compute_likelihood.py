@@ -103,7 +103,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                       help='The actual gray value can be at most as small as 1-change or as large as 1+change')
 
         form.addParam('doNorm', BooleanParam, default=False,
-                      label='Normalize',
+                      label='Normalize', expertLevel=LEVEL_ADVANCED,
                       help='Whether to subtract background gray values and normalize'
                            'so that in the background there is 0 mean and'
                            'standard deviation 1. This is applied to particles and volumes')
