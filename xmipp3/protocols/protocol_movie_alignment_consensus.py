@@ -54,9 +54,7 @@ DISCARDED = 'Discarded'
 
 class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
-    Protocol to estimate the agreement between different movie alignment
-    algorithms in the Global Shifts such as MotionCorr or FlexAlign. It is estimated to indicate differences between them
-    and likely to plot them in case their Global Shifts are noticeable.
+    The protocol compares two sets of aligned movies (reference and secondary) to evaluate their alignment consistency. It calculates the correlation between shift trajectories, allowing for a minimum correlation threshold to be set. Movies with correlations below this threshold can be discarded. The protocol can also generate plots showing the trajectories and correlations for each movie. This helps in identifying and validating the quality of movie alignments based on consensus among different alignment runs.
     """
 
     _label = 'movie alignment consensus'
@@ -90,16 +88,13 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       help="This will generate a plot for each movie where the reference and the secondary trajectory"
                            "will be plot in the same graph with its correlation value.")
 
-        form.addParallelSection(threads=4, mpi=1)
+        form.addParallelSection(threads=4)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
         self.initializeParams()
-        movieSteps = self._insertNewMovieSteps(self.allMovies1.keys(),
-                                               self.allMovies2.keys(),
-                                               self.insertedDict)
         self._insertFunctionStep('createOutputStep',
-                                 prerequisites=movieSteps, wait=True)
+                                 prerequisites=[], wait=True)
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -150,7 +145,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       pwutils.prettyTime(mTime)))
         # If the input movies.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck is not None and self.lastCheck > mTime:
+        if self.lastCheck > mTime and self.processedDict: # If this is empty it is due to a static "continue" action or it is the first round
             return None
 
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
@@ -228,7 +223,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         S1[1, :] = shiftY_1
         S2[0, :] = shiftX_2
         S2[1, :] = shiftY_2
-
+        
         # Translation through subtraction of the center of mass
         S1c = np.mean(S1, axis=1, keepdims=True)
         S2c = np.mean(S2, axis=1, keepdims=True)
@@ -303,7 +298,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
         # We have finished when there is not more input movies (stream closed)
         # and the number of processed movies is equal to the number of inputs
-        maxMovieSize = min(len(self.allMovies1), len(self.allMovies2))
+        maxMovieSize = len(set(self.allMovies1).intersection(set(self.allMovies2)))
         self.finished = (self.isStreamClosed and allDone == maxMovieSize)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
