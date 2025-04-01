@@ -222,32 +222,38 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 print('{:9s}\t{:9s}\t{:9s}\t{:9s}\t{:9s}\t{:9s}\t{:9s}\n'.format('-sos', 'term1', 'term2',
                                                                                  'LL', 'var', '1/(2*var)', 'std'))
         for objId in mdResults:
-            itemId = mdResults.getValue(emlib.MDL_ITEM_ID,objId)
-            
-            fnResidual = mdResults.getValue(emlib.MDL_IMAGE_RESIDUAL,objId)
-            I = xmippLib.Image(fnResidual)
+            itemId = mdResults.getValue(emlib.MDL_ITEM_ID, objId)
 
-            elements_within_circle = I.getData()[self.getMasks()[0]]
-            sum_of_squares = np.sum(elements_within_circle**2)
-            Npix = elements_within_circle.size
+            if self.optimizeGray:
+                fnResidual = mdResults.getValue(emlib.MDL_IMAGE_RESIDUAL, objId)
+                I = xmippLib.Image(fnResidual)
 
-            elements_between_circles = I.getData()[self.getMasks()[1]]
-            var = np.var(elements_between_circles)
+                elements_within_circle = I.getData()[self.getMasks()[0]]
+                sum_of_squares = np.sum(elements_within_circle**2)
+                Npix = elements_within_circle.size
 
-            term1 = -sum_of_squares/(2*var)
-            term2 = Npix/2 * np.log(2*np.pi*var)
-            LL = term1 - term2
+                elements_between_circles = I.getData()[self.getMasks()[1]]
+                var = np.var(elements_between_circles)
 
-            if self.printTerms.get():
-                print('{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\n'.format(-sum_of_squares, term1, term2,
-                                                                                                LL, var, 1/(2*var), var**0.5))
+                term1 = -sum_of_squares/(2*var)
+                term2 = Npix/2 * np.log(2*np.pi*var)
+                LL = term1 - term2
+
+                if self.printTerms.get():
+                    print('{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\t{:9.2e}\n'.format(-sum_of_squares, term1, term2,
+                                                                                                    LL, var, 1/(2*var), var**0.5))
+
+            else:
+                LL = mdResults.getValue(emlib.MDL_COST, objId)
 
             newRow = md.Row()
             newRow.setValue(emlib.MDL_ITEM_ID, itemId)
             newRow.setValue(emlib.MDL_LL, float(LL))
             newRow.setValue(emlib.MDL_IMAGE_REF, fnVol)
-            # newRow.setValue(emlib.MDL_RESIDUAL_VARIANCE, var)
-            newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
+
+            if self.optimizeGray:
+                newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
+
             newRow.addToMd(mdOut)
         mdOut.write(self._getExtraPath("logLikelihood%03d.xmd"%i))
 
