@@ -255,7 +255,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
                 newRow.setValue(emlib.MDL_IMAGE_RESIDUAL, fnResidual)
 
             newRow.addToMd(mdOut)
-        mdOut.write(self._getExtraPath("logLikelihood%03d.xmd"%i))
+        mdOut.write(self._getLLfilename(i))
 
     def appendRows(self, outputSet, fnXmd):
         self.iterMd = md.iterRows(fnXmd, md.MDL_ITEM_ID)
@@ -270,12 +270,12 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
         refsDict = {}
         i=1
         if isinstance(self.inputRefs.get(), Volume):
-            self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
+            self.appendRows(outputSet, self._getLLfilename(i))
             refsDict[i] = self.inputRefs.get()
             i += 1
         else:
             for volume in self.inputRefs.get():
-                self.appendRows(outputSet, self._getExtraPath("logLikelihood%03d.xmd" % i))
+                self.appendRows(outputSet, self._getLLfilename(i))
                 refsDict[i] = volume.clone()
                 i += 1
 
@@ -362,3 +362,6 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
     def _getSize(self):
         return self.inputParticles.get().getDimensions()[0]
+
+    def _getLLfilename(self, i):
+        return self._getExtraPath("logLikelihood%03d.xmd" % i)
