@@ -81,9 +81,16 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         form.addParam('minConsCorrelation', params.FloatParam, default=0.75,
                       label='Minimum consensus shifts correlation',
                       help="Minimum value for the consensus correlations between shifts trajectories."
-                           "\nIf there are noticeable discrepancies between the two estimations below this correlation,"
+                           "\n If there are noticeable discrepancies between the two estimations below this correlation,"
                            " it will be discarded. If this value is set to -1 no movies will be discarded."
                            "\n Values near 1 will indicate that there are a clear correlation between shifts trajectories.")
+
+        form.addParam('minRangeShift', params.FloatParam, default=3,
+                      label='Minimum range shift in each movie',
+                      help='Minimum value for the range shift detected in axes X and Y.'
+                      "\n It goes from maximum value to minimum value of each axe, creating a square window of a side size"
+                      " equal to this value, discarding those movies whose value is below the minimum."
+                      "\n It is necessary when discarding movies whose range shift is so small that it is not comparable.")
 
         form.addParam('trajectoryPlot', params.BooleanParam, default=False,
                       label='Global Alignment Trajectory Plot',
@@ -184,7 +191,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
             self.updateSteps()
 
-
     def _insertNewMovieSteps(self, movies1Dict, movies2Dict, insDict):
         deps = []
 
@@ -261,14 +267,25 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         self.info('Root Mean Squared Error %f' % rmse_cart)
         self.info('General Corr min(corrX, corrY) %f' % corr_cart)
 
-        if corr_cart >= self.minConsCorrelation.get():
-            self.info('Movie with id %d has a correlated alignment shift trajectory' %movieId)
-            fn = self._getMovieSelecFileAccepted()
-            with open(fn, 'a') as f:
-                f.write('%d T\n' % movieId)
+        rangeShiftX1 = max(shiftX_1) - min(shiftX_1)
+        rangeShiftX2 = max(S2_p[0, :]) - min(S2_p[0, :])
+        rangeShiftY1 = max(shiftY_1) - min(shiftY_1)
+        rangeShiftY2 = max(S2_p[1, :]) - min(S2_p[1, :])
 
-        elif corr_cart < self.minConsCorrelation.get():
-            self.info('Movie with id %d has discrepancy in the alignment with correlation %f' % (movieId, corr_cart))
+        if (rangeShiftX1 and rangeShiftX2 and rangeShiftY1 and rangeShiftY2) >= self.minRangeShift.get():
+            if corr_cart >= self.minConsCorrelation.get():
+                self.info('Movie with id %d has a correlated alignment shift trajectory' % movieId)
+                fn = self._getMovieSelecFileAccepted()
+                with open(fn, 'a') as f:
+                    f.write('%d T\n' % movieId)
+
+            elif corr_cart < self.minConsCorrelation.get():
+                self.info('Movie with id %d has discrepancy in the alignment with correlation %f' % (movieId, corr_cart))
+                fn = self._getMovieSelecFileDiscarded()
+                with open(fn, 'a') as f:
+                    f.write('%d F\n' % movieId)
+        else:
+            self.info('Movie with id %d has discrepancy in its range shift' % movieId)
             fn = self._getMovieSelecFileDiscarded()
             with open(fn, 'a') as f:
                 f.write('%d F\n' % movieId)
