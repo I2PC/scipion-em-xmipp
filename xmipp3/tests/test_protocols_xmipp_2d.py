@@ -1501,106 +1501,106 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         self.assertEquals(protScreenDeepLearning.outputParticles.getFirstItem().getDim(), (140, 140, 1), (MSG_WRONG_DIM, "particles"))
         # Check the sampling rate of the first particle
         self.assertEqual(protScreenDeepLearning.outputParticles.getFirstItem().getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "particles"))
-#
-# class TestXmippClassifyPca(TestXmippBase):
-#     """This class check if the protocol Classify PCA (static and in streaming) in Xmipp works properly."""
-#
-#     @classmethod
-#     def setUpClass(cls):
-#         setupTestProject(cls)
-#         TestXmippBase.setData('mda')
-#         cls.dsRelion = DataSet.getDataSet('relion_tutorial')
-#         cls.protImport = cls.importParticles()
-#
-#     @classmethod
-#     def importParticles(cls):
-#         pathToFile = 'import/case2/relion_it015_data.star'
-#         importProt = cls.newProtocol(emprot.ProtImportParticles,
-#                                      objLabel='from relion (auto-refine 3d)',
-#                                      importFrom=emprot.ProtImportParticles.IMPORT_FROM_RELION,
-#                                      starFile=cls.dsRelion.getFile(pathToFile),
-#                                      magnification=10000,
-#                                      samplingRate=7.08,
-#                                      haveDataBeenPhaseFlipped=True
-#                                      )
-#         cls.launchProtocol(importProt)
-#
-#         return importProt
-#
-#     def _updateProtocol(self, prot):
-#         prot2 = getProtocolFromDb(prot.getProject().path,
-#                                   prot.getDbPath(),
-#                                   prot.getObjId())
-#         # Close DB connections
-#         prot2.getProject().closeMapper()
-#         prot2.closeMappers()
-#         return prot2
-#
-#     def test_ClassifyPCAStreaming(self):
-#         print("Run 1st Classify PCA Static")
-#         protPCA1 = self.newProtocol(XmippProtClassifyPca,
-#                                     objLabel="Classify Pca - static version",
-#                                     numberOfClasses=5, numberOfMpi=4, numberOfThreads=1)
-#         protPCA1.inputParticles.set(self.protImport.outputParticles)
-#         self.proj.scheduleProtocol(protPCA1)
-#
-#         print("Start Streaming Particles")
-#         protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
-#                                       creationInterval=5, samplingRate=7.08, nDim=6000, groups=500)
-#         protStream.inputParticles.set(self.protImport.outputParticles)
-#         self.proj.scheduleProtocol(protStream, prerequisites=[protPCA1.getObjId()])
-#
-#         print("Run 2nd Classify PCA Streaming")
-#         protPCA2 = self.newProtocol(XmippProtClassifyPcaStreaming,
-#                                     objLabel="Classify Pca streaming - update classes",
-#                                     training=2000,
-#                                     correctCtf=False,
-#                                     mode=XmippProtClassifyPcaStreaming.UPDATE_CLASSES
-#                                     )
-#         protPCA2.initialClasses.set(protPCA1)
-#         protPCA2.initialClasses.setExtended("outputAverages")
-#
-#         protPCA2.inputParticles.set(protStream)
-#         protPCA2.inputParticles.setExtended("outputParticles")
-#
-#         self.proj.scheduleProtocol(protPCA2)
-#
-#         # when the first 2D Classification (static mode) finishes must have 5 classes.
-#         self.checkResults(protPCA1, 5, "Static mode classification")
-#         # when the 2D update Classification (streaming mode) finishes must have 5 classes.
-#         self.checkResults(protPCA2, 5, "Streaming mode update initial classification")
-#
-#         time.sleep(5)  # sometimes is not ready yet
-#
-#         # Check a final update
-#         self.checkFinal2DClasses1st(protPCA1, msg="Initial classification mode fails")
-#         self.checkFinal2DClasses2nd(protPCA2, msg="Update classification in streaming mode fails")
-#
-#     def checkFinal2DClasses1st(self, prot, outputName="outputClasses", msg=''):
-#         prot = self._updateProtocol(prot)
-#         output = getattr(prot, outputName, None)
-#         self.assertIsNotNone(output, msg)
-#         self.assertSetSize(output, 5, msg)
-#         self.assertSetSize(output.getImages(), 5236, msg)
-#
-#     def checkFinal2DClasses2nd(self, prot, outputName="outputClasses", msg=''):
-#         prot = self._updateProtocol(prot)
-#         output = getattr(prot, outputName, None)
-#         self.assertIsNotNone(output, msg)
-#         self.assertSetSize(output, 5, msg)
-#
-#     def checkResults(self, prot, size, msg=''):
-#         t0 = time.time()
-#         while not prot.isFinished():
-#             # Time out 4 minutes, just in case
-#             tdelta = time.time() - t0
-#             if tdelta > 4 * 60:
-#                 break
-#             prot = self._updateProtocol(prot)
-#             time.sleep(2)
-#
-#         self.assertSetSize(prot.outputClasses, size, msg)
-#
+
+class TestXmippClassifyPca(TestXmippBase):
+    """This class check if the protocol Classify PCA (static and in streaming) in Xmipp works properly."""
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData('mda')
+        cls.dsRelion = DataSet.getDataSet('relion_tutorial')
+        cls.protImport = cls.importParticles()
+
+    @classmethod
+    def importParticles(cls):
+        pathToFile = 'import/case2/relion_it015_data.star'
+        importProt = cls.newProtocol(emprot.ProtImportParticles,
+                                     objLabel='from relion (auto-refine 3d)',
+                                     importFrom=emprot.ProtImportParticles.IMPORT_FROM_RELION,
+                                     starFile=cls.dsRelion.getFile(pathToFile),
+                                     magnification=10000,
+                                     samplingRate=7.08,
+                                     haveDataBeenPhaseFlipped=True
+                                     )
+        cls.launchProtocol(importProt)
+
+        return importProt
+
+    def _updateProtocol(self, prot):
+        prot2 = getProtocolFromDb(prot.getProject().path,
+                                  prot.getDbPath(),
+                                  prot.getObjId())
+        # Close DB connections
+        prot2.getProject().closeMapper()
+        prot2.closeMappers()
+        return prot2
+
+    def test_ClassifyPCAStreaming(self):
+        print("Run 1st Classify PCA Static")
+        protPCA1 = self.newProtocol(XmippProtClassifyPca,
+                                    objLabel="Classify Pca - static version",
+                                    numberOfClasses=5, numberOfMpi=4, numberOfThreads=1)
+        protPCA1.inputParticles.set(self.protImport.outputParticles)
+        self.proj.scheduleProtocol(protPCA1)
+
+        print("Start Streaming Particles")
+        protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
+                                      creationInterval=5, samplingRate=7.08, nDim=6000, groups=500)
+        protStream.inputParticles.set(self.protImport.outputParticles)
+        self.proj.scheduleProtocol(protStream, prerequisites=[protPCA1.getObjId()])
+
+        print("Run 2nd Classify PCA Streaming")
+        protPCA2 = self.newProtocol(XmippProtClassifyPcaStreaming,
+                                    objLabel="Classify Pca streaming - update classes",
+                                    training=2000,
+                                    correctCtf=False,
+                                    mode=XmippProtClassifyPcaStreaming.UPDATE_CLASSES
+                                    )
+        protPCA2.initialClasses.set(protPCA1)
+        protPCA2.initialClasses.setExtended("outputAverages")
+
+        protPCA2.inputParticles.set(protStream)
+        protPCA2.inputParticles.setExtended("outputParticles")
+
+        self.proj.scheduleProtocol(protPCA2)
+
+        # when the first 2D Classification (static mode) finishes must have 5 classes.
+        self.checkResults(protPCA1, 5, "Static mode classification")
+        # when the 2D update Classification (streaming mode) finishes must have 5 classes.
+        self.checkResults(protPCA2, 5, "Streaming mode update initial classification")
+
+        time.sleep(5)  # sometimes is not ready yet
+
+        # Check a final update
+        self.checkFinal2DClasses1st(protPCA1, msg="Initial classification mode fails")
+        self.checkFinal2DClasses2nd(protPCA2, msg="Update classification in streaming mode fails")
+
+    def checkFinal2DClasses1st(self, prot, outputName="outputClasses", msg=''):
+        prot = self._updateProtocol(prot)
+        output = getattr(prot, outputName, None)
+        self.assertIsNotNone(output, msg)
+        self.assertSetSize(output, 5, msg)
+        self.assertSetSize(output.getImages(), 5236, msg)
+
+    def checkFinal2DClasses2nd(self, prot, outputName="outputClasses", msg=''):
+        prot = self._updateProtocol(prot)
+        output = getattr(prot, outputName, None)
+        self.assertIsNotNone(output, msg)
+        self.assertSetSize(output, 5, msg)
+
+    def checkResults(self, prot, size, msg=''):
+        t0 = time.time()
+        while not prot.isFinished():
+            # Time out 4 minutes, just in case
+            tdelta = time.time() - t0
+            if tdelta > 4 * 60:
+                break
+            prot = self._updateProtocol(prot)
+            time.sleep(2)
+
+        self.assertSetSize(prot.outputClasses, size, msg)
+
 
 class TestXmippProtCL2DClustering(TestXmippBase):
     """This class check if the protocol clustering 2d classes in Xmipp works properly."""
