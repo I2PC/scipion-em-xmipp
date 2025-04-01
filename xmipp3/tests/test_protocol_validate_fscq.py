@@ -41,8 +41,8 @@ class TestValidateFSCQ(BaseTest):
   def _runImportPDB(cls):
     protImportPDB = cls.newProtocol(
       ProtImportPdb,
-      inputPdbData=1,
-      pdbFile=cls.ds.getFile('PDBx_mmCIF/5ni1.pdb'))
+      inputPdbData=0,
+      pdbId="5ni1")
     cls.launchProtocol(protImportPDB)
     cls.protImportPDB = protImportPDB
 

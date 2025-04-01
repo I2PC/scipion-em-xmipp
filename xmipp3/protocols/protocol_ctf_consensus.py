@@ -336,17 +336,23 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         firstTimeDiscarded = len(doneListDiscarded) == 0
         allDone = len(doneListAccepted) + len(doneListDiscarded) +\
                   len(newDoneAccepted) + len(newDoneDiscarded)
-
         # We have finished when there is not more input ctf (stream closed)
         # and the number of processed ctf is equal to the number of inputs
         if self.calculateConsensus:
             inputCtfSet = self._loadInputCtfSet(self.ctfFn1)
             inputCtfSet2 = self._loadInputCtfSet(self.ctfFn2)
-            maxCtfSize = min(inputCtfSet.getSize(), inputCtfSet2.getSize())
-        else:
-            maxCtfSize =  self._loadInputCtfSet(self.ctfFn1).getSize()
 
-        self.finished = (self.isStreamClosed and allDone == maxCtfSize)
+            ctfSet1Ids = inputCtfSet.getIdSet()
+            ctfSet2Ids = inputCtfSet2.getIdSet()
+
+            newIds = list(set(ctfSet1Ids).intersection(set(ctfSet2Ids)))
+
+        else:
+            inputCtfSet = self._loadInputCtfSet(self.ctfFn1)
+            ctfSetIds = inputCtfSet.getIdSet()
+            newIds = list(set(ctfSetIds))
+
+        self.finished = (self.isStreamClosed and allDone == len(newIds))
 
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
@@ -378,7 +384,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
                 micsAttrName = OUTPUT_MICS+label
                 self._updateOutputSet(micsAttrName, mSet, streamMode)
-                # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Booelan,...)
+                # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Boolean,...)
                 # that happens somewhere while scheduling.
                 cSet.setMicrographs(Pointer(self, extended=micsAttrName))
 
@@ -636,7 +642,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             if firstCondition or consResolCrit or secondCondition:
                 self.discardedIds[ctfId] = 'F'
             else:
-                if (ctf.isEnabled()):
+                if ctf.isEnabled():
                     self.acceptedIds[ctfId] = 'T'
                 else:
                     self.acceptedIds[ctfId] = 'F'

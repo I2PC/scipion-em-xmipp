@@ -33,6 +33,7 @@ from pwem.objects import Volume, Transform, SetOfVolumes
 
 from xmipp3.convert import getImageLocation
 from pyworkflow import BETA, UPDATED, NEW, PROD
+import xmippLib
 
 
 ALIGN_MASK_CIRCULAR = 0
@@ -53,7 +54,10 @@ class XmippProtAlignVolume(ProtAlignVolume):
     _label = 'align volume'
     nVols = 0
     _devStatus = PROD
-
+    OUTPUT_NAME1 = "outputVolume"
+    OUTPUT_NAME2 = "outputVolumes"
+    _possibleOutputs = {OUTPUT_NAME1: Volume,
+                        OUTPUT_NAME2: SetOfVolumes}
     
     def __init__(self, **args):
         ProtAlignVolume.__init__(self, **args)
@@ -69,6 +73,8 @@ class XmippProtAlignVolume(ProtAlignVolume):
                       label="Input volume(s)", important=True, 
                       help='Select one or more volumes (Volume or SetOfVolumes)\n'
                            'to be aligned againt the reference volume.')
+        form.addParam('computeAvg', params.BooleanParam, label='Create average', default=False,
+                      help='Average all the volumes once aligned')
         
         group1 = form.addGroup('Mask')
         group1.addParam('applyMask', params.BooleanParam, default=False, 
@@ -198,6 +204,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
 
         vols = []
         idx=1
+        Vavg=None
         for vol in self._iterInputVolumes():
             outVol = Volume()
             fnOutVol = self._getExtraPath("vol%02d.mrc"%idx)
@@ -217,6 +224,13 @@ class XmippProtAlignVolume(ProtAlignVolume):
             # Set the sampling rate in the mrc header
             self.runJob("xmipp_image_header", "-i %s --sampling_rate %f"%(fnOutVol, Ts))
 
+            if self.computeAvg:
+                Vi=xmippLib.Image(fnOutVol).getData()
+                if Vavg is None:
+                    Vavg=Vi
+                else:
+                    Vavg+=Vi
+
             idx+=1
 
         if len(vols) > 1:
@@ -228,6 +242,18 @@ class XmippProtAlignVolume(ProtAlignVolume):
         else:
             vols[0].setSamplingRate(Ts)
             outputArgs = {'outputVolume': vols[0]}
+        
+        if self.computeAvg:
+            Vavg/=len(vols)
+            Vsave=xmippLib.Image()
+            Vsave.setData(Vavg)
+            fnAvg=self._getExtraPath("averageVolume.mrc")
+            Vsave.write(fnAvg)
+            self.runJob("xmipp_image_header", f"-i {fnAvg} --sampling_rate {Ts}")
+            volAvg=Volume()
+            volAvg.setFileName(fnAvg)
+            volAvg.setSamplingRate(Ts)
+            outputArgs['outputAverage']=volAvg
             
         self._defineOutputs(**outputArgs)
         if len(vols) > 1:
@@ -236,6 +262,10 @@ class XmippProtAlignVolume(ProtAlignVolume):
         else:
             for pointer in self.inputVolumes:
                 self._defineSourceRelation(pointer, outputArgs['outputVolume'])
+
+        if self.computeAvg:
+            for pointer in self.inputVolumes:
+                self._defineSourceRelation(pointer, outputArgs['outputAverage'])
 
     #  --------------------------- INFO functions --------------------------------------------
     def _validate(self):

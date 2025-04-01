@@ -54,8 +54,7 @@ DISCARDED = 'Discarded'
 
 class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
-    Protocol to estimate the agreement between different movie alignment
-    algorithms in the Global Shifts.
+    The protocol compares two sets of aligned movies (reference and secondary) to evaluate their alignment consistency. It calculates the correlation between shift trajectories, allowing for a minimum correlation threshold to be set. Movies with correlations below this threshold can be discarded. The protocol can also generate plots showing the trajectories and correlations for each movie. This helps in identifying and validating the quality of movie alignments based on consensus among different alignment runs.
     """
 
     _label = 'movie alignment consensus'
@@ -82,23 +81,20 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       help="Minimum value for the consensus correlations between shifts trajectories."
                            "\nIf there are noticeable discrepancies between the two estimations below this correlation,"
                            " it will be discarded. If this value is set to -1 no movies will be discarded."
-                           "\n Reasonable values are from 0.5 to 1 meaning consistency between estimations.")
+                           "\n Values near 1 will indicate that there are a clear correlation between shifts trajectories.")
 
         form.addParam('trajectoryPlot', params.BooleanParam, default=False,
                       label='Global Alignment Trajectory Plot',
                       help="This will generate a plot for each movie where the reference and the secondary trajectory"
                            "will be plot in the same graph with its correlation value.")
 
-        form.addParallelSection(threads=4, mpi=1)
+        form.addParallelSection(threads=4)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
         self.initializeParams()
-        movieSteps = self._insertNewMovieSteps(self.allMovies1.keys(),
-                                               self.allMovies2.keys(),
-                                               self.insertedDict)
         self._insertFunctionStep('createOutputStep',
-                                 prerequisites=movieSteps, wait=True)
+                                 prerequisites=[], wait=True)
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -149,7 +145,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                       pwutils.prettyTime(mTime)))
         # If the input movies.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck is not None and self.lastCheck > mTime:
+        if self.lastCheck > mTime and self.processedDict: # If this is empty it is due to a static "continue" action or it is the first round
             return None
 
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
@@ -232,7 +228,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         S2_p = np.dot(A, S2)
 
         S1_cart = np.array([S1[0, :]/S1[2, :], S1[1, :]/S1[2, :]])
+        print("S1cart= ", S1_cart)
         S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
+        print("S2pcart= ", S2_p_cart)
         rmse_cart = np.sqrt((np.square(S1_cart - S2_p_cart)).mean())
         maxe_cart = np.max(S1_cart - S2_p_cart)
         corrX_cart = np.corrcoef(S1_cart[0, :], S2_p_cart[0, :])[0, 1]
@@ -284,7 +282,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
         # We have finished when there is not more input movies (stream closed)
         # and the number of processed movies is equal to the number of inputs
-        maxMovieSize = min(len(self.allMovies1), len(self.allMovies2))
+        maxMovieSize = len(set(self.allMovies1).intersection(set(self.allMovies2)))
         self.finished = (self.isStreamClosed and allDone == maxMovieSize)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 

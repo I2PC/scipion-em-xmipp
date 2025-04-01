@@ -46,6 +46,8 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
     You can crop borders, remove bad pixels, etc. """
     _label = 'preprocess micrographs'
 
+    _possibleOutputs = {OUTPUT_MICROGRAPHS: SetOfMicrographs}
+
 
     def __init__(self, **args):        
         ProtPreprocessMicrographs.__init__(self, **args)
