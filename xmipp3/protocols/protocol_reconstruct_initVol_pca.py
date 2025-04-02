@@ -85,7 +85,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('inputVolumes', PointerParam, label="Reference volumes", allowsNull=True,
                       pointerClass='Volume', expertLevel=LEVEL_ADVANCED,
                       help='Reference volume')
-        form.addParam('classes', IntParam, default="1",
+        form.addParam('classes', IntParam, default=10,
                       label='Number of classes',
                       help='The number of classes for a multi reference refinement')
         form.addParam('particleRadius', FloatParam, default=-1,
@@ -391,10 +391,8 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob(program,args,numberOfMpi=1)
         
     def _applyCicularMask(self, input, iter):
-        if iter == 0:
-            radius = 32
-        elif iter == 1:
-            radius = 48
+        if iter < 1:
+            radius = 43
         else:
             radius = 64
         program = 'xmipp_transform_mask'
