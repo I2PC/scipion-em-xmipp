@@ -42,7 +42,7 @@ from pwem.constants import ALIGN_NONE, ALIGN_2D
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
                             writeSetOfClasses2D)
-from xmipp3.protocols.protocol_classify_pca import updateEnviron, XmippProtClassifyPca
+from xmipp3.protocols.protocol_classify_pca import XmippProtClassifyPca
 
 OUTPUT_CLASSES = "outputClasses"
 OUTPUT_AVERAGES = "outputAverages"
@@ -162,7 +162,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self._initFnStep()
 
     def _initFnStep(self):
-        updateEnviron(self.gpuList.get())
+        self.setGPU()
+        self.info(f'NUM GPUS: {self.numGPU}')
         self.inputFn = self.inputParticles.get().getFileName()
         self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
         self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd')  # Wiener
@@ -188,6 +189,14 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.classificationBatch.set(BATCH_UPDATE)
         else:
             self.numberClasses = self.numberOfClasses.get()
+
+    def setGPU(self):
+        if self.useQueueForSteps() or self.useQueue():
+            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        else:
+            myStr = self.gpuList.get()
+            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
+        self.numGPU = myStr.split(',')[0]
 
     def runPCASteps(self, newParticlesSet):
         # Run PCA steps
@@ -253,22 +262,22 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                                     self.refXmd,
                                     alignType=ALIGN_NONE)
 
-            args = ' -i  %s -o %s  ' % (self.refXmd, self.ref)
+            args = ' -i  %s -o %s -g' % (self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
             self.firstTimeDone = True
 
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
-        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA' % \
-               (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath())
+        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s' % \
+               (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), self.numGPU)
 
         env = self.getCondaEnv()
         env = self._setEnvVariables(env)
         self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
 
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
+        args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
                (inputIm, numClass, self._getExtraPath(), self._getExtraPath(), self._getExtraPath(),
-                stfile)
+                stfile, self.numGPU)
         if mask:
             args += ' --mask --sigma %s ' % (sigma)
 
