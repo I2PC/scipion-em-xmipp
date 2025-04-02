@@ -233,7 +233,7 @@ def get_cuda_version():
         return "nvcc no encontrado. ¿Está CUDA instalado?"
 
 def getCompilerVersion():
-    CUDA = get_cuda_version()
+    CUDA = float(get_cuda_version())
     print(f'CUDA version detected: {CUDA}')
     if CUDA <= 11.0:
         return 9
