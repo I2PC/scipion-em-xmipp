@@ -132,6 +132,27 @@ class Plugin(pwem.Plugin):
 
         return env
 
+    def get_cuda_version(cls):
+        try:
+            output = subprocess.check_output(["nvcc", "--version"]).decode(
+        	    "utf-8")
+            for line in output.split("\n"):
+                if "release" in line:
+                    return line.split("release")[-1].strip().split(",")[0]
+        except FileNotFoundError:
+            return "nvcc no encontrado. ¿Está CUDA instalado?"
+
+    def getCompilerVersion(cls):
+        CUDA = cls.get_cuda_version()
+        if CUDA <= 11.0:
+            return 9
+        elif 11.1 <= CUDA <= 11.4:
+            return 10
+        else:
+            return 11
+
+
+
     @classmethod
     def defineBinaries(cls, env):
         """ Define the Xmipp binaries/source available tgz.
@@ -161,8 +182,8 @@ class Plugin(pwem.Plugin):
             "openjdk",
             "libtiff",
             "libjpeg-turbo",
-	    "gcc=10",
-            "gxx=10"
+	        f"gcc={cls.getCompilerVersion()}",
+            f"gxx={cls.getCompilerVersion()}"
         ]
         
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
@@ -231,7 +252,8 @@ def getNvidiaDriverVersion(plugin):
             return nvidiaDriverVer
         except (ValueError, TypeError, FileNotFoundError):
             continue
-    
+
+
 def installDeepLearningToolkit(plugin, env):
 
     preMsgs = []
