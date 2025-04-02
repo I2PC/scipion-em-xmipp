@@ -144,6 +144,7 @@ class Plugin(pwem.Plugin):
 
     def getCompilerVersion(cls):
         CUDA = cls.get_cuda_version()
+        print(f'CUDA version detected: {CUDA}')
         if CUDA <= 11.0:
             return 9
         elif 11.1 <= CUDA <= 11.4:
