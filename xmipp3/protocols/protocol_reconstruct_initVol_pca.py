@@ -391,10 +391,10 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob(program,args,numberOfMpi=1)
         
     def _applyCicularMask(self, input, iter):
-        if iter < 2:
-            radius = 43
+        if iter < 5:
+            radius = 48
         else:
-            radius = 64
+            radius = 62
         program = 'xmipp_transform_mask'
         args = '-i %s --mask circular -%s'%(input, radius)
         self.runJob(program,args,numberOfMpi=1)
