@@ -180,6 +180,7 @@ class Plugin(pwem.Plugin):
             "fftw>=3",
             #"mpich-mpicxx",
             "make",
+	        "zlib",
             "openjdk",
             "libtiff",
             "libjpeg-turbo",
