@@ -101,7 +101,12 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
 
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
-        writeSetOfParticles(self.inputParticles.get(), self._getExtraPath(self.INPUT_PARTICLES))
+        writeSetOfParticles(self.inputParticles.get(), 
+                            self._getExtraPath(self.INPUT_PARTICLES),
+                            extraLabels=[emlib.MDL_SUBTRACTION_R2,
+                                         emlib.MDL_SUBTRACTION_BETA0,
+                                         emlib.MDL_SUBTRACTION_BETA1,
+                                         emlib.MDL_SUBTRACTION_B])
 
     def subtractionStep(self):
         vol = self.vol.get().clone()
