@@ -152,17 +152,17 @@ class Plugin(pwem.Plugin):
         
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
-            'cmake>=3.17',
-            'hdf5>=1.18',
-            'sqlite>=3',
-            'fftw>=3',
-            #'mpich-mpicxx',
-            'make',
-            'openjdk',
-            'libtiff',
-            'libjpeg-turbo'
-	    'gcc>=10,<=13',
-            'gxx>=10,<=13'
+            "cmake>=3.17",
+            "hdf5>=1.18",
+            "sqlite>=3",
+            "fftw>=3",
+            #"mpich-mpicxx",
+            "make",
+            "openjdk",
+            "libtiff",
+            "libjpeg-turbo"
+	    "gcc>=10,<=13",
+            "gxx>=10,<=13"
         ]
         
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
