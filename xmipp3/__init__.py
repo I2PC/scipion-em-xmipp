@@ -160,9 +160,9 @@ class Plugin(pwem.Plugin):
             "make",
             "openjdk",
             "libtiff",
-            "libjpeg-turbo"
-	    "gcc>=10,<=13",
-            "gxx>=10,<=13"
+            "libjpeg-turbo",
+	    "gcc=10",
+            "gxx=10"
         ]
         
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
