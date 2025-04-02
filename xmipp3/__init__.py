@@ -172,7 +172,7 @@ class Plugin(pwem.Plugin):
                 tar='void.tgz',
                 commands=commands.getCommands(),
                 neededProgs=['conda'],
-                default=False
+                default=True
             )
         
         if develMode:
