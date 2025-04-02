@@ -262,7 +262,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                                     self.refXmd,
                                     alignType=ALIGN_NONE)
 
-            args = ' -i  %s -o %s -g' % (self.refXmd, self.ref)
+            args = ' -i  %s -o %s ' % (self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
             self.firstTimeDone = True
 
