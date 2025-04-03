@@ -172,13 +172,13 @@ class Plugin(pwem.Plugin):
         
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
             commands = CommandDef('conda install -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
-            env.addPackage(
-                'xmippDep', version=_currentDepVersion,
-                tar='void.tgz',
-                commands=commands.getCommands(),
-                neededProgs=['conda'],
-                default=True
-            )
+            # env.addPackage(
+            #     'xmippDep', version=_currentDepVersion,
+            #     tar='void.tgz',
+            #     commands=commands.getCommands(),
+            #     neededProgs=['conda'],
+            #     default=True
+            # )
         
         #if develMode:
         #if True:
