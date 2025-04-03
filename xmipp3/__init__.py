@@ -189,7 +189,7 @@ class Plugin(pwem.Plugin):
 		        (f'cd .. && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
 		         f'cd {xmippSrc} && '
-		         f'git checkout {branchTest} && '
+		         #f'git checkout {branchTest} && '
 		         f'./xmipp ', COMPILE_TARGETS)
 	        ]
             print(f'installCommands: {installCommands}')
