@@ -181,7 +181,7 @@ class Plugin(pwem.Plugin):
             )
         
         #if develMode:
-            xmippSrc = 'xmipp-bundle '
+            xmippSrc = 'xmippDev'
             installCommands = [
 		        (f'cd .. && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
