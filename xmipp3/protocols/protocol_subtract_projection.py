@@ -152,12 +152,36 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         XmippProtSubtractProjectionBase._defineParams(form)
-        form.addParam('maskRoi', PointerParam, pointerClass='VolumeMask', label='ROI mask ', allowsNull=True,
+        form.addParam('maskRoi', 
+                      PointerParam, 
+                      pointerClass='VolumeMask', 
+                      label='ROI mask ', 
+                      allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep or subtract, '
-                           'avoiding masks with 1s in background. If no mask is given, the subtraction is performed in'
-                           ' whole images.')
-        form.addParam('subtract', EnumParam, default=0, choices=["Keep", "Subtract"], display=EnumParam.DISPLAY_HLIST,
-                      label="Mask contains the part to ")
+                           'avoiding masks with 1s in background. If no mask is given, the subtraction is performed in '
+                           'whole images.')
+        form.addParam('subtract', 
+                      EnumParam, 
+                      default=0, 
+                      choices=["Keep", "Subtract"], 
+                      display=EnumParam.DISPLAY_HLIST,
+                      label="Mask contains the part to keep or subtract.")
+        form.addParam('noiseEstimation',
+                      BooleanParam,
+                      label="Estimate noise",
+                      default=False,
+                      help='Estimate noise from the subtracted region of the particles. Performing this operation '
+                           'has no efect in the subtracted particles, just characterize the noise for further '
+                           'applications.')
+        form.addParam('numParticlesNoiseEstimation', 
+                      IntParam, 
+                      label="Number of particles for noise estimation: ", 
+                      default=5000, 
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Number of particles to estimate noise. The lower the number the lower the computational '
+                           'payload but the lower accuracy in the noise estimation.',
+                      condition='noiseEstimation==True')
+        
         form.addParallelSection(threads=0, mpi=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -206,6 +230,9 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
 
         if self.ignoreCTF.get():
             args += ' --ignoreCTF'
+
+        if self.noiseEstimation.get():
+            args += ' --num_particles_noise_est %d' % self.numParticlesNoiseEstimation.get()
         
         self.runJob("xmipp_subtract_projection", args)
 
