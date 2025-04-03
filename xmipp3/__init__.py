@@ -202,7 +202,7 @@ class Plugin(pwem.Plugin):
                 updateCuda=True,
                 default=True
             )
-        else:
+        if False:
             xmippSrc = f'xmippSrc-{version._binTagVersion}'
             installCommands = [
                 (f'cd .. && rm -rf {xmippSrc} && '
