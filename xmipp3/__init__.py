@@ -181,7 +181,8 @@ class Plugin(pwem.Plugin):
             )
         
         #if develMode:
-        if True:
+        #if True:
+            print('If True')
             xmippSrc = 'xmipp-devel'
             branchTest = 'agm_compilerOnEnv'
             installCommands = [
@@ -191,13 +192,15 @@ class Plugin(pwem.Plugin):
 		         f'git checkout {branchTest} && '
 		         f'./xmipp ', COMPILE_TARGETS)
 	        ]
+            print(f'installCommands: {installCommands}')
+
             env.addPackage(
                 'xmippDev',
                 tar='void.tgz',
                 commands=installCommands,
                 neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
                 updateCuda=True,
-                default=False
+                default=True
             )
         else:
             xmippSrc = f'xmippSrc-{version._binTagVersion}'
