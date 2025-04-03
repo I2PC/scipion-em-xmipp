@@ -169,7 +169,6 @@ class Plugin(pwem.Plugin):
 	        f"gcc={getCompilerVersion()}",
             f"gxx={getCompilerVersion()}"
         ]
-        print(f"os.environ['CONDA_PREFIX']: {os.environ['CONDA_PREFIX']}")
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
             commands = CommandDef('conda install -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
             env.addPackage(
