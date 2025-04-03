@@ -183,7 +183,7 @@ class Plugin(pwem.Plugin):
         #if develMode:
         #if True:
             print('If True')
-            xmippSrc = 'devel'
+            xmippSrc = 'xmipp-bundle '
             branchTest = 'agm_compilerOnEnv'
             installCommands = [
 		        (f'cd .. && rm -rf {xmippSrc} && '
