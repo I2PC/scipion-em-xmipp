@@ -181,10 +181,7 @@ class Plugin(pwem.Plugin):
             )
         
         #if develMode:
-        #if True:
-            print('If True')
             xmippSrc = 'xmipp-bundle '
-            branchTest = 'agm_compilerOnEnv'
             installCommands = [
 		        (f'cd .. && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
@@ -192,7 +189,6 @@ class Plugin(pwem.Plugin):
 		         #f'git checkout {branchTest} && '
 		         f'./xmipp ', COMPILE_TARGETS)
 	        ]
-            print(f'installCommands: {installCommands}')
 
             env.addPackage(
                 'xmippDev',
@@ -202,23 +198,23 @@ class Plugin(pwem.Plugin):
                 updateCuda=True,
                 default=True
             )
-        if False:
-            xmippSrc = f'xmippSrc-{version._binTagVersion}'
-            installCommands = [
-                (f'cd .. && rm -rf {xmippSrc} && '
-                f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
-                f'cd {xmippSrc} && '
-                f'git checkout {version._binTagVersion} && '
-                f'./xmipp --production True ', COMPILE_TARGETS)
-            ]
-            env.addPackage(
-                'xmippSrc', version=version._binTagVersion,
-                tar='void.tgz',
-                commands=installCommands,
-                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-                updateCuda=True,
-                default=not develMode
-            )
+	    # else:
+            # xmippSrc = f'xmippSrc-{version._binTagVersion}'
+            # installCommands = [
+            #     (f'cd .. && rm -rf {xmippSrc} && '
+            #     f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
+            #     f'cd {xmippSrc} && '
+            #     f'git checkout {version._binTagVersion} && '
+            #     f'./xmipp --production True ', COMPILE_TARGETS)
+            # ]
+            # env.addPackage(
+            #     'xmippSrc', version=version._binTagVersion,
+            #     tar='void.tgz',
+            #     commands=installCommands,
+            #     neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+            #     updateCuda=True,
+            #     default=not develMode
+            # )
         
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
