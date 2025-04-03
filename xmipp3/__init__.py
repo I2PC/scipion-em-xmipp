@@ -180,7 +180,8 @@ class Plugin(pwem.Plugin):
                 default=True
             )
         
-        if develMode:
+        #if develMode:
+        if True:
             xmippSrc = 'xmipp-devel'
             branchTest = 'agm_compilerOnEnv'
             installCommands = [
@@ -198,23 +199,23 @@ class Plugin(pwem.Plugin):
                 updateCuda=True,
                 default=False
             )
-        
-        xmippSrc = f'xmippSrc-{version._binTagVersion}'
-        installCommands = [
-            (f'cd .. && rm -rf {xmippSrc} && '
-            f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
-            f'cd {xmippSrc} && '
-            f'git checkout {version._binTagVersion} && '
-            f'./xmipp --production True ', COMPILE_TARGETS)
-        ]
-        env.addPackage(
-            'xmippSrc', version=version._binTagVersion,
-            tar='void.tgz',
-            commands=installCommands,
-            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-            updateCuda=True,
-            default=not develMode
-        )
+        else:
+            xmippSrc = f'xmippSrc-{version._binTagVersion}'
+            installCommands = [
+                (f'cd .. && rm -rf {xmippSrc} && '
+                f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
+                f'cd {xmippSrc} && '
+                f'git checkout {version._binTagVersion} && '
+                f'./xmipp --production True ', COMPILE_TARGETS)
+            ]
+            env.addPackage(
+                'xmippSrc', version=version._binTagVersion,
+                tar='void.tgz',
+                commands=installCommands,
+                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+                updateCuda=True,
+                default=not develMode
+            )
         
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
