@@ -84,7 +84,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                            "\n Values near 1 will indicate that there are a clear correlation between shifts trajectories.")
 
         form.addParam('minRangeShift', params.FloatParam, default=3,
-                      label='Minimum range shift in each movie in pixels',
+                      label='Minimum range shift to apply consensus (px)',
                       help='Minimum value for the range shift detected in axes X and Y in pixels.'
                       "\n It goes from maximum value to minimum value of each axe, creating a square window of a side size"
                       " equal to this value, omitting those movies from the consensus calculation."
@@ -267,34 +267,35 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         rangeShiftY1 = max(shiftY_1) - min(shiftY_1)
         rangeShiftY2 = max(S2_p[1, :]) - min(S2_p[1, :])
 
-        if ((rangeShiftX1 and rangeShiftX2) or (rangeShiftY1 and rangeShiftY2)) >= self.minRangeShift.get():
-            if corr_cart >= self.minConsCorrelation.get():
-                self.info('Movie with id %d has a correlated alignment shift trajectory' % movieId)
-                fn = self._getMovieSelecFileAccepted()
-                with open(fn, 'a') as f:
-                    f.write('%d T\n' % movieId)
+        minR = self.minRangeShift.get()
 
-            elif corr_cart < self.minConsCorrelation.get():
-                self.info('Movie with id %d has discrepancy in the alignment with correlation %f' % (movieId, corr_cart))
-                fn = self._getMovieSelecFileDiscarded()
-                with open(fn, 'a') as f:
-                    f.write('%d F\n' % movieId)
-        else:
-            S2_p = S2
-            S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
-            rmse_cart = np.sqrt((np.square(S1_cart - S2_p_cart)).mean())
-            maxe_cart = np.max(S1_cart - S2_p_cart)
-            corrX_cart = np.corrcoef(S1_cart[0, :], S2_p_cart[0, :])[0, 1]
-            corrY_cart = np.corrcoef(S1_cart[1, :], S2_p_cart[1, :])[0, 1]
-            corr_cart = np.min([corrY_cart, corrX_cart])
-
-            self.info('Root Mean Squared Error %f' % rmse_cart)
-            self.info('General Corr min(corrX, corrY) %f' % corr_cart)
-
-            self.info('Movie with id %d has discrepancy in its range shift, so it is omitted from the consensus calculation' % movieId)
+        if corr_cart >= self.minConsCorrelation.get():
+            self.info('Movie with id %d has a correlated alignment shift trajectory' % movieId)
             fn = self._getMovieSelecFileAccepted()
             with open(fn, 'a') as f:
-                f.write('%d T*\n' % movieId)
+                f.write('%d T\n' % movieId)
+
+            if (rangeShiftX1 >= minR and rangeShiftX2 >= minR) or (rangeShiftY1 >= minR and rangeShiftY2 >= minR):
+                self.info('Movie with id %d is within the range shift threshold' % movieId)
+            else:
+                self.info('Movie with id %d has discrepancy in its range shift, so it is omitted from the consensus calculation' % movieId)
+
+                S2_p = S2
+                S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
+                rmse_cart = np.sqrt((np.square(S1_cart - S2_p_cart)).mean())
+                maxe_cart = np.max(S1_cart - S2_p_cart)
+                corrX_cart = np.corrcoef(S1_cart[0, :], S2_p_cart[0, :])[0, 1]
+                corrY_cart = np.corrcoef(S1_cart[1, :], S2_p_cart[1, :])[0, 1]
+                corr_cart = np.min([corrY_cart, corrX_cart])
+
+                self.info('Root Mean Squared Error %f' % rmse_cart)
+                self.info('General Corr min(corrX, corrY) %f' % corr_cart)
+
+        elif corr_cart < self.minConsCorrelation.get():
+            self.info('Movie with id %d has discrepancy in the alignment with correlation %f' % (movieId, corr_cart))
+            fn = self._getMovieSelecFileDiscarded()
+            with open(fn, 'a') as f:
+                f.write('%d F\n' % movieId)
 
         stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
                      'max_error': maxe_cart, 'rmse_error': rmse_cart, 'S1_cart': S1_cart, 'S2_p_cart': S2_p_cart}
