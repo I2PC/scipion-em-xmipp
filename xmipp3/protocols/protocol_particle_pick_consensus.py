@@ -149,7 +149,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # If continue from an stopped run, don't repeat what is done
+        # If continue from a stopped run, don't repeat what is already done
         if not self.checkedMics:
             for fn in getFiles(self._getExtraPath()):
                 fn = removeBaseExt(fn)
@@ -169,9 +169,14 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                 readyMics.intersection_update(currentPickMics)
             allMics = allMics.union(currentPickMics)
 
+        mainPickMics = getReadyMics(self.inputCoordinates[0].get())[0]
+        secondaryPickMics = getReadyMics(self.inputCoordinates[1].get())[0]
+        if not mainPickMics == secondaryPickMics:
+            allMics = mainPickMics.intersection(secondaryPickMics)
+
         self.streamClosed = all(streamClosed)
         if self.streamClosed:
-            # for non streaming do all and in the last iteration of streaming do the rest
+            # for non-streaming do all and in the last iteration of streaming do the rest
             newMicIds = allMics.difference(self.checkedMics)
         else:  # for streaming processing, only go for the ready mics in all pickers
             if readyMics is not None:
@@ -179,10 +184,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
         if newMicIds:
             self.checkedMics.update(newMicIds)
-
             inMics = self.getMainInput().getMicrographs()
             newMics = [inMics[micId].clone() for micId in newMicIds]
-
             fDeps = self.insertNewCoorsSteps(newMics)
             outputStep = self._getFirstJoinStep()
             if outputStep is not None:
@@ -223,8 +226,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                 outputStep.setStatus(STATUS_NEW)
 
     def defineRelations(self, outputSet):
-        for inCorrds in self.inputCoordinates:
-            self._defineTransformRelation(inCorrds, outputSet)
+        for inCoords in self.inputCoordinates:
+            self._defineTransformRelation(inCoords, outputSet)
 
     def _loadOutputSet(self, SetClass, baseName):
         setFile = self._getPath(baseName)
