@@ -640,8 +640,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                     if movieId == int(line.strip().split()[0]):
                         if line.strip().split()[1] == 'T':
                             return True
-                        elif line.strip().split()[1] == 'T*':
-                            return True
                         else:
                             return False
 
