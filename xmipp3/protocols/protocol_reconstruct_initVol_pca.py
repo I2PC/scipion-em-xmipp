@@ -255,7 +255,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         (outputXMD, outputVOL, 0.5, self.sampling, self.numberOfMpi.get()) 
         self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
         
-        self._applyCicularMask(outputVOL, 0)
+        # self._applyCicularMask(outputVOL, 0)
         
     
     def pcaTraining(self, inputIm, resolutionTrain):
