@@ -156,13 +156,13 @@ class Plugin(pwem.Plugin):
         
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
-	        "cmake>=3.17,<4", #cmake-4 is not compatible with Relion compilation
+	    "cmake>=3.17<4", #cmake-4 is not compatible with Relion compilation
             "hdf5>=1.18",
             "sqlite>=3",
             "fftw>=3",
             "openmpi",
             "make",
-	        "zlib",
+            "zlib",
             "openjdk",
             "libtiff",
             "libjpeg-turbo",
