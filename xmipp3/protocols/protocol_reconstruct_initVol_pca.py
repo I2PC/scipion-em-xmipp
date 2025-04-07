@@ -229,6 +229,10 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         args = ' -i  %s -o %s --save_metadata_stack '%(outputOrig, outputConvert)
         self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
+        
+        args = ' -i  %s '%(outputConvert)
+        self.runJob("xmipp_transform_center_image",args, numberOfMpi=1)
+        
         #positivity
         # self._positivity(outputConvert)
         # blur
