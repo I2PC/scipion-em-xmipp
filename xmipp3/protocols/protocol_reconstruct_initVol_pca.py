@@ -125,7 +125,8 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.size = self.inputParticles.get().getDimensions()[0]
         self.iterations = 20
         self.classes = self.classes.get()
-        symmetry = "c1"
+        # symmetry = "c1"
+        symmetry = self.symmetryGroup.get()
         
  
         if self.particleRadius.get() == -1:
@@ -162,9 +163,6 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
             
             # angleGallery, angle, shift, maxShift = self._parameters(iter)
             # print(angleGallery, angle, shift, maxShift)
-            
-            if iter > 2:
-                symmetry = self.symmetryGroup.get()
 
             if self.classify and iter > 3:
                 saveClass = True
