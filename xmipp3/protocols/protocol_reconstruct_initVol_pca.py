@@ -125,6 +125,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.size = self.inputParticles.get().getDimensions()[0]
         self.iterations = 20
         self.classes = self.classes.get()
+        symmetry = "c1"
         
  
         if self.particleRadius.get() == -1:
@@ -138,7 +139,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         for cl in range (self.classes):
             refVol = self._getTmpPath('randomVol_class%s.mrc'%cl)+ ':mrc'
             if self.inputVolumes.get() is None:
-                self._insertFunctionStep('initRandomVol', self.imgsOrigXmd, self._getTmpPath('random_class%s.xmd'%(cl)), refVol)
+                self._insertFunctionStep('initRandomVol', self.imgsOrigXmd, self._getTmpPath('random_class%s.xmd'%(cl)), refVol, symmetry)
             else:
                 img=ImageHandler()
                 vol=self.inputVolumes.get()
@@ -150,22 +151,20 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
 
             if iter < 10:
                 angleGallery, angle, shift, maxShift = 12, 8, 3, 12
-                # angleGallery, angle, shift, maxShift = 12, 8, 4, 20
             elif iter < 14:
                 angleGallery, angle, shift, maxShift = 8, 6, 3, 12
-                # angleGallery, angle, shift, maxShift = 8, 6, 3, 12
             elif iter < 17:
                 angleGallery, angle, shift, maxShift = 6, 5, 3, 12
-                # angleGallery, angle, shift, maxShift = 6, 5, 3, 9
             elif iter < 20:
                 angleGallery, angle, shift, maxShift = 5, 5, 3, 12
-                # angleGallery, angle, shift, maxShift = 5, 5, 2, 6
                 
                 
             
             # angleGallery, angle, shift, maxShift = self._parameters(iter)
             # print(angleGallery, angle, shift, maxShift)
-                
+            
+            if iter > 2:
+                symmetry = self.symmetryGroup.get()
 
             if self.classify and iter > 3:
                 saveClass = True
@@ -207,7 +206,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
             
                 
             for cl in range(self.classes):
-                self._insertFunctionStep("createGallery", angleGallery, refVol[cl], refIm[cl])
+                self._insertFunctionStep("createGallery", angleGallery, refVol[cl], refIm[cl], symmetry)
             
             self._insertFunctionStep("globalAlign", inputXmd, refIm[cl], outXmd[0], angle, shift, maxShift, applyShift, saveClass, radius, iter)   
             
@@ -215,9 +214,9 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                 # self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get())
 
                 if saveClass or iter < 5:
-                    self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get())
+                    self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get(), symmetry)
                 else:
-                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, self.resolution.get())
+                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, self.resolution.get(), symmetry)
                     
 
         # self._insertFunctionStep("createOutput", iter)
@@ -239,15 +238,15 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         # self._applyBlurring(outputConvert)
                 
    
-    def createGallery(self, angle, refVol, refIm):
+    def createGallery(self, angle, refVol, refIm, symmetry):
         #--perturb 0.01
         args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
-                (refVol, self.symmetryGroup.get(), angle, refIm+'.mrcs')
+                (refVol, symmetry, angle, refIm+'.mrcs')
         self.runJob("xmipp_angular_project_library", args, numberOfMpi=1)
         moveFile(refIm+'.doc', refIm+'.xmd')
         
         
-    def initRandomVol(self, inputXMD, outputXMD, outputVOL):
+    def initRandomVol(self, inputXMD, outputXMD, outputVOL, symmetry):
         args = ' -s %s  -o %s --random_angles' %(inputXMD, outputXMD)
         
         env = self.getCondaEnv()
@@ -256,7 +255,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         program = 'xmipp_cuda_reconstruct_fourier'    
         args = '-i %s -o %s --sym %s  --max_resolution %s  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
-        (outputXMD, outputVOL, self.symmetryGroup.get(), 0.5, self.sampling, self.numberOfMpi.get()) 
+        (outputXMD, outputVOL, symmetry, 0.5, self.sampling, self.numberOfMpi.get()) 
         self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
         
     
@@ -289,11 +288,11 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         elif iter > 4:    
             self._extract_select_xmd(iter)
         
-    def reconstructVolume(self, input, output, iter, resol):
+    def reconstructVolume(self, input, output, iter, resol, symmetry):
         
         program = 'xmipp_cuda_reconstruct_fourier'    
         args = '-i %s -o %s --sym %s  --max_resolution %s  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
-        (input, output, self.symmetryGroup.get(), 0.5, self.sampling, self.numberOfMpi.get()) 
+        (input, output, symmetry, 0.5, self.sampling, self.numberOfMpi.get()) 
         self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
         #filter
         # self._filterVolume(output, output, self.resolution.get())
