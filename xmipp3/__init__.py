@@ -238,7 +238,7 @@ def get_cuda_version():
             if "release" in line:
                 return line.split("release")[-1].strip().split(",")[0]
     except FileNotFoundError:
-        return "nvcc no encontrado. ¿Está CUDA instalado?"
+        return '11.7'
 
 def getCompilerVersion():
     CUDA = float(get_cuda_version())
