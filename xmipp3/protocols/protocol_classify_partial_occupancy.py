@@ -26,7 +26,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.protocol.params import PointerParam, IntParam, EnumParam
+from pyworkflow.protocol.params import PointerParam, IntParam, EnumParam, BooleanParam, PathParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
@@ -89,6 +89,26 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
                       label='ROI mask ',
                       help='Specify a 3D mask for the region of the input volume ')
         
+        form.addParam('noiseEstimation',
+                      BooleanParam,
+                      label="Provide previously estiamted noise?",
+                      default=True,
+                      help='Import a previous estimation of the noise power for likelihood calculation.')
+        
+        form.addParam('noiseEstimationPath', 
+                      PathParam,
+                      label="Path to noise estimation",
+                      help="Path to previously estimates noise power.",
+                      condition='noiseEstimation==True')
+        
+        form.addParam('noiseEstimationParticles', 
+                      IntParam,
+                      label="Number of particles to estimate noise",
+                      help="Number of particles to estimate noise. This operation is computationlly expensive but "
+                           "enough particles are needed for a robust likelyhood calculation.",
+                      default=5000,
+                      condition='noiseEstimation==False')
+        
         form.addParallelSection(threads=0,
                                 mpi=4)
 
@@ -138,6 +158,11 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
 
         if self.realSpaceProjection.get() == 1:
             params["--realSpaceProjection"] = ' '
+
+        if self.noiseEstimation.get():
+            params["--noise_est"] = self.noiseEstimationPath.get()
+        else:
+            params["--noise_est_particles"] = self.noiseEstimationParticles.get()
 
         args = ' '.join(['%s %s' % (k, str(v)) for k, v in params.items()])   
         
