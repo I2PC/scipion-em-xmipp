@@ -140,7 +140,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         for cl in range (self.classes):
             refVol = self._getTmpPath('randomVol_class%s.mrc'%cl)+ ':mrc'
             if self.inputVolumes.get() is None:
-                self._insertFunctionStep('initRandomVol', self.imgsOrigXmd, self._getTmpPath('random_class%s.xmd'%(cl)), refVol, symmetry)
+                self._insertFunctionStep('initRandomVol', self.imgsFnXmd, self._getTmpPath('random_class%s.xmd'%(cl)), refVol, symmetry)
             else:
                 img=ImageHandler()
                 vol=self.inputVolumes.get()
