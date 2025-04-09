@@ -231,24 +231,32 @@ class Plugin(pwem.Plugin):
         return bundleDir if isBundle else None
 
 def get_cuda_version():
-    try:
-        output = subprocess.check_output(["nvcc", "--version"]).decode(
-            "utf-8")
-        for line in output.split("\n"):
-            if "release" in line:
-                return line.split("release")[-1].strip().split(",")[0]
-    except FileNotFoundError:
-        return '11.7'
+    cudaVersion = pwem.Plugin.guessCudaVersion(pwem.Config.CUDA_LIB, default='0.0')
+    if cudaVersion.major == 0:
+        try:
+            output = subprocess.check_output(["nvcc", "--version"]).decode("utf-8")
+            for line in output.split("\n"):
+                if "release" in line:
+                    return float(line.split("release")[-1].strip().split(",")[0])
+        except FileNotFoundError:
+            return None
 
 def getCompilerVersion():
-    CUDA = float(get_cuda_version())
-    print(f'CUDA version detected: {CUDA}')
+    CUDA = get_cuda_version()
+    if CUDA == None:
+        compiler = 10
+        print(f'CUDA not detected.\nCompiler assigned: {compiler}')
+        return compiler
+
     if CUDA <= 11.0:
-        return 9
+        compiler =  9
     elif 11.1 <= CUDA <= 11.4:
-        return 10
+        compiler =  10
     else:
-        return 11
+        compiler =  11
+
+    print(f'CUDA version detected: {CUDA}.\nCompiler assigned: {compiler}')
+    return compiler
 
 def getNvidiaDriverVersion(plugin):
     """ Several ways to retrieve NVIDIA driver version.
