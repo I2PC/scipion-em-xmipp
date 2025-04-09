@@ -164,7 +164,7 @@ class Plugin(pwem.Plugin):
             "openjdk",
             "libtiff",
             "libjpeg-turbo",
-	    f"gcc={getCompilerVersion()}",
+	        f"gcc={getCompilerVersion()}",
             f"gxx={getCompilerVersion()}"
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
@@ -195,7 +195,7 @@ class Plugin(pwem.Plugin):
                 updateCuda=True,
                 default=True
             )
-	else:
+        else:
             xmippSrc = f'xmippSrc-{version._binTagVersion}'
             installCommands = [
                 (f'cd .. && rm -rf {xmippSrc} && '
@@ -205,13 +205,13 @@ class Plugin(pwem.Plugin):
                 f'./xmipp --production True ', COMPILE_TARGETS)
             ]
             env.addPackage(
-                'xmippSrc', version=version._binTagVersion,
-                tar='void.tgz',
-                commands=installCommands,
-                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-                updateCuda=True,
-                default=not develMode
-            )
+	                'xmippSrc', version=version._binTagVersion,
+	                tar='void.tgz',
+	                commands=installCommands,
+	                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+	                updateCuda=True,
+	                default=not develMode
+	            )
         
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
