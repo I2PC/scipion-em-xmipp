@@ -179,9 +179,8 @@ class Plugin(pwem.Plugin):
         
         # if develMode:
         xmippSrc = 'xmippDev'
-        softwareEmPath = os.path.join(pwem.Config.SCIPION_SOFTWARE, 'em')
         installCommands = [
-	        (f'cd {softwareEmPath} && rm -rf {xmippSrc} && '
+	        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
 	         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
 	         f'cd {xmippSrc} && '
 	         #f'git checkout {branchTest} && '
