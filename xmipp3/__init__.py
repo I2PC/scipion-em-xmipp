@@ -250,10 +250,8 @@ def getCompilerVersion():
 
     if CUDA <= 11.0:
         compiler =  9
-    elif 11.1 <= CUDA <= 11.4:
-        compiler =  10
     else:
-        compiler =  11
+        compiler =  10
 
     print(f'CUDA version detected: {CUDA}.\nCompiler assigned: {compiler}')
     return compiler
