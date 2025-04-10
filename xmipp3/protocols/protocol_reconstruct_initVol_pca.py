@@ -253,7 +253,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         program = 'xmipp_cuda_reconstruct_fourier'    
         args = '-i %s -o %s --sym %s  --max_resolution %s  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
-        (outputXMD, outputVOL, symmetry, 0.15, self.sampling, self.numberOfMpi.get()) 
+        (outputXMD, outputVOL, symmetry, 0.5, self.sampling, self.numberOfMpi.get()) 
         self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
         
     
