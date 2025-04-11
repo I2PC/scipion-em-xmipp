@@ -171,7 +171,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
         mainPickMics = getReadyMics(self.inputCoordinates[0].get())[0]
         secondaryPickMics = getReadyMics(self.inputCoordinates[1].get())[0]
-        if not mainPickMics == secondaryPickMics:
+        if mainPickMics != secondaryPickMics:
             allMics = mainPickMics.intersection(secondaryPickMics)
 
         self.streamClosed = all(streamClosed)
