@@ -54,7 +54,11 @@ DISCARDED = 'Discarded'
 
 class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
-    The protocol compares two sets of aligned movies (reference and secondary) to evaluate their alignment consistency. It calculates the correlation between shift trajectories, allowing for a minimum correlation threshold to be set. Movies with correlations below this threshold can be discarded. The protocol can also generate plots showing the trajectories and correlations for each movie. This helps in identifying and validating the quality of movie alignments based on consensus among different alignment runs.
+    The protocol compares two sets of aligned movies (reference and secondary) to evaluate their alignment consistency.
+    It calculates the correlation between shift trajectories, allowing for a minimum correlation threshold to be set.
+    Movies with correlations below this threshold can be discarded. The protocol can also generate plots showing
+    the trajectories and correlations for each movie. This helps in identifying and validating the quality of movie alignments
+    based on consensus among different alignment runs.
     """
 
     _label = 'movie alignment consensus'
@@ -461,8 +465,34 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         return micSet
 
     def _summary(self):
-        # return message
-        pass
+        message = []
+
+        acceptedMoviesSize = (self.outputMovies.getSize()
+                        if hasattr(self, "outputMovies") else 0)
+
+        discardedMoviesSize = (self.outputMoviesDiscarded.getSize()
+                         if hasattr(self, "outputMoviesDiscarded") else 0)
+
+        acceptedMicrographsSize = (self.outputMicrographs.getSize()
+                              if hasattr(self, "outputMicrographs") else 0)
+
+        discardedMicrographsSize = (self.outputMicrographsDiscarded.getSize()
+                               if hasattr(self, "outputMicrographsDiscarded") else 0)
+
+        message.append("%d/%d Movies processed (%d accepted and %d discarded)."
+                   % (acceptedMoviesSize+discardedMoviesSize,
+                      self.inputMovies1.get().getSize(),
+                      acceptedMoviesSize, discardedMoviesSize))
+        message.append("%d/%d Micrographs processed (%d accepted and %d discarded)."
+                       % (acceptedMicrographsSize + discardedMicrographsSize,
+                          self.inputMovies1.get().getSize(),
+                          acceptedMicrographsSize, discardedMicrographsSize))
+        message.append("Values regarding the minimum correlation between sets of movies below %.2f will be discarded."
+                       % self.minConsCorrelation.get())
+        message.append("Values regarding the range shift of sets of movies below %d pixels won't be considered in the "
+                       "consensus calculation." % self.minRangeShift.get())
+
+        return message
 
     def _validate(self):
         """ The function of this hook is to add some validation before the
