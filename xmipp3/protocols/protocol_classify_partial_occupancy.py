@@ -52,7 +52,7 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
                       PointerParam,
                       pointerClass='SetOfParticles',
                       label="Particles ",
-                      help='Specify a SetOfParticles')
+                      help='Specify a input set of particles whose region of not-interest has been subtracted.')
         
         form.addParam('vol',
                       PointerParam,
@@ -74,20 +74,14 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
                       label="Fourier padding factor: ",
                       default=2,
                       expertLevel=LEVEL_ADVANCED,
-                      help='The volume is zero padded by this factor to produce projections',
+                      help='The volume is zero padded by this factor to produce projections.',
                       condition='realSpaceProjection==0')
-        
-        form.addParam('maskProtein',
-                      PointerParam,
-                      pointerClass='VolumeMask',
-                      label='Specimen mask ',
-                      help='Specify a 3D mask for the specimen of study ')
         
         form.addParam('maskRoi',
                       PointerParam,
                       pointerClass='VolumeMask',
                       label='ROI mask ',
-                      help='Specify a 3D mask for the region of the input volume ')
+                      help='Specify a 3D mask for the region of the input volume.')
         
         form.addParam('noiseEstimation',
                       BooleanParam,
@@ -107,6 +101,14 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
                       help="Number of particles to estimate noise. This operation is computationlly expensive but "
                            "enough particles are needed for a robust likelyhood calculation.",
                       default=5000,
+                      condition='noiseEstimation==False')
+        
+        form.addParam('maskProtein',
+                      PointerParam,
+                      allowsNull=True,
+                      pointerClass='VolumeMask',
+                      label='Specimen mask ',
+                      help='Specify a 3D mask for the specimen.',
                       condition='noiseEstimation==False')
         
         form.addParallelSection(threads=0,
@@ -139,30 +141,27 @@ class XmippProtClassifyPartialOccupancy(EMProtocol):
         if fnMaskRoi.endswith('.mrc'):
             fnMaskRoi += ':mrc'
 
-
-        maskProtein = self.maskProtein.get()
-        fnMaskProtein = maskProtein.getFileName()
-        if fnMaskProtein.endswith('.mrc'):
-            fnMaskProtein += ':mrc'
-
         params = {
            "-i":  self._getExtraPath(self.INPUT_PARTICLES),
            "--ref": fnVol,
-           "-o": self._getExtraPath(self.OUTPUT_PARTICLES_MRCS),
+           "-o": self._getExtraPath(self.OUTPUT_PARTICLES_XMD),
            "--padding": self.pad.get(),
-           "--save_metadata_stack ": self._getExtraPath(self.OUTPUT_PARTICLES_MRCS),
-           "--mask_protein": fnMaskProtein,
            "--mask_roi": fnMaskRoi,
            "--keep_input_columns": ' '
         }
-
         if self.realSpaceProjection.get() == 1:
             params["--realSpaceProjection"] = ' '
 
         if self.noiseEstimation.get():
             params["--noise_est"] = self.noiseEstimationPath.get()
         else:
+            maskProtein = self.maskProtein.get()
+            fnMaskProtein = maskProtein.getFileName()
+            if fnMaskProtein.endswith('.mrc'):
+                fnMaskProtein += ':mrc'
+
             params["--noise_est_particles"] = self.noiseEstimationParticles.get()
+            params["--mask_protein"] = fnMaskProtein
 
         args = ' '.join(['%s %s' % (k, str(v)) for k, v in params.items()])   
         
