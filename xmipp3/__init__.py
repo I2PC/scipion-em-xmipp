@@ -159,6 +159,8 @@ class Plugin(pwem.Plugin):
             "sqlite>=3",
             "fftw>=3",
             "openmpi",
+	    "openmpi-mpicc",
+	    "openmpi-mpicxx",
             "make",
             "zlib",
             "openjdk",
@@ -169,7 +171,7 @@ class Plugin(pwem.Plugin):
 	    "libxcrypt"
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
-            commands = CommandDef('conda install --yes -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
+            commands = CommandDef('conda install --yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
