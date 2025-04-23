@@ -154,8 +154,8 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             oddSetMic = self._createSetOfMicrographs(suffix='oddMic')
             evenSetMic = self._createSetOfMicrographs(suffix='evenMic')
 
-            oddSetMic.setSamplingRate(inSet.getSamplingRate())
-            evenSetMic.setSamplingRate(inSet.getSamplingRate())
+            oddSetMic.copyInfo(inSet)
+            evenSetMic.copyInfo(inSet)
 
             oddDir = os.path.join(self._getExtraPath(), 'oddFrames')
             evenDir = os.path.join(self._getExtraPath(), 'evenFrames')
@@ -175,8 +175,8 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
                 imgOutOdd.setFileName(fnMicOdd)
                 imgOutEven.setFileName(fnMicEven)
 
-                imgOutOdd.setSamplingRate(movie.getSamplingRate())
-                imgOutEven.setSamplingRate(movie.getSamplingRate())
+                imgOutOdd.copyInfo(movie)
+                imgOutEven.copyInfo(movie)
 
                 oddSetMic.append(imgOutOdd)
                 evenSetMic.append(imgOutEven)
