@@ -79,10 +79,11 @@ class TestSplitFramesMovies(TestSplitFramesMoviesBase):
         cls.protImportMov = cls.runImportMovies(cls.dataset.getFile('qbeta/qbeta.mrc'),1.14,300,
                                                 None,50000,2.7)
 
-    def testSplitFrames(self):
+    def testSplitFrames1(self):
         SplitFrames = self.newProtocol(XmippProtSplitFrames,
-                                   objLabel='split movies',
-                                   inputMovies=self.protImportMov.outputMovies)
+                                   objLabel='split frames',
+                                   inputMovies=self.protImportMov.outputMovies,
+                                   sumFrames=False)
         self.launchProtocol(SplitFrames)
 
         oddMovie = getattr(SplitFrames, 'oddMovie', None)
@@ -108,3 +109,28 @@ class TestSplitFramesMovies(TestSplitFramesMoviesBase):
 
         self.assertEqual(oddFrames, 4, "That's not OddMovie's length")
         self.assertEqual(evenFrames, 3, "That's not EvenMovie's length")
+
+    def testSplitFrames2(self):
+        SplitFrames2 = self.newProtocol(XmippProtSplitFrames,
+                                       objLabel='split frames',
+                                       inputMovies=self.protImportMov.outputMovies,
+                                       sumFrames=True)
+        self.launchProtocol(SplitFrames2)
+
+        oddMicrograph = getattr(SplitFrames2, 'oddMicrograph', None)
+        evenMicrograph = getattr(SplitFrames2, 'evenMicrograph', None)
+
+        self.assertIsNotNone(oddMicrograph, "OddMicrograph didn't generate correctly")
+        self.assertIsNotNone(evenMicrograph, "EvenMicrograph didn't generate correctly")
+
+        oddSR = oddMicrograph.getSamplingRate()
+        evenSR = evenMicrograph.getSamplingRate()
+
+        self.assertAlmostEqual(oddSR, 1.14)
+        self.assertAlmostEqual(evenSR, 1.14)
+
+        oddImage = oddMicrograph.getFirstItem().getFileName()
+        evenImage = evenMicrograph.getFirstItem().getFileName()
+
+        self.assertTrue(exists(oddImage), "OddImage has failed")
+        self.assertTrue(exists(evenImage), "EvenImage has failed")
