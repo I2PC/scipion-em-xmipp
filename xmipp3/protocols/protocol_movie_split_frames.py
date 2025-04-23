@@ -60,24 +60,16 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
     #--------------------------- STEPS functions -------------------------------
 
     def _insertAllSteps(self):
-        self._insertFunctionStep(self.movieProcessStep)
         self._insertFunctionStep(self.splittingStep)
         self._insertFunctionStep(self.convertXmdToStackStep)
         self._insertFunctionStep(self.separateOddEvenOutputs)
         self._insertFunctionStep(self.createOutputStep)
 
-    def movieProcessStep(self):
-
-        if self.sumFrames.get() is True:
-            self.info('Input set of movies incoming from a previous alignment, so its corresponding set of micrographs will be split.')
-            self.alignment = 'T'
-        else:
-            self.info('No existing alignment process for input set of movies, so its corresponding set of micrographs will not be split.')
-            self.alignment = 'F'
-
     def splittingStep(self):
 
-        for movie in self.inputMovies.get():
+        inSet = self.inputMovies.get()
+
+        for movie in inSet:
 
             fnMovie = movie.getFileName()
             if fnMovie.endswith(".mrc"):
@@ -90,14 +82,16 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             args += '-o "%s" ' % self._getTmpPath(fnMovieOdd)
             args += '-e %s ' % self._getTmpPath(fnMovieEven)
             args += '--type frames '
-            if self.alignment == 'T':
+            if self.sumFrames.get() is True:
                 args += '--sum_frames '
 
             self.runJob('xmipp_image_odd_even', args)
 
     def convertXmdToStackStep(self):
 
-        for movie in self.inputMovies.get():
+        inSet = self.inputMovies.get()
+
+        for movie in inSet:
 
             fnMovie = movie.getFileName()
 
@@ -119,17 +113,19 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
 
     def separateOddEvenOutputs(self):
 
+        inSet = self.inputMovies.get()
+
         oddDir = os.path.join(self._getExtraPath(), 'oddFrames')
         evenDir = os.path.join(self._getExtraPath(), 'evenFrames')
 
         os.makedirs(oddDir, exist_ok=True)
         os.makedirs(evenDir, exist_ok=True)
 
-        for movie in self.inputMovies.get():
+        for movie in inSet:
 
             fnMovie = movie.getFileName()
 
-            if self.alignment == 'T':
+            if self.sumFrames.get() is True:
 
                 fnMicOdd = self._getTmpPath(pwutils.removeExt(basename(fnMovie)) + "_odd_aligned.mrc")
                 shutil.move(fnMicOdd, os.path.join(oddDir, pwutils.removeExt(basename(fnMovie))
@@ -153,7 +149,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
 
         inSet = self.inputMovies.get()
 
-        if self.alignment == 'T':
+        if self.sumFrames.get() is True:
 
             oddSetMic = self._createSetOfMicrographs(suffix='oddMic')
             evenSetMic = self._createSetOfMicrographs(suffix='evenMic')
@@ -245,16 +241,17 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
 
         inSet = self.inputMovies.get()
 
-        if self.alignment == 'T':
+        if self.sumFrames.get() is True and (hasattr(self, "oddMicrograph") or hasattr(self, "evenMicrograph")):
 
-            oddMicrographs = getattr(self, "oddMicrograph")
-            evenMicrographs = getattr(self, "evenMicrograph")
+            oddMicrographs = getattr(self, "oddMicrograph", None)
+            evenMicrographs = getattr(self, "evenMicrograph", None)
 
             message.append("%d/%d Odd Micrographs processed."
                            % (oddMicrographs.getSize(), inSet.getSize()))
             message.append("%d/%d Even Micrographs processed."
                            % (evenMicrographs.getSize(), inSet.getSize()))
-        else:
+
+        elif self.sumFrames.get() is False and (hasattr(self, "oddMovie") or hasattr(self, "evenMovie")):
 
             oddMovies = getattr(self, "oddMovie")
             evenMovies = getattr(self, "evenMovie")
