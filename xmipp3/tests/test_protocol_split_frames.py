@@ -82,8 +82,7 @@ class TestSplitFramesMovies(TestSplitFramesMoviesBase):
     def testSplitFrames(self):
         SplitFrames = self.newProtocol(XmippProtSplitFrames,
                                    objLabel='split movies',
-                                   inputMovies=self.protImportMov.outputMovies,
-                                   sumFrames=False)
+                                   inputMovies=self.protImportMov.outputMovies)
         self.launchProtocol(SplitFrames)
 
         oddMovie = getattr(SplitFrames, 'oddMovie', None)

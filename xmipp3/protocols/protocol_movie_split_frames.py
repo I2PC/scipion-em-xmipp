@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     Jose Luis Vilas Prieto (jlvilas@cnb.csic.es)
+# *              Eduardo García Delgado (eduardo.garcia@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -32,7 +33,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam)
 
 from pwem.protocols import ProtPreprocessMicrographs
 
-from pwem.objects import Movie, Micrograph, SetOfMovies
+from pwem.objects import Movie, Micrograph
 
 
 class XmippProtSplitFrames(ProtPreprocessMicrographs):
@@ -51,23 +52,40 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         form.addParam('inputMovies', PointerParam, pointerClass='SetOfMovies',
                       label="Input movies", important=True,
                       help='Select a set of movies to be split into two sets (odd and even).'
-                      'It means, the set of frames is split in two subsets.')
-        
-        form.addParam('sumFrames', BooleanParam, 
-                      label="Sum Frames", important=False,
-                      help='Set yes to get a set of micrograms, or no to get a set of movies.')
+                      'It means, the set of frames splits into two subsets.')
+        group = form.addGroup('Alignment')
+        group.addParam('Micrographs', BooleanParam,
+                       label="Micrographs Selection", important=False, default=False,
+                       help='Set *Yes* to select a set of micrographs just in case alignment has been processed '
+                            'in the input movies, so that they can also be split into two sets (odd  and even) of micrographs. '
+                            'Set *No* if alignment has not been processed in the input movies.')
+
+        group.addParam('inputMicrographs', PointerParam, pointerClass='SetOfMicrographs',
+                      label="Input micrographs", condition="Micrographs",
+                      help='Select a set of micrographs from the previous protocol.')
 
     #--------------------------- STEPS functions -------------------------------
 
     def _insertAllSteps(self):
+        self._insertFunctionStep(self.movieProcessStep)
         self._insertFunctionStep(self.splittingStep)
         self._insertFunctionStep(self.convertXmdToStackStep)
         self._insertFunctionStep(self.separateOddEvenOutputs)
         self._insertFunctionStep(self.createOutputStep)
 
+    def movieProcessStep(self):
+
+        if self.inputMicrographs.get() is not None:
+            self.info('Input set of movies incoming from a previous alignment, so its corresponding set of micrographs will be split.')
+            self.alignment = 'T'
+        else:
+            self.info('No existing alignment process for input set of movies, so its corresponding set of micrographs will not be split.')
+            self.alignment = 'F'
+
     def splittingStep(self):
 
         for movie in self.inputMovies.get():
+
             fnMovie = movie.getFileName()
             if fnMovie.endswith(".mrc"):
                 fnMovie+=":mrcs"
@@ -79,29 +97,30 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             args += '-o "%s" ' % self._getTmpPath(fnMovieOdd)
             args += '-e %s ' % self._getTmpPath(fnMovieEven)
             args += '--type frames '
-            if self.sumFrames.get() is True:
-                args += '--sum_frames'
+            if self.alignment == 'T':
+                args += '--sum_frames '
 
             self.runJob('xmipp_image_odd_even', args)
 
     def convertXmdToStackStep(self):
 
         for movie in self.inputMovies.get():
+
             fnMovie = movie.getFileName()
 
             fnMovieOdd = pwutils.removeExt(basename(fnMovie)) + "_odd.xmd"
             fnMovieEven = pwutils.removeExt(basename(fnMovie)) + "_even.xmd"
 
-            fnMovieOddMrcs = pwutils.removeExt(basename(fnMovieOdd)) + ".mrcs"
-            fnMovieEvenMrcs = pwutils.removeExt(basename(fnMovieEven)) + ".mrcs"
+            newfnMovieOdd = pwutils.removeExt(basename(fnMovieOdd)) + ".mrcs"
+            newfnMovieEven = pwutils.removeExt(basename(fnMovieEven)) + ".mrcs"
 
             args = '-i "%s" ' % self._getTmpPath(fnMovieOdd)
-            args += '-o "%s" ' % self._getExtraPath(fnMovieOddMrcs)
+            args += '-o "%s" ' % self._getExtraPath(newfnMovieOdd)
 
             self.runJob('xmipp_image_convert', args)
 
             args = '-i "%s" ' % self._getTmpPath(fnMovieEven)
-            args += '-o "%s" ' % self._getExtraPath(fnMovieEvenMrcs)
+            args += '-o "%s" ' % self._getExtraPath(newfnMovieEven)
 
             self.runJob('xmipp_image_convert', args)
 
@@ -114,115 +133,144 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         os.makedirs(evenDir, exist_ok=True)
 
         for movie in self.inputMovies.get():
+
             fnMovie = movie.getFileName()
 
-            fnMovieOddMrcs = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_odd.mrcs")
-            shutil.move(fnMovieOddMrcs, os.path.join(oddDir,pwutils.removeExt(basename(fnMovie))
-                                                     + ".mrcs"))
+            if self.alignment == 'T':
 
-            fnMovieEvenMrcs = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_even.mrcs")
-            shutil.move(fnMovieEvenMrcs, os.path.join(evenDir, pwutils.removeExt(basename(fnMovie))
-                                                      + ".mrcs"))
+                fnMicOdd = self._getTmpPath(pwutils.removeExt(basename(fnMovie)) + "_odd_aligned.mrc")
+                shutil.move(fnMicOdd, os.path.join(oddDir, pwutils.removeExt(basename(fnMovie))
+                                                     + "_aligned.mrc"))
+
+                fnMicEven = self._getTmpPath(pwutils.removeExt(basename(fnMovie)) + "_even_aligned.mrc")
+                shutil.move(fnMicEven, os.path.join(evenDir, pwutils.removeExt(basename(fnMovie))
+                                                   + "_aligned.mrc"))
+
+            else:
+
+                fnMovieOdd = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_odd.mrcs")
+                shutil.move(fnMovieOdd, os.path.join(oddDir,pwutils.removeExt(basename(fnMovie))
+                                                         + ".mrcs"))
+
+                fnMovieEven = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_even.mrcs")
+                shutil.move(fnMovieEven, os.path.join(evenDir, pwutils.removeExt(basename(fnMovie))
+                                                          + ".mrcs"))
 
     def createOutputStep(self):
 
         inSet = self.inputMovies.get()
 
-        oddSet = self._createSetOfMovies(suffix='odd')
-        evenSet = self._createSetOfMovies(suffix='even')
+        if self.alignment == 'T':
 
-        oddSet.copyInfo(inSet)
-        evenSet.copyInfo(inSet)
+            oddSetMic = self._createSetOfMicrographs(suffix='oddMic')
+            evenSetMic = self._createSetOfMicrographs(suffix='evenMic')
 
-        oddDir = os.path.join(self._getExtraPath(), 'oddFrames')
-        evenDir = os.path.join(self._getExtraPath(), 'evenFrames')
+            oddSetMic.setSamplingRate(inSet.getSamplingRate())
+            evenSetMic.setSamplingRate(inSet.getSamplingRate())
 
-        for movie in inSet:
-            fnMovie = movie.getFileName()
+            oddDir = os.path.join(self._getExtraPath(), 'oddFrames')
+            evenDir = os.path.join(self._getExtraPath(), 'evenFrames')
 
-            fnMovieOddMrcs = os.path.join(oddDir,pwutils.removeExt(basename(fnMovie)) + ".mrcs")
-            fnMovieEvenMrcs = os.path.join(evenDir,pwutils.removeExt(basename(fnMovie)) + ".mrcs")
+            for movie in inSet:
 
-            imgOutOdd = Movie()
-            imgOutEven = Movie()
-
-            imgOutOdd.copyInfo(movie)
-            imgOutEven.copyInfo(movie)
-
-            imgOutOdd.setFileName(fnMovieOddMrcs)
-            imgOutEven.setFileName(fnMovieEvenMrcs)
-
-            if movie.getNumberOfFrames() % 2 == 0:
-                imgOutOdd.setFramesRange([1, imgOutOdd.getNumberOfFrames() / 2, 1])
-                imgOutEven.setFramesRange([1, imgOutEven.getNumberOfFrames() / 2, 1])
-            else:
-                imgOutOdd.setFramesRange([1, round(imgOutOdd.getNumberOfFrames() / 2), 1])
-                imgOutEven.setFramesRange([1, round(imgOutEven.getNumberOfFrames() / 2) - 1, 1])
-
-            oddSet.append(imgOutOdd)
-            evenSet.append(imgOutEven)
-
-        oddSet.setFramesRange([1,oddSet.getFirstItem().getNumberOfFrames(),1])
-        evenSet.setFramesRange([1,evenSet.getFirstItem().getNumberOfFrames(),1])
-
-        self._defineOutputs(oddMovie=oddSet)
-        self._defineOutputs(evenMovie=evenSet)
-
-        self._defineSourceRelation(inSet, oddSet)
-        self._defineSourceRelation(inSet, evenSet)
-
-        '''for movie in inSet:
-            self._defineSourceRelation(movie, oddSet)
-            self._defineSourceRelation(movie, evenSet)'''
-
-        
-        ''' if self.sumFrames.get() is True:
-            oddSetAligned = self._createSetOfMicrographs(suffix='oddMic')
-            evenSetAligned = self._createSetOfMicrographs(suffix='evenMic')
-
-            for movie in self.inputMovies.get():
                 fnMovie = movie.getFileName()
 
-                fnMicOdd = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_odd_aligned.mrcs")
-                fnMicEven = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_even_aligned.mrcs")
+                fnMicOdd = os.path.join(oddDir, pwutils.removeExt(basename(fnMovie))
+                                        + "_aligned.mrc")
+                fnMicEven = os.path.join(evenDir, pwutils.removeExt(basename(fnMovie))
+                                         + "_aligned.mrc")
 
                 imgOutOdd = Micrograph()
                 imgOutEven = Micrograph()
-                
+
                 imgOutOdd.setFileName(fnMicOdd)
                 imgOutEven.setFileName(fnMicEven)
 
                 imgOutOdd.setSamplingRate(movie.getSamplingRate())
                 imgOutEven.setSamplingRate(movie.getSamplingRate())
 
-                oddSetAligned.append(imgOutOdd)
-                evenSetAligned.append(imgOutEven)
+                oddSetMic.append(imgOutOdd)
+                evenSetMic.append(imgOutEven)
 
-            oddSetAligned.copyInfo(self.inputMovies.get())
-            evenSetAligned.copyInfo(self.inputMovies.get())
+            self._defineOutputs(oddMicrograph=oddSetMic)
+            self._defineOutputs(evenMicrograph=evenSetMic)
 
-            oddSetAligned.setSamplingRate(self.inputMovies.get().getSamplingRate())
-            evenSetAligned.setSamplingRate(self.inputMovies.get().getSamplingRate())
+            self._defineSourceRelation(inSet, oddSetMic)
+            self._defineSourceRelation(inSet, evenSetMic)
+        
+        else:
 
-            self._defineOutputs(oddMicrographs=oddSetAligned)
-            self._defineOutputs(evenMicrographs=evenSetAligned)
+            oddSet = self._createSetOfMovies(suffix='odd')
+            evenSet = self._createSetOfMovies(suffix='even')
 
-            self._defineSourceRelation(self.inputMovies.get(), oddSetAligned)
-            self._defineSourceRelation(self.inputMovies.get(), evenSetAligned) '''
+            oddSet.copyInfo(inSet)
+            evenSet.copyInfo(inSet)
+
+            oddDir = os.path.join(self._getExtraPath(), 'oddFrames')
+            evenDir = os.path.join(self._getExtraPath(), 'evenFrames')
+
+            for movie in inSet:
+
+                fnMovie = movie.getFileName()
+
+                fnMovieOdd = os.path.join(oddDir, pwutils.removeExt(basename(fnMovie)) + ".mrcs")
+                fnMovieEven = os.path.join(evenDir, pwutils.removeExt(basename(fnMovie)) + ".mrcs")
+
+                imgOutOdd = Movie()
+                imgOutEven = Movie()
+
+                imgOutOdd.setFileName(fnMovieOdd)
+                imgOutEven.setFileName(fnMovieEven)
+
+                imgOutOdd.copyInfo(movie)
+                imgOutEven.copyInfo(movie)
+
+                if movie.getNumberOfFrames() % 2 == 0:
+                    imgOutOdd.setFramesRange([1, imgOutOdd.getNumberOfFrames() / 2, 1])
+                    imgOutEven.setFramesRange([1, imgOutEven.getNumberOfFrames() / 2, 1])
+                else:
+                    imgOutOdd.setFramesRange([1, round(imgOutOdd.getNumberOfFrames() / 2), 1])
+                    imgOutEven.setFramesRange([1, round(imgOutEven.getNumberOfFrames() / 2) - 1, 1])
+
+                oddSet.append(imgOutOdd)
+                evenSet.append(imgOutEven)
+
+            oddSet.setFramesRange([1, oddSet.getFirstItem().getNumberOfFrames(), 1])
+            evenSet.setFramesRange([1, evenSet.getFirstItem().getNumberOfFrames(), 1])
+
+            self._defineOutputs(oddMovie=oddSet)
+            self._defineOutputs(evenMovie=evenSet)
+
+            self._defineSourceRelation(inSet, oddSet)
+            self._defineSourceRelation(inSet, evenSet)
 
     # --------------------------- INFO functions ------------------------------
-
-    def _methods(self):
-        messages = []
-        if hasattr(self, 'resolution_Volume'):
-            messages.append(
-                'Information about the method/article in ')
-        return messages
     
     def _summary(self):
-        summary = []
 
-        return summary
+        message = []
 
-    def _citations(self):
-        return ['']
+        inSet = self.inputMovies.get()
+
+        if self.alignment == 'T':
+
+            oddMicrographs = getattr(self, "oddMicrograph")
+            evenMicrographs = getattr(self, "evenMicrograph")
+
+            message.append("%d/%d Odd Micrographs processed."
+                           % (oddMicrographs.getSize(), inSet.getSize()))
+            message.append("%d/%d Even Micrographs processed."
+                           % (evenMicrographs.getSize(), inSet.getSize()))
+        else:
+
+            oddMovies = getattr(self, "oddMovie")
+            evenMovies = getattr(self, "evenMovie")
+
+            message.append("%d/%d Movies with %d Odd Frames processed."
+                           % (oddMovies.getSize(), inSet.getSize(),
+                              oddMovies.getFirstItem().getNumberOfFrames()))
+            message.append("%d/%d Movies with %d Even Frames processed."
+                           % (evenMovies.getSize(), inSet.getSize(),
+                              evenMovies.getFirstItem().getNumberOfFrames()))
+
+        return message
