@@ -53,16 +53,9 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
                       label="Input movies", important=True,
                       help='Select a set of movies to be split into two sets (odd and even).'
                       'It means, the set of frames splits into two subsets.')
-        group = form.addGroup('Alignment')
-        group.addParam('Micrographs', BooleanParam,
-                       label="Micrographs Selection", important=False, default=False,
-                       help='Set *Yes* to select a set of micrographs just in case alignment has been processed '
-                            'in the input movies, so that they can also be split into two sets (odd  and even) of micrographs. '
-                            'Set *No* if alignment has not been processed in the input movies.')
-
-        group.addParam('inputMicrographs', PointerParam, pointerClass='SetOfMicrographs',
-                      label="Input micrographs", condition="Micrographs",
-                      help='Select a set of micrographs from the previous protocol.')
+        form.addParam('sumFrames', BooleanParam,
+                      label="Sum Frames", important=False, default=False,
+                      help='Set yes to get a set of micrograms, set no to get a set of movies.')
 
     #--------------------------- STEPS functions -------------------------------
 
@@ -75,7 +68,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
 
     def movieProcessStep(self):
 
-        if self.inputMicrographs.get() is not None:
+        if self.sumFrames.get() is True:
             self.info('Input set of movies incoming from a previous alignment, so its corresponding set of micrographs will be split.')
             self.alignment = 'T'
         else:
