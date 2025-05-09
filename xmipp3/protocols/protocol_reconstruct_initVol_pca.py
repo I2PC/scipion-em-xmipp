@@ -216,7 +216,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                     self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, resol, symmetry)
                 else:
                     if iter > 15:
-                        resol = 6
+                        resol = 8
                     self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, resol, symmetry)
                     
 
