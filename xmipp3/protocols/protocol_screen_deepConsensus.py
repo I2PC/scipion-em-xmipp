@@ -53,6 +53,7 @@ from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             micrographToCTFParam, writeSetOfParticles,
                             writeSetOfCoordinates, readSetOfCoordsFromPosFnames, readSetOfCoordinates)
 
+
 MIN_NUM_CONSENSUS_COORDS = 256
 AND = 'by_all'
 OR = 'by_at_least_one'
@@ -482,6 +483,16 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.lastStep = self._insertFunctionStep('lastRoundStep', wait=True, prerequisites=self.initDeps)
         self.endStep = self._insertFunctionStep('endProtocolStep', wait=True, prerequisites=[self.lastStep])
 
+    def setGPU(self):
+        if self.useQueueForSteps() or self.useQueue():
+            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        else:
+            myStr = self.gpuList.get()
+            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
+        self.numGPU = myStr.split(',')[0]
+
+
+
     def _stepsCheck(self):
         '''Checks if new steps can be executed'''
         self.newSteps = []
@@ -588,6 +599,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         """
             Create paths where data will be saved
         """
+        self.setGPU()
+
         if self.doTesting.get() and self.testTrueSetOfParticles.get() and self.testFalseSetOfParticles.get():
             writeSetOfParticles(self.testTrueSetOfParticles.get(),
                                 self._getExtraPath("testTrueParticlesSet.xmd"))
@@ -1053,6 +1066,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         trainedParams['trainedMicFns'] += self.TO_TRAIN_MICFNS
         trainedParams['firstTraining'] = False
         self.curTrainedParams = trainedParams
+
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.runJob('xmipp_deep_consensus', args, numberOfMpi=1, env=self.getCondaEnv())
         
     def predictCNN(self):
@@ -1115,6 +1130,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
+
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.runJob('xmipp_deep_consensus', args, numberOfMpi=1,
                     env=self.getCondaEnv())
 
