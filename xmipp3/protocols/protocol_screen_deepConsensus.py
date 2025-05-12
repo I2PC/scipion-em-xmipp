@@ -1008,7 +1008,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
           numberOfThreads = None
-          gpuToUse = self.getGpuList()[0]
+          gpuToUse = self.numGPU
         else:
           numberOfThreads = self.numberOfThreads.get()
           gpuToUse = None
@@ -1059,7 +1059,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not self.auto_stopping.get():
           args+=" -s"
         if not gpuToUse is None:
-          args+= " -g %s"%(gpuToUse)
+          args+= " -g %s"%(self.numGPU)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
 
@@ -1097,7 +1097,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.getGpuList()[0]
+            gpuToUse = self.numGPU
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
@@ -1127,7 +1127,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
 
         if not gpuToUse is None:
-          args+= " -g %s"%(gpuToUse)
+          args+= " -g %s"%(self.numGPU)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
 
