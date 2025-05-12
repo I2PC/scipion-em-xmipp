@@ -106,6 +106,8 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('coef' ,FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
+        form.addParam('filter',FloatParam, label="filter resolution", default=8, expertLevel=LEVEL_ADVANCED,
+                      help='Final resolution of volume filtering')
       
 
 
@@ -216,7 +218,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                     self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, resol, symmetry)
                 else:
                     if iter > 15:
-                        resol = 8
+                        resol = self.filter.get()
                     self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, resol, symmetry)
                     
 
