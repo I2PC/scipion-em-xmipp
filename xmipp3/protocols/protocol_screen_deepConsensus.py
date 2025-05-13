@@ -490,7 +490,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             myStr = self.gpuList.get()
             print(myStr)
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
-        self.numGPU = myStr.split(',')
+        self.numGPU = myStr.split(',')[0]
 
 
 
