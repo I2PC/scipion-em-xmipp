@@ -600,7 +600,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             Create paths where data will be saved
         """
         self.setGPU()
-
+        self.info(f'NUM GPUS: {self.numGPU}')
         if self.doTesting.get() and self.testTrueSetOfParticles.get() and self.testFalseSetOfParticles.get():
             writeSetOfParticles(self.testTrueSetOfParticles.get(),
                                 self._getExtraPath("testTrueParticlesSet.xmd"))
