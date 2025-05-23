@@ -168,7 +168,7 @@ class Plugin(pwem.Plugin):
             "libjpeg-turbo",
 	        f"libstdcxx-ng=9.5.0",#{getCompilerVersion()}",
             f"libgcc-ng=9.5.0",#{getCompilerVersion()}",
-	        "libxcrypt"
+	        #"libxcrypt"
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
             commands = CommandDef('conda install --yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
