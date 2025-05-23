@@ -154,21 +154,21 @@ class Plugin(pwem.Plugin):
         
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
-	    "'cmake>=3.17,<4'", #cmake-4 is not compatible with Relion compilation
+	        "'cmake>=3.17,<4'", #cmake-4 is not compatible with Relion compilation
             "hdf5>=1.18",
             "sqlite>=3",
             "fftw>=3",
             "openmpi",
-	    "openmpi-mpicc",
-	    "openmpi-mpicxx",
+	        "openmpi-mpicc",
+	        "openmpi-mpicxx",
             "make",
             "zlib",
             "openjdk",
             "libtiff",
             "libjpeg-turbo",
-	    f"gcc={getCompilerVersion()}",
-            f"gxx={getCompilerVersion()}",
-	    "libxcrypt"
+	        f"libstdcxx-ng={getCompilerVersion()}",
+            f"libgcc-ng={getCompilerVersion()}",
+	        "libxcrypt"
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
             commands = CommandDef('conda install --yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
