@@ -166,7 +166,7 @@ class Plugin(pwem.Plugin):
             "openjdk",
             "libtiff",
             "libjpeg-turbo",
-	        f"libstdcxx-ng=9.5.0"#{getCompilerVersion()}",
+	        f"libstdcxx-ng=9.5.0",#{getCompilerVersion()}",
             f"libgcc-ng=9.5.0"#{getCompilerVersion()}",
 	        "libxcrypt"
         ]
