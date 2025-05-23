@@ -166,8 +166,8 @@ class Plugin(pwem.Plugin):
             "openjdk",
             "libtiff",
             "libjpeg-turbo",
-	        f"libstdcxx-ng={getCompilerVersion()}",
-            f"libgcc-ng={getCompilerVersion()}",
+	        f"libstdcxx-ng=9"#{getCompilerVersion()}",
+            f"libgcc-ng=9"#{getCompilerVersion()}",
 	        "libxcrypt"
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
