@@ -171,8 +171,7 @@ class Plugin(pwem.Plugin):
 	        "libstdcxx-devel_linux-64=10.3.0",
 	        "gcc=10.3",
 	        "gxx=10.3",
-
-	        #"libxcrypt"
+	        "libxcrypt"
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
             commands = CommandDef('conda install --yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
