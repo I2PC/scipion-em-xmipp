@@ -29,7 +29,7 @@ import os, shutil
 from os.path import basename
 import pyworkflow.utils as pwutils
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, BooleanParam)
+from pyworkflow.protocol.params import (PointerParam, BooleanParam, EnumParam)
 
 from pwem.protocols import ProtPreprocessMicrographs
 
@@ -44,7 +44,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
     _label = 'split frames'
     _lastUpdateVersion = VERSION_1_1
 
-    #--------------------------- DEFINE param functions ------------------------
+    # --------------------------- DEFINE param functions ------------------------
 
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -52,12 +52,12 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         form.addParam('inputMovies', PointerParam, pointerClass='SetOfMovies',
                       label="Input movies", important=True,
                       help='Select a set of movies to be split into two sets (odd and even).'
-                      'It means, the set of frames splits into two subsets.')
-        form.addParam('sumFrames', BooleanParam,
-                      label="Sum Frames", important=False, default=False,
-                      help='Set yes to get a set of micrograms, set no to get a set of movies.')
+                           'It means, the set of frames splits into two subsets.')
+        form.addParam('set', EnumParam, choices=['Movies', 'Micrographs'],
+                      label="Type of Set", important=False, default=0,
+                      help='Set Movies to get a set of movies, or set Micrographs to get a set of micrographs.')
 
-    #--------------------------- STEPS functions -------------------------------
+    # --------------------------- STEPS functions -------------------------------
 
     def _insertAllSteps(self):
         self._insertFunctionStep(self.splittingStep)
@@ -73,7 +73,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
 
             fnMovie = movie.getFileName()
             if fnMovie.endswith(".mrc"):
-                fnMovie+=":mrcs"
+                fnMovie += ":mrcs"
 
             fnMovieOdd = pwutils.removeExt(basename(fnMovie)) + "_odd.xmd"
             fnMovieEven = pwutils.removeExt(basename(fnMovie)) + "_even.xmd"
@@ -82,7 +82,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             args += '-o "%s" ' % self._getTmpPath(fnMovieOdd)
             args += '-e %s ' % self._getTmpPath(fnMovieEven)
             args += '--type frames '
-            if self.sumFrames.get() is True:
+            if self.set.get() == 1:
                 args += '--sum_frames '
 
             self.runJob('xmipp_image_odd_even', args)
@@ -92,7 +92,6 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         inSet = self.inputMovies.get()
 
         for movie in inSet:
-
             fnMovie = movie.getFileName()
 
             fnMovieOdd = pwutils.removeExt(basename(fnMovie)) + "_odd.xmd"
@@ -125,31 +124,31 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
 
             fnMovie = movie.getFileName()
 
-            if self.sumFrames.get() is True:
+            if self.set.get() == 1:
 
                 fnMicOdd = self._getTmpPath(pwutils.removeExt(basename(fnMovie)) + "_odd_aligned.mrc")
                 shutil.move(fnMicOdd, os.path.join(oddDir, pwutils.removeExt(basename(fnMovie))
-                                                     + "_aligned.mrc"))
+                                                   + "_aligned.mrc"))
 
                 fnMicEven = self._getTmpPath(pwutils.removeExt(basename(fnMovie)) + "_even_aligned.mrc")
                 shutil.move(fnMicEven, os.path.join(evenDir, pwutils.removeExt(basename(fnMovie))
-                                                   + "_aligned.mrc"))
+                                                    + "_aligned.mrc"))
 
             else:
 
                 fnMovieOdd = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_odd.mrcs")
-                shutil.move(fnMovieOdd, os.path.join(oddDir,pwutils.removeExt(basename(fnMovie))
-                                                         + ".mrcs"))
+                shutil.move(fnMovieOdd, os.path.join(oddDir, pwutils.removeExt(basename(fnMovie))
+                                                     + ".mrcs"))
 
                 fnMovieEven = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_even.mrcs")
                 shutil.move(fnMovieEven, os.path.join(evenDir, pwutils.removeExt(basename(fnMovie))
-                                                          + ".mrcs"))
+                                                      + ".mrcs"))
 
     def createOutputStep(self):
 
         inSet = self.inputMovies.get()
 
-        if self.sumFrames.get() is True:
+        if self.set.get() == 1:
 
             oddSetMic = self._createSetOfMicrographs(suffix='oddMic')
             evenSetMic = self._createSetOfMicrographs(suffix='evenMic')
@@ -161,7 +160,6 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             evenDir = os.path.join(self._getExtraPath(), 'evenFrames')
 
             for movie in inSet:
-
                 fnMovie = movie.getFileName()
 
                 fnMicOdd = os.path.join(oddDir, pwutils.removeExt(basename(fnMovie))
@@ -186,7 +184,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
 
             self._defineSourceRelation(inSet, oddSetMic)
             self._defineSourceRelation(inSet, evenSetMic)
-        
+
         else:
 
             oddSet = self._createSetOfMovies(suffix='odd')
@@ -234,14 +232,14 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             self._defineSourceRelation(inSet, evenSet)
 
     # --------------------------- INFO functions ------------------------------
-    
+
     def _summary(self):
 
         message = []
 
         inSet = self.inputMovies.get()
 
-        if self.sumFrames.get() is True and (hasattr(self, "oddMicrograph") or hasattr(self, "evenMicrograph")):
+        if self.set.get() == 1 and (hasattr(self, "oddMicrograph") or hasattr(self, "evenMicrograph")):
 
             oddMicrographs = getattr(self, "oddMicrograph", None)
             evenMicrographs = getattr(self, "evenMicrograph", None)
@@ -251,7 +249,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             message.append("%d/%d Even Micrographs processed."
                            % (evenMicrographs.getSize(), inSet.getSize()))
 
-        elif self.sumFrames.get() is False and (hasattr(self, "oddMovie") or hasattr(self, "evenMovie")):
+        elif self.set.get() == 0 and (hasattr(self, "oddMovie") or hasattr(self, "evenMovie")):
 
             oddMovies = getattr(self, "oddMovie")
             evenMovies = getattr(self, "evenMovie")
