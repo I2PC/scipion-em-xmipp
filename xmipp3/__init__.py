@@ -27,6 +27,7 @@
 # **************************************************************************
 
 import json
+import re
 from datetime import datetime
 import pwem
 from pyworkflow import Config
@@ -217,20 +218,35 @@ class Plugin(pwem.Plugin):
         
         return bundleDir if isBundle else None
 
+
 def getNvidiaDriverVersion(plugin):
-    """ Several ways to retrieve NVIDIA driver version.
+    """Attempt to retrieve the NVIDIA driver version using different methods.
+    Only returns if a valid version string is found.
     """
-    commands = [["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
-                ["cat", "/sys/module/nvidia/version"]]
+    commands = [
+        ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+        ["cat", "/sys/module/nvidia/version"]
+    ]
+
     for cmd in commands:
         try:
-            nvidiaDriverVer = subprocess.Popen(cmd,
-                                               env=plugin.getEnviron(),
-                                               stdout=subprocess.PIPE
-                                               ).stdout.read().decode('utf-8').split(".")[0]
-            return nvidiaDriverVer
-        except (ValueError, TypeError, FileNotFoundError):
-            continue
+            output = subprocess.Popen(
+                cmd,
+                env=plugin.getEnviron(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            ).communicate()[0].decode('utf-8').strip()
+
+            # Check if the output matches a version pattern like 530.30 or 470
+            match = re.match(r'^(\d+)', output)
+            if match:
+                return match.group(1)  # Return just the major version (e.g., "530")
+
+        except (ValueError, TypeError, FileNotFoundError, subprocess.SubprocessError):
+            continue  # Try next method
+
+    return None  # No valid version found
+
     
 def installDeepLearningToolkit(plugin, env):
 
@@ -239,6 +255,7 @@ def installDeepLearningToolkit(plugin, env):
     nvidiaDriverVer = None
     if os.environ.get('CUDA', 'True') == 'True':
         nvidiaDriverVer = getNvidiaDriverVersion(plugin)
+        print(nvidiaDriverVer)
 
     if nvidiaDriverVer is None:
         preMsgs.append("Not nvidia driver found. Type: "
