@@ -255,7 +255,6 @@ def installDeepLearningToolkit(plugin, env):
     nvidiaDriverVer = None
     if os.environ.get('CUDA', 'True') == 'True':
         nvidiaDriverVer = getNvidiaDriverVersion(plugin)
-        print(nvidiaDriverVer)
 
     if nvidiaDriverVer is None:
         preMsgs.append("Not nvidia driver found. Type: "
