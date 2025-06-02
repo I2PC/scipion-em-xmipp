@@ -31,7 +31,7 @@ from datetime import datetime
 import pwem
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
-from scipion.install.funcs import CommandDef
+from scipion.install.funcs import CommandDef, CondaCommandDef
 from scipion import __version__ as scipionAppVersion
 from packaging.version import Version
 from .base import *
@@ -174,7 +174,7 @@ class Plugin(pwem.Plugin):
 	        "libxcrypt"
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
-            commands = CommandDef('conda install --yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
+            commands = CondaCommandDef('conda install --yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
