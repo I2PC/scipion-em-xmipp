@@ -83,7 +83,7 @@ class TestSplitFramesMovies(TestSplitFramesMoviesBase):
         SplitFrames = self.newProtocol(XmippProtSplitFrames,
                                    objLabel='split frames',
                                    inputMovies=self.protImportMov.outputMovies,
-                                   sumFrames=False)
+                                   set=0)
         self.launchProtocol(SplitFrames)
 
         oddMovie = getattr(SplitFrames, 'oddMovie', None)
@@ -114,7 +114,7 @@ class TestSplitFramesMovies(TestSplitFramesMoviesBase):
         SplitFrames2 = self.newProtocol(XmippProtSplitFrames,
                                        objLabel='split frames',
                                        inputMovies=self.protImportMov.outputMovies,
-                                       sumFrames=True)
+                                       set=1)
         self.launchProtocol(SplitFrames2)
 
         oddMicrograph = getattr(SplitFrames2, 'oddMicrograph', None)
