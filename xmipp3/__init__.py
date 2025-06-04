@@ -164,8 +164,8 @@ class Plugin(pwem.Plugin):
             "libtiff",
             "libjpeg-turbo",
         ]
-        if os.environ['CONDA_PREFIX'] is not None:
-            commands = CondaCommandDef.condaInstall('--yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
+        if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
+            commands = CommandDef('--yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
@@ -174,7 +174,7 @@ class Plugin(pwem.Plugin):
                 default=True
             )
         
-        # if develMode: #TODO uncomment production mode
+        # if develMode:
         xmippSrc = 'xmippDev'
         installCommands = [
 	        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
