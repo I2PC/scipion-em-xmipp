@@ -165,7 +165,7 @@ class Plugin(pwem.Plugin):
             "libjpeg-turbo",
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
-            commands = CommandDef('--yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
+            commands = CommandDef('conda install --yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
