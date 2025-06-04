@@ -151,20 +151,30 @@ class Plugin(pwem.Plugin):
             'dist/bin/xmipp_image_header', 
             'dist/xmipp.bashrc'
         ]
-
+        
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
-	        "cmake>=3.18,<4.0",
-	        'hdf5>=1.18',
-	        'sqlite>=3',
-	        'fftw>=3',
-	        'make',
-	        'openjdk',
-	        'libtiff',
-	        'libjpeg-turbo'
+	        "'cmake>=3.18,<4'", #cmake-4 is not compatible with Relion compilation
+            "hdf5>=1.18",
+            "sqlite>=3",
+            "fftw>=3",
+            "openmpi",
+	        "openmpi-mpicc",
+	        "openmpi-mpicxx",
+            "make",
+            "zlib",
+            "openjdk",
+            "libtiff",
+            "libjpeg-turbo",
+	        f"libstdcxx-ng=10.3.0",#{getCompilerVersion()}",
+            f"libgcc-ng=10.3.0",#{getCompilerVersion()}",
+	        "libstdcxx-devel_linux-64=10.3.0",
+	        "gcc=10.3",
+	        "gxx=10.3",
+	        "libxcrypt"
         ]
         if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
-            commands = CondaCommandDef.condaInstall('--yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
+            commands = CondaCommandDef('conda install --yes --override-channels -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
@@ -221,7 +231,7 @@ class Plugin(pwem.Plugin):
 
         isBundle = (os.path.isdir(os.path.join(bundleDir, 'src')) and
                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
-
+        
         return bundleDir if isBundle else None
 
 def get_cuda_version():
