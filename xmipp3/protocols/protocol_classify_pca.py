@@ -161,7 +161,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         form.addParam('coef', FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of PCA components (between 0-1).'
                            ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training', IntParam, default=40000,
+        form.addParam('training', IntParam, default=200000,
                       label="particles for training",
                       help='Number of particles for PCA training')
 
@@ -194,9 +194,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         self._insertFunctionStep('convertInputStep', 
                                 self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
         
-        self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, particlesTrain)
+        # self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, particlesTrain)
         
-        self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma )
+        self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma, particlesTrain)
     
         self._insertFunctionStep('createOutputStep')
         
@@ -227,19 +227,33 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
         
         
-    def pcaTraining(self, inputIm, resolutionTrain, numTrain):
-        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA'% \
-                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath())
-
-        env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = ''
-        self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
+    # def pcaTraining(self, inputIm, resolutionTrain, numTrain):
+    #     args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA'% \
+    #             (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath())
+    #
+    #     env = self.getCondaEnv()
+    #     env['LD_LIBRARY_PATH'] = ''
+    #     self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
         
         
-    def classification(self, inputIm, numClass, stfile, mask, sigma):
-        args = ' -i %s -s %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
-                (inputIm, self.sampling, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
-                 stfile)
+    # def classification(self, inputIm, numClass, stfile, mask, sigma):
+    #     args = ' -i %s -s %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
+    #             (inputIm, self.sampling, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
+    #              stfile)
+    #     if mask:
+    #         args += ' --mask --sigma %s '%(sigma) 
+    #
+    #     if self.mode == self.UPDATE_CLASSES:
+    #         args += ' -r %s '%(self.ref)
+    #
+    #     env = self.getCondaEnv()
+    #     env['LD_LIBRARY_PATH'] = ''
+    #     self.runJob("xmipp_classify_pca", args, numberOfMpi=1, env=env)
+    
+    
+    def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain):
+        args = ' -i %s -s %s -c %s  -t %s  -o %s/classes -stExp %s'  % \
+                (inputIm, self.sampling, numClass,  numTrain, self._getExtraPath(), stfile)
         if mask:
             args += ' --mask --sigma %s '%(sigma) 
             
