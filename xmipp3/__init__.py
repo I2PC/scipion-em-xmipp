@@ -31,9 +31,7 @@ from datetime import datetime
 import pwem
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
-from scipion.install.funcs import CommandDef
-from scipion import __version__ as scipionAppVersion
-from packaging.version import Version
+from scipion.install.funcs import CondaCommandDef
 from .base import *
 from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
@@ -164,9 +162,13 @@ class Plugin(pwem.Plugin):
             'libtiff',
             'libjpeg-turbo'
         ]
-        
-        if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
-            commands = CommandDef('conda install -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
+        if Config.isCondaInstallation():
+            condaEnvPath = os.environ['CONDA_PREFIX']
+            scipionEnv=os.path.basename(condaEnvPath)  # TODO: use pyworkflow method when released: Config.getEnvName()
+
+            commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
+            commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
+            commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
