@@ -104,7 +104,10 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
                 alpha_model, hand_model, self._getExtraPath(),
                 self.thresholdAlpha.get(), self._getPath(self.vFilteredVolFile),
                 self._getPath(self.vMaskFile))
-        self.runJob("xmipp_deep_hand", args, env=self.getCondaEnv())
+
+        env = self.getCondaEnv()
+        env['LD_LIBRARY_PATH'] = ''
+        self.runJob("xmipp_deep_hand", args, env=env)
 
         # Store hand value
         hand_file = self._getExtraPath('hand.txt')

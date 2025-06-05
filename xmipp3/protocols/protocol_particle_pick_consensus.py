@@ -169,6 +169,11 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                 readyMics.intersection_update(currentPickMics)
             allMics = allMics.union(currentPickMics)
 
+        mainPickMics = getReadyMics(self.inputCoordinates[0].get())[0]
+        secondaryPickMics = getReadyMics(self.inputCoordinates[1].get())[0]
+        if mainPickMics != secondaryPickMics:
+            allMics = mainPickMics.intersection(secondaryPickMics)
+
         self.streamClosed = all(streamClosed)
         if self.streamClosed:
             # for non streaming do all and in the last iteration of streaming do the rest
