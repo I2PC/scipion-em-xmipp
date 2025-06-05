@@ -309,7 +309,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                     maxDose = stats['max']
                     diff_median = ((mean/self.mu)-1)*100
 
-                    setAttribute(newMovie, '_DIFF_TO_DOSE_PER_ANGSTROM2', abs(diff_median))
+                    setAttribute(newMovie, '_DIFF_TO_DOSE_PER_ANGSTROM2', diff_median)
                     setAttribute(newMovie, '_MEAN_DOSE_PER_ANGSTROM2', mean)
                     setAttribute(newMovie, '_STD_DOSE_PER_ANGSTROM2', std)
                     setAttribute(newMovie, '_MIN_DOSE_PER_FRAME', minDose)

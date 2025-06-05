@@ -61,6 +61,14 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
     #--------------------------- DEFINE param functions ------------------------
     def _definePreprocessParams(self, form):
+        form.addParam('boxSize', params.IntParam,
+                      label='Particle box size (px)', allowsPointers=True, default=-1,
+                      # validators=[params.Positive],
+                      help='This is the size of the boxed particles (in pixels). '
+                           'Note that if the downsample option is used, the particles will be boxed using a '
+                           'downsampled box size that maintains the ratio with the original extraction box size.'
+                           'Use the wizard to select a box size automatically. '
+                           'This is calculated by multiplying 1.5 * box size used for picking.')
 
         form.addParam('doResize', params.BooleanParam, default=False,
                       label='Rescale particles?',
@@ -100,14 +108,15 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                       label='Resize sampling rate (Å/px)',
                       help='Set the new output sampling rate.')
 
-        form.addParam('boxSize', params.IntParam,
-                      label='Particle box size (px)', allowsPointers=True, default=-1,
-                      # validators=[params.Positive],
-                      help='This is the size of the boxed particles (in pixels). '
-                           'Note that if you use downsample option, the '
-                           'particles are boxed in a downsampled boxsize conserving the same relation. '
-                           'Use the wizard to select a boxSize automatically. '
-                           'This is calculated by multiplying 1.5 * box size used for picking.')
+        form.addParam('boxSizeForced', params.IntParam,
+                      label='Force output particle box size (px)', default=-1,
+                      condition='doResize and resizeOption!=%d' % self.RESIZE_DIMENSIONS,
+                      expertLevel=LEVEL_ADVANCED,
+                      help='By default, this is set to -1, meaning that if the downsample option is used, the particles '
+                           'will be boxed using a downsampled box size that maintains the ratio with the '
+                           'original extraction box size. If a value is specified (forced), the output extraction '
+                           'box size will be applied directly to the downsampled micrographs, '
+                           'losing the original size ratio.')
 
         form.addParam('doBorders', params.BooleanParam, default=False,
                       label='Fill pixels outside borders',
@@ -444,6 +453,9 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             newBoxSize = self.getEven(boxSize/downFactor)
         else:
             newBoxSize = boxSize
+
+        if self.boxSizeForced.get() != -1: # Force output box size
+            newBoxSize = self.boxSizeForced.get()
 
         return int(newBoxSize)
 
