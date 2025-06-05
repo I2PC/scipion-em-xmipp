@@ -33,7 +33,6 @@ from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 
 from pwem import emlib
 from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
-from xmipp3.protocols.protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .plotter import XmippPlotter
 
 class XmippDeepConsensusViewer(ProtocolViewer):
@@ -45,7 +44,7 @@ class XmippDeepConsensusViewer(ProtocolViewer):
     """
     _label = 'viewer deepConsensus'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [XmippProtScreenDeepConsensus, XmippProtScreenDeepLearning]
+    _targets = [XmippProtScreenDeepConsensus]
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
@@ -83,11 +82,6 @@ class XmippDeepConsensusViewer(ProtocolViewer):
             objId = self.protocol.outputCoordinates.strId()
             otherParam = {'other': 'deepCons'}
 
-        elif (isinstance(self.protocol, XmippProtScreenDeepLearning) and
-              self.protocol.hasAttribute('outputParticles')):
-            parts = self.protocol.outputParticles
-            fnParts = parts.getFileName()
-            objId = parts.strId()
 
         if objId:
             views.append(ObjectView(

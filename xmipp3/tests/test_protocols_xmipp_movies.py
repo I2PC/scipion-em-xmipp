@@ -30,6 +30,7 @@ from pyworkflow.tests import *
 
 from xmipp3.convert import *
 from xmipp3.protocols import *
+from pwem.objects import SetOfMovies, MovieAlignment
 from pwem.protocols import ProtImportMovies, ProtImportCoordinates
 import pyworkflow.utils as pwutils
 from contextlib import redirect_stdout
@@ -774,8 +775,7 @@ class TestMovieAlignmentConsensus(BaseTest):
         self.launchProtocol(protConsensus1)
 
         sizeAccepted = protConsensus1.outputMovies.getSize()
-        self.assertEqual(sizeAccepted, 2, 'Number of accepted movies must be 2 and its '
-                                           '%d' % sizeAccepted)
+        self.assertEqual(sizeAccepted, 2, 'Number of accepted movies must be 2 and its %d' % sizeAccepted)
 
     def testMovieAlignmentConsensusFiltering2(self):
         """ This must discard movies by movie alignment consensus.
@@ -784,6 +784,7 @@ class TestMovieAlignmentConsensus(BaseTest):
         protConsensus2 = self.newProtocol(XmippProtConsensusMovieAlignment,
                                           objLabel=label,
                                           minConsCorrelation=0.9,
+                                          minRangeShift=0.01,
                                           trajectoryPlot=True
                                           )
 
@@ -796,5 +797,4 @@ class TestMovieAlignmentConsensus(BaseTest):
         self.launchProtocol(protConsensus2)
 
         sizeDiscarded = protConsensus2.outputMoviesDiscarded.getSize()
-        self.assertEqual(sizeDiscarded, 2, 'Number of accepted movies must be 2 and its '
-                                           '%d' % sizeDiscarded)
+        self.assertEqual(sizeDiscarded, 2, 'Number of discarded movies must be 0 and its %d' % sizeDiscarded)
