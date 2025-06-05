@@ -52,6 +52,7 @@ from .protocol_create_gallery import XmippProtCreateGallery
 from .protocol_ctf_consensus import XmippProtCTFConsensus
 from .protocol_ctf_micrographs import XmippProtCTFMicrographs
 from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
+from .protocol_ctf_correct_phase import XmippProtCTFCorrectPhase2D
 from .protocol_consensus_classes import XmippProtConsensusClasses
 from .protocol_denoise_particles import XmippProtDenoiseParticles
 from .protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
