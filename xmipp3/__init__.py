@@ -159,6 +159,7 @@ class Plugin(pwem.Plugin):
             "zlib",
             "openjdk",
             "libtiff",
+	    "libstdcxx-ng",
             "libjpeg-turbo",
         ]
         if Config.isCondaInstallation():
