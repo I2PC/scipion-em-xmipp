@@ -39,6 +39,8 @@ from matplotlib.text import Annotation
 
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import linkage, dendrogram
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.gui.plotter import plt
@@ -67,9 +69,12 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                                'two sets of volumes independently.')
         form.addParam('doShowPlot', params.LabelParam,
                       label="Display the StructMap")
-    
+        form.addParam('doShowDendogram', params.LabelParam,
+                      label="Display hierarchical clustering")
+
     def _getVisualizeDict(self):
-        return {'doShowPlot': self._visualize}
+        return {'doShowPlot': self._visualize,
+                'doShowDendogram': self._visualizeDendogram}
 
     def getOutputFile(self):
         fnOutput = ['']
@@ -112,6 +117,19 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         plot.initializePlot()
         return plot
         
+    def _visualizeDendogram(self, e=None):
+        distMatrix = np.loadtxt(self.protocol._getExtraPath("CorrMatrix.txt"))
+        condensed_dist = squareform(distMatrix)
+        Z = linkage(condensed_dist, method='complete')
+
+        plt.figure(figsize=(8, 4))
+        dendrogram(Z)
+        plt.title("Hierarchical Clustering (Complete Linkage)")
+        plt.xlabel("Sample Index")
+        plt.ylabel("Distance")
+        plt.tight_layout()
+        plt.show()
+
     def _validate(self):
         errors = []
         return errors
