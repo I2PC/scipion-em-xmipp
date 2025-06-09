@@ -71,6 +71,9 @@ jobs:
         SEND_INSTALLATION_STATISTICS: OFF 
       run: |
           pwd
+          ./scipion3 installp -p scipion-em-xmipp --devel || {
+          echo "First attempt failed. Retrying..."
+          sleep 10
           ./scipion3 installp -p scipion-em-xmipp --devel || (cat compilation.log && false)
-          ./scipion3 installp -p scipion-em-xmipp --devel || (cat compilation.log && false) 
+          }
       # Duplicated because a defineVariables scipion plugin fails
