@@ -43,20 +43,25 @@ jobs:
     - name: Install Scipion
       working-directory: ${{ github.workspace }}
       run: |
+        pwd
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
         
     - name: Cloning scipion-em-xmipp
       working-directory: ${{ github.workspace }}/scipion/
-      run: rm -rf scipion-em-xmipp
+      run: |
+           pwd
+           rm -rf scipion-em-xmipp
            git clone https://github.com/I2PC/scipion-em-xmipp.git
 
     - name: Conditionally checkout to ${{ github.head_ref }}
       working-directory: ${{ github.workspace }}/scipion/scipion-em-xmipp
       env:
         BRANCH_NAME: ${{ github.head_ref }}
-      run: git checkout $BRANCH_NAME
+      run: |
+          pwd
+          git checkout $BRANCH_NAME
    
     - name: Install and compile Xmipp and show log
       working-directory: ${{ github.workspace }}/scipion/ 
