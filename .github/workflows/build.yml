@@ -23,13 +23,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libopenmpi-dev openmpi-bin python3-numpy git 
 
-    # - name: Install CUDA
-    #   uses: Jimver/cuda-toolkit@master
-    #   id: cuda-toolkit
-    #   with:
-    #     cuda: '11.8.0'
-    #     method: network
-    #     sub-packages: '["nvcc", "toolkit"]'
+    - name: Install CUDA
+      uses: Jimver/cuda-toolkit@master
+      id: cuda-toolkit
+      with:
+        cuda: '11.8.0'
+        method: network
+        sub-packages: '["nvcc", "toolkit"]'
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@main
@@ -69,4 +69,8 @@ jobs:
         BUILD_TESTS: True
         BRANCH_NAME: ${{ github.head_ref }}
         SEND_INSTALLATION_STATISTICS: OFF 
-      run: ./scipion3 installp -p scipion-em-xmipp --devel || (cat compilation.log && false)
+      run: |
+          pwd
+          ./scipion3 installp -p scipion-em-xmipp --devel || (cat compilation.log && false)
+          ./scipion3 installp -p scipion-em-xmipp --devel || (cat compilation.log && false) 
+      # Duplicated because a defineVariables scipion plugin fails
