@@ -169,6 +169,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
 
     def cleanIntermediate(self):
         cleanPattern(self._getExtraPath("Pair*correlation.txt"))
+        print("Cleaning",self._getExtraPath("*"+self.OUTPUT_SUFFIX))
         cleanPattern(self._getExtraPath("*"+self.OUTPUT_SUFFIX))
 
     # --------------------------- UTILS functions --------------------------------------------
