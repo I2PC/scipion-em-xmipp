@@ -151,17 +151,16 @@ class Plugin(pwem.Plugin):
         
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
-            'cmake>=3.17',
-            'hdf5>=1.18',
-            'sqlite>=3',
-            'fftw>=3',
-            'mpich-mpicxx',
-            'c-compiler',
-            'cxx-compiler',
-            'make',
-            'openjdk',
-            'libtiff',
-            'libjpeg-turbo'
+	        "'cmake>=3.18,<4'", #cmake-4 is not compatible with Relion compilation
+            "hdf5>=1.18",
+            "sqlite>=3",
+            "fftw>=3",
+            "make",
+            "zlib",
+            "openjdk",
+            "libtiff",
+	    "libstdcxx-ng",
+            "libjpeg-turbo",
         ]
         if Config.isCondaInstallation():
             condaEnvPath = os.environ['CONDA_PREFIX']
@@ -175,36 +174,45 @@ class Plugin(pwem.Plugin):
                 tar='void.tgz',
                 commands=commands.getCommands(),
                 neededProgs=['conda'],
-                default=False
+                default=True
             )
         
         if develMode:
+            xmippSrc = 'xmippDev'
+            installCommands = [
+		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
+		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
+		         f'cd {xmippSrc} && '
+		         #f'git checkout {branchTest} && '
+		         f'./xmipp ', COMPILE_TARGETS)
+	        ]
+
             env.addPackage(
-                'xmippDev',
-                tar='void.tgz',
-                commands=[(f'cd {bundleDir} && ./xmipp', COMPILE_TARGETS)],
-                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-                updateCuda=True,
-                default=False
-            )
-        
-        xmippSrc = f'xmippSrc-{version._binTagVersion}'
-        installCommands = [
-            (f'cd .. && rm -rf {xmippSrc} && '
-            f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
-            f'cd {xmippSrc} && '
-            f'git checkout {version._binTagVersion} && '
-            f'./xmipp --production True ', COMPILE_TARGETS)
-        ]
-        env.addPackage(
-            'xmippSrc', version=version._binTagVersion,
-            tar='void.tgz',
-            commands=installCommands,
-            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-            updateCuda=True,
-            default=not develMode
-        )
-        
+	            'xmippDev',
+	            tar='void.tgz',
+	            commands=installCommands,
+	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+	            updateCuda=True,
+	            default=True
+	        )
+        else:
+            xmippSrc = f'xmippSrc-{version._binTagVersion}'
+            installCommands = [
+                (f'cd .. && rm -rf {xmippSrc} && '
+                f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
+                f'cd {xmippSrc} && '
+                f'git checkout {version._binTagVersion} && '
+                f'./xmipp --production True ', COMPILE_TARGETS)
+            ]
+            env.addPackage(
+	                'xmippSrc', version=version._binTagVersion,
+	                tar='void.tgz',
+	                commands=installCommands,
+	                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+	                updateCuda=True,
+	                default=not develMode
+	            )
+
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
 
@@ -219,7 +227,6 @@ class Plugin(pwem.Plugin):
                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
         
         return bundleDir if isBundle else None
-
 
 def getNvidiaDriverVersion(plugin):
     """Attempt to retrieve the NVIDIA driver version using different methods.
@@ -249,7 +256,6 @@ def getNvidiaDriverVersion(plugin):
 
     return None  # No valid version found
 
-    
 def installDeepLearningToolkit(plugin, env):
 
     preMsgs = []
