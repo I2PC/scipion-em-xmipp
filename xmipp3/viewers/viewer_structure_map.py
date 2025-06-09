@@ -119,7 +119,7 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         
     def _visualizeDendogram(self, e=None):
         distMatrix = np.loadtxt(self.protocol._getExtraPath("CorrMatrix.txt"))
-        condensed_dist = squareform(distMatrix)
+        condensed_dist = squareform(0.5*(distMatrix+distMatrix.transpose()))
         Z = linkage(condensed_dist, method='complete')
 
         plt.figure(figsize=(8, 4))
