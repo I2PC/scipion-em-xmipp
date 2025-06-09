@@ -227,32 +227,6 @@ class Plugin(pwem.Plugin):
         
         return bundleDir if isBundle else None
 
-def get_cuda_version():
-    cudaVersion = pwem.Plugin.guessCudaVersion(pwem.Config.CUDA_LIB, default='0.0')
-    if cudaVersion.major == 0:
-        try:
-            output = subprocess.check_output(["nvcc", "--version"]).decode("utf-8")
-            for line in output.split("\n"):
-                if "release" in line:
-                    return float(line.split("release")[-1].strip().split(",")[0])
-        except FileNotFoundError:
-            return None
-
-def getCompilerVersion():
-    CUDA = get_cuda_version()
-    if CUDA == None:
-        compiler = 10
-        print(f'CUDA not detected.\nCompiler assigned: {compiler}')
-        return compiler
-
-    if CUDA <= 11.0:
-        compiler =  9
-    else:
-        compiler =  10
-
-    print(f'CUDA version detected: {CUDA}.\nCompiler assigned: {compiler}')
-    return compiler
-
 def getNvidiaDriverVersion(plugin):
     """Attempt to retrieve the NVIDIA driver version using different methods.
     Only returns if a valid version string is found.
