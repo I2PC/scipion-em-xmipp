@@ -105,8 +105,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
                 self.thresholdAlpha.get(), self._getPath(self.vFilteredVolFile),
                 self._getPath(self.vMaskFile))
 
-        env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = ''
+        env = self.removeCudaFromEnvPath(self.getCondaEnv())
         self.runJob("xmipp_deep_hand", args, env=env)
 
         # Store hand value
@@ -114,6 +113,17 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         f = open(hand_file)
         self.hand = Float(float(f.read()))
         f.close()
+
+    def removeCudaFromEnvPath(self, env):
+        paths = env['LD_LIBRARY_PATH'].split(':')
+        finalPath = ''
+        for p in paths:
+            if p.find('cuda') != -1:
+                pass
+            else:
+                finalPath+= p + ':'
+        env['LD_LIBRARY_PATH'] = finalPath
+        return env
 
     def flipStep(self):
         if self.hand.get() > self.thresholdHand.get():
