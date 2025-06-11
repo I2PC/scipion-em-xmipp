@@ -70,7 +70,6 @@ class XmippProtCTFCorrectPhase2D(ProtProcessParticles):
         params +=  '  --save_metadata_stack %s' % self._getPath('corrected_ctf_particles.xmd')
         params +=  '  --sampling_rate %s' % self.inputParticles.get().getSamplingRate()
 
-        print(params)
         nproc = self.numberOfMpi.get()
         nT=self.numberOfThreads.get() 
 
