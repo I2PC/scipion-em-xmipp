@@ -90,19 +90,6 @@ class XmippProtCTFCorrectPhase2D(ProtProcessParticles):
         
         self._defineOutputs(outputParticles=partSet)
         self._defineSourceRelation(imgSet, partSet)
-    #--------------------------- INFO functions -------------------------------------------- 
-    def _validate(self):
-        pass
-    
-    def _summary(self):
-        pass
-    
-    def _methods(self):
-        messages = []
-        return messages
-    
-    def _citations(self):
-        return []
     
     #--------------------------- UTILS functions -------------------------------------------- 
     def _updateLocation(self, item, row):
