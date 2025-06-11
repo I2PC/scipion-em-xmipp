@@ -89,8 +89,3 @@ class XmippProtCTFCorrectPhase2D(ProtProcessParticles):
         self._defineOutputs(outputParticles=partSet)
         self._defineSourceRelation(imgSet, partSet)
     
-    #--------------------------- UTILS functions -------------------------------------------- 
-    def _updateLocation(self, item, row):
-        index, filename = xmippToLocation(row.getValue(md.MDL_IMAGE))
-        item.setLocation(index, filename)
-
