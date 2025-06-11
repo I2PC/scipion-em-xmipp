@@ -28,7 +28,7 @@ import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtProcessParticles
 
-from xmipp3.convert import writeSetOfParticles, xmippToLocation
+from xmipp3.convert import writeSetOfParticles, xmippToLocation, readSetOfParticles
 
 
 class XmippProtCTFCorrectPhase2D(ProtProcessParticles):
@@ -84,9 +84,7 @@ class XmippProtCTFCorrectPhase2D(ProtProcessParticles):
         
         partSet.copyInfo(imgSet)
         partSet.setIsPhaseFlipped(True)
-        partSet.copyItems(imgSet,
-                            updateItemCallback=self._updateLocation,
-                            itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID))
+        readSetOfParticles(imgFn, partSet)
         
         self._defineOutputs(outputParticles=partSet)
         self._defineSourceRelation(imgSet, partSet)
