@@ -1,7 +1,27 @@
-## Release 3.24.12.2 - Poseidon
-   - More scipion-em-xmipp
-      - Updating version for pypi requirements
-      - Bug cloning tag
+## Release 3.25.06.0 - X
+- New protocols
+
+- Protocols updated
+   - Max shift: tolerate movies without micrographs associated
+   - Highred: test updated
+   - substract_projection: update command to boost and subtract to generate only one output stack
+   - Movie alignment consensus protocol: enables irregular input sets
+
+- Protocols fixed
+   - simulate ctf: fix pre-CTF noise np.numpy, init generator for pre and post ctf noise
+   - validate FSCQ: test fixed
+   - resolution_monogenic_signal: fixing header in MonoRes
+   - protocol_process: CropResize halves fix
+   - Extract particles test fixed
+   - FSO viewer: the fso was failing when the fso did not cross some thresholds
+ 
+     
+- Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
+
+- More scipion-em-xmipp
+   - Updating version for pypi requirements
+   - Bug cloning tag
+        
 ## Release 3.24.12 - Poseidon
    - New protocols
       - apply_tilt_to_ctf: Apply a local deviation to the CTF based on the micrograph's tilt
