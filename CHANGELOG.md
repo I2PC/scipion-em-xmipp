@@ -27,7 +27,7 @@
    - reconstruct_significant: fix gpu usage
    - ransac: fix gpu usage
      
-- Protocols deprecated (For more details visit [this]([https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols](https://i2pc.github.io/docs/Utils/Deprecated-programs/index.html)))
+- Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols](https://i2pc.github.io/docs/Utils/Deprecated-programs/index.html)))
    - XmippProtScreenDeepLearning
 
 - More scipion-em-xmipp
