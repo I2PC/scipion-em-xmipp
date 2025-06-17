@@ -36,7 +36,7 @@ from pyworkflow.protocol.params import (MultiPointerParam, FloatParam, GE)
 from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.objects import Volume, SetOfVolumes
 from pwem.protocols import ProtAnalysis3D
-import pwem.emlib.image as emlib
+import pwem.emlib as emlib
 
 import xmippLib
 
@@ -58,7 +58,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
                       pointerClass=[SetOfVolumes, Volume], minNumObjects=1 )
         form.addParam('maxShift', FloatParam, label='Maximum shift (px)',
                       validators=[GE(0)], default=16 )
-        form.addParallelSection(threads=4, mpi=0)
+        form.addParallelSection(mpi=8)
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -73,37 +73,55 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         volumes = self._getInputVolumes()
         n = len(volumes)
         
-        pool = mp.Pool(processes=int(self.numberOfThreads))
-        program = 'xmipp_volume_align'
-        futures = []
+        program = 'xmipp_transform_filter'
+        args = []
+        args += ['-i', emlib.image.ImageHandler.locationToXmipp(volumes[0].getLocation())]
+        args += ['--fourier', 'cone', 60.0]
+        args += ['--save', self._getExtraPath('multiplicity.mrc')]
+        self.runJob(program, args, numberOfMpi=1)
+        
+        md = emlib.metadata.MetaData()
         for index0, index1 in itertools.combinations(range(n), r=2):
+            objId = md.addObject()
             volume0 = volumes[index0]
             volume1 = volumes[index1]
-            matrixFilename = self._getPairTransformMatrixFilename(index0, index1)
+            md.setValue(emlib.metadata.MDL_IMAGE_REF, emlib.image.ImageHandler.locationToXmipp(volume0.getLocation()), objId)
+            md.setValue(emlib.metadata.MDL_IMAGE, emlib.image.ImageHandler.locationToXmipp(volume1.getLocation()), objId)
+            md.setValue(emlib.metadata.MDL_MASK, self._getExtraPath('multiplicity.mrc'), objId)
+            md.setValue(emlib.metadata.MDL_COMMENT, '%06d,%06d' % (index0, index1), objId)
+        md.write(self._getExtraPath('pairs.xmd'))
             
-            args = []
-            args += ['--i1', emlib.ImageHandler.locationToXmipp(volume0.getLocation())]
-            args += ['--i2', emlib.ImageHandler.locationToXmipp(volume1.getLocation())]
-            args += ['--frm', 0.25, self.maxShift]
-            args += ['--copyGeo', matrixFilename]
-            futures.append(pool.apply_async(self.runJob, args=(program, args)))
-
-        for future in futures:
-            future.wait()
+        program = 'xmipp_tomo_align_subtomo_pairs'
+        args = []
+        args += ['-i', self._getExtraPath('pairs.xmd')]
+        args += ['-o', self._getExtraPath('aligned_pairs.xmd')]
+        # TODO add maxfreq and maxshift
+        args += ['--keep_input_columns']
+        self.runJob(program, args)
         
         rotations = np.empty((3*n, 3*n))
         shifts = np.empty((3, n, n))
-        for index0, index1 in itertools.combinations(range(n), r=2):
-            matrixFilename = self._getPairTransformMatrixFilename(index0, index1)
-            matrix = np.loadtxt(matrixFilename).reshape(4, 4)
+        md.read(self._getExtraPath('aligned_pairs.xmd'))
+        for objId in md:
+            comment: str = md.getValue(emlib.metadata.MDL_COMMENT, objId)
+            rot = md.getValue(emlib.metadata.MDL_ANGLE_ROT, objId)
+            tilt = md.getValue(emlib.metadata.MDL_ANGLE_TILT, objId)
+            psi = md.getValue(emlib.metadata.MDL_ANGLE_PSI, objId)
+            x = md.getValue(emlib.metadata.MDL_SHIFT_X, objId)
+            y = md.getValue(emlib.metadata.MDL_SHIFT_Y, objId)
+            z = md.getValue(emlib.metadata.MDL_SHIFT_Z, objId)
+            
+            index0, index1 = comment.split(',')
+            index0 = int(index0)
+            index1 = int(index1)
             
             start0 = 3*index0
             end0 = start0 + 3
             start1 = 3*index1
             end1 = start1 + 3
 
-            rotation = matrix[:3,:3]
-            shift = matrix[:3, 3]
+            rotation = xmippLib.Euler_angles2matrix(rot, tilt, psi)
+            shift = np.array([x, y, z])
             
             rotations[start0:end0, start1:end1] = rotation
             rotations[start1:end1, start0:end0] = rotation.T
@@ -115,6 +133,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             start = 3*index
             end = start + 3
             rotations[start:end,start:end] = np.eye(3)
+            shifts[:,index,index] = 0
             
         np.save(self._getPairwiseRotationMatrixFilename(), rotations)
         np.save(self._getPairwiseShiftMatrixFilename(), shifts)
@@ -145,7 +164,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         program = 'xmipp_transform_geometry'
         for i, volume, transform in zip(itertools.count(), volumes, transforms):
-            inputVolumeFilename = emlib.ImageHandler.locationToXmipp(volume.getLocation())
+            inputVolumeFilename = emlib.image.ImageHandler.locationToXmipp(volume.getLocation())
             outputVolumeFilename = self._getTransoformedVolumeFilename(i)
             
             args = []
@@ -172,7 +191,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         args = []
         args += ['-i', self._getAverageFilename()]
         args += ['--sampling_rate', self._getSamplingRate()]
-        self.runJob(program, args)
+        self.runJob(program, args, numberOfMpi=1)
                     
     def createOutputStep(self):
         samplingRate = self._getSamplingRate()
@@ -271,7 +290,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         matrices = v.reshape(n, 3, 3)
         u, _, vh = np.linalg.svd(matrices, full_matrices=True)
         matrices = u @ vh
-        
+
         return matrices, w
     
     def _decomposeShifts(self, pairwise: np.ndarray, rotations: np.ndarray):
