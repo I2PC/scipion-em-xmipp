@@ -31,7 +31,7 @@ import multiprocessing.dummy as mp
 import numpy as np
 import scipy.sparse
 
-from pyworkflow.protocol.params import (MultiPointerParam, FloatParam, GE)
+from pyworkflow.protocol.params import (MultiPointerParam, FloatParam, GE, Range)
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.objects import Volume, SetOfVolumes
@@ -58,10 +58,15 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
                       pointerClass=[SetOfVolumes, Volume], minNumObjects=1 )
         form.addParam('maxShift', FloatParam, label='Maximum shift (px)',
                       validators=[GE(0)], default=16 )
+        form.addParam('maxFreq', FloatParam, label='Maximum frequency',
+                      validators=[Range(0, 1.0)], default=0.25 )
+        form.addParam('maxTilt', FloatParam, label='Maximium tilt angle (deg)',
+                      validators=[Range(0, 90.0)], default=60.0 )
         form.addParallelSection(mpi=8)
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
+        self._insertFunctionStep(self.makePairsStep)
         self._insertFunctionStep(self.pairwiseAlignStep)
         self._insertFunctionStep(self.synchronizeStep)
         self._insertFunctionStep(self.applyTransformationsStep)
@@ -69,15 +74,15 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         self._insertFunctionStep(self.createOutputStep)
     
     #------------------------------- STEPS functions ---------------------------
-    def pairwiseAlignStep(self):
+    def makePairsStep(self):
         volumes = self._getInputVolumes()
         n = len(volumes)
         
         program = 'xmipp_transform_filter'
         args = []
         args += ['-i', emlib.image.ImageHandler.locationToXmipp(volumes[0].getLocation())]
-        args += ['--fourier', 'cone', 60.0]
-        args += ['--save', self._getExtraPath('multiplicity.mrc')]
+        args += ['--fourier', 'cone', self.maxTilt.get()]
+        args += ['--save', self._getMultiplicityMaskFilename()]
         self.runJob(program, args, numberOfMpi=1)
         
         md = emlib.metadata.MetaData()
@@ -87,21 +92,26 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             volume1 = volumes[index1]
             md.setValue(emlib.metadata.MDL_IMAGE_REF, emlib.image.ImageHandler.locationToXmipp(volume0.getLocation()), objId)
             md.setValue(emlib.metadata.MDL_IMAGE, emlib.image.ImageHandler.locationToXmipp(volume1.getLocation()), objId)
-            md.setValue(emlib.metadata.MDL_MASK, self._getExtraPath('multiplicity.mrc'), objId)
+            md.setValue(emlib.metadata.MDL_MASK, self._getMultiplicityMaskFilename(), objId)
             md.setValue(emlib.metadata.MDL_COMMENT, '%06d,%06d' % (index0, index1), objId)
         md.write(self._getExtraPath('pairs.xmd'))
-            
+        
+    def pairwiseAlignStep(self):
+        volumes = self._getInputVolumes()
+        n = len(volumes)
+        
         program = 'xmipp_tomo_align_subtomo_pairs'
         args = []
-        args += ['-i', self._getExtraPath('pairs.xmd')]
-        args += ['-o', self._getExtraPath('aligned_pairs.xmd')]
-        # TODO add maxfreq and maxshift
+        args += ['-i', self._getPairMetadataFilename()]
+        args += ['-o', self._getAlignedPairMetadataFilename()]
+        args += ['--maxShift', self.maxShift.get()]
+        args += ['--maxFreq', self.maxFreq.get()]
         args += ['--keep_input_columns']
         self.runJob(program, args)
         
         rotations = np.empty((3*n, 3*n))
         shifts = np.empty((3, n, n))
-        md.read(self._getExtraPath('aligned_pairs.xmd'))
+        md = emlib.metadata.MetaData(self._getAlignedPairMetadataFilename())
         for objId in md:
             comment: str = md.getValue(emlib.metadata.MDL_COMMENT, objId)
             rot = md.getValue(emlib.metadata.MDL_ANGLE_ROT, objId)
@@ -260,8 +270,14 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         return count
     
-    def _getPairTransformMatrixFilename(self, index0: int, index1: int) -> str:
-        return self._getTmpPath('matrix_%06d_%06d.txt' % (index0, index1))
+    def _getPairMetadataFilename(self):
+        return self._getExtraPath('pairs.xmd')
+    
+    def _getAlignedPairMetadataFilename(self):
+        return self._getExtraPath('aligned_pairs.xmd')
+
+    def _getMultiplicityMaskFilename(self):
+        return self._getExtraPath('multiplicity.mrc')
     
     def _getPairwiseRotationMatrixFilename(self) -> str:
         return self._getExtraPath('pairwise_rotations.npy')
