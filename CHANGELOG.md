@@ -1,11 +1,21 @@
 ## Release 3.25.06.0 - X
 - New protocols
+   - compute_likelihood: This protocol computes the likelihood of a set of particles with assigned angles when compared to a set of maps or atomic modelS
 
 - Protocols updated
    - Max shift: tolerate movies without micrographs associated
    - Highred: test updated
    - substract_projection: update command to boost and subtract to generate only one output stack
    - Movie alignment consensus protocol: enables irregular input sets
+   - volume_adjust_sub: better label for volume 1 vs 2
+   - convert_pdb: aDD binThreads
+   - align_volume: add possible
+   - movie_alignment_consensus: Changes in functionality; comparisons between ons between shifts trajectories, and a additional change related to the minimum consensus or threshold for shifts correlation.
+   - particle_pick_consensus: Fixed ID mismatch when combining coordinate sets; now supports asymmetrical sets without indexing errors.
+   - movie_split_frames: now allows testing sum_frames, includes a summary, improved layout, and updated test.
+   - deep_Consensus: GPU handling
+   - Deep_hand: handling env to avoid system CUDA settings,  erasing cuda things from env['LD_LIBRARY_PATH']
+   - Extract particles protocol: force output boxsize
 
 - Protocols fixed
    - simulate ctf: fix pre-CTF noise np.numpy, init generator for pre and post ctf noise
@@ -14,13 +24,20 @@
    - protocol_process: CropResize halves fix
    - Extract particles test fixed
    - FSO viewer: the fso was failing when the fso did not cross some thresholds
- 
+   - reconstruct_significant: fix gpu usage
+   - ransac: fix gpu usage
      
-- Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols))
+- Protocols deprecated (For more details visit [this]([https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols](https://i2pc.github.io/docs/Utils/Deprecated-programs/index.html)))
+   - XmippProtScreenDeepLearning
 
 - More scipion-em-xmipp
+   - Most of the Xmipp dependencies installed on Scipion env
    - Updating version for pypi requirements
    - Bug cloning tag
+   - Use toml for installation
+   - Bug fixed related to the WriteSetOfParticles and the Missing ExtraLabels (The Oier and Fede Adventures)
+   - Handling nvidia drivers error message
+   - improving deps installation
         
 ## Release 3.24.12 - Poseidon
    - New protocols
