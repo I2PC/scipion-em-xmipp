@@ -27,11 +27,11 @@
 
 from typing import List
 import itertools
-import multiprocessing.dummy as mp
 import numpy as np
 import scipy.sparse
 
-from pyworkflow.protocol.params import (MultiPointerParam, FloatParam, GE, Range)
+from pyworkflow.protocol.params import (MultiPointerParam, FloatParam, EnumParam,
+                                        GE, Range)
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.objects import Volume, SetOfVolumes
@@ -48,6 +48,15 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     _lastUpdateVersion = BETA
     _devStatus = PROD
 
+    CHOICE_NONE = 'None'
+    CHOICE_WEDGE = 'Wedge'
+    CHOICE_CONE = 'Cone'
+    CHOICES = [
+        CHOICE_NONE,
+        CHOICE_WEDGE,
+        CHOICE_CONE
+    ]
+    
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
 
@@ -62,6 +71,8 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
                       validators=[Range(0, 1.0)], default=0.25 )
         form.addParam('maxTilt', FloatParam, label='Maximium tilt angle (deg)',
                       validators=[Range(0, 90.0)], default=60.0 )
+        form.addParam('missingRegion', EnumParam, label='Missing region',
+                      choices=self.CHOICES)
         form.addParallelSection(mpi=8)
 
     # --------------------------- INSERT steps functions -----------------------
@@ -78,10 +89,18 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         volumes = self._getInputVolumes()
         n = len(volumes)
         
+        
         program = 'xmipp_transform_filter'
         args = []
         args += ['-i', emlib.image.ImageHandler.locationToXmipp(volumes[0].getLocation())]
-        args += ['--fourier', 'cone', self.maxTilt.get()]
+        args += ['--fourier']
+        choice = self.CHOICES[self.missingRegion.get()]
+        if choice == self.CHOICE_WEDGE:
+            args += ['wedge', -self.maxTilt.get(), self.maxTilt.get()]
+        elif choice == self.CHOICE_CONE:
+            args += ['cone', self.maxTilt.get()]
+        else:
+            raise ValueError('Invalid choice')
         args += ['--save', self._getMultiplicityMaskFilename()]
         self.runJob(program, args, numberOfMpi=1)
         
