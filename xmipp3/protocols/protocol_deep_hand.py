@@ -33,6 +33,7 @@ from pyworkflow.utils.path import cleanPath
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import getImageLocation
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepHand(EMProtocol, XmippProtocol):
     """Protocol to returns handedness of structure from trained deep learning model
@@ -40,6 +41,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     _label ="deep hand"
     _conda_env = "xmipp_pyTorch"
+    _devStatus = UPDATED
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)

@@ -65,7 +65,7 @@ class XmippProtValFit(ProtAnalysis3D):
     """
     _label = 'validate fsc-q'
     _lastUpdateVersion = VERSION_3_0
-    _devStatus = PROD
+    _devStatus = UPDATED
     _ATTRNAME = 'fscq_score'
     _OUTNAME = 'outputAtomStruct'
     _possibleOutputs = {_OUTNAME: AtomStruct}

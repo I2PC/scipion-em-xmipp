@@ -52,6 +52,7 @@ from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput, IN_COOR
 from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             micrographToCTFParam, writeSetOfParticles,
                             writeSetOfCoordinates, readSetOfCoordsFromPosFnames, readSetOfCoordinates)
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 MIN_NUM_CONSENSUS_COORDS = 256
@@ -81,6 +82,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
     _stepsCheckSecs = 5              # time in seconds to check the steps
+    _devStatus = UPDATED
+
 
     USING_INPUT_COORDS = False
     USING_INPUT_MICS = False

@@ -55,7 +55,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
     """
     NO_ROTATION = 0
     NO_FLIP = 0
-    _devStatus = UPDATED
+    _devStatus = PROD
     _label = 'FlexAlign'
     _lastUpdateVersion = VERSION_1_1
 

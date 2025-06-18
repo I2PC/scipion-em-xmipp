@@ -33,6 +33,7 @@ from pyworkflow.utils import replaceBaseExt, removeExt, getExt
 from pwem.convert import headers, downloadPdb, cifToPdb
 from pwem.objects import Volume, Transform
 from pwem.protocols import EMProtocol
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 CITE = 'Fernandez-Gimenez2021'
@@ -43,6 +44,7 @@ class XmippProtVolAdjBase(EMProtocol):
     used by both  XmippProtVolSubtraction and XmippProtVolAdjust."""
 
     _possibleOutputs = {"outputVolume": Volume}
+    _devStatus = UPDATED
 
     # --------------------------- DEFINE param functions --------------------------------------------
     @classmethod

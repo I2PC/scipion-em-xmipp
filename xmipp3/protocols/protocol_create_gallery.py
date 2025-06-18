@@ -42,7 +42,7 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     This gallery of projections may help to understand the images
     observed in the microscope.
     """
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     _label = 'create gallery'
     _version = VERSION_1_1
