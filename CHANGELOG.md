@@ -1,4 +1,4 @@
-## Release 3.25.06.0 - X
+## Release 3.25.06.0 - Rhea
 - New protocols
    - compute_likelihood: This protocol computes the likelihood of a set of particles with assigned angles when compared to a set of maps or atomic modelS
 
