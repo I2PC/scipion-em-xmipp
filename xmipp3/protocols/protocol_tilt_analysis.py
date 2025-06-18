@@ -36,12 +36,12 @@ from pyworkflow.protocol.params import (PointerParam, IntParam,
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
-from pyworkflow import UPDATED
 from pwem.objects import SetOfMicrographs, Image, Set, Float
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
 from xmipp3 import emlib
 from xmipp3.convert import getScipionObj
+from pyworkflow import UPDATED, PROD
 
 OUTPUT_MICS = "outputMicrographs"
 OUTPUT_MICS_DISCARDED = "discardedMicrographs"
@@ -51,7 +51,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
     """
     _label = 'tilt analysis'
-    _devStatus = UPDATED
+    _devStatus = PROD
     _lastUpdateVersion = VERSION_3_0
     _possibleOutputs = {OUTPUT_MICS: SetOfMicrographs,
                         OUTPUT_MICS_DISCARDED: SetOfMicrographs

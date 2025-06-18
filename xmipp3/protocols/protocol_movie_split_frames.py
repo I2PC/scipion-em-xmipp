@@ -34,6 +34,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, EnumParam)
 from pwem.protocols import ProtPreprocessMicrographs
 
 from pwem.objects import Movie, Micrograph
+from pyworkflow import UPDATED, PROD
 
 
 class XmippProtSplitFrames(ProtPreprocessMicrographs):
@@ -43,6 +44,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
     """
     _label = 'split frames'
     _lastUpdateVersion = VERSION_1_1
+    _devStatus = UPDATED
 
     # --------------------------- DEFINE param functions ------------------------
 

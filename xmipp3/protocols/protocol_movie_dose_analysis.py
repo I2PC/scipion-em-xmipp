@@ -35,7 +35,7 @@ from pyworkflow.object import Set
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
-from pyworkflow import UPDATED
+from pyworkflow import UPDATED, PROD
 import pyworkflow.utils as pwutils
 
 from pwem.emlib.image import ImageHandler
@@ -55,7 +55,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
 
-    _devStatus = UPDATED
+    _devStatus = PROD
     _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0
     _possibleOutputs = {

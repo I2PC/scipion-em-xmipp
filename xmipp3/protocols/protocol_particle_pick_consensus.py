@@ -39,6 +39,7 @@ from pwem.protocols import ProtParticlePicking
 from pyworkflow.protocol.constants import *
 from pwem.objects import SetOfCoordinates, Coordinate
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile
+from pyworkflow import UPDATED, PROD
 
 
 PICK_MODE_LARGER = 0
@@ -72,6 +73,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     """
 
     _label = 'picking consensus'
+    _devStatus = UPDATED
     _possibleOutputs = ProtPickingConsensusOutput
     outputName = ProtPickingConsensusOutput.consensusCoordinates.name
     FN_PREFIX = 'consensusCoords_'

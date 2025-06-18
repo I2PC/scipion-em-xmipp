@@ -41,6 +41,7 @@ from pwem import emlib
 from xmipp3.convert import (writeSetOfClasses2D, readSetOfVolumes,
                             writeSetOfParticles)
 from xmipp3.base import isMdEmpty, isXmippCudaPresent
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippProtRansac(ProtInitialVolume):
@@ -57,7 +58,8 @@ class XmippProtRansac(ProtInitialVolume):
     sample consensus (RANSAC) approach.    
      """
     _label = 'ransac'
-    
+    _devStatus = UPDATED
+
     def __init__(self, **args):
         ProtInitialVolume.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL

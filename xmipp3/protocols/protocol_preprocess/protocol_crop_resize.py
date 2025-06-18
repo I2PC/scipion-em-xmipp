@@ -438,7 +438,8 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
     """ Crop or resize a set of volumes """
     _label = 'crop/resize volumes'
     _inputLabel = 'volumes'
-    
+    _devStatus = UPDATED
+
     def __init__(self, **kwargs):
         XmippProcessVolumes.__init__(self, **kwargs)
     

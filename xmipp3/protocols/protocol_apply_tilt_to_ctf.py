@@ -39,7 +39,7 @@ import math
 class XmippProtApplyTiltToCtf(EMProtocol):
     """ Apply a local deviation to the CTF based on the micrograph's tilt
     angle"""
-    _devStatus = NEW
+    _devStatus = PROD
 
     _label = 'apply tilt to ctf'
     _tilt_axes = ['X', 'Y']
