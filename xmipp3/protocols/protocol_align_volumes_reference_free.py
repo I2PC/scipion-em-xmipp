@@ -26,10 +26,8 @@
 # **************************************************************************
 
 from typing import List
-import itertools
 import math
 import numpy as np
-import scipy.sparse
 
 from pyworkflow.protocol.params import (MultiPointerParam, FloatParam, EnumParam,
                                         IntParam, GE, GT, Range)
@@ -39,6 +37,7 @@ from pwem.objects import Volume, SetOfVolumes
 from pwem.protocols import ProtAnalysis3D
 import pwem.emlib as emlib
 
+from xmipp3.convert import readSetOfVolumes
 import xmippLib
 
 class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
@@ -165,36 +164,23 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         md.write(self._getSynchronizedMetadataFilename())
         
     def applyTransformationsStep(self):
-        md = emlib.metadata.MetaData(self._getSynchronizedMetadataFilename())
-        
         program = 'xmipp_transform_geometry'
-        for i, objId in enumerate(md):
-            inputFn = md.getValue(emlib.metadata.MDL_IMAGE, objId)
-            rot = md.getValue(emlib.metadata.MDL_ANGLE_ROT, objId)
-            tilt = md.getValue(emlib.metadata.MDL_ANGLE_TILT, objId)
-            psi = md.getValue(emlib.metadata.MDL_ANGLE_PSI, objId)
-            x = md.getValue(emlib.metadata.MDL_SHIFT_X, objId)
-            y = md.getValue(emlib.metadata.MDL_SHIFT_Y, objId)
-            z = md.getValue(emlib.metadata.MDL_SHIFT_Z, objId)
-            outputFn = self._getTransoformedVolumeFilename(i)
-            
-            args = []
-            args += ['-i', inputFn]
-            args += ['-o', outputFn]
-            args += ['--rotate_volume', 'euler', rot, tilt, psi]
-            args += ['--shift', x, y, z]
-            args += ['--inverse']
-            self.runJob(program, args, numberOfMpi=1)
+        args = []
+        args += ['-i', self._getSynchronizedMetadataFilename()]
+        args += ['-o', self._getAlignedMetadataFilename]
+        args += ['--oroot', self._getAlignedVolumeRoot()]
+        args += ['--apply_transform', '--inverse']
+        self.runJob(program, args, numberOfMpi=1)
             
     def averageVolumesStep(self):
-        n = self._getVolumeCount()
+        md = emlib.metadata.MetaData(self._getAlignedMetadataFilename())
         
         volume = xmippLib.Image()
         average = 0
-        for i in range(n):
-            volume.read(self._getTransoformedVolumeFilename(i))
+        for objId in md:
+            volume.read(md.getValue(emlib.metadata.MDL_IMAGE, objId))
             average += volume.getData()
-        average /= n
+        average /= md.size()
         
         volume.setData(average)
         volume.write(self._getAverageFilename())
@@ -209,11 +195,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         samplingRate = self._getSamplingRate()
         volumes = self._createSetOfVolumes()
         volumes.setSamplingRate(samplingRate)
-        n = self._getVolumeCount()
-        
-        for i in range(n):
-            volume = Volume(location=self._getTransoformedVolumeFilename(i))
-            volumes.append(volume)
+        readSetOfVolumes(self._getAlignedMetadataFilename(), volumes)
         
         average = Volume(location=self._getAverageFilename())
         average.setSamplingRate(samplingRate)
@@ -284,8 +266,11 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     def _getMultiplicityMaskFilename(self):
         return self._getExtraPath('multiplicity.mrc')
     
-    def _getTransoformedVolumeFilename(self, i: int) -> str:
-        return self._getExtraPath('transformed_volume_%06d.mrc' % i)
+    def _getAlignedMetadataFilename(self):
+        return self._getExtraPath('aligned.xmd')
+    
+    def _getAlignedVolumeRoot(self) -> str:
+        return self._getExtraPath('aligned')
     
     def _getAverageFilename(self):
         return self._getExtraPath('average.mrc')
