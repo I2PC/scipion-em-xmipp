@@ -167,7 +167,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         program = 'xmipp_transform_geometry'
         args = []
         args += ['-i', self._getSynchronizedMetadataFilename()]
-        args += ['-o', self._getAlignedMetadataFilename]
+        args += ['-o', self._getAlignedMetadataFilename()]
         args += ['--oroot', self._getAlignedVolumeRoot()]
         args += ['--apply_transform', '--inverse']
         self.runJob(program, args, numberOfMpi=1)
