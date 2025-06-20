@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-from typing import List
+from typing import List, Tuple
 import math
 import numpy as np
 
@@ -105,21 +105,8 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
             raise ValueError('Invalid choice')
         args += ['--save', self._getMultiplicityMaskFilename()]
         self.runJob(program, args, numberOfMpi=1)
-        
-        jumps = {1}
-        if k > 1:
-            n_2 = math.floor(n/2)
-            r = (n_2 / (k-1))
-            for i in range(1, k):
-                jumps.add(max(round(r*i), 1))
-            
-        pairs = set()
-        for i in range(n):
-            for jump in jumps:
-                first = i
-                second = (i+jump) % n
-                pairs.add((min(first, second), max(first, second)))
-        
+
+        pairs = self._generatePairs(n, k)
         md = emlib.metadata.MetaData()
         for index0, index1 in pairs:
             objId = md.addObject()
@@ -254,6 +241,20 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         
         return count
     
+    def _generatePairs(self, n: int, k) -> List[Tuple[int, int]]:
+        n_2 = n // 2
+        e = np.linspace(0, 1, k)
+        jumps = np.unique(np.round(n_2 ** e).astype(np.int64))
+            
+        pairs = set()
+        for i in range(n):
+            for jump in jumps:
+                first = i
+                second = (i+int(jump)) % n
+                pairs.add((min(first, second), max(first, second)))
+
+        return list(pairs)
+        
     def _getPairMetadataFilename(self):
         return self._getExtraPath('pairs.xmd')
     
