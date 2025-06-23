@@ -48,9 +48,58 @@ ALIGN_ALGORITHM_FAST_FOURIER = 3
 class XmippProtAlignVolume(ProtAlignVolume):
     """ 
     Aligns a set of volumes using cross correlation 
-    or a Fast Fourier method. 
+    or a Fast Fourier method.
 
-     """
+    (AI Generated):
+    Purpose and Scope. This protocol aligns a set of 3D volumes to a common reference volume using one of several
+    alignment strategies based on cross-correlation. It enables users to determine the spatial relationship between
+    volumes and optionally generate an average of the aligned volumes. The alignment can be performed using exhaustive
+    search, local refinement, a combination of both, or a fast Fourier-based method (when compiled with support).
+    This protocol is typically used in workflows involving structural comparison, heterogeneity analysis, or
+    multi-model refinement.
+
+    Inputs. The user must provide a reference volume that serves as the target for alignment. One or more input
+    volumes are selected to be aligned to this reference. These inputs can be individual volumes or sets of volumes.
+    Optionally, the user can request the generation of an average volume after alignment. A binary mask can also be
+    applied during alignment to focus the comparison on a region of interest. The mask can be a simple spherical mask
+    defined by a radius or a custom volume mask file.
+
+    Protocol Behavior. For each input volume, the protocol aligns it to the reference using the selected alignment
+    strategy. The available strategies include exhaustive search over a user-defined range of angles, shifts, and
+    scales; local refinement starting from initial estimates; a combined exhaustive plus local refinement approach;
+    and a fast Fourier alignment that provides similar accuracy to exhaustive search but is computationally more
+    efficient. The user can define the search ranges for all six rigid-body parameters (three angles and three shifts),
+    as well as the scaling factor. In the case of local alignment, initial estimates for these parameters must be
+    provided. When enabled, masking is applied to both the input and reference volumes before alignment.
+
+    Each aligned volume is written to disk with its transformation matrix saved as a separate file. This matrix is also
+    stored in Scipion’s internal format, allowing for downstream transformation tracking. If requested, an average
+    volume is computed by summing the aligned volumes and dividing by their number.
+
+    Outputs. The protocol outputs either a single aligned volume or a set of aligned volumes, depending on the number
+    of inputs. Each output volume has its transformation relative to the reference volume saved and accessible in the
+    Scipion project. If the averaging option is selected, an additional output volume is produced representing the
+    average of the aligned volumes. All output volumes retain the original sampling rate, which is also explicitly
+    written into the MRC headers.
+
+    User Workflow. The user selects a reference volume and one or more input volumes to align. The alignment method is
+    chosen based on the desired trade-off between accuracy and computational speed. In the exhaustive and
+    exhaustive-plus-local modes, the user must define the range and step size for each degree of freedom. In local mode,
+    initial values must be supplied. Masking and scale optimization are optional but can improve results depending on
+    the use case. After execution, the aligned volumes and optional average can be inspected or used in subsequent
+    processing steps.
+
+    Interpretation and Best Practices. When using the fast Fourier method, it is important to ensure that the Xmipp
+    installation includes support for this mode (compiled with the --cltomo flag). This mode offers a good balance
+    between accuracy and speed and is recommended when available. Local alignment is faster but more prone to local
+    minima unless the initial estimates are accurate. Exhaustive search provides robustness at the cost of increased
+    computation. Using a mask can help focus the alignment on meaningful structural regions, especially when volumes
+    contain noise or peripheral regions that vary.
+
+    The alignment transformation applied to each volume can be reused in other parts of a Scipion workflow to propagate
+    consistent orientation or to compare structural similarity. The average volume is useful for visual inspection and
+    initial modeling.
+    """
     _label = 'align volume'
     nVols = 0
     _devStatus = UPDATED
@@ -397,6 +446,12 @@ class XmippProtAlignVolumeForWeb(XmippProtAlignVolume):
     """ Aligns a set of volumes using cross correlation.
     Based on Xmipp protocol for aligning volumes, but
     the parameters are restricted for ease of use.
+
+    (AI Generated):
+    Web Variant.
+    The simplified version of the protocol, labeled "Align Volume Web", provides restricted parameters and sets the
+    fast Fourier alignment as default. This is intended for less experienced users or quick testing workflows.
+
     """
     _label = 'align volume web'
     
