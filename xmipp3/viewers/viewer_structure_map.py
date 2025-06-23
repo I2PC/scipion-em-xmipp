@@ -122,14 +122,14 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         distMatrix = np.loadtxt(self.protocol._getExtraPath("CorrMatrix.txt"))
         condensed_dist = squareform(0.5*(distMatrix+distMatrix.transpose()))
         Z = linkage(condensed_dist, method='complete')
-
-        plt.figure(figsize=(8, 4))
-        dendrogram(Z)
-        plt.title("Hierarchical Clustering (Complete Linkage)")
-        plt.xlabel("Sample Index")
-        plt.ylabel("Distance")
-        plt.tight_layout()
-        plt.show()
+	    
+	fig, ax = plt.subplots()
+	dendrogram(Z, ax=ax)
+	ax.set_title("Hierarchical Clustering (Complete Linkage)")
+	ax.set_xlabel("Sample Index")
+	ax.set_ylabel("Distance")
+	fig.tight_layout()
+	return [fig]
 
     def _validate(self):
         errors = []
