@@ -38,6 +38,7 @@
    - Bug fixed related to the WriteSetOfParticles and the Missing ExtraLabels (The Oier and Fede Adventures)
    - Handling nvidia drivers error message
    - improving deps installation
+   - Improved the help message of more than 60 protocols
         
 ## Release 3.24.12 - Poseidon
    - New protocols
