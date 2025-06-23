@@ -36,7 +36,55 @@ from pyworkflow import VERSION_2_0
 
 
 class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
-    """ Protocol for volume deformation based on Zernike3D. """
+    """ Protocol for volume deformation based on Zernike3D.
+
+    (AI Generated).
+
+    Purpose and Scope. This protocol analyzes the deformation required to transform one 3D volume into another, using a
+    spherical harmonics and Zernike polynomials framework. It quantifies shape changes between two reconstructions,
+    potentially representing different conformational or functional states. It is particularly suited for identifying
+    local and global deformations in flexible macromolecular complexes.
+
+    Inputs. The user must provide two 3D volumes: a reference volume and a volume to be deformed. The input volumes
+    must have their physical dimensions properly defined via the sampling rate. Additionally, the user may specify
+    parameters to control the level of multiresolution analysis, the resolution target, the radius of the spherical
+    region to be analyzed, and the degrees of the Zernike and spherical harmonic expansions. A regularization term
+    controls how smooth or flexible the deformation is allowed to be.
+
+    Protocol Behavior. The protocol begins by resampling both input volumes to match a target resolution and voxel
+    size, ensuring compatibility for harmonic analysis. It applies Gaussian filtering to facilitate alignment and then
+    computes the geometric transformation needed to align the two filtered volumes. This transformation is applied to
+    the original input volume.
+
+    Next, the protocol performs a spherical harmonic decomposition of the aligned volume using the specified degrees
+    and within the specified spherical region. A multiresolution comparison is optionally conducted to assess the
+    deformation at different spatial scales. The deformation parameters are regularized to prevent overfitting, with
+    stronger regularization producing smoother deformations.
+
+    The output is a new volume that represents the input volume geometrically deformed to match the reference.
+    Additionally, the protocol stores quantitative deformation parameters derived from the Zernike3D basis in a
+    results file.
+
+    Outputs. The primary output is a 3D volume that has been aligned and deformed to best match the reference
+    structure. This volume can be visualized to assess the extent of the transformation or used as input for further
+    structural analysis. The deformation parameters (encoded in the Zernike3D space) are saved in a text file, which
+    can be used for advanced analysis or visualization of shape change modes.
+
+    User Workflow. The user selects the two volumes for comparison and adjusts advanced parameters such as Zernike
+    and harmonic degrees or the regularization term only if necessary. After execution, the user can inspect the
+    deformed volume and retrieve the file containing deformation coefficients. If discrepancies in sampling or box
+    size exist, the protocol automatically resizes and crops the inputs to ensure proper alignment and analysis.
+
+    Interpretation and Best Practices. Larger Zernike and harmonic degrees allow the protocol to capture finer
+    deformations but increase computational cost and may lead to overfitting if not properly regularized. The
+    regularization parameter should be set low enough to allow real deformations but high enough to avoid capturing
+    noise. The target resolution should be chosen to balance detail and reliability, with typical values between 5 and
+    10 Å.
+
+    The deformation results should be interpreted in light of biological expectations, particularly for symmetric or
+    flexible assemblies where motions may be collective or domain-specific. Users may visualize the deformation field
+    or compare deformation parameters across datasets to identify consistent shape change patterns.
+    """
     _label = 'volume deform - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
 
