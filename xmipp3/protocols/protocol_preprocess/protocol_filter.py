@@ -419,7 +419,7 @@ class XmippProtFilterParticles(ProtFilterParticles, XmippProcessParticles):
 
 
 class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
-    """ Apply Fourier filters to a set of volumes """
+    """ Applies Fourier filters to 3D volumes, adjusting their frequency content generating a filter volume as output. Filtering can emphasize structural features, reduce noise, or prepare volumes for comparison or refinement. The filter can be applied in Fourier, wavelet or real space, and can be set as band, high or low pass filter. Also can be set the resolution range and the decay length """
     _label = 'filter volumes'
 
     #--------------------------- UTILS functions ---------------------------------------------------
