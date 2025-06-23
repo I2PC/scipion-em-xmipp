@@ -161,7 +161,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         form.addParam('coef', FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of PCA components (between 0-1).'
                            ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training', IntParam, default=200000,
+        form.addParam('training', IntParam, default=200000, expertLevel=LEVEL_ADVANCED,
                       label="particles for training",
                       help='Number of particles for PCA training')
 
@@ -196,7 +196,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         # self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, particlesTrain)
         
-        self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma, particlesTrain)
+        self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma, particlesTrain, resolution)
     
         self._insertFunctionStep('createOutputStep')
         
@@ -251,9 +251,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     #     self.runJob("xmipp_classify_pca", args, numberOfMpi=1, env=env)
     
     
-    def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain):
-        args = ' -i %s -s %s -c %s  -t %s  -o %s/classes -stExp %s'  % \
-                (inputIm, self.sampling, numClass,  numTrain, self._getExtraPath(), stfile)
+    def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain, resolutionTrain):
+        args = ' -i %s -s %s -c %s  -t %s -hr %s -p %s -o %s/classes -stExp %s'  % \
+                (inputIm, self.sampling, numClass,  numTrain, resolutionTrain, self.coef.get(), self._getExtraPath(), stfile)
         if mask:
             args += ' --mask --sigma %s '%(sigma) 
     
