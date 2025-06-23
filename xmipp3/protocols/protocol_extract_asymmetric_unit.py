@@ -41,7 +41,53 @@ DEBUG = True
 
 
 class XmippProtExtractUnit(EMProtocol):
-    """ generates files for volumes and FSCs to submit structures to EMDB
+    """ Generates files for volumes and FSCs to submit structures to EMDB.
+
+    (AI Generated):
+
+    Purpose and Scope. This protocol extracts the minimal asymmetric unit from a 3D volume with imposed symmetry.
+    This operation is commonly performed when preparing structures for public deposition, such as in the Electron
+    Microscopy Data Bank (EMDB), where only the unique portion of the structure should be submitted rather than the
+    symmetrized full volume. The extracted unit may also be used for further analysis or visualization where only the
+    distinct structural region is relevant.
+
+    Inputs. The protocol requires a single input volume that contains a symmetrized 3D reconstruction. The user must
+    specify the symmetry group under which the volume was reconstructed. Available options include cyclic, dihedral,
+    tetrahedral, octahedral, and several icosahedral symmetries, using the Xmipp notation (e.g., cN, dN, tetrahedral,
+    etc.).
+
+    For cyclic and dihedral groups, the symmetry order must be specified. An optional angular offset (in degrees) can
+    be applied to rotate the asymmetric unit around the z-axis. The user can also define an inner and outer radius in
+    pixels to apply a mask to the extracted region. If left at the default value of –1, the inner radius will be taken
+    as zero and the outer radius as half the volume size. Additionally, a positive expand factor can be provided to
+    enlarge the extracted region around the asymmetric unit.
+
+    Protocol Behavior. The protocol internally calls the Xmipp program xmipp_transform_window, which applies the
+    symmetry definition to extract the asymmetric portion of the input volume. This is done by computing the region
+    that, under the defined symmetry, uniquely defines the full volume. The extraction also considers the physical
+    sampling rate and the origin shift of the volume to ensure the result is spatially consistent.
+
+    Outputs. The main output is a new volume containing only the asymmetric unit extracted from the original input.
+    This volume retains the same voxel size as the input and is stored as a .mrc file. The extracted volume is
+    automatically loaded into Scipion as a new Volume object, with the appropriate origin and sampling rate set. This
+    volume can then be used for deposition, comparison, or visualization.
+
+    User Workflow.The user selects the volume to process and defines the symmetry group according to the imposed
+    symmetry during reconstruction. If the symmetry is cyclic or dihedral, the symmetry order must also be provided.
+    The user may adjust the optional parameters for angular offset, inner and outer mask radii, and the expansion
+    factor if they wish to fine-tune the extracted region. After running the protocol, the extracted asymmetric unit
+    becomes available as a new volume within the Scipion project.
+
+    Interpretation and Best Practices. This protocol is particularly useful in the final stages of a cryo-EM project
+    when preparing data for deposition. Extracting the asymmetric unit reduces storage size and ensures clarity
+    regarding the symmetry used in reconstruction. The masking and expansion parameters are mainly cosmetic or for
+    deposition-specific requirements; they do not affect the underlying symmetry interpretation but may influence
+    visual presentation or overlap with neighboring units. When in doubt, using the default radii and expansion
+    often produces suitable results for deposition.
+
+    The extracted unit should be inspected to confirm it matches expectations—especially when non-standard symmetry
+    axes or offset angles are used. It's also recommended to verify that the origin and voxel size are correctly
+    preserved.
     """
     _label = 'extract asymmetric unit'
     _program = ""
