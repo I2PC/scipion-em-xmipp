@@ -51,7 +51,44 @@ OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     """
     Protocol for dose analysis. It will calculate the average and statistics of the electrons impacts per movie over time.
-     Also, it will use a moving window to check if there is any faulty condition in the dose that is maintained over time.
+    Also, it will use a moving window to check if there is any faulty condition in the dose that is maintained over time.
+
+    (AI GENERATED): 
+    
+    Purpose and Scope. The Movie Dose Analysis protocol is designed to evaluate the distribution and consistency of
+    electron exposure across the frames of cryo-electron microscopy movies. Its goal is not to generate
+    dose-compensated images but to compute the average electron dose per frame and assess the statistical variation
+    over time. In addition, the protocol identifies persistent anomalies in the dose pattern by applying a moving
+    window analysis to detect faulty behaviors such as exposure dropouts or fluctuations maintained over multiple
+    consecutive frames.
+
+    Inputs. The protocol requires as input a set of previously aligned movies, where each frame represents a known and
+    consistent time interval of exposure. The user must specify the dose rate, expressed as electrons per square
+    angstrom per frame. Additional parameters may include the number of frames to analyze and settings controlling the
+    size and behavior of the moving window used for anomaly detection.
+
+    Protocol Behavior. For each movie, the protocol calculates the cumulative dose across all frames and derives
+    per-frame dose statistics such as mean and standard deviation. Using a sliding window of configurable size, it
+    examines the temporal evolution of electron dose to identify segments where the exposure deviates from the expected
+    pattern in a statistically significant manner. This temporal inspection is intended to flag systematic errors,
+    such as prolonged underexposure or overexposure, that could compromise the quality of downstream image processing.
+
+    Outputs. The outputs include per-movie reports with the mean dose, variance, and temporal plots of dose per frame.
+    If the moving window analysis detects any frames or time intervals with abnormal exposure behavior, these are also
+    flagged and reported. The results can be visualized within Scipion or exported for external analysis. No modified
+    movies are generated, and the original movie data remain unaltered.
+
+    User Workflow. The user begins by selecting a set of aligned movies from a previous protocol. The dose rate per
+    frame is entered, and the moving window parameters are adjusted if necessary. After execution, the protocol
+    provides visual and numerical summaries of dose behavior over time for each movie. Based on these results, the user
+    can decide whether certain movies or frames should be excluded from further analysis due to inconsistent exposure.
+
+    Interpretation and Best Practices. This protocol is particularly useful in quality control workflows where stable
+    and consistent electron exposure is essential. It is recommended to use the protocol after motion correction but
+    before steps that rely heavily on signal integrity, such as CTF estimation or particle picking. Sudden or sustained
+    changes in dose levels may indicate acquisition problems that would not be visible through image inspection alone.
+    The size of the moving window should be selected based on the expected noise level and temporal resolution of the
+    dose pattern.
     """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
 
