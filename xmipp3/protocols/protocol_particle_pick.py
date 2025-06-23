@@ -43,6 +43,40 @@ from xmipp3.convert import readSetOfCoordinates
 class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
     """ Picks particles in a set of micrographs
     either manually or in a supervised mode.
+
+    (AI Generated)
+
+    Purpose and Scope. This protocol is used to manually or semi-automatically select particles from a set of
+    micrographs, typically as the first step in a single-particle analysis workflow. It launches a graphical interface
+    that allows the user to identify individual particles by clicking on them or to inspect results of supervised
+    particle picking. It is designed for interactive use but can also run in a batch mode when needed for scheduled or
+    automated workflows.
+
+    Inputs. The input consists of a set of micrographs. These micrographs must have been previously imported or processed in Scipion and contain valid image paths. Optionally, the protocol allows the user to activate or deactivate interactive mode and to decide whether discarded particles (manually removed during picking) should be saved as a separate output.
+
+Protocol Behavior
+
+The protocol launches the Xmipp supervised particle picker graphical interface, which allows the user to inspect micrographs one by one and either manually pick particles or adjust parameters for automatic picking. During the session, picked particles are saved and, if configured, discarded particles are also tracked.
+
+If the protocol is run in non-interactive mode, it finishes automatically after the first session, which is useful when this protocol is called as part of a larger workflow. If run in interactive mode, the user can perform multiple sessions of particle picking before finalizing the protocol.
+
+For testing purposes or scripted runs, the protocol supports importing coordinates from a folder instead of launching the GUI. This is done by setting an internal option importFolder, not exposed in the graphical interface.
+
+Outputs
+
+The main output is a set of particle coordinates corresponding to the manually or automatically selected particles. These coordinates can be used as input to downstream steps such as particle extraction. If the user has chosen to save discarded particles, a separate output is generated containing those coordinates. The protocol also records the box size used during picking, which is typically derived from the picker configuration.
+
+User Workflow
+
+The user provides a set of micrographs and launches the protocol. The GUI opens, allowing manual selection or supervised picking. After completing the session, the protocol creates an output coordinate set and optionally a discarded coordinate set. These can be viewed in Scipion and passed to downstream protocols for further processing, such as extraction, classification, or refinement.
+
+Interpretation and Best Practices
+
+This protocol is ideal for initial particle selection, particularly when automated picking methods are not yet trained. It is especially useful in early stages of a project where representative particle views are needed to create templates or to perform initial classifications.
+
+If a supervised picker is enabled in the GUI, automatic particle proposals may be shown and confirmed or rejected. The protocol can handle large numbers of micrographs but benefits from chunking the picking into multiple sessions to prevent fatigue and ensure quality control.
+
+When working in scheduled workflows, it is advisable to disable interactive mode so that downstream protocols can run without interruption.
     """
     _label = 'manual-picking (step 1)'
 
