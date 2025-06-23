@@ -64,7 +64,63 @@ IMAGES_PER_CLASS = 200
 
 class XmippProtCL2D(ProtClassify2D):
     """ Classifies a set of images using a clustering algorithm to subdivide
-    the original dataset into a given number of classes. """
+    the original dataset into a given number of classes.
+
+    (AI Generated):
+
+    Purpose and Scope. This protocol classifies a set of 2D particles into multiple classes using iterative alignment
+    and clustering. The method works by grouping similar particle images into class averages and refining these
+    iteratively over several classification levels. It supports robust classification, outlier detection, and
+    post-classification core analysis to help identify stable and representative image subsets.
+
+    Inputs. The protocol requires a set of 2D particles as input. The user specifies the total number of desired output
+    classes. The classification can be initialized randomly or from a user-supplied set of reference class averages.
+    If initialized randomly, the user may also set the number of initial classes for the first iteration.
+    Additional advanced parameters include the number of classification iterations per level, the comparison method
+    between images (correlation or correntropy), and the clustering strategy (classical or robust). Optional features
+    include core analysis, stable core analysis, and computation of classification hierarchies.
+
+    Protocol Behavior. The protocol performs a multilevel classification using Xmipp's xmipp_classify_CL2D. If random
+    initialization is selected, the algorithm begins by creating an initial classification with a small number of
+    classes and increases the number of classes in subsequent levels. If initial references are provided, they are used
+    directly to begin the process.
+
+    Each level consists of multiple iterations where the particles are aligned and grouped according to the selected
+    similarity metric and clustering method. After classification, class averages are evaluated using Fourier Ring
+    Correlation (FRC), sorted by quality, and optionally compared between levels to build a class hierarchy.
+
+    When enabled, the protocol performs core analysis to identify which images are most representative of each class.
+    This is based on statistical thresholds (Z-scores) applied to the distances between images and class centers, and
+    optionally on principal component analysis (PCA). A further stable core analysis can be performed to identify
+    subsets of particles that consistently stay together across classification levels, allowing identification of
+    particularly reliable particle clusters.
+
+    Outputs. The main output is a SetOfClasses2D containing the class averages and the assigned particles. If core
+    analysis is enabled, additional output sets are generated: one containing only the core images, and another with
+    the stable core images. These results allow users to choose between all classified particles, those most
+    representative of each class, or those forming the most consistent groups. Each output set retains particle
+    metadata and is available for further steps in Scipion.
+
+    Optionally, rejected particles (those not assigned to cores or stable cores) can be analyzed separately, and a
+    quick classification can be run to inspect their heterogeneity.
+
+    User Workflow. To use this protocol, the user selects a particle set and defines the number of classes. They can
+    choose to initialize the classification randomly or with reference class averages. Advanced users may tweak
+    iteration counts, comparison and clustering methods, and enable additional analyses like core and stable core
+    evaluation. Once the protocol is run, the user can inspect the resulting class averages and select output sets
+    for further processing or refinement.
+
+    Interpretation and Best Practices. The number of final classes should generally be greater than the number of
+    initial classes. For robust core analysis, setting the Z-score thresholds to around 2–3 is recommended;
+    lower values are stricter and filter more particles, while higher values are more permissive. When enabling stable
+    core detection, the tolerance parameter defines how many classification levels an image can miss and still be
+    considered stable. Typical use cases include refining class averages for particle picking validation, cleaning
+    heterogeneous data sets, and exploring conformational diversity.
+
+    When working with high-resolution data (sampling rate < 3 Å/pix), consider downsampling to accelerate
+    classification, unless fine detail is critical. If many images remain unclassified or fall outside the cores,
+    it may indicate dataset heterogeneity or alignment errors.
+    """
     
     _label = 'cl2d'
     _devStatus = PROD
