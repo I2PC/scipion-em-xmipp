@@ -48,6 +48,52 @@ SIGNIFICANT = 1
 class XmippProtValidateNonTilt(ProtAnalysis3D):
     """    
     Ranks a set of volumes according to their alignment reliability obtained from a clusterability test.
+
+    (AI GENERATED):
+    Purpose and Scope. The protocol "Validate NonTilt" evaluates the quality of 3D cryo-EM volumes based on how
+    consistently their projections can be aligned to experimental particle images. It performs a clusterability test
+    to assess the reliability of the alignment between volumes and particle images, assigning each volume a quality
+    score derived from this comparison. The protocol is particularly suited for assessing whether different
+    reconstructed volumes (e.g., from heterogeneous refinement) correspond to reliable structural states.
+
+    Inputs. The user must provide one or more input volumes to be evaluated. These can be either a single volume or a
+    set of volumes. In addition, a set of experimental 2D particles (or 2D classes) is required. The user must also
+    define the symmetry group of the system using Xmipp’s notation (e.g., c1, d7, etc.). There are two available
+    alignment methods: Significant and Projection Matching. The default is Significant, which uses statistical
+    significance to assess alignment quality. The user also provides resolution limits for Fourier filtering
+    (high- and low-pass filters), the angular sampling step in degrees, the number of orientations per particle to
+    consider during validation, and the significance threshold for the statistical test.
+
+    Protocol Behavior. For each input volume, the protocol applies Fourier band-pass filtering according to the
+    user-defined resolution limits. Then it generates a gallery of projections from the filtered volume using the
+    specified angular sampling and symmetry. The next step depends on the selected alignment method. In Significant
+    mode, the protocol calculates how distinguishable the projections are compared to uniform random orientations and
+    identifies how consistently particles align to specific views. In Projection Matching mode, it aligns the
+    experimental particles to the projections using a direct search.
+
+    After alignment, the protocol evaluates how reliably the particles cluster around projection directions. This is
+    done through a clustering tendency analysis, which measures how consistently a given volume explains the particle
+    data. Volumes for which the particle orientations are coherent and well-clustered will receive higher scores. These
+    scores reflect the overall alignment reliability and can be used to rank the volumes.
+
+    Outputs. The protocol outputs a new set of volumes, where each volume includes an associated quality score based on
+    the clustering tendency. This score is saved as a weight field attached to each volume. For each volume, the
+    protocol also generates two metadata files: one with the validation results and another with the clustering
+    tendency measurements. These can be inspected to better understand the alignment performance of each volume. The
+    sampling rate is inherited from the input particles.
+
+    User Workflow. The user first selects the volumes and particles for validation. They then specify the symmetry and
+    optionally adjust parameters such as angular sampling and number of orientations. Once the protocol is run, the
+    user can inspect the output set of volumes, which will now carry alignment reliability scores. These results help
+    in selecting the most robust structural models among several candidates, especially when dealing with heterogeneous
+    reconstructions or alternate refinement branches.
+
+    Interpretation and Best Practices. Higher weights indicate volumes whose projections align consistently to the
+    particle set, suggesting that the volume likely represents a true structural state. Lower weights indicate poor
+    alignment consistency, possibly due to overfitting, noise, or structural artifacts. When using the Significant
+    method, the significance level determines how stringent the validation is. A value close to 1 is more permissive,
+    while lower values are more conservative. The angular sampling should balance computational cost with the need for
+    precision, and more orientations per particle can provide more robust statistics at the cost of runtime.
     """
 
     _label = 'validate_nontilt'
