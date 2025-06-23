@@ -333,7 +333,7 @@ class XmippFilterHelper():
 
 
 class XmippProtFilterParticles(ProtFilterParticles, XmippProcessParticles):
-    """ Apply Fourier filters to a set of particles  """
+    """ Applies Fourier-based filters to a set of particles to enhance or suppress specific frequency components. This helps improve contrast or remove noise, preparing particles for further analysis such as picking. """
     _label = 'filter particles'
     tmpCTF = "ctf.xmd"
 

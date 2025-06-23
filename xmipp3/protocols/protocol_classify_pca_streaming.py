@@ -53,7 +53,7 @@ BATCH_UPDATE = 5000
 
 
 class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
-    """ Classifies a set of images. """
+    """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming, enabling efficient processing of large datasets.  """
 
     _label = '2D classification pca streaming'
     _lastUpdateVersion = VERSION_3_0

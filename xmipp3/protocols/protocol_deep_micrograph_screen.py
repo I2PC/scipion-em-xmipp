@@ -40,7 +40,7 @@ from xmipp3.constants import SAME_AS_PICKING, OTHER
 
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
-    """Protocol to remove coordinates in carbon zones or large impurities"""
+    """Removes coordinates located in carbon regions or large impurities in micrographs using a pre-trained deep learning model. This screening improves particle picking accuracy by filtering out false positives from contaminated areas."""
     _label = 'deep micrograph cleaner'
     _conda_env= "xmipp_MicCleaner"
 
