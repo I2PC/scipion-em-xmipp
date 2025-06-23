@@ -140,6 +140,7 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         args = []
         args += ['-i', self._getAlignedPairMetadataFilename()]
         args += ['-o', self._getSynchronizedMetadataFilename()]
+        args += ['--error', self._getErrorMetadataFilename()]
         self.runJob(program, args, numberOfMpi=1)
         
         md = emlib.metadata.MetaData(self._getSynchronizedMetadataFilename())
@@ -263,6 +264,9 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
 
     def _getSynchronizedMetadataFilename(self):
         return self._getExtraPath('synchronized.xmd')
+
+    def _getErrorMetadataFilename(self):
+        return self._getExtraPath('error.xmd')
 
     def _getMultiplicityMaskFilename(self):
         return self._getExtraPath('multiplicity.mrc')
