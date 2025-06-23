@@ -312,6 +312,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                 validateMsgs.append('If you want to use a previous estimation '
                                     'of the CTF, the corresponding set of CTFs '
                                     'is needed')
+        return validateMsgs
 
     def _summary(self):
         summary = ProtCTFMicrographs._summary(self)
