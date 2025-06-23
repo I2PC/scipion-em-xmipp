@@ -47,7 +47,7 @@ SIGNIFICANT = 1
 
 class XmippProtValidateNonTilt(ProtAnalysis3D):
     """    
-    Ranks a set of volumes according to their alignment reliability obtained from a clusterability test.
+    Ranks a set of volumes based on alignment reliability using a clusterability test. This validation helps identify well-aligned structures and discard poorly aligned or inconsistent reconstructions, improving final data quality.
     """
 
     _label = 'validate_nontilt'

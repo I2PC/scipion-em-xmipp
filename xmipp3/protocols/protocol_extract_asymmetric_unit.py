@@ -41,7 +41,7 @@ DEBUG = True
 
 
 class XmippProtExtractUnit(EMProtocol):
-    """ generates files for volumes and FSCs to submit structures to EMDB
+    """ Generates the necessary files for volumes and Fourier Shell Correlation (FSC) curves to submit structural data to the Electron Microscopy Data Bank (EMDB). This protocol ensures proper formatting and data preparation for public deposition.
     """
     _label = 'extract asymmetric unit'
     _program = ""
