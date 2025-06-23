@@ -43,7 +43,7 @@ LOCALDEBLUR_METHOD_URL='https://github.com/I2PC/scipion/wiki/XmippProtLocSharp'
 
 class XmippProtLocSharp(ProtAnalysis3D):
     """    
-    Given a resolution map the protocol calculate the sharpened map.
+    Calculates sharpened maps based on a given resolution map. The sharpening process enhances high-resolution features by boosting contrast where the local resolution allows to do so.
     """
     _label = 'localdeblur sharpening'
     _lastUpdateVersion = VERSION_1_1
