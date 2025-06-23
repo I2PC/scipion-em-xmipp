@@ -4,18 +4,18 @@
 
 - Protocols updated
    - Max shift: tolerate movies without micrographs associated
-   - Highred: test updated
+   - Highres: test updated
    - substract_projection: update command to boost and subtract to generate only one output stack
-   - Movie alignment consensus protocol: enables irregular input sets
+   - Movie alignment consensus protocol: enables irregular input sets. Changes in functionality; comparisons between ons between shifts trajectories, and a additional change related to the minimum consensus or threshold for shifts correlation.
    - volume_adjust_sub: better label for volume 1 vs 2
    - convert_pdb: aDD binThreads
    - align_volume: add possible
-   - movie_alignment_consensus: Changes in functionality; comparisons between ons between shifts trajectories, and a additional change related to the minimum consensus or threshold for shifts correlation.
    - particle_pick_consensus: Fixed ID mismatch when combining coordinate sets; now supports asymmetrical sets without indexing errors.
    - movie_split_frames: now allows testing sum_frames, includes a summary, improved layout, and updated test.
    - deep_Consensus: GPU handling
    - Deep_hand: handling env to avoid system CUDA settings,  erasing cuda things from env['LD_LIBRARY_PATH']
    - Extract particles protocol: force output boxsize
+   - Structure map: Adding a dendrogram and removing some intermediate files
 
 - Protocols fixed
    - simulate ctf: fix pre-CTF noise np.numpy, init generator for pre and post ctf noise
