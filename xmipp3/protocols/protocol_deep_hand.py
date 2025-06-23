@@ -36,7 +36,54 @@ from xmipp3.convert import getImageLocation
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepHand(EMProtocol, XmippProtocol):
-    """Protocol to returns handedness of structure from trained deep learning model
+    """Protocol to returns handedness of structure from trained deep learning model.
+
+    (AI Generated)
+
+    Purpose and Scope. This protocol determines the handedness of a cryo-EM map using a pre-trained deep learning model.
+    Handedness prediction in single-particle cryo-EM is a non-trivial task, since the reconstruction process does not
+    inherently resolve the absolute hand of the structure. This protocol automates the detection of left-handed
+    structures and, if necessary, flips the volume to generate the correct right-handed version. It is especially
+    useful for post-processing before deposition or interpretation of newly resolved structures.
+
+    Inputs. The user provides a 3D volume to be analyzed. This input volume must be properly scaled in physical units
+    (sampling rate defined). The user also sets a threshold to define a mask based on the density values in the volume.
+    Two additional thresholds are required: the alpha threshold, which controls the detection of alpha-helical
+    structures within the volume, and the hand threshold, which defines the decision boundary beyond which the volume
+    is considered to be left-handed and should be flipped.
+
+    Protocol Behavior. The protocol proceeds in several steps. First, it preprocesses the input volume by rescaling it
+    to 1 Å per voxel and applying a mask to isolate significant density regions based on the user-defined threshold. It
+    also applies a low-pass filter to 5 Å to enhance the signal of secondary structure elements relevant to hand
+    prediction.
+
+    Next, it runs a deep learning model trained on cryo-EM data to detect alpha helices and estimate the handedness of
+    the volume. This is done using two neural networks: one to identify secondary structure elements and another to
+    classify the overall hand of the structure.
+
+    Based on the predicted hand value, which ranges from 0 to 1, the protocol decides whether to flip the volume.
+    Values close to 0 indicate a right-handed structure, while values near 1 indicate a left-handed one. If the hand
+    value exceeds the user-defined threshold, the structure is mirrored along the X-axis using xmipp_transform_mirror.
+
+    Outputs. The protocol produces two main outputs. First, it returns a numerical value that quantifies the predicted
+    handedness. Second, it provides a 3D volume: either the original input volume (if it was determined to be
+    right-handed), or a flipped version (if it was predicted to be left-handed). The resulting volume can be directly
+    used for downstream interpretation or deposition.
+
+    User Workflow. The user selects the input volume and specifies the mask threshold. The alpha and hand thresholds
+    are pre-filled with suggested values (0.7 and 0.6, respectively) but can be adjusted as needed. The protocol is
+    then launched. After execution, the user can inspect the predicted hand value and see whether the volume was
+    flipped. The output volume is accessible through the standard Scipion viewer.
+
+    Interpretation and Best Practices. Predicted hand values close to 0 strongly suggest a right-handed structure,
+    which is generally the correct biological hand. Values above 0.5 indicate increasing likelihood of a left-handed
+    structure. The threshold for flipping is set to 0.6 by default but can be adjusted based on confidence or empirical
+    evaluation. Users are advised to visually inspect the output and, if possible, validate it with independent
+    biochemical or structural data.
+
+    Note that preprocessing assumes the presence of alpha helices and moderate resolution (~5 Å), as the deep learning
+    model is trained on structures containing discernible secondary structure. For low-resolution volumes or
+    non-protein densities, predictions may be unreliable.
     """
 
     _label ="deep hand"
