@@ -34,7 +34,7 @@ from pwem.objects import Class3D
 from pwem.protocols import ProtClassify3D
 from pwem.protocols import ProtImportParticles
 
-from xmipp3.protocols import XmippProtConsensusClasses
+from xmipp3.protocols import XmippProtConsensusClasses3D
 
 
 class TestConsensusClasses3D(BaseTest):
@@ -136,7 +136,7 @@ class TestConsensusClasses3D(BaseTest):
         print("\n", greenStr(" Test Consensus ".center(75, '-')))
 
         # preparing and launching the protocol
-        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses,
+        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
                                            inputClassifications=[self.set1, 
                                                                  self.set2, 
                                                                  self.set3])
@@ -155,7 +155,7 @@ class TestConsensusClasses3D(BaseTest):
         print("\n", greenStr(" Test Consensus with different set sizes".center(75, '-')))
 
         # preparing and launching the protocol
-        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses,
+        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
                                            inputClassifications=[self.set1, 
                                                                  self.set2, 
                                                                  self.set4])
@@ -174,7 +174,7 @@ class TestConsensusClasses3D(BaseTest):
         print("\n", greenStr(" Test Consensus with different set sizes 2".center(75, '-')))
 
         # preparing and launching the protocol
-        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses,
+        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
                                            inputClassifications=[self.set4, 
                                                                  self.set2, 
                                                                  self.set1])
@@ -193,7 +193,7 @@ class TestConsensusClasses3D(BaseTest):
         print("\n", greenStr(" Test Consensus with different class sizes".center(75, '-')))
 
         # preparing and launching the protocol
-        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses,
+        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
                                            inputClassifications=[self.set5, 
                                                                  self.set2, 
                                                                  self.set1])
@@ -211,7 +211,7 @@ class TestConsensusClasses3D(BaseTest):
         print("\n", greenStr(" Test Consensus with four sets".center(75, '-')))
 
         # preparing and launching the protocol
-        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses,
+        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
                                            inputClassifications=[self.set1,
                                                                  self.set2,
                                                                  self.set3,
@@ -230,7 +230,7 @@ class TestConsensusClasses3D(BaseTest):
         print("\n", greenStr("Test Consensus with four sets and a random reference classification".center(75, '-')))
 
         # preparing and launching the protocol
-        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses,
+        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
                                            inputClassifications=[self.set1,
                                                                  self.set2,
                                                                  self.set3,
