@@ -40,13 +40,15 @@ from pyworkflow.utils import cleanPath
 from pyworkflow.utils.path import cleanPattern
 
 from ..protocols.protocol_structure_map_zernike3d import mds
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippProtStructureMap(ProtAnalysis3D):
-    """ Protocol for structure mapping based on correlation distance. """
+    """ Performs structure mapping based on correlation distance between volumes. This protocol helps identify similarities and differences among multiple structures by quantifying their spatial relationships."""
     _label = 'struct map'
     _lastUpdateVersion = VERSION_2_0
     OUTPUT_SUFFIX = '_%d_crop.vol'
+    _devStatus = UPDATED
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)

@@ -33,7 +33,7 @@ import xmipp3
 
         
 class XmippProtVolumeStrain(ProtAnalysis3D):
-    """Compare two states of a volume to analyze the local strains and rotations"""
+    """Compares two volume states to analyze local strains and rotations. This protocol helps study structural changes by quantifying deformation and dynamic behavior between different conformations."""
     _label = 'calculate strain'
     
     def __init__(self, **args):

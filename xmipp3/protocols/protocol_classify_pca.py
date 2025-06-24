@@ -100,7 +100,7 @@ AVERAGES_IMAGES_FILE = 'classes_images.star'
 class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     """ Classifies a set of images. """
     
-    _label = '2D classification pca'
+    _label = 'Classifies a set of images using Principal Component Analysis (PCA). This 2D classification groups (the number of groups can be set) are based on their similarities, assisting in the identification of different conformational states or particle populations.'
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
     _devStatus = BETA

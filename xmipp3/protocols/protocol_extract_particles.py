@@ -48,7 +48,7 @@ from pyworkflow import BETA, UPDATED, NEW, PROD
 FACTOR_BOXSIZE = 1.5
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
-    """Protocol to extract particles from a set of coordinates"""
+    """Extracts particle images from micrographs based on provided coordinates. This essential step prepares particle stacks for further processing such as classification and reconstruction."""
     _label = 'extract particles'
     _devStatus = UPDATED
     RESIZE_FACTOR = 0

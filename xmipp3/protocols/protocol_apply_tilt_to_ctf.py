@@ -37,8 +37,7 @@ from pyworkflow import BETA, UPDATED, NEW, PROD
 import math
 
 class XmippProtApplyTiltToCtf(EMProtocol):
-    """ Apply a local deviation to the CTF based on the micrograph's tilt
-    angle"""
+    """ Applies a local deviation correction to the particle’s contrast transfer function (CTF) estimation based on the tilt angle of the micrograph. This adjustment improves reconstruction quality, especially for tilted samples."""
     _devStatus = PROD
 
     _label = 'apply tilt to ctf'
