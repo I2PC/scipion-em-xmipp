@@ -238,7 +238,7 @@ def getNvidiaDriverVersion(plugin):
     ]
 
     for cmd in commands:
-	print(cmd)
+        print(cmd)
         try:
             output = subprocess.Popen(
                 cmd,
@@ -246,13 +246,13 @@ def getNvidiaDriverVersion(plugin):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             ).communicate()[0].decode('utf-8').strip()
-	    print(output)
+            print(output)
 
 
             # Check if the output matches a version pattern like 530.30 or 470
             match = re.match(r'^(\d+)', output)
             if match:
-	    	print(match)
+                print(match)
                 return match.group(1)  # Return just the major version (e.g., "530")
 
         except (ValueError, TypeError, FileNotFoundError, subprocess.SubprocessError):
