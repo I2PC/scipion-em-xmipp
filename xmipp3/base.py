@@ -155,9 +155,10 @@ class XmippProtocol:
         # Looking for the installation target for that conda environment.
         kerasError = False
         envName = CondaEnvManager.getCondaName(self, **kwargs)
+        targetName = CondaEnvManager.getCondaEnvTargetFilename(self, envName)
         if not os.path.isfile(os.path.join(pwem.Config.EM_ROOT,
                                            XMIPP_DLTK_NAME,
-                                           envName+'.yml')):
+                                           targetName)):
             errors.append("*%s environment not found*. "
                           "Required to run this protocol." % envName)
             kerasError = True

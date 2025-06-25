@@ -415,6 +415,16 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
                                  updateClassCallback=self._updateClass,
                                  itemDataIterator=mdIter,  # relion style
                                  iterParams=params)
+
+    def _validate(self):
+        """ Check if the installation of this protocol is correct.
+		Can't rely on package function since this is a "multi package" package
+		Returning an empty list means that the installation is correct
+		and there are not errors. If some errors are found, a list with
+		the error messages will be returned.
+		"""
+        error = self.validateDLtoolkit()
+        return error
     
 # --------------------------- Static functions --------------------------------
 def rowToAlignmentEmtable(alignmentRow, alignType):
