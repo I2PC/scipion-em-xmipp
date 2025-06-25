@@ -52,6 +52,8 @@ from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput, IN_COOR
 from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             micrographToCTFParam, writeSetOfParticles,
                             writeSetOfCoordinates, readSetOfCoordsFromPosFnames, readSetOfCoordinates)
+from pyworkflow import BETA, UPDATED, NEW, PROD
+
 
 MIN_NUM_CONSENSUS_COORDS = 256
 AND = 'by_all'
@@ -80,6 +82,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
     _stepsCheckSecs = 5              # time in seconds to check the steps
+    _devStatus = UPDATED
+
 
     USING_INPUT_COORDS = False
     USING_INPUT_MICS = False
@@ -482,6 +486,16 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.lastStep = self._insertFunctionStep('lastRoundStep', wait=True, prerequisites=self.initDeps)
         self.endStep = self._insertFunctionStep('endProtocolStep', wait=True, prerequisites=[self.lastStep])
 
+    def setGPU(self):
+        if self.useQueueForSteps() or self.useQueue():
+            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        else:
+            myStr = self.gpuList.get()
+            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
+        self.numGPU = myStr.split(',')[0]
+
+
+
     def _stepsCheck(self):
         '''Checks if new steps can be executed'''
         self.newSteps = []
@@ -588,6 +602,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         """
             Create paths where data will be saved
         """
+        self.setGPU()
+        self.info(f'NUM GPUS: {self.numGPU}')
         if self.doTesting.get() and self.testTrueSetOfParticles.get() and self.testFalseSetOfParticles.get():
             writeSetOfParticles(self.testTrueSetOfParticles.get(),
                                 self._getExtraPath("testTrueParticlesSet.xmd"))
@@ -995,7 +1011,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
           numberOfThreads = None
-          gpuToUse = self.getGpuList()[0]
+          gpuToUse = self.numGPU
         else:
           numberOfThreads = self.numberOfThreads.get()
           gpuToUse = None
@@ -1046,13 +1062,15 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not self.auto_stopping.get():
           args+=" -s"
         if not gpuToUse is None:
-          args+= " -g %s"%(gpuToUse)
+          args+= " -g %s"%(self.numGPU)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
 
         trainedParams['trainedMicFns'] += self.TO_TRAIN_MICFNS
         trainedParams['firstTraining'] = False
         self.curTrainedParams = trainedParams
+
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.runJob('xmipp_deep_consensus', args, numberOfMpi=1, env=self.getCondaEnv())
         
     def predictCNN(self):
@@ -1082,7 +1100,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.getGpuList()[0]
+            gpuToUse = self.numGPU
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
@@ -1112,9 +1130,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
 
         if not gpuToUse is None:
-          args+= " -g %s"%(gpuToUse)
+          args+= " -g %s"%(self.numGPU)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
+
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.runJob('xmipp_deep_consensus', args, numberOfMpi=1,
                     env=self.getCondaEnv())
 
@@ -1215,7 +1235,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.USING_INPUT_COORDS = False
       else:
         # Micrographs of the set removed because there might be new ones in streaming
-        self.outputCoordinates.setMicrographs(self.coordinatesDict['OR'].getMicrographs(asPointer=True))
+        self.outputCoordinates.setMicrographs(self.coordinatesDict['OR'].getMicrographs(asPointer=False))
       return self.outputCoordinates
 
     def getPreParticlesOutput(self, partSet):

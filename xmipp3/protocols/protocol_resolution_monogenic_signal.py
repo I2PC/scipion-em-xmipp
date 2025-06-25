@@ -38,6 +38,7 @@ from pwem.objects import Volume
 import pwem.emlib.metadata as md
 
 from pwem.convert.headers import Ccp4Header
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 MONORES_METHOD_URL = 'https://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
 OUTPUT_RESOLUTION_FILE = 'monoresResolutionMap.mrc'
@@ -52,10 +53,11 @@ FN_GAUSSIAN_MAP = 'gaussianfilter'
 
 class XmippProtMonoRes(ProtAnalysis3D):
     """    
-    Given a map the protocol assigns local resolutions to each voxel of the map.
+    Assigns local resolution values to each voxel within a given 3D map, providing detailed insight into regional map quality. This aids in interpreting structural data by highlighting areas of varying resolution.
     """
     _label = 'local MonoRes'
     _lastUpdateVersion = VERSION_1_1
+    _devStatus = UPDATED
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)

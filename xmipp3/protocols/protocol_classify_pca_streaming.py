@@ -37,12 +37,12 @@ from pyworkflow.protocol.params import IntParam
 from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
 from pyworkflow.constants import BETA
 
-from pwem.objects import SetOfClasses2D, SetOfAverages
+from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles
 from pwem.constants import ALIGN_NONE, ALIGN_2D
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
                             writeSetOfClasses2D)
-from xmipp3.protocols.protocol_classify_pca import updateEnviron, XmippProtClassifyPca
+from xmipp3.protocols.protocol_classify_pca import XmippProtClassifyPca
 
 OUTPUT_CLASSES = "outputClasses"
 OUTPUT_AVERAGES = "outputAverages"
@@ -53,7 +53,7 @@ BATCH_UPDATE = 5000
 
 
 class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
-    """ Classifies a set of images. """
+    """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming, enabling efficient processing of large datasets.  """
 
     _label = '2D classification pca streaming'
     _lastUpdateVersion = VERSION_3_0
@@ -80,7 +80,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                       label="particles for initial classification",
                       help='Number of particles for an initial classification to compute the 2D references')
 
-        form.addParallelSection(threads=3, mpi=1)
+        form.addParallelSection(threads=3)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -101,26 +101,26 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             if not self._newParticlesToProcess():
                 self.info('No new particles')
             else:
-                with self._lock:  # This lock needs to be here since the classifyItems access the inputSet
-                    # and can create a race condition
-                    particlesSet = self._loadInputParticleSet()
-                    self.streamState = particlesSet.getStreamState()
-                    where = None
-                    if self.lastCreationTime:
-                        where = 'creation>"' + str(self.lastCreationTime) + '"'
+                particlesSet = self._loadInputParticleSet()
+                self.streamState = particlesSet.getStreamState()
+                where = None
+                if self.lastCreationTime:
+                    where = 'creation>"' + str(self.lastCreationTime) + '"'
 
-                    for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
-                        tmp = particle.getObjCreation()
-                        newParticlesSet.append(particle.clone())
+                for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
+                    tmp = particle.getObjCreation()
+                    newParticlesSet.append(particle.clone())
 
+                particlesSet.close()
                 self.lastCreationTime = tmp
                 self.info('%d new particles' % len(newParticlesSet))
                 self.info('Last creation time REGISTER %s' % self.lastCreationTime)
 
                 # ------------------------------------ PCA TRAINING ----------------------------------------------
                 if self._doPcaTraining(newParticlesSet):
-                    self.pcaStep = self._insertFunctionStep(self.runPCASteps, newParticlesSet, prerequisites=[])
-                    if len(newParticlesSet) == len(self.inputParticles.get()) and self.streamState == Set.STREAM_CLOSED:
+                    self.pcaStep = self._insertFunctionStep(self.runPCASteps, newParticlesSet,
+                                                            prerequisites=[], needsGPU=True)
+                    if len(newParticlesSet) == len(particlesSet) and self.streamState == Set.STREAM_CLOSED:
                         self.staticRun = True
                         self.info('Static Run')
                 # ------------------------------------ CLASSIFICATION ----------------------------------------------
@@ -135,12 +135,14 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                     self.info('Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
                 else:
-                    self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps)
+                    self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps, needsGPU=False)
                     self.finish = True
-                    continue  # To avoid waiting 1 min
+                    continue  # To avoid waiting
 
+            with self._lock: # Add this lock so it will not block the iterItems of the classify method
+                self.inputParticles.get().close() # If this is not close then it blocks the input protocol
             sys.stdout.flush()
-            time.sleep(60)
+            time.sleep(30)
 
         sys.stdout.flush()  # One last flush
 
@@ -160,12 +162,14 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self._initFnStep()
 
     def _initFnStep(self):
-        updateEnviron(self.gpuList.get())
+        self.setGPU()
+        self.info(f'NUM GPUS: {self.numGPU}')
+        self.inputFn = self.inputParticles.get().getFileName()
         self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
         self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd')  # Wiener
         self.imgsPcaFn = self._getTmpPath('images_pca.mrc')
         self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
-        self.imgsXmd = self._getTmpPath('images_.xmd')
+        self.imgsXmd = self._getTmpPath('images_.xmd')  # Wiener
         self.imgsFn = self._getTmpPath('images_.mrc')
         self.refXmd = self._getTmpPath('references.xmd')
         self.ref = self._getExtraPath('classes.mrcs')
@@ -174,6 +178,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.sigmaProt = self.inputParticles.get().getDimensions()[0] / 3
 
         self.sampling = self.inputParticles.get().getSamplingRate()
+        self.acquisition = self.inputParticles.get().getAcquisition()
         resolution = self.resolution.get()
         if resolution < 2 * self.sampling:
             resolution = (2 * self.sampling) + 0.5
@@ -184,6 +189,14 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.classificationBatch.set(BATCH_UPDATE)
         else:
             self.numberClasses = self.numberOfClasses.get()
+
+    def setGPU(self):
+        if self.useQueueForSteps() or self.useQueue():
+            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        else:
+            myStr = self.gpuList.get()
+            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
+        self.numGPU = myStr.split(',')[0]
 
     def runPCASteps(self, newParticlesSet):
         # Run PCA steps
@@ -200,14 +213,19 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
         self._updateFnClassification()
         classStep = self._insertFunctionStep(self.runClassificationSteps,
-                                             newParticlesSet, prerequisites=self.pcaStep)
+                                             newParticlesSet, prerequisites=self.pcaStep, needsGPU=True)
         updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
-                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep)
+                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep,
+                                              needsGPU=False)
         self.newDeps.append(updateStep)
 
     def runClassificationSteps(self, newParticlesSet):
         self.classificationLaunch = True
-        self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+        if self.correctCtf:
+            self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsXmd) # Wiener filter
+        else:
+            self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+
         self.classification(self.imgsFn, self.numberClasses,
                             self.imgsOrigXmd, self.mask.get(), self.sigmaProt)
         self.classificationLaunch = False
@@ -220,13 +238,11 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             writeSetOfParticles(input, outputOrig)
 
             if self.correctCtf:
-                # args = ' -i  %s -o %s --sampling_rate %s ' % (outputOrig, outputMRC, self.sampling)
-                # self.runJob("xmipp_ctf_correct_wiener2d", args,  numberOfMpi=8)
                 # ------------ WIENER -----------------------
                 args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
                        '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
                       (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
-                       self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), int(self.gpuList.get()))
+                       self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), 0) # CUDA_VISIBLE_DEVICES is set then only id "0" available
                 env = self.getCondaEnv()
                 env = self._setEnvVariables(env)
                 self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
@@ -246,22 +262,22 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                                     self.refXmd,
                                     alignType=ALIGN_NONE)
 
-            args = ' -i  %s -o %s  ' % (self.refXmd, self.ref)
+            args = ' -i  %s -o %s ' % (self.refXmd, self.ref)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
             self.firstTimeDone = True
 
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
-        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA' % \
-               (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath())
+        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s' % \
+               (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), self.numGPU)
 
         env = self.getCondaEnv()
         env = self._setEnvVariables(env)
         self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
 
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
+        args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
                (inputIm, numClass, self._getExtraPath(), self._getExtraPath(), self._getExtraPath(),
-                stfile)
+                stfile, self.numGPU)
         if mask:
             args += ' --mask --sigma %s ' % (sigma)
 
@@ -306,7 +322,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     # --------------------------- UTILS functions -----------------------------
     def _loadInputParticleSet(self):
         """ Returns te input set of particles"""
-        partSet = self.inputParticles.get()
+        self.debug("Loading input db: %s" % self.inputFn)
+        partSet = SetOfParticles(filename=self.inputFn)
         partSet.loadAllProperties()
 
         return partSet
@@ -315,13 +332,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         return self.inputParticles
 
     def _loadEmptyParticleSet(self):
-        partSet = self.inputParticles.get()
+        partSet = SetOfParticles(filename=self.inputFn)
         partSet.loadAllProperties()
-        self.acquisition = partSet.getAcquisition()
         copyPartSet = self._createSetOfParticles()
         copyPartSet.copyInfo(partSet)
-        copyPartSet.setSamplingRate(self.sampling)
-        copyPartSet.setAcquisition(self.acquisition)
 
         return copyPartSet
 
@@ -331,7 +345,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         # Limit the number of threads
         env['OMP_NUM_THREADS'] = '12'
         env['MKL_NUM_THREADS'] = '12'
-        env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
         return env
 
     def _updateFnClassification(self):
@@ -342,7 +355,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self.info('Starts classification round: %d' % self.classificationRound)
 
     def _newParticlesToProcess(self):
-        particlesFile = self.inputParticles.get().getFileName()
+        particlesFile = self.inputFn
         now = datetime.now()
         self.lastCheck = getattr(self, 'lastCheck', now)
         mTime = datetime.fromtimestamp(os.path.getmtime(particlesFile))
@@ -397,7 +410,9 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         Load an empty output setOfAverages
         """
         outputRefs = self._createSetOfAverages()  # We need to create always an empty set since we need to rebuild it
-        outputRefs.copyInfo(self.inputParticles.get())
+        partSet = SetOfParticles(filename=self.inputFn)
+        partSet.loadAllProperties()
+        outputRefs.copyInfo(partSet)
         outputRefs.setSamplingRate(self.sampling)
         outputRefs.setAlignment(ALIGN_2D)
 
@@ -481,7 +496,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.lastCreationTime = self._getLastDone()
             self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
         else:
-            self.lastCreationTime = 0
+            self.lastCreationTime = ''
             self.classificationRound = 0
 
         self.lastCreationTimeProcessed = self.lastCreationTime

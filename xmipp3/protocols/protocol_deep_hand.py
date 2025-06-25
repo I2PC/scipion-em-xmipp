@@ -33,13 +33,15 @@ from pyworkflow.utils.path import cleanPath
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import getImageLocation
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepHand(EMProtocol, XmippProtocol):
-    """Protocol to returns handedness of structure from trained deep learning model
+    """Predicts the handedness of a structure using a trained deep learning model. Determining correct handedness is essential in cryo-EM to ensure the accurate interpretation of 3D reconstructions.
     """
 
     _label ="deep hand"
     _conda_env = "xmipp_pyTorch"
+    _devStatus = UPDATED
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
@@ -104,13 +106,26 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
                 alpha_model, hand_model, self._getExtraPath(),
                 self.thresholdAlpha.get(), self._getPath(self.vFilteredVolFile),
                 self._getPath(self.vMaskFile))
-        self.runJob("xmipp_deep_hand", args, env=self.getCondaEnv())
+
+        env = self.removeCudaFromEnvPath(self.getCondaEnv())
+        self.runJob("xmipp_deep_hand", args, env=env)
 
         # Store hand value
         hand_file = self._getExtraPath('hand.txt')
         f = open(hand_file)
         self.hand = Float(float(f.read()))
         f.close()
+
+    def removeCudaFromEnvPath(self, env):
+        paths = env['LD_LIBRARY_PATH'].split(':')
+        finalPath = ''
+        for p in paths:
+            if p.find('cuda') != -1:
+                pass
+            else:
+                finalPath+= p + ':'
+        env['LD_LIBRARY_PATH'] = finalPath
+        return env
 
     def flipStep(self):
         if self.hand.get() > self.thresholdHand.get():

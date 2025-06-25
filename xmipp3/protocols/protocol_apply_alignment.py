@@ -36,7 +36,7 @@ from xmipp3.convert import xmippToLocation, writeSetOfParticles
 
         
 class XmippProtApplyAlignment(ProtAlign2D):
-    """ Apply alignment parameters and produce a new set of images. """
+    """ Applies previously calculated alignment parameters to a set of images, producing a new aligned dataset. This step is critical for improving the consistency and quality of images before further analysis or reconstruction. """
     _label = 'apply alignment 2d'
 
     #--------------------------- DEFINE param functions --------------------------------------------
