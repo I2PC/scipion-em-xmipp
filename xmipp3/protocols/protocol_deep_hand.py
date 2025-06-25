@@ -177,7 +177,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
     def _validate(self):
         errors = []
 
-        errors.append(self.validateDLtoolkit())
+        errors += self.validateDLtoolkit()
 
         if self.thresholdAlpha.get() > 1.0 or self.thresholdAlpha.get() < 0.0:
            errors.append("Alpha threshold must be between 0.0 and 1.0")
