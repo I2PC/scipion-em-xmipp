@@ -84,16 +84,6 @@ ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
                   "angleTilt": XMIPPCOLUMNS.angleTilt.value
                   }
 
-
-
-def updateEnviron(gpuNum):
-    """ Create the needed environment for pytorch programs. """
-    print("updating environ to select gpu %s" % (gpuNum))
-    if gpuNum == '':
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
-
 CONTRAST_AVERAGES_FILE = 'classes_contrast_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
         
@@ -199,12 +189,10 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         self._insertFunctionStep('createOutputStep')
 
     def setGPU(self):
-        if self.useQueueForSteps() or self.useQueue():
-            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
-        else:
-            myStr = self.gpuList.get()
-            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
-        self.numGPU = myStr.split(',')[0]
+        self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
+        os.environ["CUDA_VISIBLE_DEVICES"] = self.protGpus
+        self.numGPU = self.protGpus.split(' ')[0]
+        print(f'Visible GPUS: {self.protGpus}')
 
 
     #--------------------------- STEPS functions -------------------------------

@@ -487,14 +487,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.endStep = self._insertFunctionStep('endProtocolStep', wait=True, prerequisites=[self.lastStep])
 
     def setGPU(self):
-        if self.useQueueForSteps() or self.useQueue():
-            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
-        else:
-            myStr = self.gpuList.get()
-            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
-        self.numGPU = myStr.split(',')[0]
-
-
+        self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
+        os.environ["CUDA_VISIBLE_DEVICES"] = self.protGpus
+        self.numGPU = self.protGpus.split(' ')[0]
+        print(f'Visible GPUS: {self.protGpus}')
 
     def _stepsCheck(self):
         '''Checks if new steps can be executed'''
