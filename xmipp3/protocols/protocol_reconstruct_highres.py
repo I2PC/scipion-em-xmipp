@@ -141,6 +141,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
+        form.addParam('correctEnvelope', BooleanParam, default=False,
+                      label='Correct CTF envelope')
         form.addParam("saveSpace", BooleanParam, default=True, label="Remove intermediate files", expertLevel=LEVEL_ADVANCED)
 
         form.addSection(label='Next Reference')
@@ -1369,7 +1371,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 deleteStack = False
                 if hasCTF:
                     args="-i %s -o %s.stk --save_metadata_stack %s.xmd --keep_input_columns"%(fnAngles,fnCorrectedImagesRoot,fnCorrectedImagesRoot)
-                    args+=" --sampling_rate %f --correct_envelope"%TsCurrent
+                    args+=" --sampling_rate %f"%TsCurrent
+                    if self.correctEnvelope:
+                        args+=" --correct_envelope"
                     if self.inputParticles.get().isPhaseFlipped():
                         args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get(),24))
