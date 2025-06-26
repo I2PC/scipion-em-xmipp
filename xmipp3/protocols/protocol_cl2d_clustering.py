@@ -39,7 +39,7 @@ OUTPUT_AVERAGES = 'outputAverages'
 
 
 class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
-    """2D clustering protocol to group similar images (2D Averages or 2D Classes) """
+    """Groups similar 2D class averages using clustering. This process helps identify homogeneous subsets within the dataset, improving classification and downstream analysis. """
 
     _label = 'clustering 2d classes'
     _devStatus = BETA

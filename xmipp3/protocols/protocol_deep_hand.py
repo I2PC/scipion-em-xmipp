@@ -36,7 +36,7 @@ from xmipp3.convert import getImageLocation
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepHand(EMProtocol, XmippProtocol):
-    """Protocol to returns handedness of structure from trained deep learning model
+    """Predicts the handedness of a structure using a trained deep learning model. Determining correct handedness is essential in cryo-EM to ensure the accurate interpretation of 3D reconstructions.
     """
 
     _label ="deep hand"
@@ -176,6 +176,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     def _validate(self):
         errors = []
+
+        errors += self.validateDLtoolkit()
 
         if self.thresholdAlpha.get() > 1.0 or self.thresholdAlpha.get() < 0.0:
            errors.append("Alpha threshold must be between 0.0 and 1.0")

@@ -100,7 +100,7 @@ AVERAGES_IMAGES_FILE = 'classes_images.star'
 class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     """ Classifies a set of images. """
     
-    _label = '2D classification pca'
+    _label = 'Classifies a set of images using Principal Component Analysis (PCA). This 2D classification groups (the number of groups can be set) are based on their similarities, assisting in the identification of different conformational states or particle populations.'
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
     _devStatus = BETA
@@ -415,6 +415,16 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
                                  updateClassCallback=self._updateClass,
                                  itemDataIterator=mdIter,  # relion style
                                  iterParams=params)
+
+    def _validate(self):
+        """ Check if the installation of this protocol is correct.
+		Can't rely on package function since this is a "multi package" package
+		Returning an empty list means that the installation is correct
+		and there are not errors. If some errors are found, a list with
+		the error messages will be returned.
+		"""
+        error = self.validateDLtoolkit()
+        return error
     
 # --------------------------- Static functions --------------------------------
 def rowToAlignmentEmtable(alignmentRow, alignType):

@@ -48,7 +48,7 @@ OUTPUT_MICS_DISCARDED = "discardedMicrographs"
 AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
 
 class XmippProtTiltAnalysis(ProtMicrographs):
-    """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
+    """ Estimates the tilt angle of a micrograph by analyzing power spectral density correlations across different image quadrants. This helps discard the ones that have a tilt so high it could negatively affect the posterior processing.
     """
     _label = 'tilt analysis'
     _devStatus = PROD

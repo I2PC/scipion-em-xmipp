@@ -53,7 +53,7 @@ BATCH_UPDATE = 5000
 
 
 class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
-    """ Classifies a set of images. """
+    """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming, enabling efficient processing of large datasets.  """
 
     _label = '2D classification pca streaming'
     _lastUpdateVersion = VERSION_3_0
@@ -502,6 +502,16 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self.lastCreationTimeProcessed = self.lastCreationTime
         # Convert the string to a datetime object
         self.lastCheck = datetime.strptime(self.lastCreationTime, '%Y-%m-%d %H:%M:%S')
+
+    def _validate(self):
+        """ Check if the installation of this protocol is correct.
+        Can't rely on package function since this is a "multi package" package
+        Returning an empty list means that the installation is correct
+        and there are not errors. If some errors are found, a list with
+        the error messages will be returned.
+        """
+        error=self.validateDLtoolkit()
+        return error
 
 # --------------------------- Static functions --------------------------------
 def updateFileName(filepath, round):
