@@ -76,7 +76,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     def _defineParams(self, form):
         form.addSection(label=Message.LABEL_INPUT)
 
-        EER_CONDITION = 'inputMovies is not None and len(inputMovies) > 0 and next(iter(inputMovies.getFiles())).endswith(".eer")'
+        EER_CONDITION = 'bool(inputMovies) and next(iter(inputMovies.getFiles())).endswith(".eer")'
 
         form.addParam('inputMovies', PointerParam, pointerClass='SetOfMovies',
                       label=Message.LABEL_INPUT_MOVS,
@@ -226,7 +226,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         else:
             n = movie.getNumberOfFrames()
 
-        frames = [1, n/2, n]
+        frames = [1, n//2, n]
 
         for frame in frames:
             frame_image = ImageHandler().read("%d@%s" % (frame, filename)).getData()
