@@ -91,7 +91,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
 
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
-                      help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
+                      help='See https://github.com/I2PC/xmipp-portal/wiki/Symmetry for a description of the symmetry groups format'
                         'If no symmetry is present, give c1')
         
         form.addParam('nextMask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
@@ -110,16 +110,16 @@ class XmippProtReconstructSwarm(ProtRefine3D):
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.imgsFn=self._getExtraPath('images.xmd')
-        self._insertFunctionStep('convertInputStep', self.inputParticles.getObjId())
-        self._insertFunctionStep('evaluateIndividuals',0)
+        self._insertFunctionStep(self.convertInputStep, self.inputParticles.getObjId())
+        self._insertFunctionStep(self.evaluateIndividuals,0)
         for self.iteration in range(1,self.numberOfIterations.get()+1):
-            self._insertFunctionStep('reconstructNewVolumes',self.iteration)
-            self._insertFunctionStep('postProcessing',self.iteration)
-            self._insertFunctionStep('evaluateIndividuals',self.iteration)
+            self._insertFunctionStep(self.reconstructNewVolumes,self.iteration)
+            self._insertFunctionStep(self.postProcessing,self.iteration)
+            self._insertFunctionStep(self.evaluateIndividuals,self.iteration)
             if self.iteration>1:
-                self._insertFunctionStep('updateVolumes',self.iteration)
-        self._insertFunctionStep('calculateAverage',self.numberOfIterations.get()+1)
-        self._insertFunctionStep('cleanVolume',self._getExtraPath("volumeAvg.vol"))
+                self._insertFunctionStep(self.updateVolumes,self.iteration)
+        self._insertFunctionStep(self.calculateAverage,self.numberOfIterations.get()+1)
+        self._insertFunctionStep(self.cleanVolume,self._getExtraPath("volumeAvg.vol"))
         self._insertFunctionStep("createOutput")
     
     #--------------------------- STEPS functions ---------------------------------------------------

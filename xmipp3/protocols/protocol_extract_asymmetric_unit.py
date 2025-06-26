@@ -76,7 +76,7 @@ class XmippProtExtractUnit(EMProtocol):
                                " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_In25r]] + ")"],
                       default=XMIPP_I222,
                       label="Symmetry",
-                      help="See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/"
+                      help="See https://github.com/I2PC/xmipp-portal/wiki/Symmetry"
                            "Symmetry for a description of the symmetry groups "
                            "format in Xmipp.\n"
                            "If no symmetry is present, use _c1_."
@@ -103,8 +103,8 @@ class XmippProtExtractUnit(EMProtocol):
     # --------------------------- INSERT steps functions ----------------------
 
     def _insertAllSteps(self):
-        self._insertFunctionStep('extractUnit')
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep(self.extractUnit)
+        self._insertFunctionStep(self.createOutputStep)
 
     # --------------------------- STEPS functions -----------------------------
 

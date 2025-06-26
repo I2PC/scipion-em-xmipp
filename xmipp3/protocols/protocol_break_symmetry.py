@@ -40,7 +40,7 @@ class XmippProtAngBreakSymmetry(ProtProcessParticles):
     equivalent angular assignment for a given symmetry.
 
     Be aware that input symmetry values follows Xmipp conventions as described in:
-    http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry
+    https://github.com/I2PC/xmipp-portal/wiki/Symmetry
     """
     _label = 'break symmetry'
 
@@ -49,7 +49,7 @@ class XmippProtAngBreakSymmetry(ProtProcessParticles):
         
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
-                      help="See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry"
+                      help="See https://github.com/I2PC/xmipp-portal/wiki/Symmetry"
                            " for a description of the symmetry groups format in Xmipp.\n"
                            "If no symmetry is present, use _c1_.")
     
@@ -63,9 +63,9 @@ class XmippProtAngBreakSymmetry(ProtProcessParticles):
         # Create a metadata with the geometrical information
         # as expected by Xmipp
         imgsFn = self._getPath('input_particles.xmd')
-        self._insertFunctionStep('convertInputStep', imgsFn)
-        self._insertFunctionStep('breakSymmetryStep', imgsFn)
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep(self.convertInputStep, imgsFn)
+        self._insertFunctionStep(self.breakSymmetryStep, imgsFn)
+        self._insertFunctionStep(self.createOutputStep)
 
     #--------------------------- STEPS functions --------------------------------------------
 

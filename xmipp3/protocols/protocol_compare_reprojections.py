@@ -96,7 +96,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       help='If this option is chosen, then the residual covariance matrix is calculated and '
                            'characterized. But this option takes time and disk space')
         form.addParam('symmetryGroup', StringParam, default="c1", label='Symmetry group',
-                      help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry'
+                      help='See https://github.com/I2PC/xmipp-portal/wiki/Symmetry for a description of the symmetry'
                            ' groups format. If no symmetry is present, give c1')
         form.addParam('angularSampling', FloatParam, default=5, expertLevel=LEVEL_ADVANCED,
                       label='Angular sampling rate',
