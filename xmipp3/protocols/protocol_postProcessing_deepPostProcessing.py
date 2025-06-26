@@ -307,7 +307,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        error=self.validateDLtoolkit(model="deepEMhancer")
+        error=self.validateDLtoolkit(model="deepEMhancer_v016")
 
         return error
     
