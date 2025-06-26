@@ -261,11 +261,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                     if min(psd.shape) < self.windowSize.get():
                         localParams['pieceDim'] = self.windowSize.get()/2
                         localParams['ctfmodelSize'] = self.windowSize.get()/2
-                else:
-                    # This is needed to make sure that the micrograph has the correct sampling
-                    # Otherwise, it brings the last sampling tested
-                    copyFile(micFn, finalName)
-
+    
                 # Update _params dictionary with mic and micDir
                 localParams['micFn'] = finalName
                 localParams['samplingRate'] = mic.getSamplingRate() * downFactor
