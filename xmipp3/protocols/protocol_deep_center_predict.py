@@ -83,15 +83,16 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.fnImgs = self._getExtraPath('imgs.xmd')
-        if self.useQueueForSteps() or self.useQueue():
-            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
-        else:
-            myStr = self.gpuList.get()
-            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
-        numGPU = myStr.split(',')
+        self.setGpu()
         self._insertFunctionStep("convertInputStep", self.inputParticles.get())
-        self._insertFunctionStep("predict", numGPU[0])
+        self._insertFunctionStep("predict", self.numGPU[0])
         self._insertFunctionStep("createOutputStep")
+
+    def setGpu(self):
+        self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
+        os.environ["CUDA_VISIBLE_DEVICES"] = self.protGpus
+        self.numGPU = self.protGpus.split(' ')
+        print(f'protGpus: {self.protGpus}')
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputSet):
