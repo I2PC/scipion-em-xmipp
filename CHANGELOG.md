@@ -16,6 +16,9 @@
    - deep_Consensus: GPU handling
    - Deep_hand: handling env to avoid system CUDA settings,  erasing cuda things from env['LD_LIBRARY_PATH']
    - Extract particles protocol: force output boxsize
+   - reconstruct_fourier: correctEnvelope False by default
+   - reconstruct_highres: correctEnvelope False by default
+
 
 - Protocols fixed
    - simulate ctf: fix pre-CTF noise np.numpy, init generator for pre and post ctf noise
