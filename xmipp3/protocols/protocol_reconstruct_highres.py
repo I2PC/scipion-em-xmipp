@@ -290,6 +290,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+        self.setGpu()
         self.imgsFn=self._getExtraPath('images.xmd')
         if self.doContinue:
             self.copyAttributes(self.continueRun.get(), 'particleRadius')
@@ -332,6 +333,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         self._insertFunctionStep('cleanDirectory',iteration)
 
     #--------------------------- STEPS functions ---------------------------------------------------
+    def setGpu(self):
+        self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
+        os.environ["CUDA_VISIBLE_DEVICES"] = self.protGpus
+        print(self.protGpus)
+
     def convertInputStep(self, inputParticlesId):
         if self.alignmentMethod==self.NO_ALIGNMENT:
             writeSetOfParticles(self.inputParticles.get(),self.imgsFn, postprocessImageRow=getPreviousQuality)
@@ -513,26 +519,29 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         N_GPUs = len((self.gpuList.get()).split(','))
                         args += ' -gpusPerNode %d' % N_GPUs
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-                    count=0
-                    GpuListCuda=''
-                    if self.useQueueForSteps() or self.useQueue():
-                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                        GpuList = GpuList.split(",")
-                        for elem in GpuList:
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            count+=1
-                    else:
-                        GpuListAux = ''
-                        for elem in self.getGpuList():
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            GpuListAux = GpuListAux+str(elem)+','
-                            count+=1
-                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                    # count=0
+                    # GpuListCuda=''
+                    # if self.useQueueForSteps() or self.useQueue():
+                    #     GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    #     GpuList = GpuList.split(",")
+                    #     for elem in GpuList:
+                    #         GpuListCuda = GpuListCuda+str(count)+' '
+                    #         count+=1
+                    # else:
+                    #     GpuListAux = ''
+                    #     for elem in self.getGpuList():
+                    #         GpuListCuda = GpuListCuda+str(count)+' '
+                    #         GpuListAux = GpuListAux+str(elem)+','
+                    #         count+=1
+                    #     os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                     if self.numberOfMpi.get()==1:
-                        args += " --device %s" %(GpuListCuda)
+                        # args += " --device %s" %(GpuListCuda)
+                        args += " --device %s" % (self.protGpus)
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
-                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                        # self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.protGpus.get()).split(','))+1)
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len(self.protGpus.split(' ')) + 1)
                     else:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
@@ -920,24 +929,26 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     # cleanPath(join(fnDirSignificant,"angles_iter001_00.xmd"))
                                     cleanPath(join(fnDirSignificant,"images_significant_iter001_00.xmd"))
                             else:
-                                count=0
-                                GpuListCuda=''
-                                if self.useQueueForSteps() or self.useQueue():
-                                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                                    GpuList = GpuList.split(",")
-                                    for elem in GpuList:
-                                        GpuListCuda = GpuListCuda+str(count)+' '
-                                        count+=1
-                                else:
-                                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-                                    GpuListAux = ''
-                                    for elem in self.getGpuList():
-                                        GpuListCuda = GpuListCuda+str(count)+' '
-                                        GpuListAux = GpuListAux+str(elem)+','
-                                        count+=1
-                                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                                # count=0
+                                # GpuListCuda=''
+                                # if self.useQueueForSteps() or self.useQueue():
+                                #     GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                                #     GpuList = GpuList.split(",")
+                                #     for elem in GpuList:
+                                #         GpuListCuda = GpuListCuda+str(count)+' '
+                                #         count+=1
+                                # else:
+                                #     GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                                #     GpuListAux = ''
+                                #     for elem in self.getGpuList():
+                                #         GpuListCuda = GpuListCuda+str(count)+' '
+                                #         GpuListAux = GpuListAux+str(elem)+','
+                                #         count+=1
+                                #     os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
-                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup,self.numberOfReplicates.get(), GpuListCuda)
+                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup, self.numberOfReplicates.get(),
+                                        self.protGpus)
+                                       # (fnGroup, fnGalleryGroupMd, fnAnglesGroup,self.numberOfReplicates.get(), GpuListCuda)
                                 self.runJob(CUDA_ALIGN_SIGNIFICANT,args, numberOfMpi=1)
 
                             if exists(fnAnglesGroup):
@@ -1430,26 +1441,28 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         N_GPUs = len((self.gpuList.get()).split(','))
                         args += ' -gpusPerNode %d' % N_GPUs
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-                    count=0
-                    GpuListCuda=''
-                    if self.useQueueForSteps() or self.useQueue():
-                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                        GpuList = GpuList.split(",")
-                        for elem in GpuList:
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            count+=1
-                    else:
-                        GpuListAux = ''
-                        for elem in self.getGpuList():
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            GpuListAux = GpuListAux+str(elem)+','
-                            count+=1
-                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                    # count=0
+                    # GpuListCuda=''
+                    # if self.useQueueForSteps() or self.useQueue():
+                    #     GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    #     GpuList = GpuList.split(",")
+                    #     for elem in GpuList:
+                    #         GpuListCuda = GpuListCuda+str(count)+' '
+                    #         count+=1
+                    # else:
+                    #     GpuListAux = ''
+                    #     for elem in self.getGpuList():
+                    #         GpuListCuda = GpuListCuda+str(count)+' '
+                    #         GpuListAux = GpuListAux+str(elem)+','
+                    #         count+=1
+                    #     os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                     if self.numberOfMpi.get()==1:
-                        args += " --device %s" %(GpuListCuda)
+                        # args += " --device %s" %(GpuListCuda)
+                        args += " --device %s" % self.protGpus
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
-                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len(self.protGpus.split(' '))+1)
                     else:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
