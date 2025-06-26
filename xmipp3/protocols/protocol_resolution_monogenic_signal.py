@@ -37,6 +37,9 @@ from pyworkflow.utils import getExt
 from pwem.objects import Volume
 import pwem.emlib.metadata as md
 
+from pwem.convert.headers import Ccp4Header
+from pyworkflow import BETA, UPDATED, NEW, PROD
+
 MONORES_METHOD_URL = 'https://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
 OUTPUT_RESOLUTION_FILE = 'monoresResolutionMap.mrc'
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'monoresResolutionChimera.mrc'
@@ -50,10 +53,11 @@ FN_GAUSSIAN_MAP = 'gaussianfilter'
 
 class XmippProtMonoRes(ProtAnalysis3D):
     """    
-    Given a map the protocol assigns local resolutions to each voxel of the map.
+    Assigns local resolution values to each voxel within a given 3D map, providing detailed insight into regional map quality. This aids in interpreting structural data by highlighting areas of varying resolution.
     """
     _label = 'local MonoRes'
     _lastUpdateVersion = VERSION_1_1
+    _devStatus = UPDATED
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -258,19 +262,23 @@ class XmippProtMonoRes(ProtAnalysis3D):
             freq_step = self.stepSize.get()
         else:
             freq_step = 0.5
+        
+        samplingRate = -1
 
         if self.useHalfVolumes:
             params = ' --vol %s' % self.vol1Fn
             params += ' --vol2 %s' % self.vol2Fn
             if self.hasHalfVolumesFile:
-                params += ' --sampling_rate %f' % self.associatedHalves.get().getSamplingRate()
+                samplingRate = self.associatedHalves.get().getSamplingRate()
             else:
-                params += ' --sampling_rate %f' % self.halfMap1.get().getSamplingRate()
+                samplingRate = self.halfMap1.get().getSamplingRate()
             if self.noiseOnlyInHalves.get() is True:
                 params += ' --noiseonlyinhalves'
         else:
             params = ' --vol %s' % self.vol0Fn
-            params += ' --sampling_rate %f' % self.fullMap.get().getSamplingRate()
+            samplingRate = self.fullMap.get().getSamplingRate()
+
+        params += ' --sampling_rate %f' % samplingRate
 
         params += ' --mask %s' % self._getFileName(BINARY_MASK)
 
@@ -287,6 +295,13 @@ class XmippProtMonoRes(ProtAnalysis3D):
         params += ' --threads %i' % self.numberOfThreads.get()
 
         self.runJob('xmipp_resolution_monogenic_signal', params)
+
+        ccp4header = Ccp4Header(self._getExtraPath(OUTPUT_RESOLUTION_FILE), readHeader=True)
+        ccp4header.setSampling(samplingRate)
+        ccp4header.writeHeader()
+        ccp4header = Ccp4Header(self._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA), readHeader=True)
+        ccp4header.setSampling(samplingRate)
+        ccp4header.writeHeader()
 
     def createHistogram(self):
 

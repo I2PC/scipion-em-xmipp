@@ -327,12 +327,16 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
             inputMovies = self._loadInputSet(self.movsFn)
             inputMics = self._loadMicAssociatedInputSet()
+            inputMicsIds = inputMics.getIdSet()
 
             for movieId in newDoneList:
                 movie = inputMovies.getItem("id", movieId).clone()
-                mic = inputMics.getItem("id", movieId).clone()
                 tryToAppend(movieSet, movie)
-                tryToAppend(micsSet, mic)
+                if movieId in inputMicsIds:
+                    mic = inputMics.getItem("id", movieId).clone()
+                    tryToAppend(micsSet, mic)
+                else:
+                    self.info("Movie with id %d has not a micrograph associated" %movieId)
             
             if movieSet.getSize() > 0:
                 self._updateOutputSet(OUTPUT_MOVIES + suffix, movieSet,

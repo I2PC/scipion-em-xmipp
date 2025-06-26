@@ -29,6 +29,7 @@ from pwem.protocols import ProtProcessParticles, ProtPreprocessVolumes
 from pwem.objects import Volume
 import pwem.emlib.metadata as md
 from pyworkflow import BETA, UPDATED, NEW, PROD
+from pwem.convert import headers
 
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             writeSetOfVolumes, getImageLocation)
@@ -148,6 +149,10 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             
     def createOutputStep(self):
         volInput = self.inputVolumes.get()
+        if hasattr(self, 'resizeOption') and self.doResize:
+            samplingRate = self.resizeSamplingRate.get()
+        else:
+            samplingRate = volInput.getSamplingRate()
         if self._isSingleInput():
             # Create the output with the same class as
             # the input, that should be Volume or a subclass
@@ -157,11 +162,10 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             vol.copyInfo(volInput)
             vol.setLocation(self.outputStk)
             if self.outputStk.endswith(".mrc"):
-                if hasattr(self, 'resizeOption') and self.doResize:
-                    samplingRate = self.resizeSamplingRate.get()
-                else:
-                    samplingRate = volInput.getSamplingRate()
-                self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk, samplingRate))
+                self.setHeader(self.outputStk, samplingRate)
+                if volInput.hasHalfMaps():
+                    vol.setHalfMaps("")
+
             if volInput.hasOrigin():
                 vol.setOrigin(volInput.getOrigin())
             self._postprocessOutput(vol)
@@ -173,12 +177,21 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             self._preprocessOutput(volumes)
             for i, obj in enumerate(volInput.iterItems()):
                 vol = obj
-                vol.setLocation(i+1, self.outputStk)
+                fnSingle = self._getExtraPath("output_volume%03d.mrc"%(i+1))
+                self.runJob("xmipp_image_convert","-i %d@%s  -o %s -t vol"%(i+1,self.outputStk, fnSingle))
+                self.setHeader(fnSingle, samplingRate)
+                vol.setLocation(fnSingle)
                 volumes.append(vol)
+            self.runJob("rm",self.outputStk)
             self._postprocessOutput(volumes)
             self._defineOutputs(outputVol=volumes)
             
         self._defineTransformRelation(self.inputVolumes, self.outputVol)
+    
+    def setHeader(self, filename, samplingRate):
+        ccp4header = headers.Ccp4Header(filename, readHeader=True)
+        ccp4header.setSampling(samplingRate)
+        ccp4header.writeHeader()
     
     #--------------------------- UTILS functions ------------------------------
     def _isSingleInput(self):
@@ -191,6 +204,6 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             self.outputStk = self._getExtraPath("output_volume.mrc")
         else:
             self.inputFn = self._getTmpPath('input_volumes.xmd')
-            self.outputStk = self._getExtraPath("output_volumes.stk")
+            self.outputStk = self._getExtraPath("output_volume.mrcs")
             self.outputMd = self._getExtraPath('output_volumes.xmd')
 

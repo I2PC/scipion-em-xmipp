@@ -30,6 +30,7 @@ from pyworkflow.tests import *
 
 from xmipp3.convert import *
 from xmipp3.protocols import *
+from pwem.objects import SetOfMovies, MovieAlignment
 from pwem.protocols import ProtImportMovies, ProtImportCoordinates
 import pyworkflow.utils as pwutils
 from contextlib import redirect_stdout
@@ -92,139 +93,6 @@ class TestXmippBase(BaseTest):
                                   sphericalAberration=2.7, dosePerFrame=1.5,
                                   scannedPixelSize=None,
                                   magnification=61000)
-
-
-class TestOFAlignment(TestXmippBase):
-    """This class check if the preprocessing micrographs protocol
-    in Xmipp works properly."""
-
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData()
-        cls.protImport1 = cls.runImportMovie1(cls.movie1)
-        cls.protImport2 = cls.runImportMovie2(cls.movie2)
-    
-    def runOFProtocol(self, movies, label="Default", saveMic=True,
-                      saveMovie=False, useAlign=False):
-        protOF = XmippProtOFAlignment(doSaveAveMic=saveMic,
-                                      doSaveMovie=saveMovie,
-                                      useAlignment=useAlign)
-        protOF.setObjLabel(label)
-        protOF.inputMovies.set(movies)
-        self.launchProtocol(protOF)
-        return protOF
-    
-    def testAlignOF1(self):
-        protOF1 = self.runOFProtocol(self.protImport1.outputMovies,
-                                     label="Movie MRC")
-        self.assertIsNotNone(protOF1.outputMicrographs,
-                             "SetOfMicrographs has not been created.")
-    
-    def testAlignOF2(self):
-        protOF2 = self.runOFProtocol(self.protImport2.outputMovies,
-                                     label="Movie EM")
-        self.assertIsNotNone(protOF2.outputMicrographs,
-                             "SetOfMicrographs has not been created.")
-    
-    def testAlignOFSaveMovieAndMic(self):
-        protOF3 = self.runOFProtocol(self.protImport1.outputMovies,
-                                     label="Save Movie", saveMovie=True)
-        self.assertIsNotNone(protOF3.outputMovies,
-                             "SetOfMovies has not been created.")
-    
-    def testAlignOFSaveMovieNoMic(self):
-        protOF4 = self.runOFProtocol(self.protImport1.outputMovies,
-                                     label="Save Movie", saveMic=False,
-                                     saveMovie=True)
-        self.assertIsNotNone(protOF4.outputMovies,
-                             "SetOfMovies has not been created.")
-    
-    def testAlignOFWAlignment(self):
-        prot = XmippProtFlexAlign(doSaveAveMic=False)
-        prot.inputMovies.set(self.protImport1.outputMovies)
-        self.launchProtocol(prot)
-        
-        protOF5 = self.runOFProtocol(prot.outputMovies,
-                                     label="Movie w Alignment",
-                                     saveMic=False, 
-                                     saveMovie=True)
-        self.assertIsNotNone(protOF5.outputMovies,
-                             "SetOfMovies has not been created.")
-
-
-class TestOFAlignment2(TestXmippBase):
-    """This class check if the optical flow protocol in Xmipp works properly."""
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        cls.dsMovies = DataSet.getDataSet('movies')
-
-    def getArgs(self, filesPath, pattern=''):
-        return {'importFrom': ProtImportMovies.IMPORT_FROM_FILES,
-                'filesPath': self.dsMovies.getFile(filesPath),
-                'filesPattern': pattern,
-                'amplitudConstrast': 0.1,
-                'sphericalAberration': 2.,
-                'voltage': 300,
-                'samplingRate': 3.54,
-                'dosePerFrame' : 2.0,
-                }
-
-    def _checkOutput(self, prot, args, moviesId=[], size=None, dim=None):
-        movies = getattr(prot, 'outputMovies', None)
-        self.assertIsNotNone(movies)
-        self.assertEqual(movies.getSize(), size)
-
-        for i, m in enumerate(movies):
-            if moviesId:
-                self.assertEqual(m.getObjId(), moviesId[i])
-            self.assertAlmostEqual(m.getSamplingRate(),
-                                   args['samplingRate'])
-            a = m.getAcquisition()
-            self.assertAlmostEqual(a.getVoltage(), args['voltage'])
-
-            if dim is not None: # Check if dimensions are the expected ones
-                x, y, n = m.getDim()
-                self.assertEqual(dim, (x, y, n))
-
-    def _importMovies(self):
-        args = self.getArgs('ribo/', pattern='*movie.mrcs')
-
-        # Id's should be set increasing from 1 if ### is not in the pattern
-        protMovieImport = self.newProtocol(ProtImportMovies, **args)
-        protMovieImport.setObjLabel('from files')
-        self.launchProtocol(protMovieImport)
-
-        self._checkOutput(protMovieImport, args, [1, 2, 3], size=3,
-                          dim=(1950, 1950, 16))
-        return protMovieImport
-
-    def test_OpticalFlow(self):
-        protMovieImport = self._importMovies()
-
-        mc1 = self.newProtocol(XmippProtFlexAlign,
-                               objLabel='CC (no-write)',
-                               alignFrame0=2, alignFrameN=10,
-                               useAlignToSum=True,
-                               numberOfThreads=1)
-        mc1.inputMovies.set(protMovieImport.outputMovies)
-        self.launchProtocol(mc1)
-
-        of1 = self.newProtocol(XmippProtOFAlignment,
-                               objLabel='OF DW',
-                               alignFrame0=2, alignFrameN=10,
-                               useAlignment=True,
-                               doApplyDoseFilter=True,
-                               doSaveUnweightedMic=True,
-                               numberOfThreads=1)
-        of1.inputMovies.set(mc1.outputMovies)
-        self.launchProtocol(of1)
-        self.assertIsNotNone(of1.outputMicrographs,
-                             "SetOfMicrographs has not been created.")
-        self.assertIsNotNone(of1.outputMicrographsDoseWeighted,
-                             "SetOfMicrographs with dose correction has not "
-                             "been created.")
 
 
 class TestCorrelationAlignment(BaseTest):
@@ -907,8 +775,7 @@ class TestMovieAlignmentConsensus(BaseTest):
         self.launchProtocol(protConsensus1)
 
         sizeAccepted = protConsensus1.outputMovies.getSize()
-        self.assertEqual(sizeAccepted, 2, 'Number of accepted movies must be 2 and its '
-                                           '%d' % sizeAccepted)
+        self.assertEqual(sizeAccepted, 2, 'Number of accepted movies must be 2 and its %d' % sizeAccepted)
 
     def testMovieAlignmentConsensusFiltering2(self):
         """ This must discard movies by movie alignment consensus.
@@ -917,6 +784,7 @@ class TestMovieAlignmentConsensus(BaseTest):
         protConsensus2 = self.newProtocol(XmippProtConsensusMovieAlignment,
                                           objLabel=label,
                                           minConsCorrelation=0.9,
+                                          minRangeShift=0.01,
                                           trajectoryPlot=True
                                           )
 
@@ -929,5 +797,4 @@ class TestMovieAlignmentConsensus(BaseTest):
         self.launchProtocol(protConsensus2)
 
         sizeDiscarded = protConsensus2.outputMoviesDiscarded.getSize()
-        self.assertEqual(sizeDiscarded, 2, 'Number of accepted movies must be 2 and its '
-                                           '%d' % sizeDiscarded)
+        self.assertEqual(sizeDiscarded, 2, 'Number of discarded movies must be 0 and its %d' % sizeDiscarded)

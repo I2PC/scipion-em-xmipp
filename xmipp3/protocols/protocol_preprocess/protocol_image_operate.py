@@ -208,7 +208,7 @@ class XmippOperateHelper():
 class XmippProtImageOperateParticles(ProtOperateParticles,
                                      XmippProcessParticles,
                                      XmippOperateHelper):
-    """ Apply an operation to two sets of particles  """
+    """Performs operations between two sets of particles or to a set of particles. The mathematical operations are: plus, minus multiply, divide, minimum, maximum, dot product, log, log10, sqrt, abs, pow, column, slice, row, mn, radial average or reset. This protocol supports comparative analysis or creation of difference maps between conditions.  """
     _label = 'operate particles'
     
     def __init__(self, **args):
@@ -298,7 +298,7 @@ class XmippProtImageOperateParticles(ProtOperateParticles,
 class XmippProtImageOperateVolumes(ProtOperateVolumes,
                                    XmippProcessVolumes,
                                    XmippOperateHelper):
-    """ Apply an operation to two sets of volumes """
+    """ A Executes arithmetic operations between two volumesor to a volume. The mathematical operations are: plus, minus multiply, divide, minimum, maximum, dot product, log, log10, sqrt, abs, pow, column, slice, row, mn, radial average or resetThis enables structural comparisons, highlighting conformational changes or shared features between datasets."""
     _label = 'operate volumes'
      
     def __init__(self, **args):

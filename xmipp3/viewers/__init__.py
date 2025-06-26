@@ -27,7 +27,6 @@
 from .viewer import XmippViewer
 from .plotter import XmippPlotter
 
-from .viewer_angular_resolution_alignment import XmippProtAngResAlignViewer
 from .viewer_apply_tilt_to_ctf import XmippApplyTiltToCTFViewer
 from .viewer_cl2d import XmippCL2DViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
@@ -61,6 +60,7 @@ from .viewer_cl2d_clustering import XmippCL2DClusteringViewer
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
 from .viewer_projmatch import XmippProjMatchViewer
+from .viewer_LL_matrix import XmippLogLikelihoodViewer
 
 from .viewer_volume_deform_zernike3d import XmippVolumeDeformZernike3DViewer
 from .viewer_structure_map import XmippProtStructureMapViewer

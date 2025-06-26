@@ -75,19 +75,35 @@ class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
     def _visualizeDoseTime(self, e=None):
         if os.path.exists(self.protocol.getDosePlot()):
             image = plt.imread(self.protocol.getDosePlot())
-            plt.figure()
+            # Get the image dimensions (height, width)
+            height, width, _ = image.shape
+            # Convert pixels to inches for the figure size (assuming 100 DPI)
+            dpi = 100
+            figsize = (width / dpi, height / dpi)
+            # Create the figure with the calculated size
+            plt.figure(figsize=figsize)
+            # Display the image without axes
             fig = plt.imshow(image)
             fig.axes.get_xaxis().set_visible(False)
             fig.axes.get_yaxis().set_visible(False)
+            # Show the image
             plt.show()
 
     def _visualizeDoseDiffTime(self, e=None):
         if os.path.exists(self.protocol.getDoseDiffPlot()):
             image = plt.imread(self.protocol.getDoseDiffPlot())
-            plt.figure()
+            # Get the image dimensions (height, width)
+            height, width, _ = image.shape
+            # Convert pixels to inches for the figure size (assuming 100 DPI)
+            dpi = 100
+            figsize = (width / dpi, height / dpi)
+            # Create the figure with the calculated size
+            plt.figure(figsize=figsize)
+            # Display the image without axes
             fig = plt.imshow(image)
             fig.axes.get_xaxis().set_visible(False)
             fig.axes.get_yaxis().set_visible(False)
+            # Show the image
             plt.show()
 
     def _visualizeMovies(self, objName):

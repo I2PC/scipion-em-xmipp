@@ -21,8 +21,8 @@ jobs:
     - name: Install dependencies 
       run: |
         sudo apt-get update
-        sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopenmpi-dev make cmake
-        
+        sudo apt-get install -y libopenmpi-dev openmpi-bin python3-numpy git 
+
     - name: Install CUDA
       uses: Jimver/cuda-toolkit@master
       id: cuda-toolkit
@@ -41,30 +41,39 @@ jobs:
         python-version: "3.8"
         
     - name: Install Scipion
-      working-directory: ${{ github.workspace }}/../
+      working-directory: ${{ github.workspace }}
       run: |
+        pwd
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
         
-    - name: Cloning Xmipp
-      working-directory: ${{ github.workspace }}/../
-      run: git clone https://github.com/I2PC/xmipp.git
+    - name: Cloning scipion-em-xmipp
+      working-directory: ${{ github.workspace }}/scipion/
+      run: |
+           pwd
+           rm -rf scipion-em-xmipp
+           git clone https://github.com/I2PC/scipion-em-xmipp.git
 
-    - name: Conditionally checkout Xmipp to ${{ github.head_ref }}
-      working-directory: ${{ github.workspace }}/../xmipp
+    - name: Conditionally checkout to ${{ github.head_ref }}
+      working-directory: ${{ github.workspace }}/scipion/scipion-em-xmipp
       env:
         BRANCH_NAME: ${{ github.head_ref }}
       run: |
-        if [ $(git ls-remote --heads https://github.com/I2PC/xmipp.git $BRANCH_NAME | wc -l) -eq 1 ]; then
+          pwd
           git checkout $BRANCH_NAME
-        fi
-
-      
-    - name: Compile Xmipp and show log
-      working-directory: ${{ github.workspace }}/../xmipp
+   
+    - name: Install and compile Xmipp and show log
+      working-directory: ${{ github.workspace }}/scipion/ 
       env:
         BUILD_TESTS: True
         BRANCH_NAME: ${{ github.head_ref }}
         SEND_INSTALLATION_STATISTICS: OFF 
-      run: ../scipion/scipion3 run ./xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
+      run: |
+          pwd
+          ./scipion3 installp -p scipion-em-xmipp --devel || {
+          echo "First attempt failed. Retrying..."
+          sleep 10
+          ./scipion3 installp -p scipion-em-xmipp --devel || (cat compilation.log && false)
+          }
+      # Duplicated because a defineVariables scipion plugin fails

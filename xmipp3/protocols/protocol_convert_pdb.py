@@ -43,7 +43,7 @@ from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, repl
 from pyworkflow import UPDATED, PROD
 
 class XmippProtConvertPdb(ProtInitialVolume):
-    """ Convert atomic structure(s) into volume(s) """
+    """  Converts atomic structure files in PDB (Protein Data Bank) format into volumetric maps. Converting a PDB to a volume generates a simulated electron density map, useful for validating atomic models, fitting into experimental maps or performing docking."""
     _label = 'convert pdbs to volumes'
     _devStatus = UPDATED
     OUTPUT_NAME1 = "outputVolume"
@@ -74,6 +74,14 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
         # Defining parallel arguments
         form.addParallelSection(threads=4, mpi=1)
+        form.addParam('binThreads', params.IntParam,
+                      label='threads',
+                      default=2,
+                      help='Number of threads used by Xmipp each time it is called in the protocol execution. For '
+                           'example, if 3 Scipion threads and 3 Xmipp threads are set, the pdbs will be '
+                           'processed in groups of 2 at the same time with a call of Xmipp with 3 threads each, so '
+                           '6 threads will be used at the same time. Beware the memory of your machine has '
+                           'memory enough to load together the number of pdbs specified by Scipion threads.')
 
         # Generating form
         form.addSection(label='Input')
