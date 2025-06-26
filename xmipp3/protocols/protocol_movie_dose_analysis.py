@@ -42,7 +42,7 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies
 from pwem.protocols import ProtProcessMovies
 
-from xmipp3.convert import getScipionObj, isEerMovie
+from xmipp3.convert import getScipionObj
 
 THRESHOLD = 2
 OUTPUT_MOVIES = "outputMovies"
