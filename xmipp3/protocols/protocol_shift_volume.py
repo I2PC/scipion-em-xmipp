@@ -30,6 +30,9 @@ from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, I
 import pyworkflow.object as pwobj
 from pwem.protocols import EMProtocol
 from pwem.objects import Volume
+from pwem.emlib.image import ImageHandler as ih
+
+import numpy as np
 
 
 class XmippProtShiftVolume(EMProtocol):
@@ -45,7 +48,9 @@ class XmippProtShiftVolume(EMProtocol):
                       help='Use output shifts of protocol "shift particles" which should be executed previously')
         form.addParam('inputProtocol', PointerParam, pointerClass='XmippProtShiftParticles', allowsNull=True,
                       label="Shift particles protocol", condition='shiftBool')
-        COND = 'not shiftBool'
+        form.addParam('option', BooleanParam, label='Use center of mass?', default='False',
+                      help='Select the position where the particles will be shifted in a volume displayed in a wizard.')
+        COND = 'not shiftBool and not option'
         form.addParam('x', FloatParam, label="x", condition=COND, allowsNull=True)
         form.addParam('y', FloatParam, label="y", condition=COND, allowsNull=True)
         form.addParam('z', FloatParam, label="z", condition=COND, allowsNull=True)
@@ -73,9 +78,19 @@ class XmippProtShiftVolume(EMProtocol):
             self.shifty = shiftprot.shiftY.get()
             self.shiftz = shiftprot.shiftZ.get()
         else:
-            self.shiftx = self.x.get()
-            self.shifty = self.y.get()
-            self.shiftz = self.z.get()
+            if not self.option:
+                self.shiftx = self.x.get()
+                self.shifty = self.y.get()
+                self.shiftz = self.z.get()
+            else:
+                if fnVol.endswith('.mrc'):
+                    fnVol += ':mrc'
+                vol = ih().read(fnVol).getData()
+                coords = np.argwhere(vol >= np.std(vol)) - 0.5 * vol.shape[0]
+                masscenter = np.mean(coords, axis=0)
+                self.shiftx = -masscenter[2]
+                self.shifty = -masscenter[1]
+                self.shiftz = -masscenter[0]
         program = "xmipp_transform_geometry"
         args = '-i %s -o %s --shift %f %f %f --dont_wrap' % \
                (fnVol, self._getExtraPath("shift_volume.mrc"), self.shiftx, self.shifty, self.shiftz)
