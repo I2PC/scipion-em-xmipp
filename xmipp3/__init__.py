@@ -27,13 +27,12 @@
 # **************************************************************************
 
 import json
+import re
 from datetime import datetime
 import pwem
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
-from scipion.install.funcs import CommandDef
-from scipion import __version__ as scipionAppVersion
-from packaging.version import Version
+from scipion.install.funcs import CondaCommandDef
 from .base import *
 from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
@@ -152,56 +151,68 @@ class Plugin(pwem.Plugin):
         
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
-            'cmake>=3.17',
-            'hdf5>=1.18',
-            'sqlite>=3',
-            'fftw>=3',
-            'mpich-mpicxx',
-            'c-compiler',
-            'cxx-compiler',
-            'make',
-            'openjdk',
-            'libtiff',
-            'libjpeg-turbo'
+	        "'cmake>=3.18,<4'", #cmake-4 is not compatible with Relion compilation
+            "hdf5>=1.18",
+            "sqlite>=3",
+            "fftw>=3",
+            "make",
+            "zlib",
+            "openjdk",
+            "libtiff",
+	    "libstdcxx-ng",
+            "libjpeg-turbo",
         ]
-        
-        if os.environ['CONDA_PREFIX'] is not None: # TODO replace with pyworkflow method when available.
-            commands = CommandDef('conda install -c conda-forge '  + ' '.join(CONDA_DEPENDENCIES))
+        if Config.isCondaInstallation():
+            condaEnvPath = os.environ['CONDA_PREFIX']
+            scipionEnv=os.path.basename(condaEnvPath)  # TODO: use pyworkflow method when released: Config.getEnvName()
+
+            commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
+            commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
+            commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
                 commands=commands.getCommands(),
                 neededProgs=['conda'],
-                default=False
+                default=True
             )
         
         if develMode:
+            xmippSrc = 'xmippDev'
+            installCommands = [
+		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
+		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
+		         f'cd {xmippSrc} && '
+		         #f'git checkout {branchTest} && '
+		         f'./xmipp ', COMPILE_TARGETS)
+	        ]
+
             env.addPackage(
-                'xmippDev',
-                tar='void.tgz',
-                commands=[(f'cd {bundleDir} && ./xmipp', COMPILE_TARGETS)],
-                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-                updateCuda=True,
-                default=False
-            )
-        
-        xmippSrc = f'xmippSrc-{version._binTagVersion}'
-        installCommands = [
-            (f'cd .. && rm -rf {xmippSrc} && '
-            f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
-            f'cd {xmippSrc} && '
-            f'git checkout {version._binTagVersion} && '
-            f'./xmipp --production True ', COMPILE_TARGETS)
-        ]
-        env.addPackage(
-            'xmippSrc', version=version._binTagVersion,
-            tar='void.tgz',
-            commands=installCommands,
-            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-            updateCuda=True,
-            default=not develMode
-        )
-        
+	            'xmippDev',
+	            tar='void.tgz',
+	            commands=installCommands,
+	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+	            updateCuda=True,
+	            default=False
+	        )
+        else:
+            xmippSrc = f'xmippSrc-{version._binTagVersion}'
+            installCommands = [
+                (f'cd .. && rm -rf {xmippSrc} && '
+                f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
+                f'cd {xmippSrc} && '
+                f'git checkout {version._binTagVersion} && '
+                f'./xmipp --production True ', COMPILE_TARGETS)
+            ]
+            env.addPackage(
+	                'xmippSrc', version=version._binTagVersion,
+	                tar='void.tgz',
+	                commands=installCommands,
+	                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+	                updateCuda=True,
+	                default=not develMode
+	            )
+
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
 
@@ -216,45 +227,67 @@ class Plugin(pwem.Plugin):
                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
         
         return bundleDir if isBundle else None
-    
+
+def getNvidiaDriverVersion(plugin):
+    """Attempt to retrieve the NVIDIA driver version using different methods.
+    Only returns if a valid version string is found.
+    """
+    commands = [
+        ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+        ["cat", "/sys/module/nvidia/version"]
+    ]
+
+    for cmd in commands:
+        try:
+            output = subprocess.Popen(
+                cmd,
+                env=plugin.getEnviron(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            ).communicate()[0].decode('utf-8').strip()
+
+            # Check if the output matches a version pattern like 530.30 or 470
+            match = re.match(r'^(\d+)', output)
+            if match:
+                return match.group(1)  # Return just the major version (e.g., "530")
+
+        except (ValueError, TypeError, FileNotFoundError, subprocess.SubprocessError):
+            continue  # Try next method
+
+    return None  # No valid version found
+
 def installDeepLearningToolkit(plugin, env):
 
     preMsgs = []
     cudaMsgs = []
     nvidiaDriverVer = None
     if os.environ.get('CUDA', 'True') == 'True':
-        try:
-            nvidiaDriverVer = subprocess.Popen(["nvidia-smi",
-                                                "--query-gpu=driver_version",
-                                                "--format=csv,noheader"],
-                                               env=plugin.getEnviron(),
-                                               stdout=subprocess.PIPE
-                                               ).stdout.read().decode('utf-8').split(".")[0]
-            if int(nvidiaDriverVer) < NVIDIA_DRIVERS_MINIMUM_VERSION:
-                preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
-                cudaMsgs.append(f"Your NVIDIA drivers are too old (<{NVIDIA_DRIVERS_MINIMUM_VERSION}). "
-                                "Tensorflow was installed without GPU support. "
-                                "Just CPU computations enabled (slow computations)."
-                                f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
-                                "set CUDA=True in 'scipion.conf' file")
-                nvidiaDriverVer = None
-        except (ValueError, TypeError, FileNotFoundError):
-            nvidiaDriverVer = None
-            preMsgs.append("Not nvidia driver found. Type: "
-                           " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
-            preMsgs.append(
-                "CUDA will NOT be USED. (not found or incompatible)")
-            msg = ("Tensorflow installed without GPU. Just CPU computations "
-                   "enabled (slow computations).")
-            cudaMsgs.append(msg)
-            useGpu = False
+        nvidiaDriverVer = getNvidiaDriverVersion(plugin)
 
-    if nvidiaDriverVer is not None:
-        preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
-        msg = "Tensorflow will be installed with CUDA SUPPORT."
+    if nvidiaDriverVer is None:
+        preMsgs.append("Not nvidia driver found. Type: "
+                       " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
+        preMsgs.append(
+            "CUDA will NOT be USED. (not found or incompatible)")
+        msg = ("Tensorflow installed without GPU. Just CPU computations "
+               "enabled (slow computations).")
         cudaMsgs.append(msg)
-        useGpu = True
+        useGpu = False
 
+    else:
+        if int(nvidiaDriverVer) < NVIDIA_DRIVERS_MINIMUM_VERSION:
+            preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
+            cudaMsgs.append(f"Your NVIDIA drivers are too old (<{NVIDIA_DRIVERS_MINIMUM_VERSION}). "
+                            "Tensorflow was installed without GPU support. "
+                            "Just CPU computations enabled (slow computations)."
+                            f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
+                            "set CUDA=True in 'scipion.conf' file")
+            useGpu = False
+        else:
+            preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
+            msg = "Tensorflow will be installed with CUDA SUPPORT."
+            cudaMsgs.append(msg)
+            useGpu = True
 
     # commands  = [(command, target), (cmd, tgt), ...]
     cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))

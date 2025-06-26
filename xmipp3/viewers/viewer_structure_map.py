@@ -25,6 +25,7 @@
 # **************************************************************************
 
 import os, matplotlib, math
+
 from scipy import ndimage
 from scipy.spatial import KDTree
 import tkinter as tk
@@ -38,6 +39,8 @@ from matplotlib.text import Annotation
 
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import linkage, dendrogram
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.gui.plotter import plt
@@ -66,9 +69,13 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                                'two sets of volumes independently.')
         form.addParam('doShowPlot', params.LabelParam,
                       label="Display the StructMap")
-    
+
+        form.addParam('doShowDendogram', params.LabelParam,
+	                  label="Display hierarchical clustering")
+
     def _getVisualizeDict(self):
-        return {'doShowPlot': self._visualize}
+	    return {'doShowPlot': self._visualize,
+	            'doShowDendogram': self._visualizeDendogram}
 
     def getOutputFile(self):
         fnOutput = ['']
@@ -110,7 +117,20 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         plot = projectionPlot(self.coordinates, labels, weights)
         plot.initializePlot()
         return plot
-        
+
+    def _visualizeDendogram(self, e=None):
+        distMatrix = np.loadtxt(self.protocol._getExtraPath("CorrMatrix.txt"))
+        condensed_dist = squareform(0.5*(distMatrix+distMatrix.transpose()))
+        Z = linkage(condensed_dist, method='complete')
+	    
+        fig, ax = plt.subplots()
+        dendrogram(Z, ax=ax)
+        ax.set_title("Hierarchical Clustering (Complete Linkage)")
+        ax.set_xlabel("Sample Index")
+        ax.set_ylabel("Distance")
+        fig.tight_layout()
+        return [fig]
+
     def _validate(self):
         errors = []
         return errors
@@ -264,7 +284,7 @@ class projectionPlot(object):
         zMax = np.max(z)
         z = z / zMax
         self.ax_2d.contour(xi, yi, z, 15, linewidths=0.5, colors='k')
-        cf = self.ax_2d.contourf(xi, yi, z, 15, cmap=plt.cm.jet)
+        cf = self.ax_2d.contourf(xi, yi, z, 15, cmap=plt.cm.viridis)
         self.ax_2d.set_title("Projection Scatter Plot")
         cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
         self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
@@ -280,27 +300,49 @@ class projectionPlot(object):
         S = np.zeros(R.shape)
         sigma = R.shape[0] / (200 / 5)
         lbox = int(6 * sigma)
+
         if lbox % 2 == 0:
             lbox += 1
-        mid = int((lbox - 1) / 2 + 1)
+        mid = lbox // 2
+
+        # Create Gaussian kernel
         kernel = np.zeros((lbox, lbox))
         kernel[mid, mid] = 1
         kernel = gaussian_filter(kernel, sigma=sigma)
+
         for p in range(Xr.shape[0]):
             indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
             indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
-            if 'weights' in locals():
-                S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * self.weights
-            else:
-                S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
+
+            # Compute valid bounds for kernel application
+            i_start = max(indx - mid, 0)
+            i_end = min(indx + mid + 1, S.shape[0])
+            j_start = max(indy - mid, 0)
+            j_end = min(indy + mid + 1, S.shape[1])
+
+            # Determine the portion of the kernel that fits within the bounds
+            k_i_start = max(mid - indx, 0)
+            k_i_end = k_i_start + (i_end - i_start)
+            k_j_start = max(mid - indy, 0)
+            k_j_end = k_j_start + (j_end - j_start)
+
+            # Add the kernel to the grid
+            S[i_start:i_end, j_start:j_end] += kernel[k_i_start:k_i_end, k_j_start:k_j_end]
+
+        # Crop zero rows and columns
         S = S[~np.all(S == 0, axis=1)]
         S = S[:, ~np.all(S == 0, axis=0)]
+
+        # Rotate and crop the image
         S = ndimage.rotate(S, 90)
-        cf = self.ax_2d.imshow(S)
+
+        # Plot the result
+        cf = self.ax_2d.imshow(S, cmap="viridis")
         cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
         self.ax_2d.set_title('Projection Scatter Plot')
         self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
         self.cb.set_ticks([])
+        self.ax_2d.axis("off")
         self.fig.canvas.draw()
 
     def plotType(self, label):
@@ -350,7 +392,7 @@ class Annotation3D(Annotation):
     def draw(self, renderer):
         for coord, text in zip(self._verts3d, self.s):
             xs3d, ys3d, zs3d = coord[0], coord[1], coord[2]
-            xs, ys, zs = proj_transform(xs3d, ys3d, zs3d, renderer.M)
+            xs, ys, zs = proj_transform(xs3d, ys3d, zs3d, self.axes.get_proj())
             self.xy = (xs, ys)
             Annotation.set_text(self, text)
             Annotation.draw(self, renderer)

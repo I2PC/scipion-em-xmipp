@@ -48,7 +48,7 @@ from pwem.emlib import Image
 from pyworkflow.utils.path import copyFile
 
 class XmippProtCTFMicrographs(ProtCTFMicrographs):
-    """ Protocol to estimate CTF on a set of micrographs using Xmipp. """
+    """ Estimates the contrast transfer function (CTF) parameters on a set of micrographs using Xmipp, as well as other useful parameters such as ice thickness or information decay rate. Accurate CTF estimation is essential for correcting image distortions and improving resolution. It is recommended to use over the defocus calculated by other means (ie CTFFIND, gCTF or Warp). """
     _label = 'ctf estimation'
 
     _criterion_psd = ("ctfCritIceness>1.03")
