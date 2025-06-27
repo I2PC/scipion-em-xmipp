@@ -123,13 +123,13 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         condensed_dist = squareform(0.5*(distMatrix+distMatrix.transpose()))
         Z = linkage(condensed_dist, method='complete')
 	    
-	fig, ax = plt.subplots()
-	dendrogram(Z, ax=ax)
-	ax.set_title("Hierarchical Clustering (Complete Linkage)")
-	ax.set_xlabel("Sample Index")
-	ax.set_ylabel("Distance")
-	fig.tight_layout()
-	return [fig]
+        fig, ax = plt.subplots()
+        dendrogram(Z, ax=ax)
+        ax.set_title("Hierarchical Clustering (Complete Linkage)")
+        ax.set_xlabel("Sample Index")
+        ax.set_ylabel("Distance")
+        fig.tight_layout()
+        return [fig]
 
     def _validate(self):
         errors = []
