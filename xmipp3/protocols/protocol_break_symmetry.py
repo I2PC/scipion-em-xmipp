@@ -49,7 +49,7 @@ class XmippProtAngBreakSymmetry(ProtProcessParticles):
         
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
-                      help="See https://github.com/I2PC/xmipp-portal/wiki/Symmetry"
+                      help="See https://i2pc.github.io/docs/Utils/Conventions/index.html#symmetry"
                            " for a description of the symmetry groups format in Xmipp.\n"
                            "If no symmetry is present, use _c1_.")
     
