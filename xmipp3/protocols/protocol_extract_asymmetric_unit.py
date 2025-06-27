@@ -76,7 +76,7 @@ class XmippProtExtractUnit(EMProtocol):
                                " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_In25r]] + ")"],
                       default=XMIPP_I222,
                       label="Symmetry",
-                      help="See https://github.com/I2PC/xmipp-portal/wiki/Symmetry"
+                      help="See https://i2pc.github.io/docs/Utils/Conventions/index.html#symmetry"
                            "Symmetry for a description of the symmetry groups "
                            "format in Xmipp.\n"
                            "If no symmetry is present, use _c1_."
