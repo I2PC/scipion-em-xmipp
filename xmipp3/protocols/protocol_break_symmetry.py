@@ -40,7 +40,7 @@ class XmippProtAngBreakSymmetry(ProtProcessParticles):
     equivalent angular assignment for a given symmetry.
 
     Be aware that input symmetry values follows Xmipp conventions as described in:
-    https://github.com/I2PC/xmipp-portal/wiki/Symmetry
+    https://i2pc.github.io/docs/Utils/Conventions/index.html#symmetry
     """
     _label = 'break symmetry'
 
