@@ -165,7 +165,7 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
                       label='Symmetrize mask')
         form.addParam('symmetry', StringParam, default='c1',
                       label='Symmetry group',condition="doSymmetrize",
-                      help="To obtain a symmetric mask. See https://github.com/I2PC/xmipp-portal/wiki/Symmetry \n"
+                      help="To obtain a symmetric mask. See https://i2pc.github.io/docs/Utils/Conventions/index.html#symmetry \n"
                            "for a description of the symmetry groups format. \n"
                            "If no symmetry is present, give c1")
         form.addParam('doMorphological', BooleanParam, default=False,
