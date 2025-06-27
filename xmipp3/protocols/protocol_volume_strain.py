@@ -54,7 +54,7 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
                       help='Binary mask that defines where the strains and rotations will be calculated')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
-                      help='See https://github.com/I2PC/xmipp-portal/wiki/Symmetry for a description of the symmetry groups format'
+                      help='See https://i2pc.github.io/docs/Utils/Conventions/index.html#symmetry for a description of the symmetry groups format'
                         'If no symmetry is present, give c1')
     
     #--------------------------- INSERT steps functions --------------------------------------------
