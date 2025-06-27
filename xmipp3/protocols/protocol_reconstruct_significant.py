@@ -43,6 +43,7 @@ from pwem import emlib
 from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
 from xmipp3.base import isXmippCudaPresent
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippProtReconstructSignificant(ProtInitialVolume):
@@ -53,6 +54,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
     the cumulative density function of different image similarity measures.
     """
     _label = 'reconstruct significant'
+    _devStatus = UPDATED
 
     # --------------------------- DEFINE param functions -----------------------
 

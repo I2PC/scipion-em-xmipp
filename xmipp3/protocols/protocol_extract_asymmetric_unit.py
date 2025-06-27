@@ -31,7 +31,7 @@ from pwem.objects import Transform
 from pwem.convert import Ccp4Header
 from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
-                                        EnumParam, IntParam)
+                                        EnumParam, IntParam, GE)
 
 from xmipp3.constants import (XMIPP_SYM_NAME, XMIPP_TO_SCIPION, XMIPP_CYCLIC,
                               XMIPP_DIHEDRAL_X, XMIPP_TETRAHEDRAL, XMIPP_OCTAHEDRAL,
@@ -41,7 +41,7 @@ DEBUG = True
 
 
 class XmippProtExtractUnit(EMProtocol):
-    """ generates files for volumes and FSCs to submit structures to EMDB
+    """ Generates the necessary files for volumes and Fourier Shell Correlation (FSC) curves to submit structural data to the Electron Microscopy Data Bank (EMDB). This protocol ensures proper formatting and data preparation for public deposition.
     """
     _label = 'extract asymmetric unit'
     _program = ""
@@ -89,9 +89,9 @@ class XmippProtExtractUnit(EMProtocol):
                       condition='symmetryGroup<=%d' % SYM_DIHEDRAL_X,
                       label="offset",
                       help="rotate unit cell around z-axis by offset degrees")
-        form.addParam('innerRadius', FloatParam, default=-1,
-                      label="Inner Radius (px)",
-                      help="inner Mask radius, if -1, the radius will be 0")
+        form.addParam('innerRadius', FloatParam, default=0.0,
+                      label="Inner Radius (px)", validators=[GE(0.0)],
+                      help="inner Mask radius")
         form.addParam('outerRadius', FloatParam, default=-1,
                       label="Outer Radius (px)",
                       help="outer Mask radius, if -1, the radius will be "
@@ -128,8 +128,8 @@ class XmippProtExtractUnit(EMProtocol):
         args = "-i %s -o %s" % \
                (inFileName, self._getOutputVol())
         args += " --unitcell %s " % sym
-        args += " %f " % self.innerRadius.get()
-        args += " %f " % self.outerRadius.get()
+        args += " %f " % self._getInnerRadius()
+        args += " %f " % self._getOuterRadius()
         args += " %f " % self.expandFactor.get()
         args += " %f " % self.offset.get()
         sampling = self.inputVolumes.get().getSamplingRate()
@@ -177,7 +177,17 @@ class XmippProtExtractUnit(EMProtocol):
         return []
 
     # --------------------------- UTILS functions -----------------------------
-
+    def _getInnerRadius(self):
+        return self.innerRadius.get()
+    
+    def _getOuterRadius(self):
+        outerRadius = self.outerRadius.get()
+        if outerRadius < 0:
+            volume: Volume = self.inputVolumes.get()
+            dim = volume.getDimensions()
+            outerRadius = dim[0] / 2
+        return outerRadius
+    
     def _getOutputVol(self):
         prefix = os.path.basename(self.inputVolumes.get().getFileName()).split(".")[0]
 

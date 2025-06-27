@@ -47,6 +47,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 
 from xmipp3.convert import setXmippAttributes, writeSetOfParticles
 import xmippLib
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 
@@ -56,7 +57,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     _label = 'log likelihood'
     _lastUpdateVersion = VERSION_1_1
     _possibleOutputs = {"reprojections": SetOfParticles}
-    
+    _devStatus = NEW
     stepsExecutionMode = STEPS_PARALLEL
 
     # Normalization enum constants
