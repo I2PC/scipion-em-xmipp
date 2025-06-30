@@ -31,7 +31,7 @@ from pwem.objects import Transform
 from pwem.convert import Ccp4Header
 from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
-                                        EnumParam, IntParam)
+                                        EnumParam, IntParam, GE)
 
 from xmipp3.constants import (XMIPP_SYM_NAME, XMIPP_TO_SCIPION, XMIPP_CYCLIC,
                               XMIPP_DIHEDRAL_X, XMIPP_TETRAHEDRAL, XMIPP_OCTAHEDRAL,
@@ -76,7 +76,7 @@ class XmippProtExtractUnit(EMProtocol):
                                " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_In25r]] + ")"],
                       default=XMIPP_I222,
                       label="Symmetry",
-                      help="See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/"
+                      help="See https://i2pc.github.io/docs/Utils/Conventions/index.html#symmetry"
                            "Symmetry for a description of the symmetry groups "
                            "format in Xmipp.\n"
                            "If no symmetry is present, use _c1_."
@@ -89,9 +89,9 @@ class XmippProtExtractUnit(EMProtocol):
                       condition='symmetryGroup<=%d' % SYM_DIHEDRAL_X,
                       label="offset",
                       help="rotate unit cell around z-axis by offset degrees")
-        form.addParam('innerRadius', FloatParam, default=-1,
-                      label="Inner Radius (px)",
-                      help="inner Mask radius, if -1, the radius will be 0")
+        form.addParam('innerRadius', FloatParam, default=0.0,
+                      label="Inner Radius (px)", validators=[GE(0.0)],
+                      help="inner Mask radius")
         form.addParam('outerRadius', FloatParam, default=-1,
                       label="Outer Radius (px)",
                       help="outer Mask radius, if -1, the radius will be "
@@ -103,8 +103,8 @@ class XmippProtExtractUnit(EMProtocol):
     # --------------------------- INSERT steps functions ----------------------
 
     def _insertAllSteps(self):
-        self._insertFunctionStep('extractUnit')
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep(self.extractUnit)
+        self._insertFunctionStep(self.createOutputStep)
 
     # --------------------------- STEPS functions -----------------------------
 
@@ -128,8 +128,8 @@ class XmippProtExtractUnit(EMProtocol):
         args = "-i %s -o %s" % \
                (inFileName, self._getOutputVol())
         args += " --unitcell %s " % sym
-        args += " %f " % self.innerRadius.get()
-        args += " %f " % self.outerRadius.get()
+        args += " %f " % self._getInnerRadius()
+        args += " %f " % self._getOuterRadius()
         args += " %f " % self.expandFactor.get()
         args += " %f " % self.offset.get()
         sampling = self.inputVolumes.get().getSamplingRate()
@@ -177,7 +177,17 @@ class XmippProtExtractUnit(EMProtocol):
         return []
 
     # --------------------------- UTILS functions -----------------------------
-
+    def _getInnerRadius(self):
+        return self.innerRadius.get()
+    
+    def _getOuterRadius(self):
+        outerRadius = self.outerRadius.get()
+        if outerRadius < 0:
+            volume: Volume = self.inputVolumes.get()
+            dim = volume.getDimensions()
+            outerRadius = dim[0] / 2
+        return outerRadius
+    
     def _getOutputVol(self):
         prefix = os.path.basename(self.inputVolumes.get().getFileName()).split(".")[0]
 

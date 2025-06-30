@@ -165,7 +165,7 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
                       label='Symmetrize mask')
         form.addParam('symmetry', StringParam, default='c1',
                       label='Symmetry group',condition="doSymmetrize",
-                      help="To obtain a symmetric mask. See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry \n"
+                      help="To obtain a symmetric mask. See https://i2pc.github.io/docs/Utils/Conventions/index.html#symmetry \n"
                            "for a description of the symmetry groups format. \n"
                            "If no symmetry is present, give c1")
         form.addParam('doMorphological', BooleanParam, default=False,
@@ -195,14 +195,14 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
         self.maskFile = self._getPath('mask.mrc')
         
         if self.source == SOURCE_VOLUME:
-            self._insertFunctionStep('createMaskFromVolumeStep')
+            self._insertFunctionStep(self.createMaskFromVolumeStep)
         elif self.source == SOURCE_GEOMETRY:
             self.inputVolume.set(None)
-            self._insertFunctionStep('createMaskFromGeometryStep')
+            self._insertFunctionStep(self.createMaskFromGeometryStep)
         elif self.source == SOURCE_FEATURE_FILE:
-            self._insertFunctionStep('createMaskFromFeatureFile')
-        self._insertFunctionStep('postProcessMaskStep')
-        self._insertFunctionStep('createOutputStep')
+            self._insertFunctionStep(self.createMaskFromFeatureFile)
+        self._insertFunctionStep(self.postProcessMaskStep)
+        self._insertFunctionStep(self.createOutputStep)
     
     #--------------------------- STEPS functions -------------------------------
     def createMaskFromVolumeStep(self):
