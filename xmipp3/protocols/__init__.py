@@ -59,7 +59,6 @@ from .protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
 from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
                                               XmippProtEliminateEmptyClasses)
 from .protocol_extract_particles import XmippProtExtractParticles
-from .protocol_extract_particles_movies import XmippProtExtractMovieParticles
 from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from .protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from .protocol_helical_parameters import XmippProtHelicalParameters
