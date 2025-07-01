@@ -232,7 +232,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
-        gpuId = self.setGPU(oneGPU=False)
+        gpuId = self.setGPU(oneGPU=True)
         args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s'% \
                 (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), gpuId)
 
@@ -242,7 +242,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        gpuId = self.setGPU(oneGPU=False)
+        gpuId = self.setGPU(oneGPU=True)
         args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
                 (inputIm, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
                  stfile, gpuId)
