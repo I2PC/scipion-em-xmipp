@@ -529,12 +529,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
+                        gpuId = self.setGpu(oneGPU=False)
                         args += ' -gpusPerNode %d' % self.getNumGpus()
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-
                     if self.numberOfMpi.get()==1:
-                        gpuId = self.setGpu(oneGPU=False)
-                        args += " --device %s" % (gpuId.replace(',', ' '))
+                        gpuId = self.setGpu(oneGPU=True)
+
+                    args += " --device %s" % (gpuId.replace(',', ' '))
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.getNumGpus()+1)
@@ -1417,11 +1418,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
+                        gpuId = self.setGpu(oneGPU=False)
                         args += ' -gpusPerNode %d' % self.getNumGpus()
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
                     if self.numberOfMpi.get()==1:
-                        gpuId = self.setGpu(oneGPU=False)
-                        args += " --device %s" % (gpuId.replace(',', ' '))
+                        gpuId = self.setGpu(oneGPU=True)
+                    args += " --device %s" % (gpuId.replace(',', ' '))
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.getNumGpus()+1)
