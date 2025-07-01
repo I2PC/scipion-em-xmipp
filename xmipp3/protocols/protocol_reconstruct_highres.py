@@ -335,6 +335,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     def getNumGpus(self):
         return len(self._stepsExecutor.getGpuList())
 
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
 
     def setGpu(self, oneGPU=False):
         self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
