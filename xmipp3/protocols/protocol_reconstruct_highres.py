@@ -290,7 +290,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self.setGpu()
         self.imgsFn=self._getExtraPath('images.xmd')
         if self.doContinue:
             self.copyAttributes(self.continueRun.get(), 'particleRadius')
@@ -342,8 +341,16 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     def getNumGpus(self):
         return len(self._stepsExecutor.getGpuList())
 
-    def setGpu(self):
-        os.environ["CUDA_VISIBLE_DEVICES"] = self.getGpusList(",") # cuda visible devices requires ','
+
+    def setGpu(self, oneGPU=False):
+        self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
 
     def convertInputStep(self, inputParticlesId):
         if self.alignmentMethod==self.NO_ALIGNMENT:
@@ -527,7 +534,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
 
                     if self.numberOfMpi.get()==1:
-                        args += " --device %s" % (self.getGpusList(" "))
+                        args += " --device %s" % (self.setGpu(oneGPU=False))
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.getNumGpus()+1)
@@ -1413,7 +1420,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         args += ' -gpusPerNode %d' % self.getNumGpus()
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
                     if self.numberOfMpi.get()==1:
-                        args += " --device %s" % self.getGpusList(" ")
+                        args += " --device %s" % self.setGpu(oneGPU=False)
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.getNumGpus()+1)

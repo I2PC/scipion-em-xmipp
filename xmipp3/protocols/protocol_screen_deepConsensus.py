@@ -1008,7 +1008,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
           numberOfThreads = None
-          gpuToUse = self.GPU_numID
+          gpuToUse = self.setGPU(oneGPU=True)
         else:
           numberOfThreads = self.numberOfThreads.get()
           gpuToUse = None
@@ -1058,9 +1058,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                                           self.nModels.get())
         if not self.auto_stopping.get():
           args+=" -s"
-        if not gpuToUse is None:
-          args+= " -g %s"%(self.GPU_numID)
-        if not numberOfThreads is None:
+        if gpuToUse:
+          args+= " -g %s"%(gpuToUse)
+        if numberOfThreads:
           args+= " -t %s"%(numberOfThreads)
 
         trainedParams['trainedMicFns'] += self.TO_TRAIN_MICFNS
@@ -1097,7 +1097,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.GPU_numID
+            gpuToUse = self.setGPU(oneGPU=True)
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
@@ -1126,9 +1126,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTestDict)
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
 
-        if not gpuToUse is None:
-          args+= " -g %s"%(self.GPU_numID)
-        if not numberOfThreads is None:
+        if gpuToUse:
+          args+= " -g %s"%(gpuToUse)
+        if  numberOfThreads:
           args+= " -t %s"%(numberOfThreads)
 
         os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
