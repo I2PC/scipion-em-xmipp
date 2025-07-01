@@ -494,7 +494,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def setGPU(self):
         self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
-        print(f'self.protGpus: {self.protGpus}')
         os.environ["CUDA_VISIBLE_DEVICES"] = self.getGpusList(",")[0]
         self.GPU_numID = self.getGpusList(",")[0]
         print(f'Visible GPUS: {self.getGpusList(",")[0]}')

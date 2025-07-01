@@ -85,14 +85,20 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
         self.fnImgs = self._getExtraPath('imgs.xmd')
         self.setGpu()
         self._insertFunctionStep("convertInputStep", self.inputParticles.get())
-        self._insertFunctionStep("predict", self.numGPU[0])
+        self._insertFunctionStep("predict", self.GPU_numID[0])
         self._insertFunctionStep("createOutputStep")
+
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
 
     def setGpu(self):
         self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
-        os.environ["CUDA_VISIBLE_DEVICES"] = self.protGpus
-        self.numGPU = self.protGpus.split(' ')
-        print(f'protGpus: {self.protGpus}')
+        os.environ["CUDA_VISIBLE_DEVICES"] = self.getGpusList(",")[0]
+        self.GPU_numID = self.getGpusList(",")[0]
+        print(f'Visible GPUS: {self.getGpusList(",")[0]}')
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputSet):
