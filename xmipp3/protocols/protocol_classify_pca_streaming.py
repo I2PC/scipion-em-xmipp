@@ -162,8 +162,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self._initFnStep()
 
     def _initFnStep(self):
-        self.setGPU()
-        self.info(f'NUM GPUS: {self.GPU_numID}')
         self.inputFn = self.inputParticles.get().getFileName()
         self.imgsPcaXmd = self._getExtraPath('images_pca.xmd')
         self.imgsPcaXmdOut = self._getTmpPath('images_pca.xmd')  # Wiener
@@ -196,11 +194,15 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             strGpus = strGpus + str(elem) + separator
         return strGpus[:-1]
 
-    def setGPU(self):
+    def setGPU(self, oneGPU=False):
         self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
-        os.environ["CUDA_VISIBLE_DEVICES"] = self.getGpusList(",")[0]
-        self.GPU_numID = self.getGpusList(",")[0]
-        print(f'Visible GPUS: {self.getGpusList(",")[0]}')
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
 
 
     def runPCASteps(self, newParticlesSet):
@@ -272,17 +274,19 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.firstTimeDone = True
 
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
+        gpuID = self.setGPU(oneGPU=False)
         args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s' % \
-               (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), self.GPU_numID)
+               (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), gpuID)
 
         env = self.getCondaEnv()
         env = self._setEnvVariables(env)
         self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
 
     def classification(self, inputIm, numClass, stfile, mask, sigma):
+        gpuID = self.setGPU(oneGPU=False)
         args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
                (inputIm, numClass, self._getExtraPath(), self._getExtraPath(), self._getExtraPath(),
-                stfile, self.GPU_numID)
+                stfile, gpuID)
         if mask:
             args += ' --mask --sigma %s ' % (sigma)
 

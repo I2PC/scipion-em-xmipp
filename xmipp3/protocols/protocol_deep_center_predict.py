@@ -83,9 +83,8 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.fnImgs = self._getExtraPath('imgs.xmd')
-        self.setGpu()
         self._insertFunctionStep("convertInputStep", self.inputParticles.get())
-        self._insertFunctionStep("predict", self.GPU_numID[0])
+        self._insertFunctionStep("predict")
         self._insertFunctionStep("createOutputStep")
 
     def getGpusList(self, separator):
@@ -94,11 +93,15 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
             strGpus = strGpus + str(elem) + separator
         return strGpus[:-1]
 
-    def setGpu(self):
+    def setGpu(self, oneGPU=False):
         self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
-        os.environ["CUDA_VISIBLE_DEVICES"] = self.getGpusList(",")[0]
-        self.GPU_numID = self.getGpusList(",")[0]
-        print(f'Visible GPUS: {self.getGpusList(",")[0]}')
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputSet):
@@ -115,13 +118,14 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
             self.runJob("xmipp_image_resize", "-i %s -o %s --fourier 64" % (self.fnImgs, fnTmp))
             self.fnImgs = self._getTmpPath("imgs.xmd")
 
-    def predict(self, gpuId):
+    def predict(self):
         if self.modelSource==self.PRETRAINED:
             fnModel = self.getModel('deepCenter', 'deepCenterModel.h5') 
         elif self.getRunMode()==self.PREVIOUS:
             fnModel = self.protocolPointer.get()._getExtraPath("model.h5")
         else:
             fnModel = self.modelFile.get()
+        gpuId = self.setGpu(oneGPU=True)
         args = "-i %s --gpu %s --model %s -o %s --scale %f" % (self.fnImgs, gpuId, fnModel,
                                                                self.fnImgs, self.scaleFactor)
         self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())

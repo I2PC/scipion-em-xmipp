@@ -161,7 +161,6 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     def _insertAllSteps(self):
 
         """ Mainly prepare the command line for call classification program"""
-        self.setGPU()
         self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
         self.imgsXmd = self._getTmpPath('images.xmd')
         self.imgsFn = self._getTmpPath('images.mrc')
@@ -195,11 +194,15 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             strGpus = strGpus + str(elem) + separator
         return strGpus[:-1]
 
-    def setGPU(self):
+    def setGPU(self, oneGPU=False):
         self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
-        os.environ["CUDA_VISIBLE_DEVICES"] = self.getGpusList(",")[0]
-        self.GPU_numID = self.getGpusList(",")[0]
-        print(f'Visible GPUS: {self.getGpusList(",")[0]}')
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
 
 
     #--------------------------- STEPS functions -------------------------------
@@ -229,8 +232,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
+        gpuId = self.setGPU(oneGPU=False)
         args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s'% \
-                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), self.GPU_numID)
+                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), gpuId)
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
@@ -238,9 +242,10 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         
     def classification(self, inputIm, numClass, stfile, mask, sigma):
+        gpuId = self.setGPU(oneGPU=False)
         args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
                 (inputIm, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
-                 stfile, self.GPU_numID)
+                 stfile, gpuId)
         if mask:
             args += ' --mask --sigma %s '%(sigma) 
             
