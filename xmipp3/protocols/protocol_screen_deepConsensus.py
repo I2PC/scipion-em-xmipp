@@ -486,11 +486,18 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.lastStep = self._insertFunctionStep('lastRoundStep', wait=True, prerequisites=self.initDeps)
         self.endStep = self._insertFunctionStep('endProtocolStep', wait=True, prerequisites=[self.lastStep])
 
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
     def setGPU(self):
         self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
-        os.environ["CUDA_VISIBLE_DEVICES"] = self.protGpus
-        self.numGPU = self.protGpus.split(' ')[0]
-        print(f'Visible GPUS: {self.protGpus}')
+        print(f'self.protGpus: {self.protGpus}')
+        os.environ["CUDA_VISIBLE_DEVICES"] = self.getGpusList(",")[0]
+        self.GPU_numID = self.getGpusList(",")[0]
+        print(f'Visible GPUS: {self.getGpusList(",")[0]}')
 
     def _stepsCheck(self):
         '''Checks if new steps can be executed'''
@@ -599,7 +606,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             Create paths where data will be saved
         """
         self.setGPU()
-        self.info(f'NUM GPUS: {self.numGPU}')
+        self.info(f'NUM GPUS: {self.GPU_numID}')
         if self.doTesting.get() and self.testTrueSetOfParticles.get() and self.testFalseSetOfParticles.get():
             writeSetOfParticles(self.testTrueSetOfParticles.get(),
                                 self._getExtraPath("testTrueParticlesSet.xmd"))
@@ -1007,7 +1014,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
           numberOfThreads = None
-          gpuToUse = self.numGPU
+          gpuToUse = self.GPU_numID
         else:
           numberOfThreads = self.numberOfThreads.get()
           gpuToUse = None
@@ -1058,7 +1065,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not self.auto_stopping.get():
           args+=" -s"
         if not gpuToUse is None:
-          args+= " -g %s"%(self.numGPU)
+          args+= " -g %s"%(self.GPU_numID)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
 
@@ -1096,7 +1103,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.numGPU
+            gpuToUse = self.GPU_numID
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
@@ -1126,7 +1133,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
 
         if not gpuToUse is None:
-          args+= " -g %s"%(self.numGPU)
+          args+= " -g %s"%(self.GPU_numID)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
 
