@@ -274,7 +274,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.firstTimeDone = True
 
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
-        gpuID = self.setGPU(oneGPU=False)
+        gpuID = self.setGPU(oneGPU=True)
         args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s' % \
                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), gpuID)
 
@@ -283,7 +283,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
 
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        gpuID = self.setGPU(oneGPU=False)
+        gpuID = self.setGPU(oneGPU=True)
         args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
                (inputIm, numClass, self._getExtraPath(), self._getExtraPath(), self._getExtraPath(),
                 stfile, gpuID)
