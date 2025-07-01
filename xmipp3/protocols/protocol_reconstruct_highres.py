@@ -332,12 +332,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         self._insertFunctionStep('cleanDirectory',iteration)
 
     #--------------------------- STEPS functions ---------------------------------------------------
-    def getGpusList(self, separator):
-        strGpus = ""
-        for elem in self._stepsExecutor.getGpuList():
-            strGpus = strGpus + str(elem) + separator
-        return strGpus[:-1]
-
     def getNumGpus(self):
         return len(self._stepsExecutor.getGpuList())
 
@@ -534,7 +528,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
 
                     if self.numberOfMpi.get()==1:
-                        args += " --device %s" % (self.setGpu(oneGPU=False))
+                        gpuId = self.setGpu(oneGPU=False)
+                        args += " --device %s" % (gpuId.replace(',', ' '))
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.getNumGpus()+1)
@@ -1420,7 +1415,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         args += ' -gpusPerNode %d' % self.getNumGpus()
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
                     if self.numberOfMpi.get()==1:
-                        args += " --device %s" % self.setGpu(oneGPU=False)
+                        gpuId = self.setGpu(oneGPU=False)
+                        args += " --device %s" % (gpuId.replace(',', ' '))
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.getNumGpus()+1)
