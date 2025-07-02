@@ -60,7 +60,7 @@ FN_METADATA_HISTOGRAM = 'mdhist'
 
 class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
     """    
-    Given a map the protocol assigns local resolutions to each voxel of the map.
+    A deep-learning-based method designed to estimate local resolution in cryo-electron microscopy maps. It analyzes 3D structural features directly from the map data to assign local resolution values to beach voxel of a 3D map.. Using models trained on simulated and experimental data, DeepRes provides spatially resolved estimates that reflect variations in structural clarity across the map. The method captures subtle improvements from post-processing steps, offering a refined view of resolution distribution that supports better interpretation and validation of cryo-EM structures.
     """
     _label = 'local deepRes'
     _lastUpdateVersion = VERSION_2_0

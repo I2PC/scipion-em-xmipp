@@ -435,10 +435,11 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
 
 
 class XmippProtCropResizeVolumes(XmippProcessVolumes):
-    """ Crop or resize a set of volumes """
+    """Crops or resizes 3D volumes to a desired size or region of interest. This protocol helps optimize memory usage and focus on relevant structural areas for analysis or comparison."""
     _label = 'crop/resize volumes'
     _inputLabel = 'volumes'
-    
+    _devStatus = UPDATED
+
     def __init__(self, **kwargs):
         XmippProcessVolumes.__init__(self, **kwargs)
     

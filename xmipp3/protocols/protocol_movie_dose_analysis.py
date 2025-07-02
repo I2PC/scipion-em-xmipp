@@ -35,7 +35,7 @@ from pyworkflow.object import Set
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
-from pyworkflow import UPDATED
+from pyworkflow import UPDATED, PROD
 import pyworkflow.utils as pwutils
 
 from pwem.emlib.image import ImageHandler
@@ -50,12 +50,11 @@ OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 
 class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     """
-    Protocol for dose analysis. It will calculate the average and statistics of the electrons impacts per movie over time.
-     Also, it will use a moving window to check if there is any faulty condition in the dose that is maintained over time.
+    Analyzes the electron dose applied throughout a movie acquisition. This protocol helps assess dose accumulation and its effects on image quality, providing information essential for dose weighting and optimizing reconstruction..
     """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
 
-    _devStatus = UPDATED
+    _devStatus = PROD
     _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0
     _possibleOutputs = {
@@ -309,7 +308,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                     maxDose = stats['max']
                     diff_median = ((mean/self.mu)-1)*100
 
-                    setAttribute(newMovie, '_DIFF_TO_DOSE_PER_ANGSTROM2', abs(diff_median))
+                    setAttribute(newMovie, '_DIFF_TO_DOSE_PER_ANGSTROM2', diff_median)
                     setAttribute(newMovie, '_MEAN_DOSE_PER_ANGSTROM2', mean)
                     setAttribute(newMovie, '_STD_DOSE_PER_ANGSTROM2', std)
                     setAttribute(newMovie, '_MIN_DOSE_PER_FRAME', minDose)

@@ -63,8 +63,7 @@ IMAGES_PER_CLASS = 200
 
 
 class XmippProtCL2D(ProtClassify2D):
-    """ Classifies a set of images using a clustering algorithm to subdivide
-    the original dataset into a given number of classes. """
+    """ Classifies a set of 2D images using clustering algorithms. It subdivides the original dataset into user-defined classes, aiding the identification of particle heterogeneity or structural variations within the data. """
     
     _label = 'cl2d'
     _devStatus = PROD

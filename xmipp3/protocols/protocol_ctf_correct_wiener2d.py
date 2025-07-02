@@ -33,7 +33,7 @@ from xmipp3.convert import writeSetOfParticles, xmippToLocation
 
 class XmippProtCTFCorrectWiener2D(ProtProcessParticles):
     """    
-    Perform CTF correction by Wiener filtering.
+     Performs CTF correction on images using Wiener filtering in 2D. This method enhances image quality by reducing noise and compensating for the contrast transfer function effects in the micrographs or particle images. Use it with caution, preferably only for visualization purposes or when subsequent methods demand it explicitly.
     """
     _label = 'ctf_correct_wiener2d'
     

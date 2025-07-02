@@ -33,7 +33,7 @@ from pwem.protocols import EMProtocol
 
 
 class XmippProtRotateVolume(EMProtocol):
-    """ Rotate a volume around x,y,z """
+    """ Rotates a 3D volume around the x, y, and z axes by specified angles. This protocol allows flexible repositioning of volumes for alignment, comparison, or visualization. """
 
     _label = 'rotate volume'
 
