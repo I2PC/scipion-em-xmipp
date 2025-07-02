@@ -87,4 +87,3 @@ class XmippProtCTFCorrectPhase2D(ProtProcessParticles):
         
         self._defineOutputs(outputParticles=partSet)
         self._defineSourceRelation(imgSet, partSet)
-    
