@@ -36,7 +36,7 @@ from pyworkflow import VERSION_2_0
 
 
 class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
-    """ Protocol for volume deformation based on Zernike3D. """
+    """  Performs volume deformation based on Zernike3D functions, allowing flexible adjustments of 3D maps. This protocol aids in modeling conformational changes or correcting structural distortions in volumes.. """
     _label = 'volume deform - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
 

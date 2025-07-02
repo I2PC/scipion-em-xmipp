@@ -57,9 +57,7 @@ from .protocol_denoise_particles import XmippProtDenoiseParticles
 from .protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
 from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
                                               XmippProtEliminateEmptyClasses)
-from .protocol_enrich import XmippProtEnrich
 from .protocol_extract_particles import XmippProtExtractParticles
-from .protocol_extract_particles_movies import XmippProtExtractMovieParticles
 from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from .protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from .protocol_helical_parameters import XmippProtHelicalParameters
@@ -107,7 +105,6 @@ from .protocol_rotate_volume import XmippProtRotateVolume
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
-from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_shift_particles import XmippProtShiftParticles
 from .protocol_shift_volume import XmippProtShiftVolume
 from .protocol_simulate_ctf import XmippProtSimulateCTF
@@ -141,4 +138,5 @@ from .protocol_volume_local_adjust import XmippProtLocalVolAdj
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
 from .protocol_deep_center import XmippProtDeepCenter
+from .protocol_compute_likelihood import XmippProtComputeLikelihood
 from .protocol_deep_center_predict import XmippProtDeepCenterPredict

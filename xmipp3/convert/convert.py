@@ -485,8 +485,7 @@ def imageToRow(img, imgRow, imgLabel, **kwargs):
         acquisitionToRow(img.getAcquisition(), imgRow)
 
     # Write all extra labels to the row
-    objectToRow(img, imgRow, {}, 
-                extraLabels=IMAGE_EXTRA_LABELS + kwargs.get('extraLabels', []))
+    objectToRow(img, imgRow, {}, extraLabels=IMAGE_EXTRA_LABELS + kwargs.get('extraLabels', []))
 
     # Provide a hook to be used if something is needed to be
     # done for special cases before converting image to row
