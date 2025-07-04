@@ -158,7 +158,7 @@ class Plugin(pwem.Plugin):
             "make",
             "zlib",
             "openjdk",
-            "libtiff<=4.5.1",
+            "'libtiff<=4.5.1'",
 	    "libstdcxx-ng",
             "libjpeg-turbo",
         ]
