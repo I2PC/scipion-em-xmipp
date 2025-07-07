@@ -94,7 +94,6 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
         return strGpus[:-1]
 
     def setGpu(self, oneGPU=False):
-        self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
         if oneGPU:
             gpus = self.getGpusList(",")[0]
         else:

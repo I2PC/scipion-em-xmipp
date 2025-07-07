@@ -493,7 +493,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         return strGpus[:-1]
 
     def setGPU(self, oneGPU=False):
-        self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
         if oneGPU:
             gpus = self.getGpusList(",")[0]
         else:
