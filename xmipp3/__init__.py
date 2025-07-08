@@ -238,6 +238,8 @@ def getNvidiaDriverVersion(plugin):
     ]
 
     for cmd in commands:
+        print("I'm at getNvidiaDriverVersion")
+        print(f"testing {cmd}")
         try:
             output = subprocess.Popen(
                 cmd,
@@ -245,6 +247,8 @@ def getNvidiaDriverVersion(plugin):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             ).communicate()[0].decode('utf-8').strip()
+
+            print(f"output:{output}")
 
             # Check if the output matches a version pattern like 530.30 or 470
             match = re.match(r'^(\d+)', output)
@@ -257,11 +261,12 @@ def getNvidiaDriverVersion(plugin):
     return None  # No valid version found
 
 def installDeepLearningToolkit(plugin, env):
-
+    print("I'm at installDeepLearningToolkit")
     preMsgs = []
     cudaMsgs = []
     nvidiaDriverVer = None
     if os.environ.get('CUDA', 'True') == 'True':
+        print("CUDA variable is True")
         nvidiaDriverVer = getNvidiaDriverVersion(plugin)
 
     if nvidiaDriverVer is None:
