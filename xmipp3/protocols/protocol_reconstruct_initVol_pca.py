@@ -303,8 +303,8 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         #positivity
         self._positivity(output)
         #automatic mask
-        # if iter < 7:
-        #     self._applyMaskThreshold(output)
+        if iter < 7:
+            self._applyMaskThreshold(output)
         #gaussian mask
         # self._applyGaussianMask(output)
         #mask
