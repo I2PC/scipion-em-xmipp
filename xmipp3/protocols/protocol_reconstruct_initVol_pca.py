@@ -127,8 +127,14 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.size = self.inputParticles.get().getDimensions()[0]
         self.iterations = 20
         self.classes = self.classes.get()
-        # symmetry = "c1"
         symmetry = self.symmetryGroup.get()
+        
+        
+        special_iters = {
+            0:  (20.0, 20.0),
+            9:  (16.0, 16.0),
+            14: (self.resolution.get(), self.filter.get())
+        }
         
  
         if self.particleRadius.get() == -1:
@@ -138,7 +144,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
 
         
         self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn)
-        self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get())
+        # self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get())
         for cl in range (self.classes):
             refVol = self._getTmpPath('randomVol_class%s.mrc'%cl)+ ':mrc'
             if self.inputVolumes.get() is None:
@@ -149,22 +155,9 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                 img.convert(vol, refVol)
         
         
-        for iter in range(self.iterations):
-                
-
-            if iter < 10:
-                angleGallery, angle, shift, maxShift = 12, 8, 3, 12
-            elif iter < 14:
-                angleGallery, angle, shift, maxShift = 8, 6, 3, 12
-            elif iter < 17:
-                angleGallery, angle, shift, maxShift = 6, 5, 3, 12
-            elif iter < 20:
-                angleGallery, angle, shift, maxShift = 5, 5, 3, 12
-                
-                
+        for iter in range(self.iterations):     
             
-            # angleGallery, angle, shift, maxShift = self._parameters(iter)
-            # print(angleGallery, angle, shift, maxShift)
+            angleGallery, angle, shift, maxShift = self._parameters(iter)
 
             if self.classify and iter > 3:
                 saveClass = True
@@ -208,18 +201,36 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
             for cl in range(self.classes):
                 self._insertFunctionStep("createGallery", angleGallery, refVol[cl], refIm[cl], symmetry)
             
+            # if iter == 0:
+            #     resol = 20.0 
+            #     filter_res = 20.0 
+            #     self._insertFunctionStep("pcaTraining", self.imgsFn, resol)
+            # elif iter == 9:
+            #     resol = 16.0
+            #     filter_res = 16.0 
+            #     self._insertFunctionStep("pcaTraining", self.imgsFn, resol)
+            # elif iter == 14:
+            #     resol = self.resolution.get() 
+            #     filter_res = self.filter.get()
+            #     self._insertFunctionStep("pcaTraining", self.imgsFn, resol)
+            
+            if iter in special_iters:
+                resol, filter_res = special_iters[iter]
+                self._insertFunctionStep("pcaTraining", self.imgsFn, resol)
+                
+                      
             self._insertFunctionStep("globalAlign", inputXmd, refIm[cl], outXmd[0], angle, shift, maxShift, applyShift, saveClass, radius, iter)   
             
             for cl in range(self.classes):
                 # self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, self.resolution.get())
                 
-                resol = self.resolution.get()
+                # resol = self.resolution.get()
                 if saveClass or iter < 5:
-                    self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, resol, symmetry)
+                    self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, filter_res, symmetry)
                 else:
-                    if iter > 15:
-                        resol = self.filter.get()
-                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, resol, symmetry)
+                    # if iter > 15:
+                    #     resol = self.filter.get()
+                    self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, filter_res, symmetry)
                     
 
         # self._insertFunctionStep("createOutput", iter)
@@ -460,18 +471,19 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
     def _parameters(self, iter):
         
-        if iter < 5:
-            angleGallery, angle, shift, maxShift = 12, 8, 4, 20
-        elif iter < 10:
+        if iter < 10:
+            angleGallery, angle, shift, maxShift = 12, 8, 3, 12
+        elif iter < 14:
             angleGallery, angle, shift, maxShift = 8, 6, 3, 12
-        elif iter < 15:
-            angleGallery, angle, shift, maxShift = 6, 5, 3, 9
+        elif iter < 17:
+            angleGallery, angle, shift, maxShift = 6, 5, 3, 12
         elif iter < 20:
-            angleGallery, angle, shift, maxShift = 5, 5, 2, 6
+            angleGallery, angle, shift, maxShift = 5, 5, 3, 12
         # elif iter < 10:
         #     angleGallery, angle, shift, maxShift = 4, 4, 2, 8
             
         return(angleGallery, angle, shift, maxShift)
+    
         
 
 
