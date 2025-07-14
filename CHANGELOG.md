@@ -4,7 +4,6 @@
 
 - Protocols updated
    - Max shift: tolerate movies without micrographs associated
-   - Highres: test updated
    - substract_projection: update command to boost and subtract to generate only one output stack
    - Movie alignment consensus protocol: enables irregular input sets. Changes in functionality; comparisons between ons between shifts trajectories, and a additional change related to the minimum consensus or threshold for shifts correlation.
    - volume_adjust_sub: better label for volume 1 vs 2
@@ -15,7 +14,10 @@
    - deep_Consensus: GPU handling
    - Deep_hand: handling env to avoid system CUDA settings,  erasing cuda things from env['LD_LIBRARY_PATH']
    - Extract particles protocol: force output boxsize
+   - reconstruct_fourier: correctEnvelope False by default
+   - reconstruct_highres: test updated, correctEnvelope False by default
    - Structure map: Adding a dendrogram and removing some intermediate files
+
 
 - Protocols fixed
    - simulate ctf: fix pre-CTF noise np.numpy, init generator for pre and post ctf noise

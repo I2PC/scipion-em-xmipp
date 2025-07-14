@@ -139,7 +139,6 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         distMatrix = np.loadtxt(self.protocol._getExtraPath("CorrMatrix.txt"))
         condensed_dist = squareform(0.5 * (distMatrix + distMatrix.transpose()))
         Z = linkage(condensed_dist, method='complete')
-
         fig, ax = plt.subplots()
         dendrogram(Z, ax=ax)
         ax.set_title("Hierarchical Clustering (Complete Linkage)")

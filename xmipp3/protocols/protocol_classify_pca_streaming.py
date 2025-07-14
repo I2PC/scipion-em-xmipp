@@ -503,6 +503,16 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         # Convert the string to a datetime object
         self.lastCheck = datetime.strptime(self.lastCreationTime, '%Y-%m-%d %H:%M:%S')
 
+    def _validate(self):
+        """ Check if the installation of this protocol is correct.
+        Can't rely on package function since this is a "multi package" package
+        Returning an empty list means that the installation is correct
+        and there are not errors. If some errors are found, a list with
+        the error messages will be returned.
+        """
+        error=self.validateDLtoolkit()
+        return error
+
 # --------------------------- Static functions --------------------------------
 def updateFileName(filepath, round):
     filename = os.path.basename(filepath)
