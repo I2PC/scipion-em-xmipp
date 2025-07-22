@@ -98,9 +98,10 @@ CONTRAST_AVERAGES_FILE = 'classes_contrast_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
         
 class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
-    """ Classifies a set of images. """
+    """ 'Classifies a set of images using Principal Component Analysis (PCA). This 2D classification groups (the number of groups can be set) are based on their similarities, assisting in the identification of different conformational states or particle populations.'
+    """
     
-    _label = '2D classification pca'
+    _label = " 2D classification pca "
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
     _devStatus = BETA
@@ -171,9 +172,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     def _insertAllSteps(self):
 
         """ Mainly prepare the command line for call classification program"""
-    
-        updateEnviron(self.gpuList.get())
-        
+        self.setGPU()
         self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
         self.imgsXmd = self._getTmpPath('images.xmd')
         self.imgsFn = self._getTmpPath('images.mrc')
@@ -199,7 +198,15 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma )
     
         self._insertFunctionStep('createOutputStep')
-        
+
+    def setGPU(self):
+        if self.useQueueForSteps() or self.useQueue():
+            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        else:
+            myStr = self.gpuList.get()
+            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
+        self.numGPU = myStr.split(',')[0]
+
 
     #--------------------------- STEPS functions -------------------------------
     def convertInputStep(self, input, outputOrig, outputMRC):
@@ -228,8 +235,8 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
-        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA'% \
-                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath())
+        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s'% \
+                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), self.numGPU)
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
@@ -237,9 +244,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         
     def classification(self, inputIm, numClass, stfile, mask, sigma):
-        args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s' % \
+        args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
                 (inputIm, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
-                 stfile)
+                 stfile, self.numGPU)
         if mask:
             args += ' --mask --sigma %s '%(sigma) 
             
@@ -409,6 +416,16 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
                                  updateClassCallback=self._updateClass,
                                  itemDataIterator=mdIter,  # relion style
                                  iterParams=params)
+
+    def _validate(self):
+        """ Check if the installation of this protocol is correct.
+		Can't rely on package function since this is a "multi package" package
+		Returning an empty list means that the installation is correct
+		and there are not errors. If some errors are found, a list with
+		the error messages will be returned.
+		"""
+        error = self.validateDLtoolkit()
+        return error
     
 # --------------------------- Static functions --------------------------------
 def rowToAlignmentEmtable(alignmentRow, alignType):

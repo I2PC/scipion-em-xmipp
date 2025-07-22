@@ -43,6 +43,7 @@ from pwem import emlib
 from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
 from xmipp3.base import isXmippCudaPresent
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippProtReconstructSignificant(ProtInitialVolume):
@@ -53,6 +54,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
     the cumulative density function of different image similarity measures.
     """
     _label = 'reconstruct significant'
+    _devStatus = UPDATED
 
     # --------------------------- DEFINE param functions -----------------------
 
@@ -216,7 +218,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
     def _insertAllSteps(self):
         # Convert input images if necessary
         self.imgsFn = self._getExtraPath('input_classes.xmd')
-        self._insertFunctionStep('convertInputStep', self.imgsFn)
+        self._insertFunctionStep(self.convertInputStep, self.imgsFn, )
         SL = emlib.SymList()
         SL.readSymmetryFile(self.symmetryGroup.get())
         self.trueSymsNo = SL.getTrueSymsNo()
@@ -318,26 +320,17 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                 N_GPUs = len((self.gpuList.get()).split(','))
                 cudaReconsArgs += ' -gpusPerNode %d' % N_GPUs
                 cudaReconsArgs += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-            count=0
-            GpuListCuda=''
-            if self.useQueueForSteps() or self.useQueue():
-                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                GpuList = GpuList.split(",")
-                for elem in GpuList:
-                    GpuListCuda = GpuListCuda+str(count)+' '
-                    count+=1
-            else:
-                GpuListAux = ''
-                for elem in self.getGpuList():
-                    GpuListCuda = GpuListCuda+str(count)+' '
-                    GpuListAux = GpuListAux+str(elem)+','
-                    count+=1
-                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-            cudaReconsArgs += ' --thr %s' %  self.numberOfThreads.get()
-            if self.numberOfMpi.get()==1:
-                cudaReconsArgs += ' --device %s' %(GpuListCuda)
-            if self.numberOfMpi.get()>1:
-                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconsArgs, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+
+            gpuList = list(map(str, self._stepsExecutor.getGpuList()))
+            gpuListArg=" ".join(gpuList)
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpuList)
+            self.info("GPUs used in CUDA_VISIBLE_DEVICES: %s" % gpuListArg)
+
+            cudaReconsArgs += ' --thr %s' % self.numberOfThreads.get()
+            if self.numberOfMpi.get() == 1:
+                cudaReconsArgs += ' --device ' + gpuListArg
+            if self.numberOfMpi.get() > 1:
+                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconsArgs, numberOfMpi=len(gpuList)+1)
             else:
                 self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconsArgs)
         else:

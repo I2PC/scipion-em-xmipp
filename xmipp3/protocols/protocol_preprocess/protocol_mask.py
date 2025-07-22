@@ -179,7 +179,7 @@ class XmippProtMask:
         
 class XmippProtMaskParticles(ProtMaskParticles, XmippProcessParticles,
                              XmippProtMask, XmippGeometricalMask2D):
-    """ Apply mask to a set of particles """
+    """ Applies masks to a set of particle images to isolate specific regions or exclude unwanted background. The mask can be done with a geometry or import an external one. The center can be shift and the pixels outside the mask can be filled with a min avg, max or an specific value. Masking is critical for focusing on structural features and improving alignment and classification."""
     _label = 'apply 2d mask'
     
     MASK_FILE = 'mask.spi'
