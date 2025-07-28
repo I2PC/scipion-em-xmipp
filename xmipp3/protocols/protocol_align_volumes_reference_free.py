@@ -141,6 +141,12 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         PROGRAM = 'xmipp_synchronize_transform'
         MAX_ERROR = 90.0 # degrees
 
+        md = emlib.metadata.MetaData(self._getAlignedPairMetadataFilename())
+        corr = np.ndarray(md.getColumnValues(emlib.metadata.MDL_CORRELATION_IDX))
+        weights = (1.0 + corr) / 2.0
+        md.setColumnValues(emlib.metadata.MDL_WEIGHT, weights.tolist())
+        md.write(self._getAlignedPairMetadataFilename())
+        
         inputMdFilename = self._getAlignedPairMetadataFilename()
         lastSynchronizedMdFilename = None
         for i in range(self.iterations.get()):
