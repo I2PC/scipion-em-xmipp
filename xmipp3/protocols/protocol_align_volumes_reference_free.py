@@ -72,9 +72,11 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
         form.addParam('maxTilt', FloatParam, label='Maximium tilt angle (deg)',
                       validators=[Range(0, 90.0)], default=60.0 )
         form.addParam('missingRegion', EnumParam, label='Missing region',
-                      choices=self.CHOICES)
+                      choices=self.CHOICES, default=0)
         form.addParam('connectivity', IntParam, label='Conectivity',
-                      validators=[GT(0)])
+                      validators=[GT(0)], default=16)
+        form.addParam('iterations', IntParam, label='Iterations',
+                      validators=[GT(0)], default=1)
         form.addParallelSection(mpi=8)
 
     # --------------------------- INSERT steps functions -----------------------
@@ -136,25 +138,37 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     def synchronizeStep(self):
         volumes = self._getInputVolumes()
 
-        program = 'xmipp_synchronize_transform'
-        args = []
-        args += ['-i', self._getAlignedPairMetadataFilename()]
-        args += ['-o', self._getSynchronizedMetadataFilename()]
-        args += ['--error', self._getErrorMetadataFilename()]
-        self.runJob(program, args, numberOfMpi=1)
+        PROGRAM = 'xmipp_synchronize_transform'
+        MAX_ERROR = 90.0 # degrees
+
+        inputMdFilename = self._getAlignedPairMetadataFilename()
+        lastSynchronizedMdFilename = None
+        for i in range(self.iterations.get()):
+            args = []
+            args += ['-i', inputMdFilename]
+            args += ['-o', self._getSynchronizedMetadataFilename(i)]
+            args += ['--error', self._getErrorMetadataFilename(i)]
+            self.runJob(PROGRAM, args, numberOfMpi=1)
+            lastSynchronizedMdFilename = self._getSynchronizedMetadataFilename(i)
+            
+            md = emlib.metadata.MetaData(self._getErrorMetadataFilename(i))
+            query = emlib.metadata.MDValueGT(emlib.MDL_ANGLE_DIFF, MAX_ERROR) 
+            md.removeObjects(query)
+            md.write(self._getFilteredErrorMetadataFilename(i))
+            inputMdFilename = self._getFilteredErrorMetadataFilename(i)
         
-        md = emlib.metadata.MetaData(self._getSynchronizedMetadataFilename())
+        md = emlib.metadata.MetaData(lastSynchronizedMdFilename)
         for objId in md:
             itemId = md.getValue(emlib.metadata.MDL_ITEM_ID, objId)
             volume: Volume = volumes[itemId]
             location = emlib.image.ImageHandler.locationToXmipp(volume.getLocation())
             md.setValue(emlib.metadata.MDL_IMAGE, location, objId)
-        md.write(self._getSynchronizedMetadataFilename())
+        md.write(self._getLastSynchronizedMetadataFilename())
         
     def applyTransformationsStep(self):
         program = 'xmipp_transform_geometry'
         args = []
-        args += ['-i', self._getSynchronizedMetadataFilename()]
+        args += ['-i', self._getLastSynchronizedMetadataFilename()]
         args += ['-o', self._getAlignedMetadataFilename()]
         args += ['--oroot', self._getAlignedVolumeRoot()]
         args += ['--apply_transform', '--inverse']
@@ -262,12 +276,18 @@ class XmippProtAlignVolumesReferenceFree(ProtAnalysis3D):
     def _getAlignedPairMetadataFilename(self):
         return self._getExtraPath('aligned_pairs.xmd')
 
-    def _getSynchronizedMetadataFilename(self):
+    def _getSynchronizedMetadataFilename(self, iteration: int):
+        return self._getExtraPath('%02d_synchronized.xmd' % iteration)
+
+    def _getErrorMetadataFilename(self, iteration: int):
+        return self._getExtraPath('%02d_error.xmd' % iteration)
+
+    def _getFilteredErrorMetadataFilename(self, iteration: int):
+        return self._getExtraPath('%02d_filtered_error.xmd' % iteration)
+
+    def _getLastSynchronizedMetadataFilename(self):
         return self._getExtraPath('synchronized.xmd')
-
-    def _getErrorMetadataFilename(self):
-        return self._getExtraPath('error.xmd')
-
+    
     def _getMultiplicityMaskFilename(self):
         return self._getExtraPath('multiplicity.mrc')
     
