@@ -29,7 +29,7 @@ type_of_version = 'release' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _binVersion = 'v3.25.06.0' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz)
-_pluginVersion = 'v3.25.06.0' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz) or in scipion-em-xmipp
+_pluginVersion = 'v3.25.06.1' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz) or in scipion-em-xmipp
 
 _binTagVersion = _binVersion + '-Rhea' #'devel' or _binVersion + '-Poseidon'
 _pluginTagVersion = _pluginVersion + '-Rhea'  #'devel' or _pluginVersion + '-Poseidon'

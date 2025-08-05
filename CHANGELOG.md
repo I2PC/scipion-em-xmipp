@@ -1,3 +1,6 @@
+## Release 3.25.06.1 - Rhea
+- Disabling the default installation of dependencies to prevent breaking the scipion environment
+
 ## Release 3.25.06.0 - Rhea
 - New protocols
    - compute_likelihood: This protocol computes the likelihood of a set of particles with assigned angles when compared to a set of maps or atomic modelS
