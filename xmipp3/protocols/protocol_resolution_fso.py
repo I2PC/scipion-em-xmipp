@@ -49,7 +49,7 @@ class XmippProtFSO(ProtAnalysis3D):
     """
     _label = 'resolution fso'
     _lastUpdateVersion = VERSION_2_0
-    _devStatus = PROD
+    _devStatus = UPDATED
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)

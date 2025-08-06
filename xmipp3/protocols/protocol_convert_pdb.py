@@ -43,7 +43,7 @@ from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, repl
 from pyworkflow import UPDATED, PROD
 
 class XmippProtConvertPdb(ProtInitialVolume):
-    """ Convert atomic structure(s) into volume(s) """
+    """  Converts atomic structure files in PDB (Protein Data Bank) format into volumetric maps. Converting a PDB to a volume generates a simulated electron density map, useful for validating atomic models, fitting into experimental maps or performing docking."""
     _label = 'convert pdbs to volumes'
     _devStatus = UPDATED
     OUTPUT_NAME1 = "outputVolume"

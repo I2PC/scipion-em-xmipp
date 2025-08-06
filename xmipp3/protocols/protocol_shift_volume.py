@@ -33,7 +33,7 @@ from pwem.objects import Volume
 
 
 class XmippProtShiftVolume(EMProtocol):
-    """ This protocol shifts a volume according to the input shifts"""
+    """ Shifts a 3D volume spatially according to user-provided parameters."""
 
     _label = 'shift volume'
 

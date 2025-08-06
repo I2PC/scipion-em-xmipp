@@ -47,13 +47,11 @@ ALIGN_ALGORITHM_FAST_FOURIER = 3
 
 class XmippProtAlignVolume(ProtAlignVolume):
     """ 
-    Aligns a set of volumes using cross correlation 
-    or a Fast Fourier method. 
-
+    Aligns a set of 3D volumes using cross-correlation or Fast Fourier Transform methods. The alignment allows direct comparison or averaging of volumes by bringing them into a common spatial frame.
      """
     _label = 'align volume'
     nVols = 0
-    _devStatus = PROD
+    _devStatus = UPDATED
     OUTPUT_NAME1 = "outputVolume"
     OUTPUT_NAME2 = "outputVolumes"
     _possibleOutputs = {OUTPUT_NAME1: Volume,
@@ -394,9 +392,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
         return alignArgs
           
 class XmippProtAlignVolumeForWeb(XmippProtAlignVolume):
-    """ Aligns a set of volumes using cross correlation.
-    Based on Xmipp protocol for aligning volumes, but
-    the parameters are restricted for ease of use.
+    """ Similar to XmippProtAlignVolume but optimized for web-based visualization. This protocol aligns volumes for easier comparison in web interfaces, facilitating remote analysis and presentation.
     """
     _label = 'align volume web'
     
