@@ -48,9 +48,9 @@ class XmippProtShiftVolume(EMProtocol):
                       help='Use output shifts of protocol "shift particles" which should be executed previously')
         form.addParam('inputProtocol', PointerParam, pointerClass='XmippProtShiftParticles', allowsNull=True,
                       label="Shift particles protocol", condition='shiftBool')
-        form.addParam('option', BooleanParam, label='Use center of mass?', default='False',
+        form.addParam('useCM', BooleanParam, label='Use center of mass?', default='False',
                       help='Select the position where the particles will be shifted in a volume displayed in a wizard.')
-        COND = 'not shiftBool and not option'
+        COND = 'not shiftBool and not useCM'
         form.addParam('x', FloatParam, label="x", condition=COND, allowsNull=True)
         form.addParam('y', FloatParam, label="y", condition=COND, allowsNull=True)
         form.addParam('z', FloatParam, label="z", condition=COND, allowsNull=True)
@@ -78,7 +78,7 @@ class XmippProtShiftVolume(EMProtocol):
             self.shifty = shiftprot.shiftY.get()
             self.shiftz = shiftprot.shiftZ.get()
         else:
-            if not self.option:
+            if not self.useCM:
                 self.shiftx = self.x.get()
                 self.shifty = self.y.get()
                 self.shiftz = self.z.get()
