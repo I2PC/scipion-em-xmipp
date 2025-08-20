@@ -86,11 +86,15 @@ class XmippProtShiftVolume(EMProtocol):
                 if fnVol.endswith('.mrc'):
                     fnVol += ':mrc'
                 vol = ih().read(fnVol).getData()
-                coords = np.argwhere(vol >= np.std(vol)) - 0.5 * vol.shape[0]
-                masscenter = np.mean(coords, axis=0)
-                self.shiftx = -masscenter[2]
-                self.shifty = -masscenter[1]
-                self.shiftz = -masscenter[0]
+                vol[vol < 0] = 0
+                xs = np.linspace(-vol.shape[2] / 2, vol.shape[2] / 2, vol.shape[2])
+                ys = np.linspace(-vol.shape[1] / 2, vol.shape[1] / 2, vol.shape[1])
+                zs = np.linspace(-vol.shape[0] / 2, vol.shape[0] / 2, vol.shape[0])
+                xs, ys, zs = np.meshgrid(xs, ys, zs, indexing='ij')
+                totalMass = vol.sum()
+                self.shiftx = -(xs * vol).sum() / totalMass
+                self.shifty = -(ys * vol).sum() / totalMass
+                self.shiftz = -(zs * vol).sum() / totalMass
         program = "xmipp_transform_geometry"
         args = '-i %s -o %s --shift %f %f %f --dont_wrap' % \
                (fnVol, self._getExtraPath("shift_volume.mrc"), self.shiftx, self.shifty, self.shiftz)
