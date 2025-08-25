@@ -58,6 +58,7 @@ from .protocol_denoise_particles import XmippProtDenoiseParticles
 from .protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
 from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
                                               XmippProtEliminateEmptyClasses)
+from .protocol_estimate_boxsize_psf import XmippProtEstimateBoxsizePSF
 from .protocol_extract_particles import XmippProtExtractParticles
 from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from .protocol_extract_asymmetric_unit import XmippProtExtractUnit
