@@ -38,7 +38,7 @@ from pwem.protocols import ProtCTFMicrographs
 import pwem.emlib.metadata as md
 from pwem import emlib
 
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol.constants import (STATUS_NEW, LEVEL_ADVANCED)
 from pyworkflow import UPDATED, NEW
 import xmippLib
 
@@ -50,10 +50,23 @@ OUTPUT_BOXSIZE_PX = "extractionBoxSizePx"
 
 class XmippProtEstimateBoxsizePSF(ProtCTFMicrographs):
     """
-    Protocol to estimate meaningful particle extraction boxsize based on the CTFs estimated values.
-    An integer representing the recommended value will be output. CTFs with different defocus values look differently,
-    while particles with higher defocus values will be recommended a bigger box size for extraction,
-    particles with lower defocus values will be recommended a more compact one.
+    Protocol to estimate meaningful particle extraction box size based on the point spread function (PSF) derived from the CTF parameters of a set of CTFs estimations.
+    The PSF models how a point in the object plane spreads due to the microscope optics (defocus + aberrations).
+    If you don’t account for its width:
+        - CTF correction may lose high-resolution data at edges.
+        - Particles at high defocus will have truncated Fourier information.
+    By adding the PSF support size to your picking box, you ensure:
+        - High-defocus particles are still properly captured.
+        - CTF correction is valid over the full particle area.
+
+    The algorithm:
+    1. Take a set of CTFs.
+    2. Sample them evenly across defocus values.
+    3.For each:
+        - Compute the Point Spread Function from the CTF.
+        - Measure the width of the PSF above a given threshold.
+        - Add that width to the original particle box size.
+    4. Return the enlarged box size needed to capture both the particle and the CTF spread.
     """
     _label = 'PSF particle extraction box size'
     _devStatus = NEW
@@ -76,6 +89,17 @@ class XmippProtEstimateBoxsizePSF(ProtCTFMicrographs):
                       important=True,
                       help='This is size of the boxed particles (in pixels).\n'
                            'For sanity check if it is not, it will be transform to an even number.')
+        form.addParam('thresholdPSF', params.FloatParam,
+                      default=0.01,
+                      label='Threshold PSF',
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Sets the relative amplitude threshold used to define the extent (“support”) of the Point Spread Function (PSF).\n'
+                           'By default we use 0.01: includes all pixels where PSF ≥ 1% of its maximum.\n'
+                           'Lower values (e.g., 0.001) expand the support to include weaker, more spread-out signal tails.\n'
+                           'Higher values shrink the support, possibly excluding faint high-defocus contributions.\n'
+                           'Reducing this value increases the estimated box size, '
+                           'which may help preserve high-resolution information at higher defocus, '
+                           'but at the cost of larger extraction boxes and higher computational load.')
         form.addSection(label='Sampling')
         form.addParam('numImages', params.IntParam,
                       default=25, label='Sample size',
@@ -174,7 +198,7 @@ class XmippProtEstimateBoxsizePSF(ProtCTFMicrographs):
         inputCtfSet = self._loadInputCtfSet(self.ctfFn)
         pickingBoxSize = self.boxSize.get()
         ts = self.inputCTF.get().getMicrographs().getSamplingRate()
-        print(ts)
+        psf_th = self.thresholdPSF.get()
         ctfDefocus = {}
 
         for ctfId in ctfIds:
@@ -193,14 +217,14 @@ class XmippProtEstimateBoxsizePSF(ProtCTFMicrographs):
             fnCTF = self._getTmpPath("%s.ctfParam" % baseMicName)
             ctfToCTFParam(ctf, fnCTF)
             psf = np.abs(xmippLib.getPSF(fnCTF, ts))
-            thPSF = 0.001 * np.max(psf)
+            thPSF = psf_th * np.max(psf)
             supportPSF_A = np.sum(psf > thPSF) * ts
             supportPSF_Px = np.sum(psf > thPSF)
             estimatedBoxSizeA = pickingBoxSize * ts + supportPSF_A
             estimatedBoxSizePx = pickingBoxSize + supportPSF_Px
             self.estimatedBoxSizesA.append(estimatedBoxSizeA)
             self.estimatedBoxSizesPx.append(estimatedBoxSizePx)
-            self.info("Defocus %0.1f - estimated box size %0.1f(A)" % (ctfDefocus[ctfId], estimatedBoxSizeA))
+            self.info("Defocus %0.1f - estimated box size %0.1f (A)" % (ctfDefocus[ctfId], estimatedBoxSizeA))
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
