@@ -30,6 +30,9 @@ from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, I
 import pyworkflow.object as pwobj
 from pwem.protocols import EMProtocol
 from pwem.objects import Volume
+from pwem.emlib.image import ImageHandler as ih
+
+import numpy as np
 
 
 class XmippProtShiftVolume(EMProtocol):
@@ -45,7 +48,9 @@ class XmippProtShiftVolume(EMProtocol):
                       help='Use output shifts of protocol "shift particles" which should be executed previously')
         form.addParam('inputProtocol', PointerParam, pointerClass='XmippProtShiftParticles', allowsNull=True,
                       label="Shift particles protocol", condition='shiftBool')
-        COND = 'not shiftBool'
+        form.addParam('useCM', BooleanParam, label='Use center of mass?', default='False',
+                      help='Select the position where the particles will be shifted in a volume displayed in a wizard.')
+        COND = 'not shiftBool and not useCM'
         form.addParam('x', FloatParam, label="x", condition=COND, allowsNull=True)
         form.addParam('y', FloatParam, label="y", condition=COND, allowsNull=True)
         form.addParam('z', FloatParam, label="z", condition=COND, allowsNull=True)
@@ -73,9 +78,23 @@ class XmippProtShiftVolume(EMProtocol):
             self.shifty = shiftprot.shiftY.get()
             self.shiftz = shiftprot.shiftZ.get()
         else:
-            self.shiftx = self.x.get()
-            self.shifty = self.y.get()
-            self.shiftz = self.z.get()
+            if not self.useCM:
+                self.shiftx = self.x.get()
+                self.shifty = self.y.get()
+                self.shiftz = self.z.get()
+            else:
+                if fnVol.endswith('.mrc'):
+                    fnVol += ':mrc'
+                vol = ih().read(fnVol).getData()
+                vol[vol < 0] = 0
+                xs = np.linspace(-vol.shape[2] / 2, vol.shape[2] / 2, vol.shape[2])
+                ys = np.linspace(-vol.shape[1] / 2, vol.shape[1] / 2, vol.shape[1])
+                zs = np.linspace(-vol.shape[0] / 2, vol.shape[0] / 2, vol.shape[0])
+                xs, ys, zs = np.meshgrid(xs, ys, zs, indexing='ij')
+                totalMass = vol.sum()
+                self.shiftx = -(xs * vol).sum() / totalMass
+                self.shifty = -(ys * vol).sum() / totalMass
+                self.shiftz = -(zs * vol).sum() / totalMass
         program = "xmipp_transform_geometry"
         args = '-i %s -o %s --shift %f %f %f --dont_wrap' % \
                (fnVol, self._getExtraPath("shift_volume.mrc"), self.shiftx, self.shifty, self.shiftz)
