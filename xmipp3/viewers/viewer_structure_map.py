@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-import os, matplotlib, math
+import os, math, glob
 
 from scipy import ndimage
 from scipy.spatial import KDTree
@@ -43,11 +43,22 @@ from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, dendrogram
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
+from pyworkflow.gui import askYesNo
 from pyworkflow.gui.plotter import plt
 import pyworkflow.protocol.params as params
+from pyworkflow.utils import weakImport, process, Message, makePath, cleanPath
+
+from pwem.objects import SetOfClassesFlex, ClassFlex, VolumeFlex
 
 from xmipp3.protocols.protocol_structure_map import XmippProtStructureMap
 from xmipp3.protocols.protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
+
+flexutils_available = False
+with weakImport("flexutils"):
+    import flexutils
+    from xmipp_metadata.image_handler import ImageHandler
+    import tkinter as tk
+    flexutils_available = True
 
 
 class XmippProtStructureMapViewer(ProtocolViewer):
@@ -73,9 +84,15 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         form.addParam('doShowDendogram', params.LabelParam,
 	                  label="Display hierarchical clustering")
 
+        if flexutils_available:
+            form.addParam('doShowAnnotate', params.LabelParam,
+                          label='Display structure mapping using the annotation tool from Flexutils Plugin')
+
     def _getVisualizeDict(self):
-	    return {'doShowPlot': self._visualize,
-	            'doShowDendogram': self._visualizeDendogram}
+        vis_dict = {'doShowPlot': self._visualize, 'doShowDendogram': self._visualizeDendogram}
+        if flexutils_available:
+            vis_dict["doShowAnnotate"] = self._visualizeAnnotate
+        return vis_dict
 
     def getOutputFile(self):
         fnOutput = ['']
@@ -120,9 +137,8 @@ class XmippProtStructureMapViewer(ProtocolViewer):
 
     def _visualizeDendogram(self, e=None):
         distMatrix = np.loadtxt(self.protocol._getExtraPath("CorrMatrix.txt"))
-        condensed_dist = squareform(0.5*(distMatrix+distMatrix.transpose()))
+        condensed_dist = squareform(0.5 * (distMatrix + distMatrix.transpose()))
         Z = linkage(condensed_dist, method='complete')
-	    
         fig, ax = plt.subplots()
         dendrogram(Z, ax=ax)
         ax.set_title("Hierarchical Clustering (Complete Linkage)")
@@ -131,6 +147,134 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         fig.tight_layout()
         return [fig]
 
+    def _visualizeAnnotate(self, e=None):
+        fnOutput = self.getOutputFile()
+        for file in fnOutput:
+            if not os.path.exists(file):
+                return [self.errorMessage('The necessary metadata was not produced\n'
+                                          'Execute again the protocol\n',
+                                          title='Missing result file')]
+
+        # Check whether intermediate results' folder has been created
+        path = os.path.abspath(self.protocol._getExtraPath("Intermediate_results"))
+        if not os.path.isdir(path):
+            makePath(path)
+
+        self.coordinates = (np.loadtxt(file) for file in fnOutput)
+        self.coordinates = np.vstack(self.coordinates)
+        z_space_file = os.path.join(path, "z_space.txt")
+        np.savetxt(z_space_file, self.coordinates)
+
+        volumesPaths = [os.path.abspath(v.getFileName()) for v in self.protocol.inputVolumes.get()]
+        pathsFile = os.path.join(path,"volumesPath.txt")
+        with open(pathsFile, "w") as f:
+            for line in volumesPaths:
+                f.write("%s\n" % line)
+
+        args = (f"--data {z_space_file} --z_space {z_space_file} --mode FromFiles --volumesPaths {pathsFile} --reduce pca "
+                f"--path {path}")
+        program = "viewer_interactive_3d.py"
+        program = flexutils.Plugin.getProgram(program, needsPackages=None, chimera=True)
+        process.runJob(None, program, args)
+
+        # Create output (if needed)
+        frame = tk.Frame()
+        if len(glob.glob(os.path.join(path, "saved_selections*"))) > 0 and \
+                askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, frame):
+            inputVolumes = self.protocol.inputVolumes.get()
+            partIds = list(inputVolumes.getIdSet())
+
+            suffix = getOutputSuffix(self.protocol, SetOfClassesFlex)
+            setFn = self._getPath('flexClasses%s.sqlite' % suffix)
+            cleanPath(setFn)
+            flexClasses = SetOfClassesFlex(filename=setFn, progName="StructMap")
+            flexClasses.setImages(inputVolumes)
+
+            # Read selected coefficients
+            clInx = 1
+            newId = 1
+            for file in sorted(glob.glob(os.path.join(path, 'saved_selections*'))):
+                z_space_vw = []
+                with open(file) as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        z_space_vw.append(np.fromstring(line, dtype=float, sep=' '))
+                z_space_vw = np.asarray(z_space_vw)
+
+                if z_space_vw.ndim < 2:
+                    z_space_vw = z_space_vw[None, ...]
+
+                if "_cluster" in file:
+                    # Read space
+                    z_space = z_space_vw[1:]
+                    z_space_vw = z_space_vw[0][None, ...]
+                else:
+                    # Read space
+                    z_space = np.loadtxt(os.path.join(path, "z_space.txt"))
+
+                # Create KDTree
+                kdtree = KDTree(np.loadtxt(os.path.join(path, "z_space.txt")))
+
+                # Populate SetOfClasses3D with KMean particles
+                for z_idx in range(z_space_vw.shape[0]):
+                    if "_cluster" in file:
+                        if z_space.shape[0] > 0:
+                            _, currIds = kdtree.query(z_space, k=1)
+                            currIds = np.squeeze(np.asarray(currIds)).astype(int)
+                        else:
+                            currIds = np.array([])
+                    else:
+                        _, currIds = kdtree.query(z_space_vw[z_idx].reshape(1, -1), k=1)
+                        currIds = currIds[0]
+
+                    if currIds.ndim and currIds.size:
+                        newClass = ClassFlex()
+                        newClass.copyInfo(inputVolumes)
+                        newClass.setObjId(clInx)
+                        representative = VolumeFlex(progName="StructMap")
+                        if hasattr(representative, "setSamplingRate"):
+                            representative.setSamplingRate(inputVolumes.getSamplingRate())
+
+                        # Set correct sampling rate in volume header
+                        ImageHandler().setSamplingRate(volumesPaths[clInx - 1], inputVolumes.getSamplingRate())
+
+                        # ****** Fill representative information *******
+                        representative.setLocation(volumesPaths[clInx - 1])
+                        representative.setZFlex(z_space_vw[z_idx])
+                        # ********************
+
+                        newClass.setRepresentative(representative)
+                        flexClasses.append(newClass)
+
+                        enabledClass = flexClasses[newClass.getObjId()]
+                        enabledClass.enableAppend()
+
+                        if "_cluster" in file:
+                            for itemId in currIds:
+                                item = inputVolumes[partIds[itemId]]
+                                item.setObjId(newId)
+                                enabledClass.append(item)
+                                newId += 1
+                        else:
+                            itemId = currIds[0]
+                            while itemId >= inputVolumes.getSize():
+                                currIds = np.delete(currIds, 0)
+                                itemId = currIds[0]
+                            item = inputVolumes[partIds[itemId]]
+                            enabledClass.append(item)
+                            newId += 1
+
+                        flexClasses.update(enabledClass)
+                        clInx += 1
+
+            # Save new output
+            name_classes = "Selection_" + suffix
+            args = {}
+            args[name_classes] = flexClasses
+
+            self.protocol._defineOutputs(**args)
+            self.protocol._defineSourceRelation(inputVolumes, flexClasses)
+        
     def _validate(self):
         errors = []
         return errors
@@ -402,3 +546,20 @@ def annotate3D(ax, s, *args, **kwargs):
 
     tag = Annotation3D(s, *args, **kwargs)
     ax.add_artist(tag)
+
+def getOutputSuffix(protocol, cls):
+    """ Get the name to be used for a new output.
+    For example: output3DCoordinates7.
+    It should take into account previous outputs
+    and number with a higher value.
+    """
+    maxCounter = -1
+    for attrName, _ in protocol.iterOutputAttributes(cls):
+        suffix = attrName.replace(protocol.OUTPUT_PREFIX, '')
+        try:
+            counter = int(suffix)
+        except:
+            counter = 1  # when there is not number assume 1
+        maxCounter = max(counter, maxCounter)
+
+    return str(maxCounter + 1) if maxCounter > 0 else '1'  # empty if not output
