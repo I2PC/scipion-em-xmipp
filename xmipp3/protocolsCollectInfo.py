@@ -91,6 +91,7 @@ def requestDSFillMap(dictProtocolFile):
     dictVectors = {}
     index = 0
     dictProtocolsInfo = {}
+    protocolsTags = protocolsConfTagExtractor()
     for protocol in dictProtocolFile.keys():
         index+=1
         indexProt = 0
@@ -103,8 +104,42 @@ def requestDSFillMap(dictProtocolFile):
             protocolString = classTexted(scriptTexted, protocol)
             helpProtocol = removeJumpLine(helpProtocolStr(protocolString))
             labelProtocol = extract_label_protocol(protocolString, protocol)
-            dictProtocolsInfo['protocol']= {'name':labelProtocol,  'Description': helpProtocol}
+            try:
+                tagsProtocol = protocolsTags[protocol]
+            except KeyError:
+               pass
+            dictProtocolsInfo[protocol] = {'name':labelProtocol,  'Description': helpProtocol, 'Tags': tagsProtocol}
     return dictProtocolsInfo
+
+def protocolsConfTagExtractor():
+    import re
+
+    path_stack = []
+    protocols_dict = {}
+
+    with open("protocols.conf", "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            # Detecta inicio de sección o grupo
+            section_match = re.search(r'"tag":\s*"section".*?"text":\s*"([^"]+)"', line)
+            group_match = re.search(r'"tag":\s*"protocol_group".*?"text":\s*"([^"]+)"', line)
+            protocol_match = re.search(r'"tag":\s*"protocol".*?"value":\s*"([^"]+)"', line)
+
+            if section_match:
+                path_stack.append(section_match.group(1))
+            elif group_match:
+                path_stack.append(group_match.group(1))
+            elif protocol_match:
+                # Guardar en diccionario
+                protocols_dict[protocol_match.group(1)] = list(path_stack)
+            elif line.startswith("]}") or line.startswith("],") or line.startswith("}"):
+                if path_stack:
+                    path_stack.pop()
+
+    return protocols_dict
 
 
 def classTexted(scriptTexted, protocol):
