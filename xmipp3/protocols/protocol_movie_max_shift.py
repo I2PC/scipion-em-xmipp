@@ -242,17 +242,17 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
                 evalBoth = self.rejType==self.REJ_AND or self.rejType==self.REJ_OR
 
-                # --- Evaluacion por desplazamiento acumulado ---
+                # --- Evaluation for accumulated displacement ---
                 if self.rejType == self.REJ_MOVIE or evalBoth:
                     deltaX = np.diff(shiftArrayX)
                     deltaY = np.diff(shiftArrayY)
-                    # Magnitud de cada paso
+                    # Magnitude for each step
                     stepDistances = np.sqrt(deltaX ** 2 + deltaY ** 2)
-                    # Suma total del recorrido
+                    # Total sum of the displacement
                     totalPath = np.sum(stepDistances) * sampling
                     rejectedByMovie = totalPath > self.maxMovieShift.get()
 
-                # --- Evaluacion por desplazamiento máximo entre frames ---
+                # --- Evaluation by maximum displacement between frames ---
                 if self.rejType == self.REJ_FRAME or evalBoth:
                     frameShiftX = np.diff(shiftArrayX)
                     frameShiftY = np.diff(shiftArrayY)
