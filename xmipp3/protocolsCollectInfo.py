@@ -22,7 +22,11 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+'''
+Para abrir desde el html un fichero json hay que leventar un servidor local:
+cd /home/agarcia/scipion3/xmipp-bundle/src/scipion-em-xmipp/xmipp3/
+python3 -m http.server 8000
+'''
 import os
 import re
 import ast
