@@ -111,35 +111,113 @@ def requestDSFillMap(dictProtocolFile):
             dictProtocolsInfo[protocol] = {'name':labelProtocol,  'Description': helpProtocol, 'Tags': tagsProtocol}
     return dictProtocolsInfo
 
+import re
+
+def extract_protocols(node, path=None, result=None):
+    if path is None:
+        path = []
+    if result is None:
+        result = {}
+
+    if isinstance(node, dict):
+        tag = node.get("tag")
+        text = node.get("text")
+        value = node.get("value")
+
+        if tag in ("section", "protocol_group") and text:
+            path.append(text)
+            for child in node.get("children", []):
+                extract_protocols(child, path, result)
+            path.pop()
+        elif tag == "protocol" and value:
+            # Guardar todas las rutas posibles
+            result.setdefault(value, []).append(list(path))
+        else:
+            for child in node.get("children", []):
+                extract_protocols(child, path, result)
+
+    elif isinstance(node, list):
+        for item in node:
+            extract_protocols(item, path, result)
+
+    return result
+
+
 def protocolsConfTagExtractor():
-    import re
 
-    path_stack = []
-    protocols_dict = {}
+    import ast
+    listas = {}
+    nombre_lista = None
+    acumulado = []
+    abierto = False
 
-    with open("protocols.conf", "r") as f:
+    with open("protocols.conf", "r", encoding="utf-8") as f:
         for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
+            line_strip = line.strip()
+            if not line_strip or line_strip.startswith("#"):
                 continue
 
-            # Detecta inicio de sección o grupo
-            section_match = re.search(r'"tag":\s*"section".*?"text":\s*"([^"]+)"', line)
-            group_match = re.search(r'"tag":\s*"protocol_group".*?"text":\s*"([^"]+)"', line)
-            protocol_match = re.search(r'"tag":\s*"protocol".*?"value":\s*"([^"]+)"', line)
+            # Detectar inicio de lista
+            if not abierto:
+                if "=" in line_strip and line_strip.endswith("[") or line_strip.endswith("=["):
+                    nombre_lista = line_strip.split("=")[0].strip()
+                    abierto = True
+                    acumulado = ["["]  # empezamos la lista
+                    continue
 
-            if section_match:
-                path_stack.append(section_match.group(1))
-            elif group_match:
-                path_stack.append(group_match.group(1))
-            elif protocol_match:
-                # Guardar en diccionario
-                protocols_dict[protocol_match.group(1)] = list(path_stack)
-            elif line.startswith("]}") or line.startswith("],") or line.startswith("}"):
-                if path_stack:
-                    path_stack.pop()
+            # Acumular líneas mientras esté abierta
+            if abierto:
+                acumulado.append(line_strip)
+                if line_strip.endswith("]"):
+                    # fin de lista
+                    lista_str = "\n".join(acumulado)
+                    try:
+                        listas[nombre_lista] = ast.literal_eval(lista_str)
+                    except Exception as e:
+                        print(f"No se pudo parsear {nombre_lista}: {e}")
+                    abierto = False
+                    nombre_lista = None
+                    acumulado = []
 
-    return protocols_dict
+    protocolDict = {}
+    for k in listas.keys():
+        result = extract_protocols(listas[k])
+        for value in result.keys():
+            result[value][0].insert(0, k)
+            if 'more' in result[value][0]:
+                result[value][0].remove('more')
+        protocolDict.update(result)
+
+    return protocolDict
+
+def extract_protocols(node, path=None, result=None):
+    if path is None:
+        path = []
+    if result is None:
+        result = {}
+
+    if isinstance(node, dict):
+        tag = node.get("tag")
+        text = node.get("text")
+        value = node.get("value")
+
+        if tag in ("section", "protocol_group") and text:
+            path.append(text)
+            for child in node.get("children", []):
+                extract_protocols(child, path, result)
+            path.pop()
+        elif tag == "protocol" and value:
+            # Guardar todas las rutas posibles
+            result.setdefault(value, []).append(list(path))
+        else:
+            for child in node.get("children", []):
+                extract_protocols(child, path, result)
+
+    elif isinstance(node, list):
+        for item in node:
+            extract_protocols(item, path, result)
+
+    return result
 
 
 def classTexted(scriptTexted, protocol):
