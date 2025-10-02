@@ -163,7 +163,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         else:
             args += " --local"
         if self.considerMirrors:
-            args += " --mirrors"
+            args += " --consider_mirror"
         args += " --copyGeo %s" % fhInputTranMat
         if not self.wrap:
             args += ' --dontWrap'
