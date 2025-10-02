@@ -41,7 +41,7 @@ from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
 from xmipp3.protocols import *
-from xmipp3.protocols import XmippFilterHelper as xfh
+from xmipp3.protocols import XmippFilterHelper as xfh, XmippProtCL2D
 from xmipp3.protocols import XmippResizeHelper as xrh
 from xmipp3.protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
 
@@ -1025,8 +1025,6 @@ class TestXmippDenoiseParticles(TestXmippBase):
     """Check protocol Denoise Particles"""
     @classmethod
     def setUpClass(cls):
-        ProtRelionClassify2D = Domain.importFromPlugin('relion.protocols', 'ProtRelionClassify2D', doRaise=True)
-        ProtRelionPreprocessParticles = Domain.importFromPlugin('relion.protocols', 'ProtRelionPreprocessParticles', doRaise=True)
         # To denoise particles we need to import the particles and the
         # classes, and particles must be aligned with classes. As this
         # is the usual situation after a CL2D, we just run that protocol.
@@ -1036,24 +1034,20 @@ class TestXmippDenoiseParticles(TestXmippBase):
         cls.setData('mda')
 
         # Import particles
-        psize = 3.50  # pixel size ("sampling rate"), in A/pixel
-        cls.protImport = cls.runImportParticles(cls.particlesFn, psize)
+        cls.protImport = cls.runImportParticles(cls.particlesFn, 3.50)
 
         # Normalize them
-        radiusInPixel = 42
-        cls.protNormalize = cls.newProtocol(ProtRelionPreprocessParticles,
-                                            doNormalize=True, backRadius=radiusInPixel)
+        cls.protNormalize = cls.newProtocol(XmippProtPreprocessParticles,
+                                            doNormalize=True, backRadius=42)
         cls.protNormalize.inputParticles.set(cls.protImport.outputParticles)
         cls.launchProtocol(cls.protNormalize)
-        diameterInA = 2 * radiusInPixel * psize
-        cls.protRelion2DClass = cls.newProtocol(ProtRelionClassify2D,
-                                                doCTF=False, maskDiameterA=diameterInA,
-                                                numberOfMpi=1, numberOfThreads=1)
-        cls.protRelion2DClass.numberOfClasses.set(4)
-        cls.protRelion2DClass.numberOfIterations.set(3)
-        cls.protRelion2DClass.inputParticles.set(cls.protNormalize.outputParticles)
+        cls.protXmipp2DClass = cls.newProtocol(XmippProtCL2D,
+                                               numberOfClasses=4, numberOfInitialClasses=1,
+                                               doCore=False, numberOfIterations=3, numberOfMpi=1,
+                                               numberOfThreads=1)
+        cls.protXmipp2DClass.inputParticles.set(cls.protNormalize.outputParticles)
 
-        cls.launchProtocol(cls.protRelion2DClass)
+        cls.launchProtocol(cls.protXmipp2DClass)
 
     def test_denoiseparticles(self):
         print("""
@@ -1064,7 +1058,7 @@ class TestXmippDenoiseParticles(TestXmippBase):
 """)
         protDenoise = self.newProtocol(XmippProtDenoiseParticles)
         protDenoise.inputParticles.set(self.protImport.outputParticles)
-        protDenoise.inputClasses.set(self.protRelion2DClass.outputClasses)
+        protDenoise.inputClasses.set(self.protXmipp2DClass.outputClasses)
         self.launchProtocol(protDenoise)
         # We check that protocol generates output
         self.assertIsNotNone(protDenoise.outputParticles,
