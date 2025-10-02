@@ -159,22 +159,25 @@ class Plugin(pwem.Plugin):
             "zlib",
             "openjdk",
             "'libtiff<=4.5.1'",
-	    "libstdcxx-ng",
             "libjpeg-turbo",
         ]
+
+        CONDA_LIBSTDCXX_DEPENDENCE = ["libstdcxx-ng"]
+
         if Config.isCondaInstallation():
             condaEnvPath = os.environ['CONDA_PREFIX']
             scipionEnv=os.path.basename(condaEnvPath)  # TODO: use pyworkflow method when released: Config.getEnvName()
 
             commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
-            commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
+            #commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
+            commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_LIBSTDCXX_DEPENDENCE))
             commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
                 tar='void.tgz',
                 commands=commands.getCommands(),
                 neededProgs=['conda'],
-                default=False
+                default=True
             )
         
         if develMode:
