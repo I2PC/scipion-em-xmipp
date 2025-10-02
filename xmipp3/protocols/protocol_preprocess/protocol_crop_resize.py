@@ -449,17 +449,26 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
         
     def _insertProcessStep(self):
         XmippResizeHelper._insertProcessStep(self)
-        
+
     #--------------------------- STEPS functions ---------------------------------------------------
     def filterStep(self, isFirstStep, args):
         XmippResizeHelper.filterStep(self, self._ioArgs(isFirstStep)+args)
-    
+        if self._isSingleInput() and self.inputVolumes.get().hasHalfMaps():
+            XmippResizeHelper.filterStep(self, self._ioArgsHalf(isFirstStep,0) + args)
+            XmippResizeHelper.filterStep(self, self._ioArgsHalf(isFirstStep,1) + args)
+
     def resizeStep(self, isFirstStep, args):
         XmippResizeHelper.resizeStep(self, self._ioArgs(isFirstStep)+args)
-    
+        if self._isSingleInput() and self.inputVolumes.get().hasHalfMaps():
+            XmippResizeHelper.resizeStep(self, self._ioArgsHalf(isFirstStep,0) + args)
+            XmippResizeHelper.resizeStep(self, self._ioArgsHalf(isFirstStep,1) + args)
+
     def windowStep(self, isFirstStep, args):
         XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep)+args)
-        
+        if self._isSingleInput() and self.inputVolumes.get().hasHalfMaps():
+            XmippResizeHelper.windowStep(self, self._ioArgsHalf(isFirstStep,0) + args)
+            XmippResizeHelper.windowStep(self, self._ioArgsHalf(isFirstStep,1) + args)
+
     def _preprocessOutput(self, volumes):
         # We use the preprocess only when input is a set
         # we do not use postprocess to setup correctly
@@ -551,6 +560,15 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
                 return "-i %s -o %s --save_metadata_stack %s --keep_input_columns " % (self.inputFn, self.outputStk, self.outputMd)
         else:
             return "-i %s" % self.outputStk
+
+    def _ioArgsHalf(self, isFirstStep, halfIdx=0):
+        localHalves = [self._getExtraPath("half1.mrc"), self._getExtraPath("half2.mrc")]
+        if isFirstStep:
+            inputVol = self.inputVolumes.get()
+            fnHalves = inputVol.getHalfMaps().split(',')
+            return "-i %s -o %s " % (fnHalves[halfIdx], localHalves[halfIdx])
+        else:
+            return "-i %s"%localHalves[halfIdx]
 
     def _filterArgs(self):
         return XmippResizeHelper._filterCommonArgs(self)
