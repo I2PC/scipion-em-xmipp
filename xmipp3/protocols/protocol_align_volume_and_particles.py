@@ -89,6 +89,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
                            'calculated with the reference and input volumes.')
         form.addParam('alignmentMode', params.EnumParam, default=ALIGN_GLOBAL, choices=["Global","Local"],
                       label="Alignment mode")
+        form.addParam('considerMirrors', params.BooleanParam, default=True,
+                      label='Consider mirrors')
         form.addParam('symmetryGroup', params.StringParam, default='c1',
                       label="Symmetry group",
                       help='See %s page for a description of the symmetries '
@@ -160,6 +162,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
             args += " --frm"
         else:
             args += " --local"
+        if self.considerMirrors:
+            args += " --mirrors"
         args += " --copyGeo %s" % fhInputTranMat
         if not self.wrap:
             args += ' --dontWrap'
