@@ -164,7 +164,7 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             if self.outputStk.endswith(".mrc"):
                 self.setHeader(self.outputStk, samplingRate)
                 if volInput.hasHalfMaps():
-                    vol.setHalfMaps("")
+                    vol.setHalfMaps([self._getExtraPath("half1.mrc"), self._getExtraPath("half2.mrc")])
 
             if volInput.hasOrigin():
                 vol.setOrigin(volInput.getOrigin())
