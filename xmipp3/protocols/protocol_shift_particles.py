@@ -26,15 +26,15 @@
 # *
 # **************************************************************************
 
+import numpy as np
+
 from pwem.emlib.image import ImageHandler as ih
 from pwem.objects import Volume
-from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, EnumParam, FloatParam
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
 import pyworkflow.object as pwobj
-from pwem import ALIGN_PROJ
-import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
-from xmipp3.convert import xmippToLocation, writeSetOfParticles, readSetOfParticles
+from xmipp3.convert import writeSetOfParticles
+from xmipp3.utils import applyTransform, readImage, writeImageFromArray
 
 
 class XmippProtShiftParticles(EMProtocol):
@@ -71,11 +71,6 @@ class XmippProtShiftParticles(EMProtocol):
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
                       help='Box size for the shifted particles.')
-        form.addParam('inv', BooleanParam, label='Inverse', expertLevel=LEVEL_ADVANCED, default='True',
-                      help='Use inverse transformation matrix')
-        form.addParam('interp', EnumParam, default=0, choices=['Linear', 'Spline'], expertLevel=LEVEL_ADVANCED,
-                      display=EnumParam.DISPLAY_HLIST, label='Interpolation',
-                      help='Linear: Use bilinear/trilinear interpolation\nSpline: Use spline interpolation')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -90,8 +85,6 @@ class XmippProtShiftParticles(EMProtocol):
 
     def shiftStep(self):
         """call xmipp program to shift the particles"""
-        centermd = self._getExtraPath("center_particles.xmd")
-        args = '-i "%s" -o "%s" ' % (self._getExtraPath("input_particles.xmd"), centermd)
         if self.option:
             self.x = self.xin.get()
             self.y = self.yin.get()
@@ -108,23 +101,11 @@ class XmippProtShiftParticles(EMProtocol):
             self.y = masscenter[1] - 0.5 * vol.getDimensions()[1]
             self.z = masscenter[2] - 0.5 * vol.getDimensions()[2]
 
-        args += '--shift_to %f %f %f ' % (self.x, self.y, self.z)
-        program = "xmipp_transform_geometry"
-        if not self.interp.get():
-            interp = 'linear'
-        else:
-            interp = 'spline'
-        if self.applyShift.get():
-            args += ' --apply_transform'
-        args += ' --dont_wrap --interp %s' % interp
-        if self.inv.get():
-            args += ' --inverse'
-        self.runJob(program, args)
-
-        if not self.boxSizeBool.get():
-            box = self.boxSize.get()
-            self.runJob('xmipp_transform_window', '-i "%s" -o "%s" --size %d %d %d --save_metadata_stack' %
-                        (centermd, self._getExtraPath("crop_particles.stk"), box, box, 1))
+        # Shift matrix
+        self.tr_shift = np.eye(4)
+        self.tr_shift[0, -1] = self.x
+        self.tr_shift[1, -1] = self.y
+        self.tr_shift[2, -1] = self.z
 
     def createOutputStep(self):
         """create output with the new particles"""
@@ -132,11 +113,43 @@ class XmippProtShiftParticles(EMProtocol):
         inputParticles = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputParticles)
-        if self.boxSizeBool.get():
-            outputmd = self._getExtraPath("center_particles.xmd")
-        else:
-            outputmd = self._getExtraPath("crop_particles.xmd")
-        readSetOfParticles(outputmd, outputSet, alignType=ALIGN_PROJ)
+
+        # Prepare images
+        if self.applyShift.get():
+            images = np.squeeze(readImage(inputParticles.getFirstItem().getFileName()).getData())
+            transformed_images = []
+            transformed_images_fn = self._getExtraPath("transformed_images.mrcs")
+
+        for particle in inputParticles.iterItems():
+            tr = particle.getTransform().getMatrix()
+            tr = self.tr_shift @ tr
+
+            if self.applyShift.get():
+                # Transformation matrix to be applied to the image
+                tr_inv = np.linalg.inv(tr)
+                tr_to_be_applied = np.eye(3)
+                tr_to_be_applied[0, -1] = -tr_inv[0, -1]
+                tr_to_be_applied[1, -1] = -tr_inv[1, -1]
+
+                # Transformation matrix to be saved in the metadata
+                tr_inv[0, -1] = 0.0
+                tr_inv[1, -1] = 0.0
+                tr = np.linalg.inv(tr_inv)
+
+                # Apply transformation to image
+                image = images[particle.getObjId() - 1]
+                transformed_images.append(applyTransform(image, tr_to_be_applied, image.shape))
+
+                # Change particle location
+                particle.setLocation((particle.getObjId(), transformed_images_fn))
+
+            particle.getTransform().setMatrix(tr)
+            outputSet.append(particle.clone())
+
+        # Save transformed images if needed
+        if self.applyShift.get():
+            writeImageFromArray(np.stack(transformed_images, axis=0)[:, None, ...], transformed_images_fn)
+
         self._defineOutputs(outputParticles=outputSet)
         self._defineOutputs(shiftX=pwobj.Float(self.x),
                             shiftY=pwobj.Float(self.y),
