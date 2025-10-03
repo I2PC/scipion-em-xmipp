@@ -486,15 +486,20 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.lastStep = self._insertFunctionStep('lastRoundStep', wait=True, prerequisites=self.initDeps)
         self.endStep = self._insertFunctionStep('endProtocolStep', wait=True, prerequisites=[self.lastStep])
 
-    def setGPU(self):
-        if self.useQueueForSteps() or self.useQueue():
-            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
         else:
-            myStr = self.gpuList.get()
-            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
-        self.numGPU = myStr.split(',')[0]
-
-
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
 
     def _stepsCheck(self):
         '''Checks if new steps can be executed'''
@@ -576,7 +581,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             print('Mean accuracy %f surpass training accuracy threshold %f -> end training'
                 %(mean_acc, threshold))
 
-
     def lastRoundStep(self):
       '''Starts the last round of training and predictions with the remainign microgrpahs
       when all the inputs have arrived'''
@@ -597,13 +601,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.updateOutput(closeStream=True)
         self.ENDED = True
 
-
     def initializeStep(self):
         """
             Create paths where data will be saved
         """
-        self.setGPU()
-        self.info(f'NUM GPUS: {self.numGPU}')
         if self.doTesting.get() and self.testTrueSetOfParticles.get() and self.testFalseSetOfParticles.get():
             writeSetOfParticles(self.testTrueSetOfParticles.get(),
                                 self._getExtraPath("testTrueParticlesSet.xmd"))
@@ -655,7 +656,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.USING_INPUT_MICS = False
         self.preCorrectedParSet, self.preCoordSet = [], []
 
-
     def preprocessMicsStep(self):
         '''Step which preprocesses the input micrographs'''
         micIds = self.getMicsIds(filterOutNoCoords=False)
@@ -702,7 +702,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
           self.runJob('xmipp_preprocess_mics', args, numberOfMpi=1)
         self.PREPROCESSING = False
-
 
     def insertCaculateConsensusSteps(self, mode, prerequisites):
         '''Insert the steps neccessary for calculating the consensus coordinates of type "mode"'''
@@ -770,8 +769,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                 self.TO_EXTRACT_MICFNS[mode] = self.readyToExtractMicFns(mode)
 
                 return
-
-
 
     def pickNoise(self):
         '''Find noise coordinates from micrographs in order to use them as negatives in the training process'''
@@ -860,7 +857,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                   self.coordinatesDict[mode] = totalSetOfCoordinates
 
             self.USING_INPUT_COORDS = False
-
 
     def insertExtractPartSteps(self, mode, prerequisites):
         '''Inserts the steps necessary for extracting the particles from the micrographs'''
@@ -1011,7 +1007,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
           numberOfThreads = None
-          gpuToUse = self.numGPU
+          gpuToUse = self.setGPU(oneGPU=True)
         else:
           numberOfThreads = self.numberOfThreads.get()
           gpuToUse = None
@@ -1061,9 +1057,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                                           self.nModels.get())
         if not self.auto_stopping.get():
           args+=" -s"
-        if not gpuToUse is None:
-          args+= " -g %s"%(self.numGPU)
-        if not numberOfThreads is None:
+        if gpuToUse:
+          args+= " -g %s"%(gpuToUse)
+        if numberOfThreads:
           args+= " -t %s"%(numberOfThreads)
 
         trainedParams['trainedMicFns'] += self.TO_TRAIN_MICFNS
@@ -1100,7 +1096,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.numGPU
+            gpuToUse = self.setGPU(oneGPU=True)
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
@@ -1129,9 +1125,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTestDict)
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
 
-        if not gpuToUse is None:
-          args+= " -g %s"%(self.numGPU)
-        if not numberOfThreads is None:
+        if gpuToUse:
+          args+= " -g %s"%(gpuToUse)
+        if  numberOfThreads:
           args+= " -t %s"%(numberOfThreads)
 
         os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
@@ -1272,7 +1268,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       self.outputCoordinates.write()
       self.outputParticles.write()
       self._store(self.outputCoordinates, self.outputParticles)
-
 
     def _summary(self):
         message = []
