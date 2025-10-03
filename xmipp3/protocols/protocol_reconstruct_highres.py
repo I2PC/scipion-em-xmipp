@@ -341,8 +341,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             strGpus = strGpus + str(elem) + separator
         return strGpus[:-1]
 
-    def setGpu(self, oneGPU=False):
-        self.protGpus = " ".join(map(str, self._stepsExecutor.getGpuList()))
+    def setGPU(self, oneGPU=False):
         if oneGPU:
             gpus = self.getGpusList(",")[0]
         else:
@@ -529,11 +528,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
-                        gpuId = self.setGpu(oneGPU=False)
+                        gpuId = self.setGPU(oneGPU=False)
                         args += ' -gpusPerNode %d' % self.getNumGpus()
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
                     if self.numberOfMpi.get()==1:
-                        gpuId = self.setGpu(oneGPU=True)
+                        gpuId = self.setGPU(oneGPU=True)
 
                     args += " --device %s" % (gpuId.replace(',', ' '))
                     args += ' --thr %s' % self.numberOfThreads.get()
@@ -926,9 +925,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     # cleanPath(join(fnDirSignificant,"angles_iter001_00.xmd"))
                                     cleanPath(join(fnDirSignificant,"images_significant_iter001_00.xmd"))
                             else:
+                                gpuID = self.setGPU(oneGPU=False)
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
-                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup, self.numberOfReplicates.get(),
-                                        self.getGpusList(" "))
+                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup, self.numberOfReplicates.get(), gpuID)
                                 self.runJob(CUDA_ALIGN_SIGNIFICANT,args, numberOfMpi=1)
 
                             if exists(fnAnglesGroup):
@@ -1418,11 +1417,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
-                        gpuId = self.setGpu(oneGPU=False)
+                        gpuId = self.setGPU(oneGPU=False)
                         args += ' -gpusPerNode %d' % self.getNumGpus()
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
                     if self.numberOfMpi.get()==1:
-                        gpuId = self.setGpu(oneGPU=True)
+                        gpuId = self.setGPU(oneGPU=True)
                     args += " --device %s" % (gpuId.replace(',', ' '))
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
