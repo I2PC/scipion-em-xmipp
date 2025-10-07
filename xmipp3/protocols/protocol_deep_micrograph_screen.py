@@ -199,7 +199,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           args += ' -o %s' % self._getExtraPath('outputCoords')
           args += ' -b %d' % self.getBoxSize()
           args += ' -s 1' #Downsampling is automatically managed by scipion
-          args += ' -d %s' % self.getModel('deepMicrographCleaner', 'defaultModel.keras')
+          args += ' -d %s' % self.getModel('deepMicrographCleanerTF2', 'defaultModel.keras')
 
           if self.threshold.get() > 0:
               args += ' --deepThr %f ' % (1-self.threshold.get())
