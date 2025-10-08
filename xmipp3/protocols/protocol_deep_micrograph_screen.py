@@ -135,6 +135,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         else:
             gpus = self.getGpusList(",")
         os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.info(f'Visible GPUS: {gpus}')
         return gpus
 
@@ -226,10 +227,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           if self.useGpu.get():
               gpuId = self.setGPU(oneGPU=True)
               args += f' -g {gpuId} '
-          else:
-              args += ' -g -1'
 
-          os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
