@@ -122,7 +122,23 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                        help="Add a list of GPU devices that can be used.")
 
         # form.addParallelSection(threads=4, mpi=1)
-    
+
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
+
+
     #--------------------------- INSERT steps functions ------------------------
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
@@ -208,10 +224,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
               args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
 
           if self.useGpu.get():
-              if self.useQueueForSteps() or self.useQueue():
-                  args += ' -g all '
-              else:
-                  args += ' -g %s'%(",".join([str(elem) for elem in self.getGpuList()]))
+              gpuId = self.setGPU(oneGPU=True)
+              args += f' -g {gpuId} '
           else:
               args += ' -g -1'
 
