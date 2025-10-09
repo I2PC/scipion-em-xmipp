@@ -176,9 +176,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
             fhInputTranMat = self.getTransformationFile()
             transMatFromFile = np.loadtxt(fhInputTranMat)
             self._alignmentMatrix = np.reshape(transMatFromFile, (4, 4))
-            self._mirror = np.linalg.det(self._alignmentMatrix[0:3,0:3]) < 0
 
-        return self._alignmentMatrix, self._mirror
+        return self._alignmentMatrix
 
     def getTransformationFile(self):
         return self._getExtraPath('transformation-matrix.txt')
@@ -222,11 +221,9 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
 
     def _updateParticleTransform(self, particle, row):
 
-        aliMatrix, mirror = self.getAlignmentMatrix()
+        aliMatrix = self.getAlignmentMatrix()
         partTransformMat = particle.getTransform().getMatrix()
         partTransformMatrix = np.matrix(partTransformMat)
-        if mirror:
-            partTransformMatrix[0:3,2] *= -1
         newTransformMatrix = np.matmul(aliMatrix, partTransformMatrix)
         particle.getTransform().setMatrix(newTransformMatrix)
 
