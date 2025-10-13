@@ -170,7 +170,7 @@ class Plugin(pwem.Plugin):
 
             commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
             #commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
-            commands.condaInstall('-c conda-forge --yes '  + ''.join(CONDA_LIBSTDCXX_PACKAGE))
+            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE)
             commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
