@@ -96,6 +96,9 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         form.addParam('angularDistance', FloatParam, label='Angular distance',
                       default=7.5, validators=[Range(0,180)],
                       help='Maximum angular distance in degrees')
+        form.addParam('minimumNumberOfParticles', IntParam, label='Minimum number of particles',
+                      default=128, validators=[GT(0)],
+                      help='Minimum number of particles per direction to be considered in the analysis')
         form.addParam('checkMirrors', BooleanParam, label='Check mirrors',
                       default=True)
         form.addParam('principalComponents', IntParam, label='Principal components',
@@ -254,16 +257,16 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
         directionRow = emlib.metadata.Row()
         particles = emlib.MetaData()
         itemIds = set()
-        for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
+        for directionId, block in enumerate(emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()), 1):
             particles.readBlock(self._getNeighborsMdFilename(), block)
-            if particles.size() == 0:
+            if particles.size() < self.minimumNumberOfParticles.get():
                 print('Direction %s has no particles. Skipping' % block)
                 continue
 
             # Write particles
-            directionId = directionalMd.addObject()
-            makePath(self._getDirectionPath(directionId))
-            particles.write(self._getDirectionParticlesMdFilename(directionId))
+            objId = directionalMd.addObject()
+            makePath(self._getDirectionPath(objId))
+            particles.write(self._getDirectionParticlesMdFilename(objId))
             
             # Update particle ids
             itemIds.update(particles.getColumnValues(emlib.MDL_ITEM_ID))
@@ -275,47 +278,25 @@ class XmippProtHetAnalysis(ProtClassify3D, xmipp3.XmippProtocol):
             # Ensemble the output row
             directionRow.copyFromRow(maskRow)
             directionRow.setValue(emlib.MDL_MASK, maskFilename)
-            directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
-            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImagesFilename(directionId))
-            directionRow.setValue(emlib.MDL_SELFILE, self._getDirectionalClassificationMdFilename(directionId))
+            directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(objId))
+            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImagesFilename(objId))
+            directionRow.setValue(emlib.MDL_SELFILE, self._getDirectionParticlesMdFilename(objId))
             directionRow.setValue(emlib.MDL_COUNT, particles.size())
-            directionRow.writeToMd(directionalMd, directionId)
+            directionRow.writeToMd(directionalMd, objId)
 
         if len(itemIds) != len(self._getInputParticles()):
-            raise RuntimeError('Not all particles were grouped. Please try '
-                               'increasing "Angular distance" or decreasing '
-                               '"Angular sampling"')
+            print(
+                'Warning: Not all particles were grouped. Please try '
+                'increasing "Angular distance" or decreasing '
+                '"Angular sampling"'
+            )
 
         directionalMd.write(self._getDirectionalMdFilename())
         self.directionCount = Integer(directionalMd.size())
         self._store()
             
     def classifyDirectionsStep(self):
-        k = self._getPrincipalComponentsCount()
-        
-        env = self.getCondaEnv(_conda_env='xmipp_pyTorch')
-        env['LD_LIBRARY_PATH'] = '' # Torch does not like it
-
-        directionalMd = emlib.MetaData(self._getDirectionalMdFilename())
-        for directionId in directionalMd:
-            # Read information from the mask metadata
-            maskFilename = directionalMd.getValue(emlib.MDL_MASK, directionId)
-            rot = directionalMd.getValue(emlib.MDL_ANGLE_ROT, directionId)
-            tilt = directionalMd.getValue(emlib.MDL_ANGLE_TILT, directionId)
-            psi = directionalMd.getValue(emlib.MDL_ANGLE_PSI, directionId)
-                
-            # Perform the classification
-            args = []
-            args += ['-i', self._getDirectionParticlesMdFilename(directionId)]
-            args += ['-o', self._getDirectionPath(directionId, '')]
-            args += ['--mask', maskFilename]
-            args += ['--align_to', rot, tilt, psi]
-            args += ['-k', k]
-            args += ['--batch', self.batchSize]
-            if self.useGpu:
-                args += ['--device'] + self._getDeviceList()
-
-            self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
+        aaaaa
   
     def buildGraphStep(self):
         # Build graph intersecting direction pairs and calculate the similarity
