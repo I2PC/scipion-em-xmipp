@@ -60,4 +60,4 @@ jobs:
       working-directory: ${{ github.workspace }}/../
       env:
         BRANCH_NAME: ${{ github.head_ref }}
-      run: scipion/scipion3 run ./xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
+      run: scipion/scipion3 run ./xmipp/xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
