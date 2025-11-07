@@ -32,7 +32,7 @@ _binVersion = 'v3.25.06.0' # Increase it if hotfix in binaries (xmipp, xmippCore
 _pluginVersion = 'v3.25.06.0' # Increase it if hotfix in binaries (xmipp, xmippCore and/or XmippViz) or in scipion-em-xmipp
 
 _binTagVersion = _binVersion + '-Rhea' #'devel' or _binVersion + '-Poseidon'
-_pluginTagVersion = _pluginVersion + '-Rhea'  #'devel' or _pluginVersion + '-Poseidon'
+_pluginTagVersion = _pluginVersion #'devel' or _pluginVersion + '-Poseidon'
 
 _currentDepVersion = '1.0'
 __version__ = _pluginVersion[3:] # Name of the pypi package
