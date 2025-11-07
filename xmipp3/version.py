@@ -28,7 +28,7 @@
 type_of_version = 'devel' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
-_binVersion = 'v3' # Increase it if major release is generated in xmipp
+_binVersion = 'v4' # Increase it if major release is generated in xmipp
 # Increase according to SemVer rules:
 # Rules with initial package version of vX.Y.Z
 # - If the change consists of fixing a bug (that does not change at all
@@ -40,9 +40,7 @@ _binVersion = 'v3' # Increase it if major release is generated in xmipp
 # - If several of the above are true, only change the biggest one applicable (
 #   for example, if a fix is made and a new protocol are included in the same
 #   pull request, increase the one related to the new protocol).
-__version__ = 'v4.00.0'
+__version__ = 'v4.0.0'
 
 _binTagVersion = _binVersion + '-Poseidon' #'devel' or _binVersion + '-Poseidon'
-_pluginTagVersion = __version__   #'devel' or _pluginVersion + '-Poseidon'
-
 _currentDepVersion = '1.0'
