@@ -37,7 +37,7 @@ jobs:
         python-version: "3.8"
         
     - name: Install Scipion
-      working-directory: ${{ github.workspace }}
+      working-directory: ${{ github.workspace }}/../
       run: |
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
@@ -53,8 +53,8 @@ jobs:
       run: echo "SEND_INSTALLATION_STATISTICS=OFF\nBUILD_TESTING=ON" > xmipp.conf
       
     - name: Compile Xmipp and show log
-      working-directory: ${{ github.workspace }}/../xmipp
+      working-directory: ${{ github.workspace }}/../
       env:
         BRANCH_NAME: ${{ github.head_ref }}
-      run: ../scipion/scipion3 run ./xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
+      run: scipion/scipion3 run ./xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
 
