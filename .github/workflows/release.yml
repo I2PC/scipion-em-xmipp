@@ -1,7 +1,9 @@
 name: Release
 on:
   push:
-    branches: [ master ]
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   release:
@@ -34,13 +36,11 @@ jobs:
   
     - name: Get changelog, tag name, & release name
       id: variables
-      run: |
-        awk '/## Release/{if (p) exit; p=1} p' CHANGELOG.md > latest_changelog_with_title.md
-        cat latest_changelog_with_title.md | tail -n +2 > latest_changelog.md
-        RELEASE_NAME=$(cat latest_changelog_with_title.md | head -n 1 | sed 's/## Release //' | sed 's/^ *//')
-        echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=${RELEASE_NAME// /}" >> $GITHUB_OUTPUT
-    
+      run: 
+        TAG_NAME=$(grep "_pluginVersion" xmipp3/version.py | sed -E 's/.*"([^"]+)".*/\1/')
+        RELEASE_NAME="Release ${TAG_NAME}"
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+        
     - name: Generate tag
       id: tag_version
       uses: mathieudutour/github-tag-action@v6.2
