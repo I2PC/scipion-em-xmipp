@@ -106,13 +106,13 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                            ' - *by frame or movie*: Rejects movies if one of '
                                     'the conditions above are met.')
 
-        form.addParam('maxFrameShift', params.FloatParam, default=5,
+        form.addParam('maxFrameShift', params.FloatParam, default=10,
                        label='Max. frame shift (A)',
                        condition='rejType==%s or rejType==%s or rejType==%s'
                                   % (self.REJ_FRAME, self.REJ_AND, self.REJ_OR),
                        help='Maximum drift between consecutive frames '
                             'to evaluate the frame condition.')
-        form.addParam('maxMovieShift', params.FloatParam, default=15,
+        form.addParam('maxMovieShift', params.FloatParam, default=45,
                        label='Max. movie shift (A)',
                        condition='rejType==%s or rejType==%s or rejType==%s'
                                   % (self.REJ_MOVIE, self.REJ_AND, self.REJ_OR),
@@ -234,24 +234,30 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             # initialize the criteria values
             rejectedByMovie = False
             rejectedByFrame = False
+
             if any(shiftListX) or any(shiftListY):
                 # we use np.arrays to use np.diff()
                 shiftArrayX = np.asarray(shiftListX)
                 shiftArrayY = np.asarray(shiftListY)
 
                 evalBoth = self.rejType==self.REJ_AND or self.rejType==self.REJ_OR
-                if self.rejType == self.REJ_MOVIE or evalBoth:
-                    rangeX = np.max(shiftArrayX) - np.min(shiftArrayX)
-                    rangeY = np.max(shiftArrayY) - np.min(shiftArrayY)
-                    rangeM = max(rangeX, rangeY) * sampling
-                    rejectedByMovie = rangeM > self.maxMovieShift.get()
 
+                # --- Evaluation for accumulated displacement ---
+                if self.rejType == self.REJ_MOVIE or evalBoth:
+                    deltaX = np.diff(shiftArrayX)
+                    deltaY = np.diff(shiftArrayY)
+                    # Magnitude for each step
+                    stepDistances = np.sqrt(deltaX ** 2 + deltaY ** 2)
+                    # Total sum of the displacement
+                    totalPath = np.sum(stepDistances) * sampling
+                    rejectedByMovie = totalPath > self.maxMovieShift.get()
+
+                # --- Evaluation by maximum displacement between frames ---
                 if self.rejType == self.REJ_FRAME or evalBoth:
-                    frameShiftX = np.abs(np.diff(shiftArrayX))
-                    frameShiftY = np.abs(np.diff(shiftArrayY))
-                    maxShiftX = np.max(frameShiftX)
-                    maxShiftY = np.max(frameShiftY)
-                    maxShiftM = max(maxShiftX, maxShiftY) * sampling
+                    frameShiftX = np.diff(shiftArrayX)
+                    frameShiftY = np.diff(shiftArrayY)
+                    frameShifts = np.sqrt(frameShiftX ** 2 + frameShiftY ** 2)
+                    maxShiftM = np.max(frameShifts) * sampling
                     rejectedByFrame = maxShiftM > self.maxFrameShift.get()
 
                 if self.rejType == self.REJ_AND:

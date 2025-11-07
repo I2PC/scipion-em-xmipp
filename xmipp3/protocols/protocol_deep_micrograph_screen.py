@@ -122,7 +122,24 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                        help="Add a list of GPU devices that can be used.")
 
         # form.addParallelSection(threads=4, mpi=1)
-    
+
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
+
+
     #--------------------------- INSERT steps functions ------------------------
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
@@ -199,7 +216,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           args += ' -o %s' % self._getExtraPath('outputCoords')
           args += ' -b %d' % self.getBoxSize()
           args += ' -s 1' #Downsampling is automatically managed by scipion
-          args += ' -d %s' % self.getModel('deepMicrographCleaner', 'defaultModel.keras')
+          args += ' -d %s' % self.getModel('deepMicrographCleanerTF2', 'defaultModel.h5')
 
           if self.threshold.get() > 0:
               args += ' --deepThr %f ' % (1-self.threshold.get())
@@ -208,14 +225,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
               args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
 
           if self.useGpu.get():
-              if self.useQueueForSteps() or self.useQueue():
-                  args += ' -g all '
-              else:
-                  args += ' -g %s'%(",".join([str(elem) for elem in self.getGpuList()]))
-          else:
-              args += ' -g -1'
+              gpuId = self.setGPU(oneGPU=False)
+              args += f' -g {gpuId} '
 
-          os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 

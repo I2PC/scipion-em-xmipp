@@ -33,6 +33,11 @@ from pwem.protocols import ProtAnalysis3D
 
 from xmipp3.convert import (getImageLocation)
 
+def _fixMRC(fn):
+    if fn.endswith(".mrc"):
+        return fn+":mrc"
+    else:
+        return fn
 
 class XmippProtResolution3D(ProtAnalysis3D):
     """ Computes the resolution of 3D volumes using the Fourier Shell Correlation (FSC) criteria. The protocol requires two volumes, which are assumed to be independently reconstructed. In addition, the protocol can also compute the B-factor for the volumes. """
@@ -48,8 +53,11 @@ class XmippProtResolution3D(ProtAnalysis3D):
         form.addParam('doFSC', BooleanParam, default=True,
                       label="Calculate FSC and DPR?", 
                       help='If set True calculate FSC and DPR.')
-        form.addParam('referenceVolume', PointerParam, label="Reference volume", condition='doFSC', 
-                      pointerClass='Volume',
+        form.addParam('useHalves', BooleanParam, default=False,
+                      label="Use half maps",
+                      help='If available.')
+        form.addParam('referenceVolume', PointerParam, label="Reference volume", condition='doFSC and not useHalves',
+                      pointerClass='Volume', allowsNull=True,
                       help='Input volume will be compared to this volume.')  
         form.addParam('doComputeBfactor', BooleanParam, default=True,
                       label="Calculate B-factor?", 
@@ -67,10 +75,7 @@ class XmippProtResolution3D(ProtAnalysis3D):
     def _insertAllSteps(self):
         """Insert all steps to calculate the resolution of a 3D reconstruction. """
         
-        self.inputVol = getImageLocation(self.inputVolume.get())
-        if self.referenceVolume.hasValue():
-            self.refVol = getImageLocation(self.referenceVolume.get())
-        
+        self.inputVol = _fixMRC(getImageLocation(self.inputVolume.get()))
         if self.doFSC:
             self._insertFunctionStep('calculateFscStep')
         if self.doComputeBfactor:
@@ -81,37 +86,28 @@ class XmippProtResolution3D(ProtAnalysis3D):
     def createOutputStep(self):
         fnFSC = self._defineFscName()
         if exists(fnFSC):
-            mData = md.MetaData(self._defineFscName())
+            mData = md.MetaData(fnFSC)
             # Create the FSC object and set the same protocol label
             fsc = FSC(objLabel=self.getRunName())
             fsc.loadFromMd(mData,
                            md.MDL_RESOLUTION_FREQ,
                            md.MDL_RESOLUTION_FRC)
             self._defineOutputs(outputFSC=fsc)
-            self._defineSourceRelation(self.referenceVolume,fsc)
+            if not self.useHalves:
+                self._defineSourceRelation(self.referenceVolume,fsc)
             self._defineSourceRelation(self.inputVolume,fsc)
 
     #--------------------------- STEPS steps functions --------------------------------------------
     def calculateFscStep(self):
         """ Calculate the FSC between two volumes"""
-        #if volume is mrc force to be mrc volume (versus stack)
-        projectPath = self.getProject().getPath()
-        if self.refVol.endswith('.mrc'):
-            refVol = os.path.join(projectPath, self.refVol + ':mrc') # Specify that are volumes to read them properly in xmipp
+        if self.useHalves:
+            fn1, fn2 = [_fixMRC(fn) for fn in self.inputVolume.get().getHalfMaps().split(",")]
         else:
-            refVol = os.path.join(projectPath, self.refVol)
-        if self.inputVol.endswith('.mrc'):
-            inputVol = os.path.join(projectPath, self.inputVol + ':mrc') # Specify that are volumes to read them properly in xmipp
-        else:
-            inputVol = os.path.join(projectPath,self.inputVol)
+            fn1 = self.inputVol
+            fn2 = _fixMRC(getImageLocation(self.referenceVolume.get()))
 
         samplingRate = self.inputVolume.get().getSamplingRate()
-        fscFn = os.path.join(projectPath, self._defineFscName())
-        args = "--ref %s -i %s -o %s --sampling_rate %f --do_dpr" % (refVol,
-                                                                     inputVol,
-                                                                     fscFn,
-                                                                     samplingRate)
-
+        args = "--ref %s -i %s -o %s --sampling_rate %f --do_dpr" % (fn1, fn2, self._defineFscName(), samplingRate)
         self.runJob("xmipp_resolution_fsc", args)
 
     def computeBfactorStep(self):
@@ -145,11 +141,15 @@ class XmippProtResolution3D(ProtAnalysis3D):
     def _validate(self):
         validateMsgs = []
         
-        if not self.inputVolume.hasValue():
-            validateMsgs.append('Please provide an initial volume.')
-        if self.doFSC.get() and not self.referenceVolume.hasValue():
-            validateMsgs.append('Please provide a reference volume.')
-            
+        if self.useHalves:
+            inputVol = self.inputVolume.get()
+            if inputVol and not inputVol.hasHalfMaps():
+                validateMsgs.append('The input volume does not have half maps to use')
+        if self.doFSC and not self.useHalves:
+            referenceVol = self.referenceVolume.get()
+            if not referenceVol:
+                validateMsgs.append('Please, provide a reference map to compute the FSC')
+
         return validateMsgs
     
     def _summary(self):
@@ -165,7 +165,10 @@ class XmippProtResolution3D(ProtAnalysis3D):
         methodsStr=""
         if self.doFSC.get():
             methodsStr+='We obtained the FSC of the volume %s' % self.getObjectTag('inputVolume')
-            methodsStr+=' taking the volume %s' % self.getObjectTag('referenceVolume') + ' as reference.'
+            if self.useHalves:
+                methodsStr+=" considering its two associated half maps."
+            else:
+                methodsStr+=' taking the volume %s' % self.getObjectTag('referenceVolume') + ' as reference.'
             methodsStr+=self.methodsVar.get("")
         if self.doComputeBfactor.get():
             fnBfactor= self._getPath('bfactor.txt')

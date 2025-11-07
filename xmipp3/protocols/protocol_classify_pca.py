@@ -84,24 +84,14 @@ ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
                   "angleTilt": XMIPPCOLUMNS.angleTilt.value
                   }
 
-
-
-def updateEnviron(gpuNum):
-    """ Create the needed environment for pytorch programs. """
-    print("updating environ to select gpu %s" % (gpuNum))
-    if gpuNum == '':
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
-
 CONTRAST_AVERAGES_FILE = 'classes_contrast_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
         
 class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
-    """ 'Classifies a set of images using Principal Component Analysis (PCA). This 2D classification groups (the number of groups can be set) are based on their similarities, assisting in the identification of different conformational states or particle populations.'
-    """
+    """ Classifies a set of images using Principal Component Analysis (PCA). This 2D classification groups (the number of groups can be set) are based on their similarities, assisting in the identification of different conformational states or particle populations. """
     
-    _label = " 2D classification pca "
+    _label= '2D classification pca'
+
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
     _devStatus = BETA
@@ -172,7 +162,6 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     def _insertAllSteps(self):
 
         """ Mainly prepare the command line for call classification program"""
-        self.setGPU()
         self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
         self.imgsXmd = self._getTmpPath('images.xmd')
         self.imgsFn = self._getTmpPath('images.mrc')
@@ -199,13 +188,21 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     
         self._insertFunctionStep('createOutputStep')
 
-    def setGPU(self):
-        if self.useQueueForSteps() or self.useQueue():
-            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
         else:
-            myStr = self.gpuList.get()
-            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
-        self.numGPU = myStr.split(',')[0]
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
 
 
     #--------------------------- STEPS functions -------------------------------
@@ -235,8 +232,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
+        gpuId = self.setGPU(oneGPU=True)
         args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s'% \
-                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), self.numGPU)
+                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), gpuId)
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
@@ -244,9 +242,10 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         
         
     def classification(self, inputIm, numClass, stfile, mask, sigma):
+        gpuId = self.setGPU(oneGPU=True)
         args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
                 (inputIm, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
-                 stfile, self.numGPU)
+                 stfile, gpuId)
         if mask:
             args += ' --mask --sigma %s '%(sigma) 
             
