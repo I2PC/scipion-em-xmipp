@@ -39,12 +39,9 @@ jobs:
     - name: Install Scipion
       working-directory: ${{ github.workspace }}/../
       run: |
+        pwd
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
-
-    - name: Install Plugin
-      working-directory: ${{ github.workspace }}/../
-      run: scipion/scipion3 pip install ./scipion-em-xmipp
 
     - name: Cloning Xmipp
       working-directory: ${{ github.workspace }}/../
@@ -60,4 +57,7 @@ jobs:
       working-directory: ${{ github.workspace }}/../
       env:
         BRANCH_NAME: ${{ github.head_ref }}
-      run: scipion/scipion3 run ./xmipp/xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
+      run: 
+        scipion/scipion3 run ./xmipp/xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
+        scipion/scipion3 installp -p scipion-em-xmipp --devel 
+
