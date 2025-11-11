@@ -37,12 +37,14 @@ from xmipp3.base import XmippProtocol
 from xmipp_base import createMetaDataFromPattern
 from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Removes coordinates located in carbon regions or large impurities in micrographs using a pre-trained deep learning model. This screening improves particle picking accuracy by filtering out false positives from contaminated areas."""
     _label = 'deep micrograph cleaner'
     _conda_env= "xmipp_MicCleaner"
+    _devStatus = UPDATED
 
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
