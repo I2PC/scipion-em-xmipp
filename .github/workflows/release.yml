@@ -4,7 +4,11 @@ on:
 
 jobs:
   release:
+    environment:
+      name: release-approval
+      
     runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout
       uses: actions/checkout@main
