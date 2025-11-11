@@ -38,13 +38,14 @@ jobs:
         auto-activate-base: true
         activate-environment: scipion3
         python-version: "3.8"
-
+        
     - name: Install Scipion
-      working-directory: ${{ github.workspace }}/../
+      working-directory: ${{ github.workspace }}
       run: |
         pwd
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
+
 
     - name: Cloning scipion-em-xmipp
       working-directory: ${{ github.workspace }}/scipion/
