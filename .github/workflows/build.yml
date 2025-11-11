@@ -8,6 +8,9 @@ jobs:
   build:
     runs-on: ubuntu-22.04
 
+    env:
+      SEND_INSTALLATION_STATISTICS: OFF
+      
     steps:    
     - name: Checkout repository
       uses: actions/checkout@main
@@ -43,21 +46,33 @@ jobs:
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
-    - name: Cloning Xmipp
-      working-directory: ${{ github.workspace }}/../
-      run: git clone https://github.com/I2PC/xmipp.git
+    - name: Cloning scipion-em-xmipp
+      working-directory: ${{ github.workspace }}/scipion/
+      run: |
+           pwd
+           rm -rf scipion-em-xmipp
+           git clone https://github.com/I2PC/scipion-em-xmipp.git
 
-      # Do not send installation statistics
-      # Build with tests
-    - name: Set config variables
-      working-directory: ${{ github.workspace }}/../xmipp
-      run: echo "SEND_INSTALLATION_STATISTICS=OFF\nBUILD_TESTING=ON" > xmipp.conf
-
-    - name: Compile Xmipp and show log
-      working-directory: ${{ github.workspace }}/../
+    - name: Conditionally checkout to ${{ github.head_ref }}
+      working-directory: ${{ github.workspace }}/scipion/scipion-em-xmipp
       env:
         BRANCH_NAME: ${{ github.head_ref }}
-      run: 
-        scipion/scipion3 run ./xmipp/xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
-        scipion/scipion3 installp -p scipion-em-xmipp --devel 
+      run: |
+          pwd
+          git checkout $BRANCH_NAME
+   
+    - name: Install and compile Xmipp and show log
+      working-directory: ${{ github.workspace }}/scipion/ 
+      env:
+        BUILD_TESTS: True
+        BRANCH_NAME: ${{ github.head_ref }}
+        SEND_INSTALLATION_STATISTICS: OFF 
+      run: |
+          pwd
+          ./scipion3 installp -p scipion-em-xmipp --devel || {
+          echo "First attempt failed. Retrying..."
+          sleep 10
+          ./scipion3 installp -p scipion-em-xmipp --devel || (cat compilation.log && false)
+          }
+      # Duplicated because a defineVariables scipion plugin fails
 
