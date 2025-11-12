@@ -47,7 +47,7 @@ jobs:
     - name: Cloning xmipp and getting sources
       working-directory: ${{ github.workspace }}
       run: |
-        git clone -branch ms_dynamic_dependencies https://github.com/I2PC/xmipp.git xmipp-bundle
+        git clone -b ms_dynamic_dependencies https://github.com/I2PC/xmipp.git xmipp-bundle
         ./xmipp-bundle/xmipp getSources
          
               
