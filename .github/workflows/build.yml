@@ -48,7 +48,7 @@ jobs:
       run: git clone https://github.com/I2PC/xmipp.git
       
     - name: Set config variables
-      working-directory: ${{ github.workspace }}/../xmipp
+      working-directory: ${{ github.workspace }}/xmipp
       run: echo "SEND_INSTALLATION_STATISTICS=OFF\nBUILD_TESTING=ON" > xmipp.conf
       
     - name: Compile Xmipp and show log
