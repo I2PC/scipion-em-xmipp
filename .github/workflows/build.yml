@@ -49,6 +49,8 @@ jobs:
       run: |
         git clone -b ms_python_installer https://github.com/I2PC/xmipp.git xmipp-bundle
         ./xmipp-bundle/xmipp getSources
+        cd src/scipion-em-xmipp
+        git checkout ms_dynamic_dependencies
          
               
     - name: Installing scipion-em-xmipp
