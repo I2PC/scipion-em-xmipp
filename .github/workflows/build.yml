@@ -52,7 +52,7 @@ jobs:
       run: echo "SEND_INSTALLATION_STATISTICS=OFF\nBUILD_TESTING=ON" > xmipp.conf
       
     - name: Compile Xmipp and show log
-      working-directory: ${{ github.workspace }}/../
+      working-directory: ${{ github.workspace }}
       run: 
         scipion/scipion3 run ./xmipp/xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
         scipion/scipion3 installp -p scipion-em-xmipp --devel
