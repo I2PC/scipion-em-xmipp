@@ -44,15 +44,19 @@ jobs:
         python -m scipioninstaller -conda -noAsk scipion
 
 
-    - name: Cloning scipion-em-xmipp
+    - name: Cloning xmipp
       working-directory: ${{ github.workspace }}
-      run: git clone https://github.com/I2PC/scipion-em-xmipp.git
-      
+      run: |
+        git clone https://github.com/I2PC/xmipp.git xmipp-bundle
+        ./xmipp-bundle/xmipp getSources
+              
     - name: Installing scipion-em-mipp
       working-directory: ${{ github.workspace }}
       env:
           SEND_INSTALLATION_STATISTICS: 'OFF'
-      run: scipion/scipion3 installp -p scipion-em-xmipp --devel
+      run: scipion/scipion3 installp -p xmipp-bundle/src/scipion-em-xmipp --devel
+
+      
 
 
            
