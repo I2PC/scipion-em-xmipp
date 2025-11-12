@@ -19,13 +19,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libfftw3-dev libopenmpi-dev libhdf5-dev libtiff5-dev libsqlite3-dev default-jdk git cmake openmpi-bin gcc g++
 
-    - name: Install CUDA
-      uses: Jimver/cuda-toolkit@master
-      id: cuda-toolkit
-      with:
-        cuda: '11.8.0'
-        method: network
-        sub-packages: '["nvcc", "toolkit"]'
+    # - name: Install CUDA
+    #   uses: Jimver/cuda-toolkit@master
+    #   id: cuda-toolkit
+    #   with:
+    #     cuda: '11.8.0'
+    #     method: network
+    #     sub-packages: '["nvcc", "toolkit"]'
 
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@main
@@ -44,7 +44,7 @@ jobs:
         python -m scipioninstaller -conda -noAsk scipion
 
     - name: Cloning Xmipp
-      working-directory: ${{ github.workspace }}/../
+      working-directory: ${{ github.workspace }}
       run: git clone https://github.com/I2PC/xmipp.git
       
     - name: Set config variables
@@ -54,5 +54,5 @@ jobs:
     - name: Compile Xmipp and show log
       working-directory: ${{ github.workspace }}
       run: 
-        scipion/scipion3 run ./xmipp/xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
+        scipion/scipion3 run .scipion/xmipp/xmipp -b $BRANCH_NAME --keep-output || (cat compilation.log && false)
         scipion/scipion3 installp -p scipion-em-xmipp --devel
