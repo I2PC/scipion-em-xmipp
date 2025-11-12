@@ -44,7 +44,7 @@ class XmippProtSimulateCTF(Prot2D):
     """
 
     _label = 'simulate ctf'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     _lastUpdateVersion = VERSION_3_0
 
