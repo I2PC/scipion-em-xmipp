@@ -43,16 +43,16 @@ jobs:
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
-    - name: Cloning Xmipp
+
+    - name: Cloning scipion-em-xmipp
       working-directory: ${{ github.workspace }}
-      run: git clone https://github.com/I2PC/xmipp.git
+      run: git clone https://github.com/I2PC/scipion-em-xmipp.git
       
-    - name: Set config variables
-      working-directory: ${{ github.workspace }}/xmipp
-      run: echo "SEND_INSTALLATION_STATISTICS=OFF\nBUILD_TESTING=ON" > xmipp.conf
-      
-    - name: Compile Xmipp and show log
+    - name: Installing scipion-em-mipp
       working-directory: ${{ github.workspace }}
-      run: |
-        scipion/scipion3 run ./xmipp/xmipp || (cat compilation.log && false)
-        scipion/scipion3 installp -p scipion-em-xmipp --devel
+      env:
+          SEND_INSTALLATION_STATISTICS: 'OFF'
+      run: scipion/scipion3 installp -p scipion-em-xmipp --devel
+
+
+           
