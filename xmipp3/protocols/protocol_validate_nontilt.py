@@ -47,6 +47,7 @@ SIGNIFICANT = 1
 
 class XmippProtValidateNonTilt(ProtAnalysis3D):
     """    
+<<<<<<< HEAD
     Ranks a set of volumes according to their alignment reliability obtained from a clusterability test.
 
     (AI GENERATED):
@@ -94,6 +95,9 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
     method, the significance level determines how stringent the validation is. A value close to 1 is more permissive,
     while lower values are more conservative. The angular sampling should balance computational cost with the need for
     precision, and more orientations per particle can provide more robust statistics at the cost of runtime.
+=======
+    Ranks a set of volumes based on alignment reliability using a clusterability test. This validation helps identify well-aligned structures and discard poorly aligned or inconsistent reconstructions, improving final data quality.
+>>>>>>> devel
     """
 
     _label = 'validate_nontilt'

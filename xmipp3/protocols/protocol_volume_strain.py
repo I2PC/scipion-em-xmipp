@@ -33,7 +33,7 @@ import xmipp3
 
         
 class XmippProtVolumeStrain(ProtAnalysis3D):
-    """Compare two states of a volume to analyze the local strains and rotations"""
+    """Compares two volume states to analyze local strains and rotations. This protocol helps study structural changes by quantifying deformation and dynamic behavior between different conformations."""
     _label = 'calculate strain'
     
     def __init__(self, **args):
@@ -54,7 +54,7 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
                       help='Binary mask that defines where the strains and rotations will be calculated')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
-                      help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
+                      help='See https://i2pc.github.io/docs/Utils/Conventions/index.html#symmetry for a description of the symmetry groups format'
                         'If no symmetry is present, give c1')
     
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -65,9 +65,9 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
         fnVol0 = self.inputVolume0.get().getFileName()
         fnVolF = self.inputVolumeF.get().getFileName()
         fnMask = self.inputMask.get().getFileName()
-        self._insertFunctionStep("calculateStrain",fnVol0,fnVolF,fnMask)
-        self._insertFunctionStep("prepareOutput")
-        self._insertFunctionStep("createChimeraScript")
+        self._insertFunctionStep(self.calculateStrain,fnVol0,fnVolF,fnMask)
+        self._insertFunctionStep(self.prepareOutput)
+        self._insertFunctionStep(self.createChimeraScript)
     
     #--------------------------- STEPS functions ---------------------------------------------------
     def calculateStrain(self, fnVol0, fnVolF, fnMask):

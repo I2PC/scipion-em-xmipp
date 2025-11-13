@@ -61,7 +61,7 @@ OUTPUT_CIF = 'fscq_struct.cif'
 
 class XmippProtValFit(ProtAnalysis3D):
     """
-    The protocol assesses the quality of the fit.
+   Assesses the quality of the fit between a model and experimental data. This protocol evaluates how well a volume or structure matches reference data, guiding improvements in model accuracy.
     """
     _label = 'validate fsc-q'
     _lastUpdateVersion = VERSION_3_0

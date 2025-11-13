@@ -43,7 +43,7 @@ OUTPUTNAME = "outputParticles"
 CITE ='Fernandez-Gimenez2023b'
 
 class XmippProtConsensusLocalCTF(ProtAnalysis3D):
-    """This protocol compares the estimations of local defocus computed by different protocols for a set of particles"""
+    """This protocol compares local defocus estimations obtained from multiple protocols for a set of particles. It evaluates the consistency among different CTF estimates and generates a set of particles with a consensus defocus."""
     _label = 'consensus local defocus'
     _devStatus = PROD
 

@@ -18,10 +18,10 @@ jobs:
       with:
         ref: ${{ github.head_ref }}
 
-    - name: Install dependencies 
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libopenmpi-dev openmpi-bin python3-numpy git 
+        sudo apt-get install -y libfftw3-dev libopenmpi-dev libhdf5-dev libtiff5-dev libsqlite3-dev default-jdk git cmake openmpi-bin gcc g++
 
     - name: Install CUDA
       uses: Jimver/cuda-toolkit@master

@@ -43,8 +43,7 @@ TYPE_PARTICLES = 1
 
 class XmippProtAssignmentTiltPair(XmippProtParticlePickingPairs):
     """    
-    From two sets of points (tilted and untilted) the protocol determines
-    the affine transformation between these sets.
+    Determines the affine transformation between two sets of points obtained from tilted micrograph pairs. This transformation aligns coordinate sets for accurate particle matching and analysis.
     """
     _label = 'assign tiltpairs'
     _lastUpdateVersion = VERSION_1_1

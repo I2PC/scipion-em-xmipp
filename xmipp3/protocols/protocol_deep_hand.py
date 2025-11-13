@@ -36,6 +36,7 @@ from xmipp3.convert import getImageLocation
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepHand(EMProtocol, XmippProtocol):
+<<<<<<< HEAD
     """Protocol to returns handedness of structure from trained deep learning model.
 
     (AI Generated)
@@ -84,6 +85,9 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
     Note that preprocessing assumes the presence of alpha helices and moderate resolution (~5 Å), as the deep learning
     model is trained on structures containing discernible secondary structure. For low-resolution volumes or
     non-protein densities, predictions may be unreliable.
+=======
+    """Predicts the handedness of a structure using a trained deep learning model. Determining correct handedness is essential in cryo-EM to ensure the accurate interpretation of 3D reconstructions.
+>>>>>>> devel
     """
 
     _label ="deep hand"
@@ -223,6 +227,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     def _validate(self):
         errors = []
+
+        errors += self.validateDLtoolkit()
 
         if self.thresholdAlpha.get() > 1.0 or self.thresholdAlpha.get() < 0.0:
            errors.append("Alpha threshold must be between 0.0 and 1.0")

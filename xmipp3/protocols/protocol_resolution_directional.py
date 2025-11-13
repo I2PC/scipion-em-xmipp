@@ -68,7 +68,7 @@ OUTPUT_ZSCOREMAP_FILE = 'zscoreMap.vol'
 
 class XmippProtMonoDir(ProtAnalysis3D):
     """    
-    Given a map the protocol assigns local resolutions to each voxel of the map.
+    Asseses directional local resolution values of a 3D map. Enables identifying angular assignment errors and possible preferential directions. This method uses monores local resolution algorithm in a directional manner.
     """
     _label = 'directional resolution MonoDir'
     _lastUpdateVersion = VERSION_2_0

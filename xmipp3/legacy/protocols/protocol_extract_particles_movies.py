@@ -45,7 +45,7 @@ from xmipp3.convert import readSetOfMovieParticles, xmippToLocation
 
 
 class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
-    """ Extract a set of Particles from each frame of a set of Movies.
+    """ Extracts particles from each frame of a set of movies. This approach enables data augmentation as well as detailed analysis of particle behavior over time, improving motion correction strategies.
     """
     _label = 'extract movie particles'
 

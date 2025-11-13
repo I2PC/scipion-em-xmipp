@@ -31,7 +31,7 @@ from pyworkflow.protocol.params import FloatParam, TextParam
 
 
 class XmippProtPhantom(EMProtocol):
-    """ Create phantom volume from a feature description file using xmipp_phantom_create """
+    """ Creates a phantom volume based on a feature description file by using the xmipp_phantom_create tool. This synthetic volume can be used to test and validate algorithms or processing pipelines under controlled conditions. """
 
     _label = 'phantom volume'
 

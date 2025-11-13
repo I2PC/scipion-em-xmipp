@@ -39,8 +39,7 @@ from pyworkflow import UPDATED, PROD
 
 class XmippProtSplitFrames(ProtPreprocessMicrographs):
     """
-    Wrapper protocol to Xmipp split Odd Even. Applies the possibility of creating 2 different outputs of movies with
-    a quantity of frames related to their odd or even nature (that is, if each frame represents an odd or even number).
+    Wrapper protocol for Xmipp Split Odd Even. It separates movie frames into two outputs based on whether their index is odd or even. This allows for independent processing of each group, helping to reduce noise and artifacts in cryo-EM data analysis.
     """
     _label = 'split frames'
     _lastUpdateVersion = VERSION_1_1

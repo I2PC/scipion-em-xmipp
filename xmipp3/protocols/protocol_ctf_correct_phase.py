@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     Javier Vargas (jvargas@cnb.csic.es)
+# * Authors:     Federico P. de Isidro Gomez
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -28,14 +28,14 @@ import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtProcessParticles
 
-from xmipp3.convert import writeSetOfParticles, xmippToLocation
+from xmipp3.convert import writeSetOfParticles, xmippToLocation, readSetOfParticles
 
 
-class XmippProtCTFCorrectWiener2D(ProtProcessParticles):
+class XmippProtCTFCorrectPhase2D(ProtProcessParticles):
     """    
-     Performs CTF correction on images using Wiener filtering in 2D. This method enhances image quality by reducing noise and compensating for the contrast transfer function effects in the micrographs or particle images. Use it with caution, preferably only for visualization purposes or when subsequent methods demand it explicitly.
+    Perform CTF correction by phase flip.
     """
-    _label = 'ctf_correct_wiener2d'
+    _label = 'ctf_correct_phase'
     
     def __init__(self, *args, **kwargs):
         ProtProcessParticles.__init__(self, *args, **kwargs)
@@ -47,25 +47,13 @@ class XmippProtCTFCorrectWiener2D(ProtProcessParticles):
 
         form.addParam('inputParticles', params.PointerParam, pointerClass='SetOfParticles', 
                       label="Input particles",  
-                      help='Select the input projection images .') 
-        form.addParam('isIsotropic', params.BooleanParam, default='True',
-                      label="Isotropic Correction", 
-                      help='If true, Consider that there is not astigmatism and then it is performed an isotropic correction.') 
-        form.addParam('padding_factor', params.IntParam, default=2,expertLevel=params.LEVEL_ADVANCED,
-                      label="Padding factor",  
-                      help='Padding factor for Wiener correction ')
-        form.addParam('wiener_constant', params.FloatParam, default=-1,expertLevel=params.LEVEL_ADVANCED,
-                      label="Wiener constant",  
-                      help=' Wiener-filter constant (if < 0: use FREALIGN default)')
-        form.addParam('correctEnvelope', params.BooleanParam, default='False',expertLevel=params.LEVEL_ADVANCED,
-                      label="Correct for CTF envelope",  
-                      help=' Only in cases where the envelope is well estimated correct for it')                       
+                      help='Select the input projection images .')               
         form.addParallelSection(threads=1, mpi=1)
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep',self.inputParticles.get().getObjId())        
-        self._insertFunctionStep('wienerStep')
+        self._insertFunctionStep('phaseStep')
         self._insertFunctionStep('createOutputStep')
         
     def convertInputStep(self, particlesId):
@@ -76,25 +64,16 @@ class XmippProtCTFCorrectWiener2D(ProtProcessParticles):
         writeSetOfParticles(self.inputParticles.get(), 
                             self._getPath('input_particles.xmd'))
     
-    def wienerStep(self):
+    def phaseStep(self):
         params =  '  -i %s' % self._getPath('input_particles.xmd')
         params +=  '  -o %s' % self._getPath('corrected_ctf_particles.stk')
         params +=  '  --save_metadata_stack %s' % self._getPath('corrected_ctf_particles.xmd')
-        params +=  '  --pad %s' % self.padding_factor.get()
-        params +=  '  --wc %s' % self.wiener_constant.get()
         params +=  '  --sampling_rate %s' % self.inputParticles.get().getSamplingRate()
 
-        if (self.inputParticles.get().isPhaseFlipped()):
-            params +=  '  --phase_flipped '
-            
-        if (self.correctEnvelope):
-            params +=  '  --correct_envelope '
-
-        print(params)
         nproc = self.numberOfMpi.get()
         nT=self.numberOfThreads.get() 
 
-        self.runJob('xmipp_ctf_correct_wiener2d', 
+        self.runJob('xmipp_ctf_correct_phase', 
                     params, numberOfMpi=nproc,numberOfThreads=nT)
     
     def createOutputStep(self):
@@ -104,28 +83,7 @@ class XmippProtCTFCorrectWiener2D(ProtProcessParticles):
         
         partSet.copyInfo(imgSet)
         partSet.setIsPhaseFlipped(True)
-        partSet.copyItems(imgSet,
-                            updateItemCallback=self._updateLocation,
-                            itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID))
+        readSetOfParticles(imgFn, partSet)
         
         self._defineOutputs(outputParticles=partSet)
         self._defineSourceRelation(imgSet, partSet)
-    #--------------------------- INFO functions -------------------------------------------- 
-    def _validate(self):
-        pass
-    
-    def _summary(self):
-        pass
-    
-    def _methods(self):
-        messages = []
-        return messages
-    
-    def _citations(self):
-        return []
-    
-    #--------------------------- UTILS functions -------------------------------------------- 
-    def _updateLocation(self, item, row):
-        index, filename = xmippToLocation(row.getValue(md.MDL_IMAGE))
-        item.setLocation(index, filename)
-

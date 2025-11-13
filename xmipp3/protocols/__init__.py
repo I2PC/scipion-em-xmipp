@@ -52,13 +52,13 @@ from .protocol_create_gallery import XmippProtCreateGallery
 from .protocol_ctf_consensus import XmippProtCTFConsensus
 from .protocol_ctf_micrographs import XmippProtCTFMicrographs
 from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
+from .protocol_ctf_correct_phase import XmippProtCTFCorrectPhase2D
 from .protocol_consensus_classes import XmippProtConsensusClasses
 from .protocol_denoise_particles import XmippProtDenoiseParticles
 from .protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
 from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
                                               XmippProtEliminateEmptyClasses)
 from .protocol_extract_particles import XmippProtExtractParticles
-from .protocol_extract_particles_movies import XmippProtExtractMovieParticles
 from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from .protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from .protocol_helical_parameters import XmippProtHelicalParameters

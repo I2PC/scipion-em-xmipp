@@ -37,10 +37,7 @@ from xmipp3.convert import getImageLocation
 
 
 class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
-    """ Estimate helical parameters and symmetrize.
-    
-    Helical symmetry is defined as V(r,rot,z)=V(r,rot+k*DeltaRot,z+k*Deltaz).
-    """
+    """Estimates the helical symmetry and parameters of a structure. Helical symmetry is defined mathematically as V(r,rot,z)=V(r,rot+k*DeltaRot,z+k*Deltaz) and applied to improve the reconstruction of the volume specimens inthe processing. You can limit the radios of the helix, apply dihedral symmetry and apply Cn symmetry    """
     _label = 'helical symmetry'
     
     #--------------------------- DEFINE param functions --------------------------------------------

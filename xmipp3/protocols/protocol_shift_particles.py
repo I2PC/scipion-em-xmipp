@@ -31,7 +31,7 @@ from pwem.objects import Volume
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, EnumParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.object as pwobj
-from pwem import ALIGN_3D, ALIGN_2D
+from pwem import ALIGN_PROJ
 import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
 from xmipp3.convert import xmippToLocation, writeSetOfParticles, readSetOfParticles
@@ -86,8 +86,7 @@ class XmippProtShiftParticles(EMProtocol):
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
         """convert input particles into .xmd file """
-        writeSetOfParticles(self.inputParticles.get(), self._getExtraPath("input_particles.xmd"),
-                            alignType=ALIGN_3D)
+        writeSetOfParticles(self.inputParticles.get(), self._getExtraPath("input_particles.xmd"))
 
     def shiftStep(self):
         """call xmipp program to shift the particles"""
@@ -105,9 +104,9 @@ class XmippProtShiftParticles(EMProtocol):
             vol.setFileName(fnvol)
             vol = ih().read(vol.getFileName())
             masscenter = vol.centerOfMass()
-            self.x = masscenter[0]
-            self.y = masscenter[1]
-            self.z = masscenter[2]
+            self.x = masscenter[0] - 0.5 * vol.getDimensions()[0]
+            self.y = masscenter[1] - 0.5 * vol.getDimensions()[1]
+            self.z = masscenter[2] - 0.5 * vol.getDimensions()[2]
 
         args += '--shift_to %f %f %f ' % (self.x, self.y, self.z)
         program = "xmipp_transform_geometry"
@@ -137,7 +136,7 @@ class XmippProtShiftParticles(EMProtocol):
             outputmd = self._getExtraPath("center_particles.xmd")
         else:
             outputmd = self._getExtraPath("crop_particles.xmd")
-        readSetOfParticles(outputmd, outputSet)
+        readSetOfParticles(outputmd, outputSet, alignType=ALIGN_PROJ)
         self._defineOutputs(outputParticles=outputSet)
         self._defineOutputs(shiftX=pwobj.Float(self.x),
                             shiftY=pwobj.Float(self.y),

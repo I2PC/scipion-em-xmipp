@@ -120,8 +120,8 @@ class XmippPreprocessHelper:
     
 
 class XmippProtPreprocessParticles(XmippProcessParticles):
-    """ Preprocess a set of particles. You can remove dust, normalize, 
-        apply threshold, etc """
+    """Preprocesses particle images by applying the optional steps:  dust removal, randomize phase, normalize, center images, phase flip images, invert contrast, threshold, fill with below, abs_bellow or above, a threshold grey value below which all voxels should be set to 0, fill value or substitute by value binarize or  average. This cleaning stage improves particle quality and consistency for downstream tasks.
+ """
     _label = 'preprocess particles'
     _devStatus = PROD
     _possibleOutputs = {"outputParticles": SetOfParticles}
@@ -374,7 +374,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
 
 
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
-    """ Protocol for Xmipp-based preprocess for volumes """
+    """Preprocesses 3D volumes using Xmipp tools to prepare them for further analysis. Operations include: normalization, change hand, change icosahedral orientation, randomize phase, symmetry, symmetry group, aggregation mode, wrap, apply Laplacian, mask volume. adjust gray value, segment, normalize background, invert contrast and threshold."""
     _label = 'preprocess volumes'
     _devStatus = PROD
     # Aggregation constants

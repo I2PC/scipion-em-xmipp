@@ -50,7 +50,7 @@ from xmipp3.constants import OTHER
 
 
 class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):
-    """Protocol to extract particles from a set of tilted pairs coordinates"""
+    """Extracts particles based on coordinates from tilted pairs of micrographs."""
     _label = 'extract particle pairs'
 
     def __init__(self, **kwargs):

@@ -37,7 +37,7 @@ from xmipp3.base import XmippProtocol
 
 
 class XmippProtParticlePickingPairs(ProtParticlePicking, XmippProtocol):
-    """ Picks particles in a set of untilted-tilted pairs of micrographs. """
+    """ Picks particles in paired tilted micrographs. Using paired data improves particle localization and orientation determination, enhancing reconstruction accuracy. """
     _label = 'tilt pairs particle picking'
 
     def __init__(self, **args):

@@ -236,13 +236,13 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         if  self.normalization in [self.NORMALIZATION_AUTO, self.NORMALIZATION_STATS]:
           if self.modelType == self.TIGHT_MODEL:
-            params+= " --checkpoint %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_tightTarget.hd5")
+            params+= " --checkpoint %s "%self.getModel("deepEMhancer_v016", "production_checkpoints/deepEMhancer_tightTarget.hd5")
           elif self.modelType == self.HI_RES:
-            params+= " --checkpoint  %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_highRes.hd5")
+            params+= " --checkpoint  %s "%self.getModel("deepEMhancer_v016", "production_checkpoints/deepEMhancer_highRes.hd5")
           else:
-            params+= " --checkpoint  %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_wideTarget.hd5")
+            params+= " --checkpoint  %s "%self.getModel("deepEMhancer_v016", "production_checkpoints/deepEMhancer_wideTarget.hd5")
         else: #self.NORMALIZATION_MASK
-          params+= " --checkpoint  %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_masked.hd5")
+          params+= " --checkpoint  %s "%self.getModel("deepEMhancer_v016", "production_checkpoints/deepEMhancer_masked.hd5")
 
         os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.runJob("xmipp_deep_volume_postprocessing", params, numberOfMpi=1)
@@ -307,7 +307,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        error=self.validateDLtoolkit(model="deepEMhancer")
+        error=self.validateDLtoolkit(model="deepEMhancer_v016")
 
         return error
     

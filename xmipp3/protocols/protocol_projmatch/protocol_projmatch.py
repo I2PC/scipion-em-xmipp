@@ -38,7 +38,7 @@ from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
-    """ 3D reconstruction and classification using multireference projection matching"""
+    """ Performs 3D reconstruction and classification using multireference projection matching. This method assigns images to references and reconstructs volumes, allowing for the separation of structural classes."""
 
     _label = 'projection matching'
     

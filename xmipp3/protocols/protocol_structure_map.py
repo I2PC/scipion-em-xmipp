@@ -37,15 +37,18 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfVolumes
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils import cleanPath
+from pyworkflow.utils.path import cleanPattern
 
 from ..protocols.protocol_structure_map_zernike3d import mds
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippProtStructureMap(ProtAnalysis3D):
-    """ Protocol for structure mapping based on correlation distance. """
+    """ Performs structure mapping based on correlation distance between volumes. This protocol helps identify similarities and differences among multiple structures by quantifying their spatial relationships."""
     _label = 'struct map'
     _lastUpdateVersion = VERSION_2_0
     OUTPUT_SUFFIX = '_%d_crop.vol'
+    _devStatus = UPDATED
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -95,6 +98,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
 
         self._insertFunctionStep('correlationMatrix', volList, prerequisites=deps)
         self._insertFunctionStep('gatherResultsStepCorr')
+        self._insertFunctionStep('cleanIntermediate')
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self, volFn, volDim, volSr, minDim, maxSr, nVoli):
@@ -164,6 +168,10 @@ class XmippProtStructureMap(ProtAnalysis3D):
             embedExtended = np.pad(embed, ((0, 0), (0, i - embed.shape[1])),
                                    "constant", constant_values=0)
             np.savetxt(self._defineResultsName(i, label), embedExtended)
+
+    def cleanIntermediate(self):
+        cleanPattern(self._getExtraPath("Pair*correlation.txt"))
+        cleanPattern(self._getExtraPath("*_crop.vol"))
 
     # --------------------------- UTILS functions --------------------------------------------
     def _iterInputVolumes(self, volList, dimList, srList, idList):

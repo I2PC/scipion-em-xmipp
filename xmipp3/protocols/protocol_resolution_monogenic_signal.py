@@ -53,7 +53,7 @@ FN_GAUSSIAN_MAP = 'gaussianfilter'
 
 class XmippProtMonoRes(ProtAnalysis3D):
     """    
-    Given a map the protocol assigns local resolutions to each voxel of the map.
+    Assigns local resolution values to each voxel within a given 3D map, providing detailed insight into regional map quality. This aids in interpreting structural data by highlighting areas of varying resolution.
     """
     _label = 'local MonoRes'
     _lastUpdateVersion = VERSION_1_1

@@ -34,7 +34,7 @@ from xmipp3.convert import createItemMatrix, writeSetOfParticles, getImageLocati
 
 
 class XmippProtCL2DAlign(ProtAlign2D):
-    """ Aligns a set of particles using the CL2D algorithm. """
+    """ Aligns a set of particles using the CL2D algorithm, allowing for an optional reference 2D image. Accurate alignment is critical for improving class averages and achieving high-quality 2D classifications."""
     _label = 'align with cl2d'
     
     # --------------------------- DEFINE param functions -----------------------

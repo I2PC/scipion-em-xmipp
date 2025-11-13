@@ -50,6 +50,7 @@ OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 
 class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     """
+<<<<<<< HEAD
     Protocol for dose analysis. It will calculate the average and statistics of the electrons impacts per movie over time.
     Also, it will use a moving window to check if there is any faulty condition in the dose that is maintained over time.
 
@@ -89,6 +90,9 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     changes in dose levels may indicate acquisition problems that would not be visible through image inspection alone.
     The size of the moving window should be selected based on the expected noise level and temporal resolution of the
     dose pattern.
+=======
+    Analyzes the electron dose applied throughout a movie acquisition. This protocol helps assess dose accumulation and its effects on image quality, providing information essential for dose weighting and optimizing reconstruction..
+>>>>>>> devel
     """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
 

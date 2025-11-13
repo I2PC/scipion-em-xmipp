@@ -1,21 +1,39 @@
+## Release 4.0.0
+- Protocols updated
+   - deep_micrograph_screen:  updated enviroment to tensorFlow2 and models updated to  
+   - movie_max_shif: Change the criteria to evaluate the shift
+   - crop_resize: Crop/Resize half maps too, if they are available
+   - resolution3D: The FSC can be computed now using the two halves
+   - align_volume_and_particles: Allow considering mirrors in align volume and particles
+
+- More scipion-em-xmipp
+   - Disable xmippDep by default (the dependencies will not be installed by default in the Scipion environment), but installing just the libstdcxx dependence
+   - Script to generate the protocols map (https://i2pc.github.io/docs/protocolsMap.html#)
+   - Remove Relion dependency from TestXmippDenoiseParticles
+   - parse json to report summary installation errors
+   - View all classes added for XmippProtConsensusClasses
+
+
 ## Release 3.25.06.0 - Rhea
 - New protocols
    - compute_likelihood: This protocol computes the likelihood of a set of particles with assigned angles when compared to a set of maps or atomic modelS
 
 - Protocols updated
    - Max shift: tolerate movies without micrographs associated
-   - Highred: test updated
    - substract_projection: update command to boost and subtract to generate only one output stack
-   - Movie alignment consensus protocol: enables irregular input sets
+   - Movie alignment consensus protocol: enables irregular input sets. Changes in functionality; comparisons between ons between shifts trajectories, and a additional change related to the minimum consensus or threshold for shifts correlation.
    - volume_adjust_sub: better label for volume 1 vs 2
    - convert_pdb: aDD binThreads
    - align_volume: add possible
-   - movie_alignment_consensus: Changes in functionality; comparisons between ons between shifts trajectories, and a additional change related to the minimum consensus or threshold for shifts correlation.
    - particle_pick_consensus: Fixed ID mismatch when combining coordinate sets; now supports asymmetrical sets without indexing errors.
    - movie_split_frames: now allows testing sum_frames, includes a summary, improved layout, and updated test.
    - deep_Consensus: GPU handling
    - Deep_hand: handling env to avoid system CUDA settings,  erasing cuda things from env['LD_LIBRARY_PATH']
    - Extract particles protocol: force output boxsize
+   - reconstruct_fourier: correctEnvelope False by default
+   - reconstruct_highres: test updated, correctEnvelope False by default
+   - Structure map: Adding a dendrogram and removing some intermediate files
+
 
 - Protocols fixed
    - simulate ctf: fix pre-CTF noise np.numpy, init generator for pre and post ctf noise

@@ -37,7 +37,8 @@ from pyworkflow.object import Float, Integer
 
 
 class XmippApplyZernike3D(ProtAnalysis3D):
-    """ Protocol for PDB deformation based on Zernike3D basis. """
+    """ Applies deformation to atomic structures using Zernike3D basis functions. This allows flexible modeling of structural variations in atomic models to better fit experimental density maps.
+ """
     _label = 'apply deformation field - Zernike3D'
 
     # --------------------------- DEFINE param functions --------------------------------------------

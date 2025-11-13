@@ -42,7 +42,7 @@ OUTPUT_CLASSES = 'outputClasses'
 OUTPUT_PARTICLES = 'outputParticles'
 
 class XmippProtCenterParticles(ProtClassify2D):
-    """ Realignment of un-centered particles. """
+    """ Recenters particles that are initially un-centered by computing alignment shifts relative to a reference point. Proper centering enhances the accuracy of subsequent classification and refinement steps. """
     _label = 'center particles'
     _lastUpdateVersion = VERSION_2_0
     _possibleOutputs = {OUTPUT_CLASSES:SetOfClasses2D, OUTPUT_PARTICLES:SetOfParticles}

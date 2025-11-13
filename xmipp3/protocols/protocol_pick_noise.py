@@ -42,7 +42,7 @@ IN_COORDS_POS_DIR_BASENAME= "pickNoiseInPosCoordinates"
 OUT_COORDS_POS_DIR_BASENAME= "pickNoiseOutPosCoordinates"
 
 class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
-    """Protocol to pick noise particles"""
+    """Protocol designed pick noise particles in micrographs and not real particles. The protocol allows you to choose the number of noise particles to extract from each micrograph. Set to -1 for extracting the same amount of noise particles as the number true particles for that micrograph """
     _label = 'pick noise'
     _lastUpdateVersion = VERSION_2_0
     

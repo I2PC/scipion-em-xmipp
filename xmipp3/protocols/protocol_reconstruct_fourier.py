@@ -76,6 +76,8 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
                       help='Create separate reconstructions from two random subsets. Useful for resolution measurements')
         form.addParam('correctCTF', params.BooleanParam, label='Correct CTF', default=True,
                       help='Correct the CTF with a Wiener filter before reconstructing, if the CTF is available')
+        form.addParam('correctEnvelope', params.BooleanParam, label='Correct CTF envelope', default=False, condition="correctCTF",
+                      help='Correct the CTF envelope')
         line = form.addLine('Padding factor',
                              expertLevel=cons.LEVEL_ADVANCED,
                              help='Padding of the input images. Higher number will result in more precise interpolation in Fourier '
@@ -190,7 +192,9 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
         if hasCTF and self.correctCTF:
             args = "-i %s -o %s.stk --save_metadata_stack %s.xmd --keep_input_columns" %\
                    (particlesMd, fnCorrectedImagesRoot, fnCorrectedImagesRoot)
-            args += " --sampling_rate %f --correct_envelope" % imgSet.getSamplingRate()
+            args += " --sampling_rate %f" % imgSet.getSamplingRate()
+            if self.correctEnvelope:
+                args+=" --correct_envelope"
             if imgSet.isPhaseFlipped():
                 args += " --phase_flipped"
             Nproc = self.numberOfThreads.get() * self.numberOfMpi.get()

@@ -69,7 +69,6 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         ProtAlignVolume.__init__(self, **args)
 
         # These 2 must match the output enum above.
-        self._alignmentMatrix = None
         self.Volume = None
         self.Particles = None
 
@@ -89,6 +88,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
                            'calculated with the reference and input volumes.')
         form.addParam('alignmentMode', params.EnumParam, default=ALIGN_GLOBAL, choices=["Global","Local"],
                       label="Alignment mode")
+        form.addParam('considerMirrors', params.BooleanParam, default=False,
+                      label='Consider mirrors')
         form.addParam('symmetryGroup', params.StringParam, default='c1',
                       label="Symmetry group",
                       help='See %s page for a description of the symmetries '
@@ -160,6 +161,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
             args += " --frm"
         else:
             args += " --local"
+        if self.considerMirrors:
+            args += " --consider_mirror"
         args += " --copyGeo %s" % fhInputTranMat
         if not self.wrap:
             args += ' --dontWrap'
@@ -168,13 +171,16 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         cleanPath(self.fnInputVol)
 
     def getAlignmentMatrix(self):
-
-        if self._alignmentMatrix is None:
+        if not (hasattr(self, '_lhsAlignmentMatrix') and hasattr(self, '_rhsAlignmentMatrix')):
             fhInputTranMat = self.getTransformationFile()
             transMatFromFile = np.loadtxt(fhInputTranMat)
-            self._alignmentMatrix = np.reshape(transMatFromFile, (4, 4))
+            self._lhsAlignmentMatrix = np.reshape(transMatFromFile, (4, 4))
+            self._rhsAlignmentMatrix = np.eye(4)
+            
+            if np.linalg.det(self._lhsAlignmentMatrix[:3,:3]) < 0:
+                self._rhsAlignmentMatrix[2,2] = -1
 
-        return self._alignmentMatrix
+        return self._lhsAlignmentMatrix, self._rhsAlignmentMatrix
 
     def getTransformationFile(self):
         return self._getExtraPath('transformation-matrix.txt')
@@ -217,12 +223,11 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         self._defineSourceRelation(self.inputParticles, outputParticles)
 
     def _updateParticleTransform(self, particle, row):
+        lhs, rhs = self.getAlignmentMatrix()
+        alignment = np.array(particle.getTransform().getMatrix())
+        alignment2 = lhs @ alignment @ rhs
 
-        aliMatrix = self.getAlignmentMatrix()
-        partTransformMat = particle.getTransform().getMatrix()
-        partTransformMatrix = np.matrix(partTransformMat)
-        newTransformMatrix = np.matmul(aliMatrix, partTransformMatrix)
-        particle.getTransform().setMatrix(newTransformMatrix)
+        particle.getTransform().setMatrix(alignment2)
 
     def getOutputAlignedVolumePath(self):
         outVolFn = self._getExtraPath("inputVolumeAligned.mrc")

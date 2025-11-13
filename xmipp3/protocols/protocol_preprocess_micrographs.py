@@ -42,8 +42,7 @@ OUTPUT_MICROGRAPHS = 'outputMicrographs'
 
 
 class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
-    """Protocol to preprocess a set of micrographs in the project.
-    You can crop borders, remove bad pixels, etc. """
+    """This protocol preprocesses micrographs by performing several operations: cropping borders, take logarithm in order to have a linear relationship, removing bad pixels, invert contrast, downsampling micrograph, denoising, normalize the micrograph, gaussian filter and low or high filter. These steps help improve data quality before particle picking and reconstruction."""
     _label = 'preprocess micrographs'
 
     _possibleOutputs = {OUTPUT_MICROGRAPHS: SetOfMicrographs}

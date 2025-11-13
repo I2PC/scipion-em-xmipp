@@ -41,8 +41,7 @@ from xmipp3.convert import getImageLocation, alignmentToRow, convertToMrc
 
 
 class XmippProtRCT(ProtInitialVolume):
-    """Creates initial volumes by using a set of projections/classes
-    from a tilted-pair picking process and using RCT algorithm. """
+    """Creates initial 3D volumes using 2D classes and particle pairs from tilted images. Applies the Random Conical Tilt (RCT) method to generate unbiased starting volume for structure refinement, even with a small number of image pairs. The volume serves as starting models for further refinement steps. """
     _label = 'random conical tilt'
     
     def __init__(self, **args):

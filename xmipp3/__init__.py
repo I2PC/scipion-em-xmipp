@@ -151,23 +151,26 @@ class Plugin(pwem.Plugin):
         
         # When changing dependencies, increment _currentDepVersion
         CONDA_DEPENDENCIES = [
-	        "'cmake>=3.18,<4'", #cmake-4 is not compatible with Relion compilation
+	    "'cmake>=3.18,<4'", #cmake-4 is not compatible with Relion compilation
             "hdf5>=1.18",
             "sqlite>=3",
             "fftw>=3",
             "make",
             "zlib",
             "openjdk",
-            "libtiff",
-	    "libstdcxx-ng",
+            "'libtiff<=4.5.1'",
             "libjpeg-turbo",
         ]
+
+        CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng"
+
         if Config.isCondaInstallation():
             condaEnvPath = os.environ['CONDA_PREFIX']
             scipionEnv=os.path.basename(condaEnvPath)  # TODO: use pyworkflow method when released: Config.getEnvName()
 
             commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
-            commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
+            #commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
+            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE)
             commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
