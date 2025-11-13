@@ -41,7 +41,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     _label ="deep hand"
     _conda_env = "xmipp_pyTorch"
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)

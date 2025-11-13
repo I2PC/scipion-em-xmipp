@@ -51,7 +51,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
      """
     _label = 'align volume'
     nVols = 0
-    _devStatus = UPDATED
+    _devStatus = PROD
     OUTPUT_NAME1 = "outputVolume"
     OUTPUT_NAME2 = "outputVolumes"
     _possibleOutputs = {OUTPUT_NAME1: Volume,

@@ -38,6 +38,7 @@ from pyworkflow.utils import weakImport
 from pyworkflow.utils.path import cleanPath
 
 from xmipp3.constants import SYM_URL
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 ALIGN_MASK_CIRCULAR = 0
 ALIGN_MASK_BINARY_FILE = 1
@@ -63,7 +64,9 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
      """
     _label = 'align volume and particles'
     _possibleOutputs = AlignVolPartOutputs
+    _devStatus = UPDATED
     nVols = 0
+
     
     def __init__(self, **args):
         ProtAlignVolume.__init__(self, **args)
