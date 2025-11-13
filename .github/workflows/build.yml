@@ -65,7 +65,7 @@ jobs:
           SEND_INSTALLATION_STATISTICS: 'OFF'
       run: |
           pwd
-          scipion/scipion3 installp -p . --devel
+          ../../../scipion/scipion3 installp -p . --devel
 
       
 
