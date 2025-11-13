@@ -37,7 +37,7 @@ jobs:
         python-version: "3.8"
 
     - name: Install Scipion
-      working-directory: ${{ github.workspace }}/../
+      working-directory: ${{ github.workspace }}/../scipion/
       run: |
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
@@ -53,7 +53,7 @@ jobs:
         git clone -b ms_python_installer https://github.com/I2PC/xmipp.git xmipp-bundle
         ./xmipp-bundle/xmipp getSources
         cd xmipp-bundle/src/
-        ln -s "${{ github.workspace }}" "${{ github.workspace }}/../xmipp-bundle/src/scipion-em-xmipp"
+        ln -s "${{ github.workspace }}" "/xmipp-bundle/src/scipion-em-xmipp"
       # relpace the -b ms_python_installer when the branch 'd be merged
 
     - name: Installing scipion-em-xmipp
@@ -61,4 +61,5 @@ jobs:
       env:
           SEND_INSTALLATION_STATISTICS: 'OFF'
       run: |
-          ../../scipion/scipion3 installp -p scipion-em-xmipp/ --devel
+          pwd
+          ../../../scipion/scipion3 installp -p scipion-em-xmipp/ --devel
