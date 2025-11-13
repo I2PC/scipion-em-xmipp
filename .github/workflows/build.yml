@@ -55,16 +55,14 @@ jobs:
         git clone -b ms_python_installer https://github.com/I2PC/xmipp.git xmipp-bundle
         ./xmipp-bundle/xmipp getSources
         cd ${{ github.workspace }}/xmipp-bundle/src/
-        pwd
         git clone https://github.com/I2PC/scipion-em-xmipp.git
-
+      # relpace the -b ms_python_installer when the branch 'd be merged
               
     - name: Installing scipion-em-xmipp
       working-directory: ${{ github.workspace}}/xmipp-bundle/src/scipion-em-xmipp
       env:
           SEND_INSTALLATION_STATISTICS: 'OFF'
       run: |
-          pwd
           ../../../scipion/scipion3 installp -p . --devel
 
       
