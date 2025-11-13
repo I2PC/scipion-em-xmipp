@@ -60,4 +60,4 @@ jobs:
       working-directory: ${{ github.workspace}}/../xmipp/src
       env:
           SEND_INSTALLATION_STATISTICS: 'OFF'
-      run: ../../../scipion/scipion3 installp -p scipion-em-xmipp/ --devel
+      run: ../../scipion/scipion3 installp -p scipion-em-xmipp/ --devel
