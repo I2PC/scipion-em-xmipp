@@ -43,6 +43,11 @@ jobs:
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
+    - name: Install xmipp3-installer
+      working-directory: ${{ github.workspace }}
+      run: |
+        pip install --user xmipp3-installer
+        
 
     - name: Cloning xmipp and getting sources
       working-directory: ${{ github.workspace }}
