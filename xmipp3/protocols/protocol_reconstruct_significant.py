@@ -54,7 +54,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
     the cumulative density function of different image similarity measures.
     """
     _label = 'reconstruct significant'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     # --------------------------- DEFINE param functions -----------------------
 

@@ -44,7 +44,7 @@ class XmippProtVolAdjBase(EMProtocol):
     used by both  XmippProtVolSubtraction and XmippProtVolAdjust."""
 
     _possibleOutputs = {"outputVolume": Volume}
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     # --------------------------- DEFINE param functions --------------------------------------------
     @classmethod

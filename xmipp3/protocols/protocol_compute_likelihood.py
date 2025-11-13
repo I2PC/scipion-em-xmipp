@@ -57,7 +57,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     _label = 'log likelihood'
     _lastUpdateVersion = VERSION_1_1
     _possibleOutputs = {"reprojections": SetOfParticles}
-    _devStatus = NEW
+    _devStatus = PROD
     stepsExecutionMode = STEPS_PARALLEL
 
     # Normalization enum constants

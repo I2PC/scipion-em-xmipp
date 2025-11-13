@@ -32,6 +32,7 @@ from pwem.objects import FSC
 from pwem.protocols import ProtAnalysis3D
 
 from xmipp3.convert import (getImageLocation)
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 def _fixMRC(fn):
     if fn.endswith(".mrc"):
@@ -42,6 +43,7 @@ def _fixMRC(fn):
 class XmippProtResolution3D(ProtAnalysis3D):
     """ Computes the resolution of 3D volumes using the Fourier Shell Correlation (FSC) criteria. The protocol requires two volumes, which are assumed to be independently reconstructed. In addition, the protocol can also compute the B-factor for the volumes. """
     _label = 'resolution 3D'
+    _devStatus = UPDATED
       
     #--------------------------- DEFINE param functions --------------------------------------------   
     def _defineParams(self, form):

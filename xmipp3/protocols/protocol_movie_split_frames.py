@@ -43,7 +43,7 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
     """
     _label = 'split frames'
     _lastUpdateVersion = VERSION_1_1
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     # --------------------------- DEFINE param functions ------------------------
 
