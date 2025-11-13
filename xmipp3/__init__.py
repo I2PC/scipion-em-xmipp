@@ -227,7 +227,7 @@ class Plugin(pwem.Plugin):
 
         isBundle = (os.path.isdir(os.path.join(bundleDir, 'src')) and
                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
-        
+        print(f'pluginDir: {pluginDir}\n, bundleDir: {bundleDir}\n, isBundle: {isBundle}')
         return bundleDir if isBundle else None
 
 def getNvidiaDriverVersion(plugin):
