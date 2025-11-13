@@ -55,7 +55,7 @@ jobs:
         git clone -b ms_python_installer https://github.com/I2PC/xmipp.git xmipp-bundle
         ./xmipp-bundle/xmipp getSources
         cd ${{ github.workspace }}/xmipp-bundle/src/
-        ln -s ${{ github.workspace }} xmipp-bundle/src/scipion-em-xmipp
+        ln -s ${{ github.workspace }} ${{ github.workspace }}xmipp-bundle/src/scipion-em-xmipp
       # relpace the -b ms_python_installer when the branch 'd be merged
               
     - name: Installing scipion-em-xmipp
