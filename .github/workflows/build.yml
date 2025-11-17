@@ -19,14 +19,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libfftw3-dev libopenmpi-dev libhdf5-dev libtiff5-dev libsqlite3-dev default-jdk git cmake openmpi-bin gcc g++
 
-    # - name: Install CUDA
-    #   uses: Jimver/cuda-toolkit@master
-    #   id: cuda-toolkit
-    #   with:
-    #     cuda: '11.8.0'
-    #     method: network
-    #     sub-packages: '["nvcc", "toolkit"]'
-
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@main
       with:
@@ -50,14 +42,11 @@ jobs:
     - name: Cloning xmipp and getting sources
       working-directory: ${{ github.workspace }}/../
       run: |
-        git clone -b ms_python_installer https://github.com/I2PC/xmipp3.git
-        ./xmipp3/xmipp getSources
+        git clone https://github.com/I2PC/xmipp3.git
+        ./xmipp3/xmipp getSources --keep-output
         cd xmipp3/src/
         ln -s "${{ github.workspace }}" "${{ github.workspace }}/../xmipp3/src/scipion-em-xmipp"
-      # relpace the -b ms_python_installer when the branch 'd be merged
 
     - name: Installing scipion-em-xmipp
       working-directory: ${{ github.workspace}}/../xmipp3/src
-      env:
-          SEND_INSTALLATION_STATISTICS: 'OFF'
       run: ../../scipion/scipion3 installp -p scipion-em-xmipp/ --devel
