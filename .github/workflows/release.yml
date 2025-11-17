@@ -43,6 +43,8 @@ jobs:
     - name: Get changelog, tag name, & release name
       id: variables
       run: |
+        awk '/## Release/{if (p) exit; p=1} p' CHANGELOG.md > latest_changelog_with_title.md
+        cat latest_changelog_with_title.md | tail -n +2 > latest_changelog.md
         VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*$/\1/p" xmipp3/version.py)
         RELEASE_NAME="Release ${VERSION}"
         echo "TAG_NAME=$VERSION" >> $GITHUB_OUTPUT
