@@ -43,7 +43,7 @@ jobs:
     - name: Get changelog, tag name, & release name
       id: variables
       run: |
-        VERSION=$VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*$/\1/p" xmipp3/version.py)
+        VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*$/\1/p" xmipp3/version.py)
         RELEASE_NAME="Release ${VERSION}"
         echo "TAG_NAME=$VERSION" >> $GITHUB_OUTPUT
         echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_OUTPUT
