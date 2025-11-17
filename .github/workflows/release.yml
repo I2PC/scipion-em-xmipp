@@ -44,11 +44,10 @@ jobs:
       id: variables
       run: |
         VERSION=$VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*$/\1/p" xmipp3/version.py)
-        TAG_NAME=v$VERSION
         RELEASE_NAME="Release ${VERSION}"
-        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$VERSION" >> $GITHUB_OUTPUT
         echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_OUTPUT
-        echo "Tag name=$TAG_NAME"
+        echo "Tag name=v$VERSION"
         echo "Release name=$RELEASE_NAME"
 
     - name: Generate tag
