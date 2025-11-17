@@ -45,8 +45,6 @@ NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
 type_of_version = version.type_of_version
 _logo = version._logo
-_binTagVersion = version._binTagVersion
-_pluginTagVersion= version._pluginTagVersion
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
 
@@ -199,16 +197,15 @@ class Plugin(pwem.Plugin):
 	            default=False
 	        )
         else:
-            xmippSrc = f'xmippSrc-{version._binTagVersion}'
+            xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
                 (f'cd .. && rm -rf {xmippSrc} && '
-                f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
+                f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                 f'cd {xmippSrc} && '
-                f'git checkout {version._binTagVersion} && '
                 f'./xmipp --production True ', COMPILE_TARGETS)
             ]
             env.addPackage(
-	                'xmippSrc', version=version._binTagVersion,
+	                'xmipp3', version=version._binVersion,
 	                tar='void.tgz',
 	                commands=installCommands,
 	                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
@@ -228,7 +225,7 @@ class Plugin(pwem.Plugin):
 
         isBundle = (os.path.isdir(os.path.join(bundleDir, 'src')) and
                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
-        
+        print(f'pluginDir: {pluginDir}\n, bundleDir: {bundleDir}\n, isBundle: {isBundle}')
         return bundleDir if isBundle else None
 
 def getNvidiaDriverVersion(plugin):
