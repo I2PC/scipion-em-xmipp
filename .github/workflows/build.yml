@@ -50,7 +50,7 @@ jobs:
     - name: Cloning xmipp and getting sources
       working-directory: ${{ github.workspace }}/../
       run: |
-        git clone -b ms_python_installer https://github.com/I2PC/xmipp.git
+        git clone -b ms_python_installer https://github.com/I2PC/xmipp3.git
         ./xmipp/xmipp getSources
         cd xmipp/src/
         ln -s "${{ github.workspace }}" "${{ github.workspace }}/../xmipp/src/scipion-em-xmipp"
