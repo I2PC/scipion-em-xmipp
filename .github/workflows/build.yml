@@ -37,7 +37,7 @@ jobs:
     - name: Install xmipp3-installer
       working-directory: ${{ github.workspace }}
       run: |
-        pip install --user xmipp3-installer
+        pip install -r requirements.txt
         
     - name: Cloning xmipp and getting sources
       working-directory: ${{ github.workspace }}/../
