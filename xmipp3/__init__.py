@@ -202,7 +202,7 @@ class Plugin(pwem.Plugin):
                 (f'cd .. && rm -rf {xmippSrc} && '
                 f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                 f'cd {xmippSrc} && '
-                f'./xmipp --production True ', COMPILE_TARGETS)
+                f'./xmipp', COMPILE_TARGETS)
             ]
             env.addPackage(
 	                'xmipp3', version=version._binVersion,
