@@ -1,3 +1,7 @@
+## Release 4.0.1
+- More scipion-em-xmipp
+   - Fix on xmipp installation flag
+     
 ## Release 4.0.0
 - Protocols updated
    - deep_micrograph_screen:  updated enviroment to tensorFlow2 and models updated to  
