@@ -45,7 +45,6 @@ NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
 type_of_version = version.type_of_version
 _logo = version._logo
-_binTagVersion = version._binTagVersion
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
 
