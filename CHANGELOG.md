@@ -1,4 +1,8 @@
-## Release 4.0.0
+## Release 26.0.1
+- More scipion-em-xmipp
+   - Fix on xmipp installation flag
+     
+## Release 26.0.0
 - Protocols updated
    - deep_micrograph_screen:  updated enviroment to tensorFlow2 and models updated to  
    - movie_max_shif: Change the criteria to evaluate the shift
