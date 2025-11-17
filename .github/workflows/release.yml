@@ -42,7 +42,7 @@ jobs:
 
     - name: Get changelog, tag name, & release name
       id: variables
-      run:
+      run: |
         VERSION=$(grep "__version__" xmipp3/version.py | sed -E 's/.*"([^"]+)".*/\1/')
         TAG_NAME=v$VERSION
         RELEASE_NAME="Release ${VERSION}"
