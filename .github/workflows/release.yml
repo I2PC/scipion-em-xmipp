@@ -32,13 +32,13 @@ jobs:
         git config --global user.email "actions@github.com"
         git commit -m "Switch xmipp from devel to release"
 
-    #- name: Build and publish
-    #  env:
-    #    TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-    #    TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-    #  run: |
-    #    python -m build --no-isolation
-    #    twine upload dist/* -c "${{ secrets.PYPI_COMMENT }}"
+    - name: Build and publish
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: |
+        python -m build --no-isolation
+        twine upload dist/* -c "${{ secrets.PYPI_COMMENT }}"
 
     - name: Get changelog, tag name, & release name
       id: variables
