@@ -42,5 +42,4 @@ _binVersion = 'v4' # Increase it if major release is generated in xmipp
 #   pull request, increase the one related to the new protocol).
 __version__ = 'v4.0.0'
 
-_binTagVersion = _binVersion + '-Poseidon' #'devel' or _binVersion + '-Poseidon'
 _currentDepVersion = '1.0'
