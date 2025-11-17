@@ -32,20 +32,24 @@ jobs:
         git config --global user.email "actions@github.com"
         git commit -m "Switch xmipp from devel to release"
 
-    - name: Build and publish
-      env:
-        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-      run: |
-        python -m build --no-isolation
-        twine upload dist/* -c "${{ secrets.PYPI_COMMENT }}"
+    #- name: Build and publish
+    #  env:
+    #    TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+    #    TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+    #  run: |
+    #    python -m build --no-isolation
+    #    twine upload dist/* -c "${{ secrets.PYPI_COMMENT }}"
 
     - name: Get changelog, tag name, & release name
       id: variables
       run:
-        TAG_NAME=$(grep "_pluginVersion" xmipp3/version.py | sed -E 's/.*"([^"]+)".*/\1/')
-        RELEASE_NAME="Release ${TAG_NAME}"
+        VERSION=$(grep "__version__" xmipp3/version.py | sed -E 's/.*"([^"]+)".*/\1/')
+        TAG_NAME=v$VERSION
+        RELEASE_NAME="Release ${VERSION}"
         echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_OUTPUT
+        echo "Tag name=$TAG_NAME"
+        echo "Release name=$RELEASE_NAME"
 
     - name: Generate tag
       id: tag_version
