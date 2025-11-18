@@ -1,3 +1,7 @@
+## Release 26.0.2
+- More scipion-em-xmipp
+   - Remove scipion dependencies from requirements   
+
 ## Release 26.0.1
 - More scipion-em-xmipp
    - Fix on xmipp installation flag
