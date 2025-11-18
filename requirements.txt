@@ -1,8 +1,8 @@
-scipion-pyworkflow>=3.0.31
+scipion-pyworkflow==3.11.*
 scikit-learn>=1.2
 scikit-image
-scipion-em
-scipion-app
+scipion-em==3.10.*
+scipion-app==3.8.*
 scipy<=1.10.0
 joblib
 peppercorn
