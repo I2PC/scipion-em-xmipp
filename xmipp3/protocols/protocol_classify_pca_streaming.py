@@ -75,12 +75,13 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     def _defineParams(self, form):
         form = self._defineCommonParams(form)
         form.addSection(label='Classification')
-        form.addParam('classificationBatch', IntParam, default=50000,
+        form.addParam('classificationBatch', IntParam, default=75000,
                       condition="not mode",
                       label="particles for initial classification",
                       help='Number of particles for an initial classification to compute the 2D references')
 
-        form.addParallelSection(threads=3)
+        # form.addParallelSection(threads=1)
+        form.addParallelSection(threads=1, mpi=8)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -142,7 +143,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             with self._lock: # Add this lock so it will not block the iterItems of the classify method
                 self.inputParticles.get().close() # If this is not close then it blocks the input protocol
             sys.stdout.flush()
-            time.sleep(30)
+            # time.sleep(30)
 
         sys.stdout.flush()  # One last flush
 
@@ -211,8 +212,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaXmdOut)  # Wiener filter
         else:
             self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
-        numTrain = min(len(newParticlesSet), self.training.get())
-        self.pcaTraining(self.imgsPcaFn, self.resolutionPca, numTrain)
+        # numTrain = min(len(newParticlesSet), self.training.get())
+        # self.pcaTraining(self.imgsPcaFn, self.resolutionPca, numTrain)
         self.pcaLaunch = False
         self._setPcaDone()
 
@@ -231,9 +232,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsXmd) # Wiener filter
         else:
             self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
-
-        self.classification(self.imgsFn, self.numberClasses,
-                            self.imgsOrigXmd, self.mask.get(), self.sigmaProt)
+        
+        numTrain = min(len(newParticlesSet), self.training.get())
+        self.classification(self.imgsFn, self.numberClasses, self.imgsOrigXmd,
+                            self.mask.get(), self.sigmaProt, numTrain, self.resolutionPca)
         self.classificationLaunch = False
 
     def convertInputStep(self, input, outputOrig, outputMRC):
@@ -281,11 +283,12 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         env = self._setEnvVariables(env)
         self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
 
-    def classification(self, inputIm, numClass, stfile, mask, sigma):
+    def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain, resolutionTrain):
         gpuID = self.setGPU(oneGPU=True)
-        args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
-               (inputIm, numClass, self._getExtraPath(), self._getExtraPath(), self._getExtraPath(),
-                stfile, gpuID)
+        # He quitado -g %s', porque no existe ese parámetro
+        args = ' -i %s -s %s -c %s -t %s -hr %s -p %s  -o %s/classes -stExp %s' % \
+               (inputIm, self.sampling, numClass, numTrain, resolutionTrain, self.coef.get(), self._getExtraPath(),
+                stfile)#, gpuID)
         if mask:
             args += ' --mask --sigma %s ' % (sigma)
 
@@ -302,7 +305,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
         self._fillClassesFromLevel(outputClasses, update)
         self._updateOutputSet(outputName, outputClasses, streamMode)
-        self._updateOutputAverages(update)
+        # self._updateOutputAverages(update)
 
         if not update:  # First time
             self._defineSourceRelation(self._getInputPointer(), outputClasses)
@@ -317,12 +320,12 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self.info(r'Last classification round processed is %d' % self.classificationRound)
         self.classificationRound += 1
 
-    def _updateOutputAverages(self, update):
-        outRefs = self._loadOutputAverageSet()
-        readSetOfParticles(self.ref, outRefs)
-        self._updateOutputSet(OUTPUT_AVERAGES, outRefs, Set.STREAM_CLOSED)
-        if not update:  # First Time
-            self._defineSourceRelation(self._getInputPointer(), outRefs)
+    # def _updateOutputAverages(self, update):
+    #     outRefs = self._loadOutputAverageSet()
+    #     readSetOfParticles(self.ref, outRefs)
+    #     self._updateOutputSet(OUTPUT_AVERAGES, outRefs, Set.STREAM_CLOSED)
+    #     if not update:  # First Time
+    #         self._defineSourceRelation(self._getInputPointer(), outRefs)
 
     def closeOutputStep(self):
         self._closeOutputSet()
@@ -383,7 +386,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     def _fillClassesFromLevel(self, clsSet, update=False):
         """ Create the SetOfClasses2D from a given iteration. """
         self._createModelFile()
-        self._loadClassesInfo(self._getExtraPath('classes_contrast_classes.star'))
+        self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
         mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath('classes_images.star'))
 
         params = {}
@@ -518,8 +521,36 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        error=self.validateDLtoolkit()
-        return error
+        errors = []
+        if self.inputParticles.get().getDimensions()[0] > 256:
+            errors.append("You should resize the particles."
+                          " Sizes smaller than 128 pixels are recommended.")
+        er = self.validateDLtoolkit()
+        if not isinstance(er, list):
+            er = [er]
+        if er:
+            errors+=er
+        return errors
+    
+    def _warnings(self):
+        validateMsgs = []
+        if self.inputParticles.get().getDimensions()[0] > 128:
+            validateMsgs.append("Particle sizes equal to or less"
+                                " than 128 pixels are recommended.")
+        if self.inputParticles.get().getDimensions()[0] > 256:
+            validateMsgs.append("Particle sizes bigger than 256 may"
+                                " saturate the GPU memory.")
+        return validateMsgs
+    
+    def _summary(self):
+        summary = []
+
+        if not hasattr(self, 'outputClasses'):
+            summary.append("Output classes not ready yet.")
+        else:
+            summary.append('2D clasification using AlignPCA')
+
+        return summary
 
 # --------------------------- Static functions --------------------------------
 def updateFileName(filepath, round):

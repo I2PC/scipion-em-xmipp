@@ -1504,7 +1504,8 @@ class TestXmippClassifyPca(TestXmippBase):
                                     mode=XmippProtClassifyPcaStreaming.UPDATE_CLASSES
                                     )
         protPCA2.initialClasses.set(protPCA1)
-        protPCA2.initialClasses.setExtended("outputAverages")
+        # protPCA2.initialClasses.setExtended("outputAverages")
+        protPCA2.initialClasses.setExtended("outputClasses")
 
         protPCA2.inputParticles.set(protStream)
         protPCA2.inputParticles.setExtended("outputParticles")
