@@ -187,7 +187,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         form.addParam('patchSize', params.IntParam, default=-1, 
                       label='Patch size for the variance filter (px)', 
                       expertLevel=LEVEL_ADVANCED,
-                      help='Windows size to make the variance filtter and '
+                      help='Windows size to make the variance filter and '
                            'compute the Gini coeff. A twice of the particle '
                            'size is recommended. Set at -1 applies 1.5*BoxSize.')
 
