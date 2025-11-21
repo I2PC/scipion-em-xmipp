@@ -48,7 +48,7 @@ from .viewer_validate_fscq import XmippProtValFitViewer
 from .viewer_validate_overfitting import XmippValidateOverfittingViewer
 from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
-from .viewer_consensus_classes import XmippConsensusClassesViewer
+from .viewer_reconstruct_swiftres import XmippReconstructSwiftresViewer
 from .viewer_extract_asymmetric_unit import viewerXmippProtExtractUnit
 from .viewer_deepEMHancer import viewerXmippProtDeepVolPostProc
 from .viewer_local_sharpening import viewerXmippProtLocSharp
