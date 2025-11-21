@@ -2,15 +2,11 @@ name: Build plugin
 
 on:
   pull_request:
-    branches: [devel, master]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    
-    # Avoid send statistics
-    env:
-      SEND_INSTALLATION_STATISTICS: OFF
 
     steps:    
     - name: Checkout repository
@@ -23,14 +19,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libfftw3-dev libopenmpi-dev libhdf5-dev libtiff5-dev libsqlite3-dev default-jdk git cmake openmpi-bin gcc g++
 
-    - name: Install CUDA
-      uses: Jimver/cuda-toolkit@master
-      id: cuda-toolkit
-      with:
-        cuda: '11.8.0'
-        method: network
-        sub-packages: '["nvcc", "toolkit"]'
-
     - name: Install Miniconda
       uses: conda-incubator/setup-miniconda@main
       with:
@@ -39,41 +27,26 @@ jobs:
         auto-activate-base: true
         activate-environment: scipion3
         python-version: "3.8"
-        
+
     - name: Install Scipion
-      working-directory: ${{ github.workspace }}
+      working-directory: ${{ github.workspace }}/../
       run: |
-        pwd
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
+    - name: Install xmipp3-installer
+      working-directory: ${{ github.workspace }}
+      run: |
+        pip install -r requirements.txt
         
-    - name: Cloning scipion-em-xmipp
-      working-directory: ${{ github.workspace }}/scipion/
+    - name: Cloning xmipp and getting sources
+      working-directory: ${{ github.workspace }}/../
       run: |
-           pwd
-           rm -rf scipion-em-xmipp
-           git clone https://github.com/I2PC/scipion-em-xmipp.git
+        git clone https://github.com/I2PC/xmipp3.git
+        ./xmipp3/xmipp getSources --keep-output
+        cd xmipp3/src/
+        ln -s "${{ github.workspace }}" "${{ github.workspace }}/../xmipp3/src/scipion-em-xmipp"
 
-    - name: Conditionally checkout to ${{ github.head_ref }}
-      working-directory: ${{ github.workspace }}/scipion/scipion-em-xmipp
-      env:
-        BRANCH_NAME: ${{ github.head_ref }}
-      run: |
-          pwd
-          git checkout $BRANCH_NAME
-   
-    - name: Install and compile Xmipp and show log
-      working-directory: ${{ github.workspace }}/scipion/ 
-      env:
-        BUILD_TESTS: True
-        BRANCH_NAME: ${{ github.head_ref }}
-        SEND_INSTALLATION_STATISTICS: OFF 
-      run: |
-          pwd
-          ./scipion3 installp -p scipion-em-xmipp --devel || {
-          echo "First attempt failed. Retrying..."
-          sleep 10
-          ./scipion3 installp -p scipion-em-xmipp --devel || (cat compilation.log && false)
-          }
-      # Duplicated because a defineVariables scipion plugin fails
+    - name: Installing scipion-em-xmipp
+      working-directory: ${{ github.workspace}}/../xmipp3/src
+      run: ../../scipion/scipion3 installp -p scipion-em-xmipp/ --devel

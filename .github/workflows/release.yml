@@ -1,29 +1,37 @@
 name: Release
 on:
-  push:
-    branches: [ master ]
+  workflow_dispatch:
 
 jobs:
   release:
+    environment:
+      name: release-approval
+
     runs-on: ubuntu-latest
+
     steps:
     - name: Checkout
       uses: actions/checkout@main
 
-    - name: Set up MPI
-      uses: mpi4py/setup-mpi@master
-
     - name: Set up Python
       uses: actions/setup-python@main
       with:
-        python-version: '3.8'
-    
+        python-version: '3.10'
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install setuptools wheel twine build
         pip install -r requirements.txt
-      
+
+    - name: Switch xmipp from devel to release
+      run: |
+        sed -i -E "s/^(type_of_version[[:space:]]*=[[:space:]]*)'devel'/\1'release'/" xmipp3/version.py
+        git add xmipp3/version.py
+        git config --global user.name "github-actions"
+        git config --global user.email "actions@github.com"
+        git commit -m "Switch xmipp from devel to release"
+
     - name: Build and publish
       env:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
@@ -31,26 +39,30 @@ jobs:
       run: |
         python -m build --no-isolation
         twine upload dist/* -c "${{ secrets.PYPI_COMMENT }}"
-  
+
     - name: Get changelog, tag name, & release name
       id: variables
       run: |
         awk '/## Release/{if (p) exit; p=1} p' CHANGELOG.md > latest_changelog_with_title.md
         cat latest_changelog_with_title.md | tail -n +2 > latest_changelog.md
-        RELEASE_NAME=$(cat latest_changelog_with_title.md | head -n 1 | sed 's/## Release //' | sed 's/^ *//')
+        VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*$/\1/p" xmipp3/version.py)
+        RELEASE_NAME="Release ${VERSION}"
+        echo "TAG_NAME=$VERSION" >> $GITHUB_OUTPUT
         echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=${RELEASE_NAME// /}" >> $GITHUB_OUTPUT
-    
+        echo "Tag name=v$VERSION"
+        echo "Release name=$RELEASE_NAME"
+
     - name: Generate tag
       id: tag_version
       uses: mathieudutour/github-tag-action@v6.2
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ steps.variables.outputs.TAG_NAME }}
-    
+
     - name: Create a GitHub release
       uses: ncipollo/release-action@main
       with:
         tag: ${{ steps.tag_version.outputs.new_tag }}
         name: ${{ steps.variables.outputs.RELEASE_NAME }}
         bodyFile: latest_changelog.md
+        makeLatest: true

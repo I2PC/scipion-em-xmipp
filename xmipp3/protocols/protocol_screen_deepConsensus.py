@@ -82,7 +82,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
     _stepsCheckSecs = 5              # time in seconds to check the steps
-    _devStatus = UPDATED
+    _devStatus = PROD
 
 
     USING_INPUT_COORDS = False

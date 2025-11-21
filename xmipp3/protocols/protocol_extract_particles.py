@@ -50,7 +50,7 @@ FACTOR_BOXSIZE = 1.5
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Extracts particle images from micrographs based on provided coordinates. This essential step prepares particle stacks for further processing such as classification and reconstruction."""
     _label = 'extract particles'
-    _devStatus = UPDATED
+    _devStatus = PROD
     RESIZE_FACTOR = 0
     RESIZE_DIMENSIONS = 1
     RESIZE_SAMPLINGRATE = 2

@@ -88,7 +88,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
        defocus group. You may want to perform iterations one by one, and remove from one
        iteration to the next, those particles that worse fit the model."""
     _label = 'highres'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     _lastUpdateVersion = VERSION_1_1
     
