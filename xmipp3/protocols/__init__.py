@@ -136,3 +136,4 @@ from .protocol_deep_hand import XmippProtDeepHand
 from .protocol_deep_center import XmippProtDeepCenter
 from .protocol_compute_likelihood import XmippProtComputeLikelihood
 from .protocol_deep_center_predict import XmippProtDeepCenterPredict
+from .protocol_push_SPA_lake import XmippProtPushSPALake
