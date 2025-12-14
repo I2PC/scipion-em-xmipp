@@ -157,8 +157,8 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
                       help='Angstroms.')
         form.addParam('doNormalize', BooleanParam, default=False,
                       label='Normalize', 
-                      help='It subtract a ramp in the gray values and normalizes'
-                           'so that in the background there is 0 mean and'
+                      help='It subtracts a ramp in the gray values and normalizes '
+                           'so that in the background there is 0 mean and '
                            'standard deviation 1.')
         form.addParam('normType', EnumParam, condition='doNormalize',
                       label='Normalization type', expertLevel=LEVEL_ADVANCED,
