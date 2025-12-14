@@ -172,7 +172,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
                       help='Pixels outside this circle are assumed to be noise and '
                            'their stddev is set to 1. Radius for background '
                            'circle definition (in pix.). '
-                           'If this value is 0, then half the box size is used.')
+                           'If this value is less than or equal to 0, then half the box size is used.')
         form.addParam('doCenter', BooleanParam, default=False,
                       label='Center images')
         form.addParam('doPhaseFlip', BooleanParam, default=False,
