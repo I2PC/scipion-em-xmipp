@@ -169,9 +169,9 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
                            'Ramp: subtract background + NewXmipp')
         form.addParam('backRadius', IntParam, default=-1, condition='doNormalize',
                       label='Background radius', expertLevel=LEVEL_ADVANCED,
-                      help='Pixels outside this circle are assumed to be noise and'
-                           'their stddev is set to 1. Radius for background'
-                           'circle definition (in pix.).'
+                      help='Pixels outside this circle are assumed to be noise and '
+                           'their stddev is set to 1. Radius for background '
+                           'circle definition (in pix.). '
                            'If this value is 0, then half the box size is used.')
         form.addParam('doCenter', BooleanParam, default=False,
                       label='Center images')
