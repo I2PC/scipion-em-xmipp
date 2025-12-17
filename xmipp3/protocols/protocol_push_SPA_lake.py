@@ -31,7 +31,8 @@ from pyworkflow.protocol import getUpdatedProtocol
 SCREENING_PROTOCOL = ['smartscopeConnection']
 FRAME_PROTOCOL = ['ProtImportMovies']
 MICROGRAPH_PROTOCOL = ['ProtMotionCorr', 'XmippProtFlexAlign' ]
-
+RESIZE_SIZE = 3680
+DOSE = 1
 
 class XmippProtPushSPALake(XmippProtocol):
     """
@@ -95,7 +96,26 @@ class XmippProtPushSPALake(XmippProtocol):
 
 
 
-    def prepareFrames(self):
+    def prepareFrames(self, movie):
+        '''
+        Take the movie
+        1A- If mrc or tif, extract the central frame; adjust the frames to the dose desire:
+            Assign the frames to have a dose/frame in [1 - 1.5] e-/A2
+            dose 1e-/A2: 100 frames dose/frame = 0.5 => 2 frames
+            dose 1e-/A2: 50 frames dose/frame = 0.75 => 2 frames
+            dose 1e-/A2: 25 frames dose/frame = 1.5 => 1 frame
+        1B- if eer, get a frame based on the dose choosen
+        2- Crop to square getting the upper left corner as zero
+        3- Resize to 3680x3680 usando box/area method sinc(x), indirectly it applies a low pass filter
+        4- Change the pixel deep to uint8 (8bits is more than enought)
+        5- Normalze to 0-255 (10->255) or maive 5
+        5- Apply jpeg compression and save it as jpeg
+
+        Returns
+        -> jpeg frame image
+        ------
+
+        '''
         print(self.prots)
 
 
