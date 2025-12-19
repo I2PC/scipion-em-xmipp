@@ -26,7 +26,6 @@
 # **************************************************************************
 
 import os
-import time
 
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
@@ -149,6 +148,17 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
         # before the actual processing
+        # DEBUGALBERTO START
+        fname = "/home/agarcia/Documents/attachActionDebug.txt"
+        if os.path.exists(fname):
+            os.remove(fname)
+        fjj = open(fname, "a+")
+        fjj.write('ALBERTO--------->onDebugMode PID {}'.format(os.getpid()))
+        fjj.close()
+        print('ALBERTO--------->onDebugMode PID {}'.format(os.getpid()))
+        import time
+        time.sleep(10)
+        # DEBUGALBERTO END
         pwutils.makePath(self._getExtraPath('inputCoords'))
         pwutils.makePath(self._getExtraPath('outputCoords'))
         pwutils.makePath(self._getExtraPath('thumbnails'))
@@ -534,14 +544,13 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         import os
         import numpy as np
         import mrcfile
+        from scipy.ndimage import zoom
 
         import matplotlib
         matplotlib.use('Agg')
-
         import matplotlib.pyplot as plt
         from matplotlib.patches import Circle
         from matplotlib.collections import PatchCollection
-        from skimage.transform import resize
 
         t0 = time.perf_counter()
 
@@ -554,7 +563,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             return
 
         maskFn = self._getExtraPath('predictedMasks', micBase + '.mrc')
-
         thumbFn = self._getExtraPath('thumbnails', micBase + '.png')
         if os.path.exists(thumbFn):
             return
@@ -584,7 +592,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         t4 = time.perf_counter()
 
-        # --- Compute scale (max side = maxSize, never upscale) ---
+        # --- Resize image, mask, and scale coordinates/radius ---
         h, w = img.shape
         scale = min(maxSize / h, maxSize / w, 1.0)
 
@@ -592,83 +600,49 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             new_h = int(h * scale)
             new_w = int(w * scale)
 
-            # Resize image
-            img = resize(
-                img,
-                (new_h, new_w),
-                preserve_range=True,
-                anti_aliasing=True
-            ).astype(np.uint8)
+            # Bilinear resize for image
+            img = zoom(img, (scale, scale), order=1).astype(np.uint8)
 
-            # Resize mask
+            # Nearest neighbor resize for mask
             if mask is not None:
-                mask = resize(
-                    mask,
-                    (new_h, new_w),
-                    preserve_range=True,
-                    anti_aliasing=False
-                )
+                mask = zoom(mask, (scale, scale), order=0)
 
             # Scale coordinates
             coords = [(x * scale, y * scale) for x, y in coords]
 
+        radius = (self.getBoxSize() * scale) / 4
         t5 = time.perf_counter()
 
         h, w = img.shape
 
         # --- Create figure ---
-        fig, ax = plt.subplots(
-            figsize=(w / 100, h / 100),
-            dpi=100
-        )
-
-        # --- Show micrograph ---
-        ax.imshow(img, cmap='gray', origin='upper', vmin=0, vmax=255)
-
-        # --- Overlay mask (blue, alpha = value) ---
+        fig, ax = plt.subplots(figsize=(w / 100, h / 100), dpi=100)
+        ax.set_position([0, 0, 1, 1])  # axes fill figure
+        ax.axis('off')
+        # --- Show image ---
+        ax.imshow(img, cmap='gray', origin='upper', vmin=0, vmax=255, extent=(0, w, 0, h))
+        # --- Overlay mask in blue ---
         if mask is not None:
-            ax.imshow(
-                mask,
-                cmap='Blues',
-                origin='upper',
-                alpha=mask
-            )
+            ax.imshow(mask, cmap='Blues', origin='upper', alpha=mask)
 
-        # --- Fix axes ---
+        # --- Fix axes, remove background and borders ---
         ax.set_xlim(0, w)
         ax.set_ylim(h, 0)
-        ax.axis('off')
+        fig.patch.set_alpha(0)
+        ax.set_facecolor('none')
 
-        # --- Scaled radius ---
-        radius = (self.getBoxSize() * scale) / 4
+        # --- Draw particles using PatchCollection ---
+        patches = [Circle((x, y), radius=radius) for x, y in coords]
+        collection = PatchCollection(
+            patches, edgecolor='red', facecolor='none', linewidth=1
+        )
+        ax.add_collection(collection)
         t6 = time.perf_counter()
 
-        # --- Draw particles (PatchCollection) ---
-        patches = [
-            Circle((x, y), radius=radius)
-            for x, y in coords
-        ]
-
-        collection = PatchCollection(
-            patches,
-            edgecolor='red',
-            facecolor='none',
-            linewidth=1
-        )
-
-        ax.add_collection(collection)
-        t7 = time.perf_counter()
-
-        # --- Save ---
-        plt.savefig(
-            thumbFn,
-            dpi=100,
-            bbox_inches='tight',
-            pad_inches=0,
-            transparent=True
-        )
+        # --- Save thumbnail ---
+        plt.savefig(thumbFn, dpi=100, bbox_inches=None, pad_inches=0)
         plt.close(fig)
-        t8 = time.perf_counter()
+        t7 = time.perf_counter()
 
         # --- Timing report ---
         print(f'Init / checks        : {t1 - t0:.3f} s')
@@ -677,9 +651,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         print(f'Read mask            : {t4 - t3:.3f} s')
         print(f'Resize + scaling     : {t5 - t4:.3f} s')
         print(f'Figure setup         : {t6 - t5:.3f} s')
-        print(f'Draw particles       : {t7 - t6:.3f} s')
-        print(f'Save thumbnail       : {t8 - t7:.3f} s')
-        print(f'TOTAL                : {t8 - t0:.3f} s')
+        print(f'Save thumbnail       : {t7 - t6:.3f} s')
+        print(f'TOTAL                : {t7 - t0:.3f} s')
+
 
     def read_star_coordinates(self, posFn):
         coords = []
