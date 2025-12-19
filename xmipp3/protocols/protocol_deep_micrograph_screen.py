@@ -26,6 +26,7 @@
 # **************************************************************************
 
 import os
+import time
 
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
@@ -38,7 +39,9 @@ from xmipp_base import createMetaDataFromPattern
 from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 from pyworkflow import BETA, UPDATED, NEW, PROD
-
+import numpy as np
+import mrcfile
+import matplotlib.pyplot as plt
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Removes coordinates located in carbon regions or large impurities in micrographs using a pre-trained deep learning model. This screening improves particle picking accuracy by filtering out false positives from contaminated areas."""
@@ -148,6 +151,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         # before the actual processing
         pwutils.makePath(self._getExtraPath('inputCoords'))
         pwutils.makePath(self._getExtraPath('outputCoords'))
+        pwutils.makePath(self._getExtraPath('thumbnails'))
         if self.saveMasks.get():
           pwutils.makePath(self._getExtraPath("predictedMasks"))
         self._setupBasicProperties()
@@ -179,7 +183,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
     def extractMicrographListStepOwn(self, micKeyList, *args):
         micList = []
-
         for micName in micKeyList:
             mic = self.micDict[micName]
             micDoneFn = self._getMicDone(mic)
@@ -198,6 +201,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         self._computeMaskForMicrographList(micList, *args)
 
         for mic in micList:
+            self._generateThumbnail(mic)
             # Mark this mic as finished
             open(self._getMicDone(mic), 'w').close()
 
@@ -524,3 +528,186 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         self._defineSourceRelation(inputset,
                                    Pointer(value=self, extended=outputName))
         self._store()
+
+    def _generateThumbnail(self, mic, maxSize=512):
+        import time
+        import os
+        import numpy as np
+        import mrcfile
+
+        import matplotlib
+        matplotlib.use('Agg')
+
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Circle
+        from matplotlib.collections import PatchCollection
+        from skimage.transform import resize
+
+        t0 = time.perf_counter()
+
+        micFn = mic.getFileName()
+        micBase = pwutils.removeBaseExt(os.path.basename(micFn))
+
+        posFn = self._getExtraPath('outputCoords', micBase + '.pos')
+        if not os.path.exists(posFn):
+            self.warning(f'No coordinates for micrograph {micBase}')
+            return
+
+        maskFn = self._getExtraPath('predictedMasks', micBase + '.mrc')
+
+        thumbFn = self._getExtraPath('thumbnails', micBase + '.png')
+        if os.path.exists(thumbFn):
+            return
+
+        t1 = time.perf_counter()
+
+        # --- Read micrograph ---
+        with mrcfile.open(micFn, permissive=True) as mrc:
+            img = mrc.data.astype(np.float32)
+        t2 = time.perf_counter()
+
+        # --- Normalize and convert to uint8 ---
+        p1, p99 = np.percentile(img, (1, 99))
+        img = np.clip((img - p1) / (p99 - p1), 0, 1)
+        img = (img * 255).astype(np.uint8)
+
+        # --- Read coordinates ---
+        coords = self.read_star_coordinates(posFn)
+        t3 = time.perf_counter()
+
+        # --- Read mask ---
+        mask = None
+        if os.path.exists(maskFn):
+            with mrcfile.open(maskFn, permissive=True) as mrc:
+                mask = mrc.data.astype(np.float32)
+            mask = np.clip(mask, 0.0, 1.0)
+
+        t4 = time.perf_counter()
+
+        # --- Compute scale (max side = maxSize, never upscale) ---
+        h, w = img.shape
+        scale = min(maxSize / h, maxSize / w, 1.0)
+
+        if scale < 1.0:
+            new_h = int(h * scale)
+            new_w = int(w * scale)
+
+            # Resize image
+            img = resize(
+                img,
+                (new_h, new_w),
+                preserve_range=True,
+                anti_aliasing=True
+            ).astype(np.uint8)
+
+            # Resize mask
+            if mask is not None:
+                mask = resize(
+                    mask,
+                    (new_h, new_w),
+                    preserve_range=True,
+                    anti_aliasing=False
+                )
+
+            # Scale coordinates
+            coords = [(x * scale, y * scale) for x, y in coords]
+
+        t5 = time.perf_counter()
+
+        h, w = img.shape
+
+        # --- Create figure ---
+        fig, ax = plt.subplots(
+            figsize=(w / 100, h / 100),
+            dpi=100
+        )
+
+        # --- Show micrograph ---
+        ax.imshow(img, cmap='gray', origin='upper', vmin=0, vmax=255)
+
+        # --- Overlay mask (blue, alpha = value) ---
+        if mask is not None:
+            ax.imshow(
+                mask,
+                cmap='Blues',
+                origin='upper',
+                alpha=mask
+            )
+
+        # --- Fix axes ---
+        ax.set_xlim(0, w)
+        ax.set_ylim(h, 0)
+        ax.axis('off')
+
+        # --- Scaled radius ---
+        radius = (self.getBoxSize() * scale) / 4
+        t6 = time.perf_counter()
+
+        # --- Draw particles (PatchCollection) ---
+        patches = [
+            Circle((x, y), radius=radius)
+            for x, y in coords
+        ]
+
+        collection = PatchCollection(
+            patches,
+            edgecolor='red',
+            facecolor='none',
+            linewidth=1
+        )
+
+        ax.add_collection(collection)
+        t7 = time.perf_counter()
+
+        # --- Save ---
+        plt.savefig(
+            thumbFn,
+            dpi=100,
+            bbox_inches='tight',
+            pad_inches=0,
+            transparent=True
+        )
+        plt.close(fig)
+        t8 = time.perf_counter()
+
+        # --- Timing report ---
+        print(f'Init / checks        : {t1 - t0:.3f} s')
+        print(f'Read micrograph      : {t2 - t1:.3f} s')
+        print(f'Normalize + coords   : {t3 - t2:.3f} s')
+        print(f'Read mask            : {t4 - t3:.3f} s')
+        print(f'Resize + scaling     : {t5 - t4:.3f} s')
+        print(f'Figure setup         : {t6 - t5:.3f} s')
+        print(f'Draw particles       : {t7 - t6:.3f} s')
+        print(f'Save thumbnail       : {t8 - t7:.3f} s')
+        print(f'TOTAL                : {t8 - t0:.3f} s')
+
+    def read_star_coordinates(self, posFn):
+        coords = []
+        with open(posFn) as f:
+            lines = f.readlines()
+
+        in_data_particles = False
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+
+            # Detecta el inicio del bloque de partículas
+            if line.startswith('data_particles'):
+                in_data_particles = True
+                continue
+            if not in_data_particles:
+                continue
+
+            # Ignora las cabeceras y la línea 'loop_'
+            if line.startswith('loop_') or line.startswith('_'):
+                continue
+
+            # Ahora line es una fila de datos
+            parts = line.split()
+            if len(parts) >= 4:  # Nos aseguramos de que haya columnas suficientes
+                x = float(parts[2])  # _xcoor está en la columna 3 (índice 2)
+                y = float(parts[3])  # _ycoor está en la columna 4 (índice 3)
+                coords.append((x, y))
+
+        return coords

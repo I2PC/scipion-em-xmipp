@@ -35,6 +35,9 @@ from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pwem import emlib
 from xmipp3.convert import getXmippAttribute
 from xmipp3.protocols.protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
+from xmippLib import Image
+import numpy as np
+import os
 
 class XmippDeepMicrographViewer(ProtocolViewer):
     """         
@@ -61,10 +64,16 @@ class XmippDeepMicrographViewer(ProtocolViewer):
                            " to the threshold indicated in the box.\n"
                            "If you like the result, save the result"
                            " with the '+Coordinates' button")
-
+        form.addParam('visualizeMaskOverlay', FloatParam, default=0.8,
+                    label="Visualize micrographs with the mask overlay",
+                    help="Visualize micrographs with the DeepMicrographCleaner mask "
+                         "overlaid using a color transparency.\n"
+                         "The transparency indicates the Deep score factor applied "
+        )
     def _getVisualizeDict(self):
         return {'visualizeCoordinates': self._visualizeCoordinates,
-                'visualizeHistogram': self._visualizeHistogram}
+                'visualizeHistogram': self._visualizeHistogram,
+                'visualizeMaskAndMic': self._visualizeMaskAndMic}
 
     def _visualizeCoordinates(self, e=None):
         views = []
@@ -129,3 +138,23 @@ class XmippDeepMicrographViewer(ProtocolViewer):
             print(" > Output not ready yet.")
 
         return views
+
+    def _visualizeMaskAndMic(self, e=None):
+        '''
+        Get the micrographs thumbnails (512x512 or aprox, 8bits)
+        get the coords, rezise it,
+        Get the mask, resize it
+        Join all it
+        Plot with a legend of scoreDeep
+
+        Parameters
+        ----------
+        Micrograph_thumbnail
+        Mask
+        coords
+
+        Returns
+        -------
+
+        '''
+        pass
