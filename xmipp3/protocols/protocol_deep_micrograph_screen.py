@@ -166,6 +166,18 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
         # before the actual processing
+        # DEBUGALBERTO START
+        import os
+        fname = "/home/agarcia/Documents/attachActionDebug.txt"
+        if os.path.exists(fname):
+            os.remove(fname)
+        fjj = open(fname, "a+")
+        fjj.write('ALBERTO--------->onDebugMode PID {}'.format(os.getpid()))
+        fjj.close()
+        print('ALBERTO--------->onDebugMode PID {}'.format(os.getpid()))
+        import time
+        time.sleep(10)
+        # DEBUGALBERTO END
         pwutils.makePath(self._getExtraPath('inputCoords'))
         pwutils.makePath(self._getExtraPath('outputCoords'))
         pwutils.makePath(self._getExtraPath('thumbnails'))
@@ -605,7 +617,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         # --- Resize image, mask, and scale coordinates/radius ---
         h, w = img.shape
-        scale = min(MAX_SIZE_THUMB / h, MAX_SIZE_THUMB / w, 1.0)
+        scale = max(MAX_SIZE_THUMB / h, MAX_SIZE_THUMB / w)
 
         if scale < 1.0:
             # Bilinear resize for image
@@ -657,22 +669,19 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             if not line or line.startswith('#'):
                 continue
 
-            # Detecta el inicio del bloque de partículas
             if line.startswith('data_particles'):
                 in_data_particles = True
                 continue
             if not in_data_particles:
                 continue
 
-            # Ignora las cabeceras y la línea 'loop_'
             if line.startswith('loop_') or line.startswith('_'):
                 continue
 
-            # Ahora line es una fila de datos
             parts = line.split()
-            if len(parts) >= 4:  # Nos aseguramos de que haya columnas suficientes
-                x = float(parts[2])  # _xcoor está en la columna 3 (índice 2)
-                y = float(parts[3])  # _ycoor está en la columna 4 (índice 3)
+            if len(parts) >= 4:
+                x = float(parts[2])
+                y = float(parts[3])
                 coords.append((x, y))
 
         return coords
