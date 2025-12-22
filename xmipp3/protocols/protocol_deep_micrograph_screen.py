@@ -166,18 +166,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
         # before the actual processing
-        # DEBUGALBERTO START
-        import os
-        fname = "/home/agarcia/Documents/attachActionDebug.txt"
-        if os.path.exists(fname):
-            os.remove(fname)
-        fjj = open(fname, "a+")
-        fjj.write('ALBERTO--------->onDebugMode PID {}'.format(os.getpid()))
-        fjj.close()
-        print('ALBERTO--------->onDebugMode PID {}'.format(os.getpid()))
-        import time
-        time.sleep(10)
-        # DEBUGALBERTO END
         pwutils.makePath(self._getExtraPath('inputCoords'))
         pwutils.makePath(self._getExtraPath('outputCoords'))
         pwutils.makePath(self._getExtraPath('thumbnails'))
