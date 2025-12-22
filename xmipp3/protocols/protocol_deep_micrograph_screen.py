@@ -33,7 +33,6 @@ import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
 
-import time
 import mrcfile
 from scipy.ndimage import zoom
 import matplotlib
@@ -51,6 +50,9 @@ from pyworkflow import BETA, UPDATED, NEW, PROD
 import numpy as np
 import mrcfile
 import matplotlib.pyplot as plt
+
+MAX_SIZE_THUMB=512
+NUM_THUMBNAILS=45
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Removes coordinates located in carbon regions or large impurities in micrographs using a pre-trained deep learning model. This screening improves particle picking accuracy by filtering out false positives from contaminated areas."""
@@ -125,8 +127,10 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         form.addParam("saveMasks", params.BooleanParam, default=False,expertLevel=params.LEVEL_ADVANCED,
                       label="saveMasks", help="Save predicted masks?")
 
-        form.addParam("saveMicThumbnailWithMask", params.BooleanParam, default=False, expertLevel=params.LEVEL_ADVANCED,
-                      label="Save thumbnails (mics and mask)", help="Save a set of 50 micrographs with the predicted masks stamp and coords stamp")
+        form.addParam("saveMicThumbnailWithMask", params.BooleanParam, default=True, expertLevel=params.LEVEL_ADVANCED,
+                      condition='saveMasks == True',
+                      label="Save thumbnails (mics and mask)",
+                      help="Save a set of 50 micrographs with the predicted masks stamp and coords stamp")
 
 
         form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
@@ -216,7 +220,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         thumbnailCounter = 0
         for mic in micList:
             if self.saveMicThumbnailWithMask.get():
-                if thumbnailCounter <= 45:
+                if thumbnailCounter <= NUM_THUMBNAILS:
                     self._generateThumbnail(mic)
                     thumbnailCounter += 1
             # Mark this mic as finished
@@ -546,7 +550,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                                    Pointer(value=self, extended=outputName))
         self._store()
 
-    def _generateThumbnail(self, mic, maxSize=512):
+    def _generateThumbnail(self, mic):
         """
         Generate a thumbnail PNG for a given micrograph.
 
@@ -597,11 +601,11 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         if os.path.exists(maskFn):
             with mrcfile.open(maskFn, permissive=True) as mrc:
                 mask = mrc.data.astype(np.float32)
-            mask = np.clip(mask, 0.0, 0.9)
+            mask = np.clip(mask, 0.0, 1)
 
         # --- Resize image, mask, and scale coordinates/radius ---
         h, w = img.shape
-        scale = min(maxSize / h, maxSize / w, 1.0)
+        scale = min(MAX_SIZE_THUMB / h, MAX_SIZE_THUMB / w, 1.0)
 
         if scale < 1.0:
             # Bilinear resize for image
