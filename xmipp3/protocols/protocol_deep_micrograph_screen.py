@@ -33,6 +33,16 @@ import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
 
+import time
+import mrcfile
+from scipy.ndimage import zoom
+import matplotlib
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+matplotlib.use('Agg')
+from matplotlib.patches import Circle
+from matplotlib.collections import PatchCollection
+
 from xmipp3.base import XmippProtocol
 from xmipp_base import createMetaDataFromPattern
 from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
@@ -115,6 +125,10 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         form.addParam("saveMasks", params.BooleanParam, default=False,expertLevel=params.LEVEL_ADVANCED,
                       label="saveMasks", help="Save predicted masks?")
 
+        form.addParam("saveMicThumbnailWithMask", params.BooleanParam, default=False, expertLevel=params.LEVEL_ADVANCED,
+                      label="Save thumbnails (mics and mask)", help="Save a set of 50 micrographs with the predicted masks stamp and coords stamp")
+
+
         form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
                        label="Use GPU for execution",
                        help="This protocol has both CPU and GPU implementation. "
@@ -148,17 +162,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
         # before the actual processing
-        # DEBUGALBERTO START
-        fname = "/home/agarcia/Documents/attachActionDebug.txt"
-        if os.path.exists(fname):
-            os.remove(fname)
-        fjj = open(fname, "a+")
-        fjj.write('ALBERTO--------->onDebugMode PID {}'.format(os.getpid()))
-        fjj.close()
-        print('ALBERTO--------->onDebugMode PID {}'.format(os.getpid()))
-        import time
-        time.sleep(10)
-        # DEBUGALBERTO END
         pwutils.makePath(self._getExtraPath('inputCoords'))
         pwutils.makePath(self._getExtraPath('outputCoords'))
         pwutils.makePath(self._getExtraPath('thumbnails'))
@@ -210,8 +213,12 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         self._computeMaskForMicrographList(micList, *args)
 
+        thumbnailCounter = 0
         for mic in micList:
-            self._generateThumbnail(mic)
+            if self.saveMicThumbnailWithMask.get():
+                if thumbnailCounter <= 45:
+                    self._generateThumbnail(mic)
+                    thumbnailCounter += 1
             # Mark this mic as finished
             open(self._getMicDone(mic), 'w').close()
 
@@ -540,39 +547,41 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         self._store()
 
     def _generateThumbnail(self, mic, maxSize=512):
-        import time
-        import os
-        import numpy as np
-        import mrcfile
-        from scipy.ndimage import zoom
+        """
+        Generate a thumbnail PNG for a given micrograph.
 
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        from matplotlib.patches import Circle
-        from matplotlib.collections import PatchCollection
+        Steps performed:
+        1. Load the micrograph from MRC file and normalize pixel values to 0-255.
+        2. Optionally read particle coordinates from a .pos file.
+        3. Optionally read a predicted mask from a .mrc file.
+        4. Resize the image, mask, and scale coordinates if larger than maxSize.
+        5. Overlay the mask in blue and draw particles as red circles.
+        6. Save the final thumbnail as a PNG with minimal padding and compression.
 
-        t0 = time.perf_counter()
+        Parameters
+        ----------
+        mic : Micrograph object
+            The micrograph to generate the thumbnail for.
+        maxSize : int, optional
+            Maximum size (in pixels) for the thumbnail (default is 512).
 
+        Returns
+        -------
+        None
+            The thumbnail is saved directly to the 'thumbnails' directory.
+        """
         micFn = mic.getFileName()
         micBase = pwutils.removeBaseExt(os.path.basename(micFn))
 
         posFn = self._getExtraPath('outputCoords', micBase + '.pos')
-        if not os.path.exists(posFn):
-            self.warning(f'No coordinates for micrograph {micBase}')
-            return
-
         maskFn = self._getExtraPath('predictedMasks', micBase + '.mrc')
         thumbFn = self._getExtraPath('thumbnails', micBase + '.png')
         if os.path.exists(thumbFn):
             return
 
-        t1 = time.perf_counter()
-
         # --- Read micrograph ---
         with mrcfile.open(micFn, permissive=True) as mrc:
             img = mrc.data.astype(np.float32)
-        t2 = time.perf_counter()
 
         # --- Normalize and convert to uint8 ---
         p1, p99 = np.percentile(img, (1, 99))
@@ -580,39 +589,31 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         img = (img * 255).astype(np.uint8)
 
         # --- Read coordinates ---
-        coords = self.read_star_coordinates(posFn)
-        t3 = time.perf_counter()
+        if  os.path.exists(posFn):
+            coords = self.read_star_coordinates(posFn)
 
         # --- Read mask ---
         mask = None
         if os.path.exists(maskFn):
             with mrcfile.open(maskFn, permissive=True) as mrc:
                 mask = mrc.data.astype(np.float32)
-            mask = np.clip(mask, 0.0, 1.0)
-
-        t4 = time.perf_counter()
+            mask = np.clip(mask, 0.0, 0.9)
 
         # --- Resize image, mask, and scale coordinates/radius ---
         h, w = img.shape
         scale = min(maxSize / h, maxSize / w, 1.0)
 
         if scale < 1.0:
-            new_h = int(h * scale)
-            new_w = int(w * scale)
-
             # Bilinear resize for image
-            img = zoom(img, (scale, scale), order=1).astype(np.uint8)
-
+            img = zoom(img, (scale, scale), order=1, prefilter=False).astype(np.uint8)
             # Nearest neighbor resize for mask
             if mask is not None:
                 mask = zoom(mask, (scale, scale), order=0)
-
             # Scale coordinates
-            coords = [(x * scale, y * scale) for x, y in coords]
+            if coords:
+                coords = [(x * scale, y * scale) for x, y in coords]
 
         radius = (self.getBoxSize() * scale) / 4
-        t5 = time.perf_counter()
-
         h, w = img.shape
 
         # --- Create figure ---
@@ -620,39 +621,25 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         ax.set_position([0, 0, 1, 1])  # axes fill figure
         ax.axis('off')
         # --- Show image ---
-        ax.imshow(img, cmap='gray', origin='upper', vmin=0, vmax=255, extent=(0, w, 0, h))
+        ax.imshow(img, cmap='gray', origin='upper', vmin=0, vmax=255)
         # --- Overlay mask in blue ---
         if mask is not None:
-            ax.imshow(mask, cmap='Blues', origin='upper', alpha=mask)
+            ax.imshow(mask, cmap='YlGnBu', origin='upper', alpha=mask)
 
         # --- Fix axes, remove background and borders ---
         ax.set_xlim(0, w)
         ax.set_ylim(h, 0)
-        fig.patch.set_alpha(0)
         ax.set_facecolor('none')
 
         # --- Draw particles using PatchCollection ---
-        patches = [Circle((x, y), radius=radius) for x, y in coords]
-        collection = PatchCollection(
-            patches, edgecolor='red', facecolor='none', linewidth=1
-        )
+        if coords:
+            patches = [Circle((x, y), radius=radius) for x, y in coords]
+            collection = PatchCollection(patches, edgecolor='red', facecolor='none', linewidth=1)
         ax.add_collection(collection)
-        t6 = time.perf_counter()
 
         # --- Save thumbnail ---
-        plt.savefig(thumbFn, dpi=100, bbox_inches=None, pad_inches=0)
+        plt.savefig(thumbFn, dpi=80, bbox_inches=None, pad_inches=0, pil_kwargs={"compress_level": 1})
         plt.close(fig)
-        t7 = time.perf_counter()
-
-        # --- Timing report ---
-        print(f'Init / checks        : {t1 - t0:.3f} s')
-        print(f'Read micrograph      : {t2 - t1:.3f} s')
-        print(f'Normalize + coords   : {t3 - t2:.3f} s')
-        print(f'Read mask            : {t4 - t3:.3f} s')
-        print(f'Resize + scaling     : {t5 - t4:.3f} s')
-        print(f'Figure setup         : {t6 - t5:.3f} s')
-        print(f'Save thumbnail       : {t7 - t6:.3f} s')
-        print(f'TOTAL                : {t7 - t0:.3f} s')
 
 
     def read_star_coordinates(self, posFn):

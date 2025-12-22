@@ -36,8 +36,10 @@ from pwem import emlib
 from xmipp3.convert import getXmippAttribute
 from xmipp3.protocols.protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
 from xmippLib import Image
-import numpy as np
 import os
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 
 class XmippDeepMicrographViewer(ProtocolViewer):
     """         
@@ -64,11 +66,12 @@ class XmippDeepMicrographViewer(ProtocolViewer):
                            " to the threshold indicated in the box.\n"
                            "If you like the result, save the result"
                            " with the '+Coordinates' button")
-        form.addParam('visualizeMaskOverlay', FloatParam, default=0.8,
+        form.addParam('visualizeMaskAndMic', LabelParam,
                     label="Visualize micrographs with the mask overlay",
                     help="Visualize micrographs with the DeepMicrographCleaner mask "
-                         "overlaid using a color transparency.\n"
-                         "The transparency indicates the Deep score factor applied "
+                         "overlaid using a color transparency and the coords stamp.\n"
+                         "The transparency indicates the Deep score factor applied."
+                         "Will be shown the first 50 miccrographs"
         )
     def _getVisualizeDict(self):
         return {'visualizeCoordinates': self._visualizeCoordinates,
@@ -128,8 +131,7 @@ class XmippDeepMicrographViewer(ProtocolViewer):
                 plotter.createSubPlot("Deep micrograph score",
                                       "Deep micrograph score",
                                       "Number of Coordinates")
-                cScores = [getXmippAttribute(coord, mdLabel).get()
-                           for coord in outCoords]
+                cScores = [getXmippAttribute(coord, mdLabel).get() for coord in outCoords]
                 plotter.plotHist(cScores, nbins=numberOfBins)
                 views.append(plotter)
             else:
@@ -140,21 +142,48 @@ class XmippDeepMicrographViewer(ProtocolViewer):
         return views
 
     def _visualizeMaskAndMic(self, e=None):
-        '''
-        Get the micrographs thumbnails (512x512 or aprox, 8bits)
-        get the coords, rezise it,
-        Get the mask, resize it
-        Join all it
-        Plot with a legend of scoreDeep
+        views = []
 
-        Parameters
-        ----------
-        Micrograph_thumbnail
-        Mask
-        coords
+        thumb_dir = self.protocol._getExtraPath('thumbnails')
+        thumbs = sorted([
+            os.path.join(thumb_dir, f)
+            for f in os.listdir(thumb_dir)
+            if f.lower().endswith('.png')
+        ])
 
-        Returns
-        -------
+        if not thumbs:
+            return None
 
-        '''
-        pass
+        n = len(thumbs)
+        per_page = 15
+        cols = 5
+        rows = 3
+
+        for page_start in range(0, n, per_page):
+            page_thumbs = thumbs[page_start:page_start + per_page]
+            fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4), squeeze=False)
+
+            try:
+                fig.canvas.manager.set_window_title(f'Thumbnails {page_start + 1}-{page_start + len(page_thumbs)}')
+            except AttributeError:
+                pass
+
+            for ax in axes.flat:
+                ax.axis('off')
+
+            for i, fn in enumerate(page_thumbs):
+                r, c = divmod(i, cols)
+                img = mpimg.imread(fn)
+                axes[r, c].imshow(img)
+                axes[r, c].axis('off')
+
+            for j in range(len(page_thumbs), rows * cols):
+                r, c = divmod(j, cols)
+                axes[r, c].imshow(np.zeros((10, 10, 3), dtype=np.uint8))
+                axes[r, c].axis('off')
+
+
+            fig.tight_layout(pad=0.2)
+            views.append(fig)
+
+        return views
