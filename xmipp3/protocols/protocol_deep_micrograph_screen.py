@@ -642,9 +642,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         ax.add_collection(collection)
 
         # --- Save thumbnail ---
-        plt.savefig(thumbFn, dpi=80, bbox_inches=None, pad_inches=0, pil_kwargs={"compress_level": 1})
+        plt.savefig(thumbFn, dpi=80, bbox_inches=None, pad_inches=0, pil_kwargs={"compress_level": 4})
         plt.close(fig)
-
 
     def read_star_coordinates(self, posFn):
         coords = []
