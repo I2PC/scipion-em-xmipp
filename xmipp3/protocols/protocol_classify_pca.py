@@ -316,13 +316,15 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             self.info('Row is none finish updating particle')
             setattr(item, "_appendItem", False)
         else:
-            if item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value):
-                item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
-                item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
-            else:
-                print(item.getObjId(),row.get(XMIPPCOLUMNS.itemId.value) )
-                self.error('The particles ids are not synchronized')
-                setattr(item, "_appendItem", False)
+            # if item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value):
+            #     item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
+            #     item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
+            # else:
+            #     print(item.getObjId(),row.get(XMIPPCOLUMNS.itemId.value) )
+            #     self.error('The particles ids are not synchronized')
+            #     setattr(item, "_appendItem", False)
+            item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
+            item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
 
     def _updateClass(self, item):
         classId = item.getObjId()
