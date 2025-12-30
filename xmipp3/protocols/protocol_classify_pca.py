@@ -217,6 +217,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             
         
         if self.correctCtf: 
+            args = ' -i %s  --operate  randomize'%(outputOrig)
+            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+            
             args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
             self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
             
