@@ -320,6 +320,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
                 item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
                 item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
             else:
+                print(item.getObjId(),row.get(XMIPPCOLUMNS.itemId.value) )
                 self.error('The particles ids are not synchronized')
                 setattr(item, "_appendItem", False)
 
