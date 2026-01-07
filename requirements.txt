@@ -5,7 +5,5 @@ joblib
 peppercorn
 plotter
 PyWavelets
-numpy==1.*
-
 xmipp3-installer>=2.0.4,<3.0.0
-#git+https://github.com/I2PC/xmipp3-installer.git@v2.0.4#egg=xmipp3-installer
+numpy==1.*
