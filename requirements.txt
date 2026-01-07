@@ -8,4 +8,4 @@ PyWavelets
 numpy==1.*
 
 # xmipp3-installer>=2.0.3,<3.0.0
-xmipp3-installer git+https://github.com/I2PC/xmipp3-installer.git@v2.0.3
+xmipp3-installer @ git+https://github.com/I2PC/xmipp3-installer.git@v2.0.3
