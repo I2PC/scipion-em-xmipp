@@ -244,7 +244,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         env['LD_LIBRARY_PATH'] = ''
         self.runJob("xmipp_classify_pca", args, numberOfMpi=1, env=env)
         
-        args = ' -i %s  --operate  sort'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
+        args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
         self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
         
         
