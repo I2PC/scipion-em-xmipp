@@ -45,7 +45,7 @@ jobs:
       working-directory: ${{ github.workspace }}/../
       run: |
         git clone https://github.com/I2PC/xmipp3.git
-        ./xmipp3/xmipp getSources --keep-output
+        scipion/scipion3 run ./xmipp3/xmipp getSources --keep-output
         cd xmipp3/src/
         ln -s "${{ github.workspace }}" "${{ github.workspace }}/../xmipp3/src/scipion-em-xmipp"
 
