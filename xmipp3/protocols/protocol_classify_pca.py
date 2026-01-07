@@ -35,12 +35,14 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.constants import BETA
 
 from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D, Transform
+from pwem.objects import SetOfClasses2D, Transform, SetOfParticles
 from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
 
 from xmipp3 import XmippProtocol
 from xmipp3.convert import (writeSetOfParticles, writeSetOfClasses2D, xmippToLocation,
-                            readSetOfParticles, matrixFromGeometry)
+                            readSetOfParticles, matrixFromGeometry, createItemMatrix)
+
+import pwem.emlib.metadata as md
 
 
 class XMIPPCOLUMNS(enum.Enum):
@@ -242,16 +244,30 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         env['LD_LIBRARY_PATH'] = ''
         self.runJob("xmipp_classify_pca", args, numberOfMpi=1, env=env)
         
+        args = ' -i %s  --operate  sort'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
+        self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+        
         
     def createOutputStep(self):
         """ Store the SetOfClasses2D object
         resulting from the protocol execution.
         """
     
-        # inputParticles = self.inputParticles#.get()
-        inputParticles = self.imgsOrigXmd
+        inputParticles = self.inputParticles#.get()
+        
+        # imgSet = self._createSetOfParticles()
+        # imgSet.copyInfo(inputParticles)
+        # imgSet.setSamplingRate(inputParticles.getSamplingRate())
+        # imgSet.copyItems(inputParticles,
+        #              updateItemCallback=self._createItemMatrix,
+        #              itemDataIterator=md.iterRows(self._getExtraPath(AVERAGES_IMAGES_FILE),
+        #                                           sortByLabel=md.MDL_ITEM_ID))
+        
+
+        
 
         classes2DSet = self._createSetOfClasses2D(inputParticles)
+        # classes2DSet = self._createSetOfClasses2D(imgSet)
         self._fillClassesFromLevel(classes2DSet)
 
         self._defineOutputs(outputClasses=classes2DSet)
@@ -311,6 +327,13 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         return summary
 
     # #--------------------------- UTILS functions -------------------------------
+    def _createItemMatrix(self, item, row):
+        createItemMatrix(item, row, align=ALIGN_2D)
+            # forzar el objId para preservar el orden real del XMD       
+        itemId = int(row.getValue(md.MDL_ITEM_ID))
+        item.setObjId(itemId)
+
+        
     # EMTABLE IMPLEMENTATION
     def _updateParticle(self, item, row):
         if row is None:
@@ -323,8 +346,8 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             else:
                 self.error('The particles ids are not synchronized')
                 setattr(item, "_appendItem", False)
-            item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
-            item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
+            # item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
+            # item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -360,7 +383,8 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         modifiedLines = []
         for line in lines[:lastNonEmptyInd + 1]:
             # Replace "data_" with "data_particles" if found
-            modifiedLine = line.replace("data_Particles", "data_particles")
+            # modifiedLine = line.replace("data_Particles", "data_particles")
+            modifiedLine = line.replace("data_noname", "data_particles")
             modifiedLines.append(modifiedLine)
 
         # Write the modified lines back to the file
@@ -458,3 +482,4 @@ def rowToAlignmentEmtable(alignmentRow, alignType):
         alignment = None
 
     return alignment
+
