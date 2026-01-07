@@ -38,7 +38,7 @@ jobs:
       working-directory: ${{ github.workspace }}
       run: |
         git clone https://github.com/I2PC/xmipp3-installer.git
-        pip install xmipp3-installer/.
+        scipion3 run pip install xmipp3-installer/.
         rm -rf xmipp3-installer
         
     - name: Cloning xmipp and getting sources
