@@ -127,7 +127,7 @@ class Plugin(pwem.Plugin):
                                            'libraries', 'bindings', 'matlab'),
                 pwutils.Environ.BEGIN)
         return env
-		
+
     @classmethod
     def defineBinaries(cls, env):
         """ Define the Xmipp binaries/source available tgz.
