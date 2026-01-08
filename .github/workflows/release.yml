@@ -34,8 +34,8 @@ jobs:
 
     - name: Build and publish
       env:
-        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME_ALB }}
-        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD_ALB }}
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN_ALB }}
       run: |
         python -m build --no-isolation
         twine upload dist/* -c "${{ secrets.PYPI_COMMENT }}"
