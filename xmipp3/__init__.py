@@ -126,9 +126,7 @@ class Plugin(pwem.Plugin):
         env.set('MATLABPATH', os.path.join(os.environ[XMIPP_HOME],
                                            'libraries', 'bindings', 'matlab'),
                 pwutils.Environ.BEGIN)
-
         return env
-		
 		
     @classmethod
     def defineBinaries(cls, env):
