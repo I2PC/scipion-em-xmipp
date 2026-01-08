@@ -1,7 +1,7 @@
 ## Release 26.1.0
 - Protocols updated
   - deep_micrograph_cleaner: Showing thumbnails of micrographs with the mask and the coordinates stamps
-  - protocol_extract_particles: fix typo
+  - protocol_extract_particles, protocol_preprocess, protocol_compute_likelihood, protocol_extract_particles_pairs: fix typo
 
 - More scipion-em-xmipp
    - xmipp3-installer package installed from github release and not from pypi
