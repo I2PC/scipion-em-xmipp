@@ -35,7 +35,7 @@ import pyworkflow.utils as pwutils
 from scipion.install.funcs import CondaCommandDef
 from .base import *
 from .version import *
-from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL
 
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
@@ -179,7 +179,7 @@ class Plugin(pwem.Plugin):
                 default=True
             )
         xmipp3_installerV = "v2.0.4"
-        xmipp3_installer_cmd = f'pip install "xmipp3-installer @ git+https://github.com/I2PC/xmipp3-installer.git@{xmipp3_installerV}" '
+        xmipp3_installer_cmd = f'pip install "xmipp3-installer @ git+{XMIPP3_INSTALLER_URL}@{xmipp3_installerV}" '
         if develMode:
             xmippSrc = 'xmippDev'
             installCommands = [
