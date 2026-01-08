@@ -40,6 +40,6 @@ _binVersion = 'v4' # Increase it if major release is generated in xmipp
 # - If several of the above are true, only change the biggest one applicable (
 #   for example, if a fix is made and a new protocol are included in the same
 #   pull request, increase the one related to the new protocol).
-__version__ = '26.0.2'
+__version__ = '26.1.0'
 
 _currentDepVersion = '1.0'
