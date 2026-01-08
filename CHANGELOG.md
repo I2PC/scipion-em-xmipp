@@ -6,7 +6,6 @@
 - More scipion-em-xmipp
    - xmipp3-installer package installed from github release and not from pypi
 
-
 ## Release 26.0.2
 - More scipion-em-xmipp
    - Remove scipion dependencies from requirements   
