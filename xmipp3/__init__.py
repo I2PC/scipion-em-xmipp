@@ -128,7 +128,18 @@ class Plugin(pwem.Plugin):
                 pwutils.Environ.BEGIN)
 
         return env
-
+		
+	@classmethod
+	def ensureXmippInstaller(cls):
+	    try:
+	        import xmipp3_installer
+	    except ImportError:
+	        pwutils.runJob(
+	            None,
+	            "pip",
+	            'install "xmipp3-installer @ git+https://github.com/I2PC/xmipp3-installer.git@v2.0.4"'
+	        )
+		
     @classmethod
     def defineBinaries(cls, env):
         """ Define the Xmipp binaries/source available tgz.
@@ -180,6 +191,7 @@ class Plugin(pwem.Plugin):
         
         if develMode:
             xmippSrc = 'xmippDev'
+			cls._ensureXmippInstaller()
             installCommands = [
 		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
