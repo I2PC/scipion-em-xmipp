@@ -34,10 +34,10 @@ jobs:
         pip install --user scipion-installer
         python -m scipioninstaller -conda -noAsk scipion
 
-    - name: Install xmipp3-installer
-      working-directory: ${{ github.workspace }}
-      run: |
-        ../scipion/scipion3 run  pip install -r requirements.txt
+    # - name: Install xmipp3-installer
+    #   working-directory: ${{ github.workspace }}
+    #   run: |
+    #     ../scipion/scipion3 run  pip install -r requirements.txt
         
     - name: Cloning xmipp and getting sources
       working-directory: ${{ github.workspace }}/../
