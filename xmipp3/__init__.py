@@ -183,7 +183,7 @@ class Plugin(pwem.Plugin):
         if develMode:
             xmippSrc = 'xmippDev'
             installCommands = [
-		        (f'{xmipp3_installer_cmd } &&'
+		        (f'{xmipp3_installer_cmd } && '
 				 f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
 		         f'cd {xmippSrc} && '
@@ -202,7 +202,7 @@ class Plugin(pwem.Plugin):
         else:
             xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
-                (f'{xmipp3_installer_cmd } &&'
+                (f'{xmipp3_installer_cmd } && '
 				 f'cd .. && rm -rf {xmippSrc} && '
                  f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                  f'cd {xmippSrc} && '
