@@ -181,7 +181,6 @@ class Plugin(pwem.Plugin):
         xmipp3_installerV = "v2.0.4"
         if develMode:
             xmippSrc = 'xmippDev'
-			cls._ensureXmippInstaller()
             installCommands = [
 		        (f'pip install "xmipp3-installer @ git+https://github.com/I2PC/xmipp3-installer.git@{xmipp3_installerV}" '
 				 f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
