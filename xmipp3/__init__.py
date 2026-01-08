@@ -47,6 +47,7 @@ type_of_version = version.type_of_version
 _logo = version._logo
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
+_xmipp3_installerV = "v2.0.4"
 
 
 class Plugin(pwem.Plugin):
@@ -146,7 +147,7 @@ class Plugin(pwem.Plugin):
             'dist/xmipp.bashrc'
         ]
         
-        # When changing dependencies, increment _currentDepVersion
+        # When changing dependencies, increment 
         CONDA_DEPENDENCIES = [
 	    "'cmake>=3.18,<4'", #cmake-4 is not compatible with Relion compilation
             "hdf5>=1.18",
@@ -176,8 +177,7 @@ class Plugin(pwem.Plugin):
                 neededProgs=['conda'],
                 default=True
             )
-        xmipp3_installerV = "v2.0.4"
-        xmipp3_installer_cmd = f'pip install "xmipp3-installer @ git+{XMIPP3_INSTALLER_URL}@{xmipp3_installerV}" '
+        xmipp3_installer_cmd = f'pip install "xmipp3-installer @ git+{XMIPP3_INSTALLER_URL}@{_xmipp3_installerV}" '
         if develMode:
             xmippSrc = 'xmippDev'
             installCommands = [
