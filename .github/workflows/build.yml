@@ -37,7 +37,7 @@ jobs:
     - name: Install xmipp3-installer
       working-directory: ${{ github.workspace }}
       run: |
-        ../scipion/scipion3 run  pip install -r requirements.txt
+        ../scipion/scipion3 run  pip install -r requirements-bootstrap.txt
         
     - name: Cloning xmipp and getting sources
       working-directory: ${{ github.workspace }}/../
