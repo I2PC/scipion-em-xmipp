@@ -182,7 +182,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                       help='Pixels outside this circle are assumed to be noise '
                            'and their stddev is set to 1. Radius for '
                            'background circle definition (in pix.). If this '
-                           'value is 0, then half the box size is used.')
+                           'value is less than or equal to 0, then half the box size is used.')
         
         form.addParam('patchSize', params.IntParam, default=-1, 
                       label='Patch size for the variance filter (px)', 
