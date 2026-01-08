@@ -129,16 +129,6 @@ class Plugin(pwem.Plugin):
 
         return env
 		
-	@classmethod
-	def ensureXmippInstaller(cls):
-	    try:
-	        import xmipp3_installer
-	    except ImportError:
-	        pwutils.runJob(
-	            None,
-	            "pip",
-	            'install "xmipp3-installer @ git+https://github.com/I2PC/xmipp3-installer.git@v2.0.4"'
-	        )
 		
     @classmethod
     def defineBinaries(cls, env):
@@ -188,12 +178,13 @@ class Plugin(pwem.Plugin):
                 neededProgs=['conda'],
                 default=True
             )
-        
+        xmipp3_installerV = "v2.0.4"
         if develMode:
             xmippSrc = 'xmippDev'
 			cls._ensureXmippInstaller()
             installCommands = [
-		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
+		        (f'pip install "xmipp3-installer @ git+https://github.com/I2PC/xmipp3-installer.git@{xmipp3_installerV}" '
+				 f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
 		         f'cd {xmippSrc} && '
 		         #f'git checkout {branchTest} && '
@@ -211,10 +202,11 @@ class Plugin(pwem.Plugin):
         else:
             xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
-                (f'cd .. && rm -rf {xmippSrc} && '
-                f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
-                f'cd {xmippSrc} && '
-                f'./xmipp', COMPILE_TARGETS)
+                (f'pip install "xmipp3-installer @ git+https://github.com/I2PC/xmipp3-installer.git@{xmipp3_installerV}" '
+				 f'cd .. && rm -rf {xmippSrc} && '
+                 f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
+                 f'cd {xmippSrc} && '
+                 f'./xmipp', COMPILE_TARGETS)
             ]
             env.addPackage(
 	                'xmipp3', version=version._binVersion,
