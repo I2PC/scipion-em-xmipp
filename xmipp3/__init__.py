@@ -35,7 +35,7 @@ import pyworkflow.utils as pwutils
 from scipion.install.funcs import CondaCommandDef
 from .base import *
 from .version import *
-from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL
 
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
@@ -47,6 +47,7 @@ type_of_version = version.type_of_version
 _logo = version._logo
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
+_xmipp3_installerV = "v2.0.4"
 
 
 class Plugin(pwem.Plugin):
@@ -126,7 +127,6 @@ class Plugin(pwem.Plugin):
         env.set('MATLABPATH', os.path.join(os.environ[XMIPP_HOME],
                                            'libraries', 'bindings', 'matlab'),
                 pwutils.Environ.BEGIN)
-
         return env
 
     @classmethod
@@ -147,7 +147,7 @@ class Plugin(pwem.Plugin):
             'dist/xmipp.bashrc'
         ]
         
-        # When changing dependencies, increment _currentDepVersion
+        # When changing dependencies, increment 
         CONDA_DEPENDENCIES = [
 	    "'cmake>=3.18,<4'", #cmake-4 is not compatible with Relion compilation
             "hdf5>=1.18",
@@ -177,11 +177,12 @@ class Plugin(pwem.Plugin):
                 neededProgs=['conda'],
                 default=True
             )
-        
+        xmipp3_installer_cmd = f'pip install "xmipp3-installer @ git+{XMIPP3_INSTALLER_URL}@{_xmipp3_installerV}" '
         if develMode:
             xmippSrc = 'xmippDev'
             installCommands = [
-		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
+		        (f'{xmipp3_installer_cmd } && '
+				 f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
 		         f'cd {xmippSrc} && '
 		         #f'git checkout {branchTest} && '
@@ -199,10 +200,11 @@ class Plugin(pwem.Plugin):
         else:
             xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
-                (f'cd .. && rm -rf {xmippSrc} && '
-                f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
-                f'cd {xmippSrc} && '
-                f'./xmipp', COMPILE_TARGETS)
+                (f'{xmipp3_installer_cmd } && '
+				 f'cd .. && rm -rf {xmippSrc} && '
+                 f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
+                 f'cd {xmippSrc} && '
+                 f'./xmipp', COMPILE_TARGETS)
             ]
             env.addPackage(
 	                'xmipp3', version=version._binVersion,
