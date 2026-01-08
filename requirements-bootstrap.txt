@@ -1,0 +1,1 @@
+xmipp3-installer @ git+https://github.com/I2PC/xmipp3-installer.git@v2.0.4
