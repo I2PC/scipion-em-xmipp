@@ -62,6 +62,10 @@ from .protocol_extract_particles import XmippProtExtractParticles
 from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from .protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from .protocol_helical_parameters import XmippProtHelicalParameters
+from .protocol_heterogeneity_analysis import XmippProtHetAnalysis
+from .protocol_heterogeneity_dimred import XmippProtHetDimred
+from .protocol_heterogeneous_reconstruct import XmippProtHetReconstruct
+from .protocol_heterogeneous_reconstruct_interactive import XmippProtHetReconstructInteractive
 from .protocol_kerdensom import XmippProtKerdensom
 from .protocol_mics_defocus_balancer import XmippProtMicDefocusSampler
 from .protocol_ml2d import XmippProtML2D
@@ -105,6 +109,7 @@ from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippPr
 from .protocol_shift_particles import XmippProtShiftParticles
 from .protocol_shift_volume import XmippProtShiftVolume
 from .protocol_simulate_ctf import XmippProtSimulateCTF
+from .protocol_split_volume import XmippProtSplitVolume
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_subtract_projection import XmippProtBoostParticles
 from .protocol_tilt_analysis import XmippProtTiltAnalysis
