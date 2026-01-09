@@ -130,7 +130,13 @@ class XmippViewerHetAnalysis(ProtocolViewer):
         return [fig]
         
     def _displayEigenVolume(self, e):
-        command = self._writeChimeraScript(self.consensusVolume.get().getFileName())
+        consensusVolume = self.consensusVolume.get()
+        if consensusVolume:
+            consensusVolumeFilename = consensusVolume.getFileName()
+        else:
+            consensusVolumeFilename = None
+        
+        command = self._writeChimeraScript(consensusVolumeFilename)
         return [ChimeraView(command)]
         
     def _displayDirectionalMd(self, e):
@@ -339,25 +345,32 @@ class XmippViewerHetAnalysis(ProtocolViewer):
             ax.hist(v, bins=32, range=(vmin, vmax))
     
         return [fig]
+    
+    def _getEigenVolumeFilename(self, index: int) -> str:
+        return self.protocol._getExtraPath('eigen_volume_%05d.mrc' % index)
         
-    def _writeChimeraScript(self, consensusVol: str) -> str:
+    def _writeChimeraScript(self, consensusVolumeFilename: str) -> str:
         scriptFile = self.protocol._getExtraPath('fusion_chimera.cxc')
-        consensusVolFilename = os.path.abspath(consensusVol)
+        if consensusVolumeFilename:
+            consensusVolumeFilename = os.path.abspath(consensusVolumeFilename)
         n = self.protocol.outputPrincipalComponentCount.get()
         
-        ih = emlib.Image()
         with open(scriptFile, 'w') as f:
             for i in range(n):
-                basisFilename = os.path.abspath(self.protocol._getEigenVolumeFilename(i+1))
-                volId = i*2 + 1
-                mapId = volId + 1
-                ih.read(basisFilename)
-                eigenVolume = ih.getData()
-                limit = abs(eigenVolume).max()
-                f.write("open %s\n" % consensusVolFilename)
-                f.write("open %s\n" % basisFilename)
-                f.write("vol #%d hide\n" % mapId)
-                f.write("color sample #%d map #%d range %f,%f\n" % (volId, mapId, -limit, limit))
+                id = i+1
+                eigenVolumeFilename = os.path.abspath(self._getEigenVolumeFilename(id))
+                if consensusVolumeFilename:
+                    f.write('open %s id %d.1\n' % (consensusVolumeFilename, id))
+                    f.write('color #%d.1 #9a9a9a80\n' % id)
+
+                f.write('open %s id %d.2\n' % (eigenVolumeFilename, id))
+                f.write('open %s id %d.3\n' % (eigenVolumeFilename, id))
+                f.write('volume multiply #%d.2 #%d.3 modelId %d.4\n' % ((id, )*3))
+                f.write('volume #%d.4 rmsLevel %f\n' % (i+1, 8.0))
+                f.write('color sample #%d.4 map #%d.2 range -1e-12,1e-12\n' % ((id,)*2))
+                f.write('close #%d.3\n' % id)
             f.write("tile\n")
+            
+
         return scriptFile
     
