@@ -35,12 +35,14 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.constants import BETA
 
 from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D, Transform
+from pwem.objects import SetOfClasses2D, Transform, SetOfParticles
 from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
 
 from xmipp3 import XmippProtocol
 from xmipp3.convert import (writeSetOfParticles, writeSetOfClasses2D, xmippToLocation,
-                            readSetOfParticles, matrixFromGeometry)
+                            readSetOfParticles, matrixFromGeometry, createItemMatrix)
+
+import pwem.emlib.metadata as md
 
 
 class XMIPPCOLUMNS(enum.Enum):
@@ -84,14 +86,23 @@ ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
                   "angleTilt": XMIPPCOLUMNS.angleTilt.value
                   }
 
-CONTRAST_AVERAGES_FILE = 'classes_contrast_classes.star'
+
+
+def updateEnviron(gpuNum):
+    """ Create the needed environment for pytorch programs. """
+    print("updating environ to select gpu %s" % (gpuNum))
+    if gpuNum == '':
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    else:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+
+CONTRAST_AVERAGES_FILE = 'classes_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
         
 class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
-    """ Classifies a set of images using Principal Component Analysis (PCA). This 2D classification groups (the number of groups can be set) are based on their similarities, assisting in the identification of different conformational states or particle populations. """
+    """ Classifies a set of images. """
     
-    _label= '2D classification pca'
-
+    _label = 'alignPCA-2D'
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
     _devStatus = BETA
@@ -106,7 +117,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form = self._defineCommonParams(form)
-        form.addParallelSection(threads=1, mpi=8)
+        form.addParallelSection(threads=1, mpi=24)
 
     def _defineCommonParams(self, form):
         form.addHidden(GPU_LIST, StringParam, default='0',
@@ -152,7 +163,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         form.addParam('coef', FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of PCA components (between 0-1).'
                            ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training', IntParam, default=40000,
+        form.addParam('training', IntParam, default=150000, expertLevel=LEVEL_ADVANCED,
                       label="particles for training",
                       help='Number of particles for PCA training')
 
@@ -162,6 +173,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     def _insertAllSteps(self):
 
         """ Mainly prepare the command line for call classification program"""
+    
+        updateEnviron(self.gpuList.get())
+        
         self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
         self.imgsXmd = self._getTmpPath('images.xmd')
         self.imgsFn = self._getTmpPath('images.mrc')
@@ -181,29 +195,11 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
     
         self._insertFunctionStep('convertInputStep', 
                                 self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
-        
-        self._insertFunctionStep("pcaTraining", self.imgsFn, resolution, particlesTrain)
-        
-        self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma )
+                
+        self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma, particlesTrain, resolution)
     
         self._insertFunctionStep('createOutputStep')
-
-
-    def getGpusList(self, separator):
-        strGpus = ""
-        for elem in self._stepsExecutor.getGpuList():
-            strGpus = strGpus + str(elem) + separator
-        return strGpus[:-1]
-
-    def setGPU(self, oneGPU=False):
-        if oneGPU:
-            gpus = self.getGpusList(",")[0]
-        else:
-            gpus = self.getGpusList(",")
-        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
-        self.info(f'Visible GPUS: {gpus}')
-        return gpus
-
+        
 
     #--------------------------- STEPS functions -------------------------------
     def convertInputStep(self, input, outputOrig, outputMRC):
@@ -223,6 +219,9 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             
         
         if self.correctCtf: 
+            args = ' -i %s  --operate  randomize'%(outputOrig)
+            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+            
             args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
             self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
             
@@ -230,31 +229,23 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
             self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
         
-        
-    def pcaTraining(self, inputIm, resolutionTrain, numTrain):
-        gpuId = self.setGPU(oneGPU=True)
-        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s'% \
-                (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), gpuId)
-
-        env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = ''
-        self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
-        
-        
-    def classification(self, inputIm, numClass, stfile, mask, sigma):
-        gpuId = self.setGPU(oneGPU=True)
-        args = ' -i %s -c %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt -o %s/classes -stExp %s -g %s' % \
-                (inputIm, numClass, self._getExtraPath(), self._getExtraPath(),  self._getExtraPath(),
-                 stfile, gpuId)
+    
+    
+    def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain, resolutionTrain):
+        args = ' -i %s -s %s -c %s  -t %s -hr %s -p %s -o %s/classes -stExp %s'  % \
+                (inputIm, self.sampling, numClass,  numTrain, resolutionTrain, self.coef.get(), self._getExtraPath(), stfile)
         if mask:
             args += ' --mask --sigma %s '%(sigma) 
-            
+    
         if self.mode == self.UPDATE_CLASSES:
             args += ' -r %s '%(self.ref)
-
+    
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
-        self.runJob("xmipp_classify_pca", args, numberOfMpi=1, env=env)
+        self.runJob("xmipp_alignPCA_2D", args, numberOfMpi=1, env=env)
+        
+        args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
+        self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
         
         
     def createOutputStep(self):
@@ -263,25 +254,37 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         """
     
         inputParticles = self.inputParticles#.get()
+        
+        # imgSet = self._createSetOfParticles()
+        # imgSet.copyInfo(inputParticles)
+        # imgSet.setSamplingRate(inputParticles.getSamplingRate())
+        # imgSet.copyItems(inputParticles,
+        #              updateItemCallback=self._createItemMatrix,
+        #              itemDataIterator=md.iterRows(self._getExtraPath(AVERAGES_IMAGES_FILE),
+        #                                           sortByLabel=md.MDL_ITEM_ID))
+        
+
+        
 
         classes2DSet = self._createSetOfClasses2D(inputParticles)
+        # classes2DSet = self._createSetOfClasses2D(imgSet)
         self._fillClassesFromLevel(classes2DSet)
 
         self._defineOutputs(outputClasses=classes2DSet)
         self._defineSourceRelation(self.inputParticles, classes2DSet)
         
-        self.createOutputAverages(classes2DSet)
-        
-    def createOutputAverages(self, outputClasses):
-        classes = self._getExtraPath('classes.mrcs')
-        outRefs = self._createSetOfAverages()
-        outRefs.copyInfo(self.inputParticles.get())
-        outRefs.setSamplingRate(self.sampling)
-        readSetOfParticles(classes, outRefs)
-
-        outRefs.setAlignment(ALIGN_2D)
-        self._defineOutputs(outputAverages=outRefs)
-        self._defineSourceRelation(self.inputParticles, outRefs)    
+    #     self.createOutputAverages(classes2DSet)
+    #
+    # def createOutputAverages(self, outputClasses):
+    #     classes = self._getExtraPath('classes.mrcs')
+    #     outRefs = self._createSetOfAverages()
+    #     outRefs.copyInfo(self.inputParticles.get())
+    #     outRefs.setSamplingRate(self.sampling)
+    #     readSetOfParticles(classes, outRefs)
+    #
+    #     outRefs.setAlignment(ALIGN_2D)
+    #     self._defineOutputs(outputAverages=outRefs)
+    #     self._defineSourceRelation(self.inputParticles, outRefs)    
     
     # --------------------------- INFO functions --------------------------------
     def _validate(self):
@@ -319,14 +322,18 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         if not hasattr(self, 'outputClasses'):
             summary.append("Output classes not ready yet.")
         else:
-            summary.append('Two output sets are obtained:')
-            summary.append('- The first one corresponds to the classes and should be used to select '
-                           ' the particles corresponding to each class. In this case, the classes are '
-                           ' displayed applying a contrast variation.')
-            summary.append('- The second one corresponds solely to the representative classes (outputAverages)')
+            summary.append('2D clasification using AlignPCA')
+
         return summary
 
     # #--------------------------- UTILS functions -------------------------------
+    def _createItemMatrix(self, item, row):
+        createItemMatrix(item, row, align=ALIGN_2D)
+            # forzar el objId para preservar el orden real del XMD       
+        itemId = int(row.getValue(md.MDL_ITEM_ID))
+        item.setObjId(itemId)
+
+        
     # EMTABLE IMPLEMENTATION
     def _updateParticle(self, item, row):
         if row is None:
@@ -339,6 +346,8 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             else:
                 self.error('The particles ids are not synchronized')
                 setattr(item, "_appendItem", False)
+            # item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
+            # item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -374,7 +383,8 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         modifiedLines = []
         for line in lines[:lastNonEmptyInd + 1]:
             # Replace "data_" with "data_particles" if found
-            modifiedLine = line.replace("data_Particles", "data_particles")
+            # modifiedLine = line.replace("data_Particles", "data_particles")
+            modifiedLine = line.replace("data_noname", "data_particles")
             modifiedLines.append(modifiedLine)
 
         # Write the modified lines back to the file
@@ -415,16 +425,6 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
                                  updateClassCallback=self._updateClass,
                                  itemDataIterator=mdIter,  # relion style
                                  iterParams=params)
-
-    def _validate(self):
-        """ Check if the installation of this protocol is correct.
-		Can't rely on package function since this is a "multi package" package
-		Returning an empty list means that the installation is correct
-		and there are not errors. If some errors are found, a list with
-		the error messages will be returned.
-		"""
-        error = self.validateDLtoolkit()
-        return error
     
 # --------------------------- Static functions --------------------------------
 def rowToAlignmentEmtable(alignmentRow, alignType):
@@ -482,3 +482,4 @@ def rowToAlignmentEmtable(alignmentRow, alignType):
         alignment = None
 
     return alignment
+
