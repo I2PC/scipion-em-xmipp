@@ -2,6 +2,7 @@
 # *
 # * Authors: Erney Ramirez Aportela (eramirez@cnb.csic.es)
 # *          Daniel Marchan Torres (da.marchan@cnb.csic.es)
+# *          Yunior C. Fonseca Reyna (cfonseca@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -24,24 +25,28 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
+import enum
 import sys
 import emtable
 import os
 from datetime import datetime
 import time
+import numpy as np
 
+from pwem.protocols import ProtClassify2D
 from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
-from pyworkflow.protocol.params import IntParam
-from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL
+from pyworkflow.protocol.params import IntParam, StringParam, PointerParam, EnumParam, BooleanParam, FloatParam
+from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED
 from pyworkflow.constants import BETA
 
-from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles
-from pwem.constants import ALIGN_NONE, ALIGN_2D
+from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
+from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
+from xmipp3 import XmippProtocol
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
-                            writeSetOfClasses2D)
+                            writeSetOfClasses2D, xmippToLocation, matrixFromGeometry)
 from xmipp3.protocols.protocol_classify_pca import XmippProtClassifyPca
 
 OUTPUT_CLASSES = "outputClasses"
@@ -52,8 +57,63 @@ LAST_DONE_FILE = "last_done.txt"
 BATCH_UPDATE = 5000
 
 
-class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
-    """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming, enabling efficient processing of large datasets.  """
+class XMIPPCOLUMNS(enum.Enum):
+    # PARTICLES CONSTANTS
+    ctfVoltage = "ctfVoltage"  # 1
+    ctfDefocusU = "ctfDefocusU"  # 2
+    ctfDefocusV = "ctfDefocusV"  # 3
+    ctfDefocusAngle = "ctfDefocusAngle"  # 4
+    ctfSphericalAberration = "ctfSphericalAberration"  # 5
+    ctfQ0 = "ctfQ0"  # 6
+    ctfCritMaxFreq = "ctfCritMaxFreq"  # 7
+    ctfCritFitting = "ctfCritFitting"  # 8
+    enabled = "enabled"  # 9
+    image = "image"  # 10
+    itemId = "itemId"  # 11
+    micrograph = "micrograph"  # 12
+    micrographId = "micrographId"  # 13
+    scoreByVariance = "scoreByVariance"  # 14
+    scoreByGiniCoeff = "scoreByGiniCoeff"  # 15
+    xcoor = "xcoor"  # 16
+    ycoor = "ycoor"  # 17
+    ref = "ref"  # 18
+    anglePsi = "anglePsi"  # 19
+    angleRot = "angleRot"  # 20
+    angleTilt = "angleTilt"  # 21
+    shiftX = "shiftX"  # 22
+    shiftY = "shiftY"  # 23
+    shiftZ = "shiftZ"  # 24
+    flip = "flip"
+
+    # CLASSES CONSTANTS
+    classCount = "classCount"  # 3
+
+
+ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
+                  "shiftY": XMIPPCOLUMNS.shiftY.value,
+                  "shiftZ": XMIPPCOLUMNS.shiftZ.value,
+                  "flip": XMIPPCOLUMNS.flip.value,
+                  "anglePsi": XMIPPCOLUMNS.anglePsi.value,
+                  "angleRot": XMIPPCOLUMNS.angleRot.value,
+                  "angleTilt": XMIPPCOLUMNS.angleTilt.value
+                  }
+
+
+def updateEnviron(gpuNum):
+    """ Create the needed environment for pytorch programs. """
+    print("updating environ to select gpu %s" % (gpuNum))
+    if gpuNum == '':
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    else:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+
+CONTRAST_AVERAGES_FILE = 'classes_classes.star'
+AVERAGES_IMAGES_FILE = 'classes_images.star'
+
+
+class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProtocol):
+    """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming,
+        enabling efficient processing of large datasets.  """
 
     _label = '2D classification pca streaming'
     _lastUpdateVersion = VERSION_3_0
@@ -68,84 +128,128 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                         OUTPUT_AVERAGES: SetOfAverages}
 
     def __init__(self, **args):
-        XmippProtClassifyPca.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
+        ProtClassify2D.__init__(self, **args)
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
-        form = self._defineCommonParams(form)
-        form.addSection(label='Classification')
-        form.addParam('classificationBatch', IntParam, default=75000,
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       label="Choose GPU ID",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on.")
+
+        form.addSection(label='Input')
+
+        form.addParam('inputParticles', PointerParam,
+                      label="Input images",
+                      important=True, pointerClass='SetOfParticles',
+                      help='Select the input images to be classified.')
+        form.addParam('mode', EnumParam, choices=['create_classes', 'update_classes'],
+                      label="Create or update 2D classes?", default=self.CREATE_CLASSES,
+                      display=EnumParam.DISPLAY_HLIST,
+                      help='This option allows for the classification '
+                           'or simply alignment of particles into previously created classes.')
+        form.addParam('numberOfClasses', IntParam, default=50,
                       condition="not mode",
+                      label='Number of classes:',
+                      help='Number of classes (or references) to be generated.')
+        form.addParam('initialClasses', PointerParam,
+                      label="Initial classes",
+                      condition="mode",
+                      pointerClass='SetOfClasses2D, SetOfAverages',
+                      help='Set of initial classes to start the classification')
+        form.addParam('correctCtf', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
+                      label='Correct CTF?',
+                      help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
+        form.addParam('mask', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
+                      label='Use Gaussian Mask?',
+                      help='If you set to *Yes*, a gaussian mask is applied to the images.')
+        form.addParam('sigma', IntParam, default=-1, expertLevel=LEVEL_ADVANCED,
+                      label='sigma:', condition="mask",
+                      help='Sigma is the parameter that controls the dispersion or "width" of the curve.'
+                           ' If the parameter is set to -1, sigma = dim/3.')
+
+        form.addSection(label='Pca training')
+        form.addParam('resolution', FloatParam, label="max resolution", default=8,
+                      help='Maximum resolution to be consider for alignment')
+        form.addParam('coef', FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
+                      help='Percentage of variance to determine the number of PCA components (between 0-1).'
+                           ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
+        form.addParam('training', IntParam, default=150000, expertLevel=LEVEL_ADVANCED,
+                      label="particles for training",
+                      help='Number of particles for PCA training')
+        form.addSection(label='Classification')
+        form.addParam('classificationBatch', IntParam, default=2500,
                       label="particles for initial classification",
                       help='Number of particles for an initial classification to compute the 2D references')
 
-        # form.addParallelSection(threads=1)
-        form.addParallelSection(threads=1, mpi=8)
+        form.addParallelSection(threads=3, mpi=1)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
-        """
-        This step should be implemented by any streaming protocol.
-        It should check its input and when ready conditions are met
-        call the self._insertFunctionStep method.
-        """
         self._initialStep()
         self.newDeps = []
         newParticlesSet = self._loadEmptyParticleSet()
 
-        if self.isContinued() and self._isPcaDone():
+        if self.isContinued() and False:
             self.info('Continue protocol')
             self._updateVarsToContinue()
 
+        checkInterval = 5
+
         while not self.finish:
-            if not self._newParticlesToProcess():
+            particlesSet = self._loadInputParticleSet()
+            self.streamState = particlesSet.getStreamState()
+
+            where = None
+            if self.lastCreationTime:
+                where = 'creation>"' + str(self.lastCreationTime) + '"'
+            tmp = None
+            newCount = 0
+
+            for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
+                tmp = particle.getObjCreation()
+                newParticlesSet.append(particle.clone())
+                newCount += 1
+
+            particlesSet.close()
+
+            if tmp is not None:
+                self.lastCreationTime = tmp
+
+            if newCount == 0:
                 self.info('No new particles')
             else:
-                particlesSet = self._loadInputParticleSet()
-                self.streamState = particlesSet.getStreamState()
-                where = None
-                if self.lastCreationTime:
-                    where = 'creation>"' + str(self.lastCreationTime) + '"'
-
-                for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
-                    tmp = particle.getObjCreation()
-                    newParticlesSet.append(particle.clone())
-
-                particlesSet.close()
-                self.lastCreationTime = tmp
-                self.info('%d new particles' % len(newParticlesSet))
+                self.info('%d new particles in batch' % len(newParticlesSet))
                 self.info('Last creation time REGISTER %s' % self.lastCreationTime)
 
-                # ------------------------------------ PCA TRAINING ----------------------------------------------
-                if self._doPcaTraining(newParticlesSet):
-                    self.pcaStep = self._insertFunctionStep(self.runPCASteps, newParticlesSet,
-                                                            prerequisites=[], needsGPU=True)
-                    if len(newParticlesSet) == len(particlesSet) and self.streamState == Set.STREAM_CLOSED:
-                        self.staticRun = True
-                        self.info('Static Run')
-                # ------------------------------------ CLASSIFICATION ----------------------------------------------
                 if self._doClassification(newParticlesSet):
                     self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
                     newParticlesSet = self._loadEmptyParticleSet()
 
             if self.streamState == Set.STREAM_CLOSED:
                 self.info('Stream closed')
-                # Finish everything and close output sets
                 if len(newParticlesSet):
                     self.info('Finish processing with last batch %d' % len(newParticlesSet))
                     self.lastRound = True
+
+                    # Force one more iteration to flush last batch
+                    if self._doClassification(newParticlesSet):
+                        self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
+                        newParticlesSet = self._loadEmptyParticleSet()
                 else:
-                    self._insertFunctionStep(self.closeOutputStep, prerequisites=self.newDeps, needsGPU=False)
+                    self._insertFunctionStep(self.closeOutputStep,
+                                             prerequisites=self.newDeps,
+                                             needsGPU=False)
                     self.finish = True
-                    continue  # To avoid waiting
+                    continue
 
-            with self._lock: # Add this lock so it will not block the iterItems of the classify method
-                self.inputParticles.get().close() # If this is not close then it blocks the input protocol
+            with self._lock:  # Add this lock so it will not block the iterItems of the classify method
+                self.inputParticles.get().close()  # If this is not close then it blocks the input protocol
+            time.sleep(checkInterval)
             sys.stdout.flush()
-            # time.sleep(30)
 
-        sys.stdout.flush()  # One last flush
+        sys.stdout.flush()
 
     # --------------------------- STEPS functions -------------------------------
     def _initialStep(self):
@@ -183,9 +287,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
             resolution = (2 * self.sampling) + 0.5
         self.resolutionPca = resolution
 
-        if self.mode == self.UPDATE_CLASSES:
+        if self.mode.get() == self.UPDATE_CLASSES:
             self.numberClasses = len(self.initialClasses.get())
-            self.classificationBatch.set(BATCH_UPDATE)
         else:
             self.numberClasses = self.numberOfClasses.get()
 
@@ -204,62 +307,47 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self.info(f'Visible GPUS: {gpus}')
         return gpus
 
-
-    def runPCASteps(self, newParticlesSet):
-        # Run PCA steps
-        self.pcaLaunch = True
-        if self.correctCtf:
-            self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaXmdOut)  # Wiener filter
-        else:
-            self.convertInputStep(newParticlesSet, self.imgsPcaXmd, self.imgsPcaFn)
-        # numTrain = min(len(newParticlesSet), self.training.get())
-        # self.pcaTraining(self.imgsPcaFn, self.resolutionPca, numTrain)
-        self.pcaLaunch = False
-        self._setPcaDone()
-
     def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
         self._updateFnClassification()
         classStep = self._insertFunctionStep(self.runClassificationSteps,
-                                             newParticlesSet, prerequisites=self.pcaStep, needsGPU=True)
+                                             newParticlesSet,
+                                             prerequisites=[],
+                                             needsGPU=True)
         updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
                                               lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep,
                                               needsGPU=False)
         self.newDeps.append(updateStep)
 
     def runClassificationSteps(self, newParticlesSet):
-        self.classificationLaunch = True
-        if self.correctCtf:
-            self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsXmd) # Wiener filter
+        # self.classificationLaunch = True
+        if self.correctCtf.get():
+            self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsXmd)  # Wiener filter
         else:
             self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
         
         numTrain = min(len(newParticlesSet), self.training.get())
         self.classification(self.imgsFn, self.numberClasses, self.imgsOrigXmd,
                             self.mask.get(), self.sigmaProt, numTrain, self.resolutionPca)
-        self.classificationLaunch = False
+        # self.classificationLaunch = False
 
     def convertInputStep(self, input, outputOrig, outputMRC):
-        if self._isPcaDone() and self.staticRun:  # Static run: reuse files to avoid doing this twice
-            self.imgsOrigXmd = self.imgsPcaXmd
-            self.imgsFn = self.imgsPcaFn
-        else:
-            writeSetOfParticles(input, outputOrig)
+        writeSetOfParticles(input, outputOrig)
 
-            if self.correctCtf:
-                # ------------ WIENER -----------------------
-                args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
-                       '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
-                      (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
-                       self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), 0) # CUDA_VISIBLE_DEVICES is set then only id "0" available
-                env = self.getCondaEnv()
-                env = self._setEnvVariables(env)
-                self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
-            else:
-                args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
-                self.runJob("xmipp_image_convert", args, numberOfMpi=1)
+        if self.correctCtf.get():
+            # ------------ WIENER -----------------------
+            args = (' -i %s -o %s --pixel_size %s --spherical_aberration %s '
+                   '--voltage %s --q0 %s --batch 512 --padding 2 --device cuda:%d') % \
+                  (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(),
+                   self.acquisition.getVoltage(), self.acquisition.getAmplitudeContrast(), 0) # CUDA_VISIBLE_DEVICES is set then only id "0" available
+            env = self.getCondaEnv()
+            env = self._setEnvVariables(env)
+            self.runJob("xmipp_swiftalign_wiener_2d", args, env=env)
+        else:
+            args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
+            self.runJob("xmipp_image_convert", args)
 
         # For classification update
-        if self.mode == self.UPDATE_CLASSES and not self.firstTimeDone:
+        if self.mode.get() == self.UPDATE_CLASSES and not self.firstTimeDone:
             initial2DClasses = self.initialClasses.get()
             self.info('Write classes')
             if isinstance(initial2DClasses, SetOfClasses2D):
@@ -271,33 +359,23 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
                                     alignType=ALIGN_NONE)
 
             args = ' -i  %s -o %s ' % (self.refXmd, self.ref)
-            self.runJob("xmipp_image_convert", args, numberOfMpi=1)
+            self.runJob("xmipp_image_convert", args)
             self.firstTimeDone = True
 
-    def pcaTraining(self, inputIm, resolutionTrain, numTrain):
-        gpuID = self.setGPU(oneGPU=True)
-        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA -g %s' % \
-               (inputIm, self.sampling, resolutionTrain, self.coef.get(), numTrain, self._getExtraPath(), gpuID)
-
-        env = self.getCondaEnv()
-        env = self._setEnvVariables(env)
-        self.runJob("xmipp_classify_pca_train", args, numberOfMpi=1, env=env)
-
     def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain, resolutionTrain):
-        gpuID = self.setGPU(oneGPU=True)
-        # He quitado -g %s', porque no existe ese parámetro
+        # gpuID = self.setGPU(oneGPU=True)
         args = ' -i %s -s %s -c %s -t %s -hr %s -p %s  -o %s/classes -stExp %s' % \
                (inputIm, self.sampling, numClass, numTrain, resolutionTrain, self.coef.get(), self._getExtraPath(),
                 stfile)#, gpuID)
         if mask:
             args += ' --mask --sigma %s ' % (sigma)
 
-        if self.mode == self.UPDATE_CLASSES or self._isClassificationDone():
+        if self.mode.get() == self.UPDATE_CLASSES or self._isClassificationDone():
             args += ' -r %s ' % self.ref
 
         env = self.getCondaEnv()
         env = self._setEnvVariables(env)
-        self.runJob("xmipp_classify_pca", args, numberOfMpi=1, env=env)
+        self.runJob("xmipp_classify_pca", args, env=env)
 
     def updateOutputSetOfClasses(self, lastCreationTime, streamMode):
         outputName = OUTPUT_CLASSES
@@ -319,13 +397,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
         self.info(r'Last classification round processed is %d' % self.classificationRound)
         self.classificationRound += 1
-
-    # def _updateOutputAverages(self, update):
-    #     outRefs = self._loadOutputAverageSet()
-    #     readSetOfParticles(self.ref, outRefs)
-    #     self._updateOutputSet(OUTPUT_AVERAGES, outRefs, Set.STREAM_CLOSED)
-    #     if not update:  # First Time
-    #         self._defineSourceRelation(self._getInputPointer(), outRefs)
 
     def closeOutputStep(self):
         self._closeOutputSet()
@@ -364,24 +435,27 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         self.imgsXmd = updateFileName(self.imgsXmd, self.classificationRound)
         self.imgsFn = updateFileName(self.imgsFn, self.classificationRound)
         self.info('Starts classification round: %d' % self.classificationRound)
+        self.classificationRound += 1
 
     def _newParticlesToProcess(self):
         particlesFile = self.inputFn
         now = datetime.now()
-        self.lastCheck = getattr(self, 'lastCheck', now)
+
+        lastCheck = getattr(self, "lastCheck", now)
+        self.lastCheck = lastCheck
+
         mTime = datetime.fromtimestamp(os.path.getmtime(particlesFile))
-        self.debug('Last check: %s, modification: %s'
-                   % (self.lastCheck,
-                      prettyTime(mTime)))
-        # If the input have not changed since our last check,
-        # it does not make sense to check for new input data
-        if (self.lastCheck > mTime and self.lastCreationTime) and not self.lastRound:
-            newParticlesBool = False
-        else:
-            newParticlesBool = True
+        self.debug("Last check: %s, modification: %s"
+                   % (lastCheck, prettyTime(mTime)))
+
+        fileUnchanged = lastCheck > mTime
+        alreadyProcessedSomething = bool(getattr(self, "lastCreationTime", None))
+        isLastRound = bool(getattr(self, "lastRound", False))
+
+        hasNewParticles = not (fileUnchanged and alreadyProcessedSomething and not isLastRound)
 
         self.lastCheck = now
-        return newParticlesBool
+        return hasNewParticles
 
     def _fillClassesFromLevel(self, clsSet, update=False):
         """ Create the SetOfClasses2D from a given iteration. """
@@ -429,34 +503,21 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
         return outputRefs
 
-    def _doPcaTraining(self, newParticlesSet):
-        """ Two cases for launching PCA steps:
-            - If there are enough particles and PCA has not been launched or finished.
-            - Launch if it's the last round of new particles and PCA has not been launched or finished. """
-        return (len(newParticlesSet) >= self.training.get() and not self._isPcaDone() and not self.pcaLaunch) or \
-            (self.lastRound and not self._isPcaDone() and not self.pcaLaunch)
-
     def _doClassification(self, newParticlesSet):
         """ Three cases for launching Classification
             - First round of classification: enough particles and PCA done
             - Update classification: classification done, PCA done and enough batch size
             - First or update classification with a smaller batch: last round of particles and not classification launch
         """
-        return (len(newParticlesSet) >= self.classificationBatch.get() and self._isPcaDone()
-                and not self._isClassificationDone() and not self.classificationLaunch) \
-            or (len(newParticlesSet) >= BATCH_UPDATE and self._isClassificationDone() and self._isPcaDone()
-                and not self.classificationLaunch) \
-            or (self.lastRound and not self.classificationLaunch)
+        n = len(newParticlesSet)
+        b = self.classificationBatch.get()
+        if self.classificationLaunch:
+            return False
 
-    def _isPcaDone(self):
-        done = False
-        if os.path.exists(self._getExtraPath(PCA_FILE)):
-            done = True
-        return done
+        batchReady = n >= b
+        lastRoundReady = self.lastRound
 
-    def _setPcaDone(self):
-        with open(self._getExtraPath(PCA_FILE), "w") as file:
-            file.write('%d' % self.pcaStep)
+        return batchReady or lastRoundReady
 
     def _getPcaStep(self):
         " If continue then use this to collect the code for the PCA step"
@@ -501,14 +562,12 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
     def _updateVarsToContinue(self):
         """ Method to if needed and the protocol is set to continue then it will see in which state it was stopped """
 
-        self.pcaStep = []
-
         if self._isClassificationDone():
             self.lastCreationTime = self._getLastDone()
             self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
         else:
             self.lastCreationTime = ''
-            self.classificationRound = 0
+            self.classificationRound = 1
 
         self.lastCreationTimeProcessed = self.lastCreationTime
         # Convert the string to a datetime object
@@ -518,7 +577,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
         """ Check if the installation of this protocol is correct.
         Can't rely on package function since this is a "multi package" package
         Returning an empty list means that the installation is correct
-        and there are not errors. If some errors are found, a list with
+        and there are no errors. If some errors are found, a list with
         the error messages will be returned.
         """
         errors = []
@@ -552,8 +611,138 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, XmippProtClassifyPca):
 
         return summary
 
+    # #--------------------------- UTILS functions -------------------------------
+    # EMTABLE IMPLEMENTATION
+    def _updateParticle(self, item, row):
+        if row is None:
+            self.info('Row is none finish updating particle')
+            setattr(item, "_appendItem", False)
+        else:
+            if item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value):
+                item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
+                item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
+            else:
+                self.error('The particles ids are not synchronized')
+                setattr(item, "_appendItem", False)
+
+    def _updateClass(self, item):
+        classId = item.getObjId()
+        if classId in self._classesInfo:
+            index, fn, _ = self._classesInfo[classId]
+            item.setAlignment2D()
+            rep = item.getRepresentative()
+            rep.setLocation(index, fn)
+            rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
+
+    def _createModelFile(self):
+        with open(self._getExtraPath(CONTRAST_AVERAGES_FILE), 'r') as file:
+            # Read the lines of the file
+            lines = file.readlines()
+        # Open the file for writing
+        with open(self._getExtraPath(CONTRAST_AVERAGES_FILE), "w") as file:
+            # Iterate through the lines
+            for line in lines:
+                # Replace "data_" with "data_particles" if found
+                modifiedLine = line.replace("data_", "data_particles")
+                # Write the modified line to the file
+                file.write(modifiedLine)
+
+        with open(self._getExtraPath(AVERAGES_IMAGES_FILE), 'r') as file:
+            lines = file.readlines()
+
+            # Find the index of the last non-empty line
+        lastNonEmptyInd = len(lines) - 1
+        while lastNonEmptyInd >= 0 and lines[lastNonEmptyInd].strip() == "":
+            lastNonEmptyInd -= 1
+
+        # Modify the lines
+        modifiedLines = []
+        for line in lines[:lastNonEmptyInd + 1]:
+            # Replace "data_" with "data_particles" if found
+            modifiedLine = line.replace("data_Particles", "data_particles")
+            modifiedLines.append(modifiedLine)
+
+        # Write the modified lines back to the file
+        with open(self._getExtraPath(AVERAGES_IMAGES_FILE), "w") as file:
+            file.writelines(modifiedLines)
+
+    def _loadClassesInfo(self, filename):
+        """ Read some information about the produced 2D classes
+        from the metadata file.
+        """
+        self._classesInfo = {}  # store classes info, indexed by class id
+
+        mdFileName = '%s@%s' % ('particles', filename)
+        table = emtable.Table(fileName=filename)
+
+        for classNumber, row in enumerate(table.iterRows(mdFileName)):
+            index, fn = xmippToLocation(row.get(XMIPPCOLUMNS.image.value))
+            # Store info indexed by id, we need to store the row.clone() since
+            # the same reference is used for iteration
+            self._classesInfo[classNumber + 1] = (index, fn, row)
+        self._numClass = index
+
 # --------------------------- Static functions --------------------------------
-def updateFileName(filepath, round):
+def rowToAlignmentEmtable(alignmentRow, alignType):
+    """
+    is2D == True-> matrix is 2D (2D images alignment)
+            otherwise matrix is 3D (3D volume alignment or projection)
+    invTransform == True  -> for xmipp implies projection
+    """
+
+    is2D = alignType == ALIGN_2D
+    inverseTransform = alignType == ALIGN_PROJ
+
+    if alignmentRow.hasAnyColumn(ALIGNMENT_DICT.values()):
+        alignment = Transform()
+        angles = np.zeros(3)
+        shifts = np.zeros(3)
+        flip = alignmentRow.get(XMIPPCOLUMNS.flip.value, default=0.)
+
+        shifts[0] = alignmentRow.get(XMIPPCOLUMNS.shiftX.value, default=0.)
+        shifts[1] = alignmentRow.get(XMIPPCOLUMNS.shiftY.value, default=0.)
+
+        if not is2D:
+            angles[0] = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
+            angles[1] = alignmentRow.get(XMIPPCOLUMNS.angleTilt.value, default=0.)
+            angles[2] = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
+            shifts[2] = alignmentRow.get(XMIPPCOLUMNS.shiftZ.value, default=0.)
+            if flip:
+                angles[1] = angles[1] + 180  # tilt + 180
+                angles[2] = - angles[2]  # - psi, COSS: this is mirroring X
+                shifts[0] = - shifts[0]  # -x
+        else:
+            psi = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
+            rot = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
+            if not np.isclose(rot, 0., atol=1e-6) and not np.isclose(psi, 0., atol=1e-6):
+                print("HORROR rot and psi are different from zero in 2D case")
+
+            angles[0] = psi + rot
+
+        M = matrixFromGeometry(shifts, angles, inverseTransform)
+
+        if flip:
+            if alignType == ALIGN_2D:
+                M[0, :2] *= -1.  # invert only the first two columns
+                # keep x
+                M[2, 2] = -1.  # set 3D rot
+            elif alignType == ALIGN_3D:
+                M[0, :3] *= -1.  # now, invert first line excluding x
+                M[3, 3] *= -1.
+            elif alignType == ALIGN_PROJ:
+                pass
+
+        alignment.setMatrix(M)
+
+    else:
+        alignment = None
+
+    return alignment
+
+
+# --------------------------- Static functions --------------------------------
+def updateFileName(filepath, classRound):
     filename = os.path.basename(filepath)
-    newFilename = f"{filename[:filename.find('_')]}_{round}{filename[filename.rfind('.'):]}"
+    newFilename = f"{filename[:filename.find('_')]}_{classRound}{filename[filename.rfind('.'):]}"
     return os.path.join(os.path.dirname(filepath), newFilename)
+
