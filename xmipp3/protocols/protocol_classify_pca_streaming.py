@@ -182,6 +182,13 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         form.addParam('classificationBatch', IntParam, default=2500,
                       label="particles for initial classification",
                       help='Number of particles for an initial classification to compute the 2D references')
+        mpiHelp = ("*MPI*:\nThis is a number of independent processes"
+                   " that communicate through message passing "
+                   "over the network (or the same computer).\n")
+        form.addSection(label='Compute')
+        form.addParam('classificationMPIs', IntParam, default=4,
+                      label="MPIs",
+                      help=mpiHelp)
 
         form.addParallelSection(threads=3, mpi=1)
 
