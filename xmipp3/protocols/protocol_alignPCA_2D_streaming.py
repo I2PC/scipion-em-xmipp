@@ -178,8 +178,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                       help='Number of particles for PCA training')
         form.addSection(label='Classification')
         form.addParam('classificationBatch', IntParam, default=75000,
-                      label="particles for initial classification",
-                      help='Number of particles for an initial classification to compute the 2D references')
+                      label="particles for initial classification in streaming",
+                      help='Number of particles for an initial classification to compute the 2D references in streaming')
 
         form.addSection(label='Compute')
         form.addParam('classificationMPIs', IntParam, default=4,
