@@ -194,7 +194,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
 
     
         self._insertFunctionStep('convertInputStep', 
-                                self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) #convert
+                                self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) 
                 
         self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma, particlesTrain, resolution)
     

@@ -1501,10 +1501,12 @@ class TestXmippClassifyPca(TestXmippBase):
                                     objLabel="Classify Pca streaming - update classes",
                                     training=2000,
                                     correctCtf=False,
+                                    classificationBatch = 2000,
                                     mode=XmippProtClassifyPcaStreaming.UPDATE_CLASSES
                                     )
         protPCA2.initialClasses.set(protPCA1)
-        protPCA2.initialClasses.setExtended("outputAverages")
+        # protPCA2.initialClasses.setExtended("outputAverages")
+        protPCA2.initialClasses.setExtended("outputClasses")
 
         protPCA2.inputParticles.set(protStream)
         protPCA2.inputParticles.setExtended("outputParticles")
