@@ -165,6 +165,7 @@ class Plugin(pwem.Plugin):
 
         if True:
         #if Config.isCondaInstallation():
+            print('\nin\n')
             condaEnvPath = os.environ['CONDA_PREFIX']
             scipionEnv=os.path.basename(condaEnvPath)  # TODO: use pyworkflow method when released: Config.getEnvName()
 
