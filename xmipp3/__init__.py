@@ -160,7 +160,8 @@ class Plugin(pwem.Plugin):
             "libjpeg-turbo",
         ]
 
-        CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng"
+        CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
+        CONDA_ICU_PACKAGE = 'icu=72'
 
         if Config.isCondaInstallation():
             condaEnvPath = os.environ['CONDA_PREFIX']
@@ -168,7 +169,7 @@ class Plugin(pwem.Plugin):
 
             commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
             #commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
-            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE)
+            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE + CONDA_ICU_PACKAGE)
             commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
