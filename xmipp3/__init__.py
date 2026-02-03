@@ -163,15 +163,14 @@ class Plugin(pwem.Plugin):
         CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
         CONDA_ICU_PACKAGE = 'icu=72'
 
-        if True:
-        #if Config.isCondaInstallation():
+        if Config.isCondaInstallation():
             print('\nin\n')
             condaEnvPath = os.environ['CONDA_PREFIX']
             scipionEnv=os.path.basename(condaEnvPath)  # TODO: use pyworkflow method when released: Config.getEnvName()
 
             commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
             #commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
-            commands.condaInstall('-c conda-forge --yes '  + CONDA_ICU_PACKAGE)
+            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE + CONDA_ICU_PACKAGE)
             commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
