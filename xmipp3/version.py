@@ -42,4 +42,4 @@ _binVersion = 'v4' # Increase it if major release is generated in xmipp
 #   pull request, increase the one related to the new protocol).
 __version__ = '26.1.0'
 
-_currentDepVersion = '1.0'
+_currentDepVersion = '2.0'
