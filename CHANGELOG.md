@@ -1,6 +1,6 @@
 ## Release 27.0.0
 - More scipion-em-xmipp
-   - Updated xmipp3-dependencie (2.1.0 with configuration flags that can be set using environment variables.)
+   - Updated xmipp3-installer dependency (2.1.0 with configuration flags that can be set using environment variables.)
    - Mayor version because of deprecated protocol in previous version; DeepCenter
 
 ## Release 26.2.0
