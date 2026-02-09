@@ -173,7 +173,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         form.addParam('coef', FloatParam, label="% variance", default=0.85, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of PCA components (between 0-1).'
                            ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training', IntParam, default=150000, expertLevel=LEVEL_ADVANCED,
+        form.addParam('training', IntParam, default=100000, expertLevel=LEVEL_ADVANCED,
                       label="particles for training",
                       help='Number of particles for PCA training')
         form.addSection(label='Classification')
