@@ -141,8 +141,17 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
+        form.addParam('correctCTF', BooleanParam, default=False,
+                      label='Perform CTF correction',
+                      help='Caution! Disabling CTF correction is not recommended. Use only if you have already'
+                      ' pre-corrected CTF in your images, or if you deliberately want to leave it uncorrected.'
+                     )
         form.addParam('correctEnvelope', BooleanParam, default=False,
-                      label='Correct CTF envelope')
+                      condition='correctCTF',
+                      label='Correct CTF envelope',
+                      help='Currently, only Xmipp3 CTF supports envelope calculations. This parameter will only'
+                      ' work if your CTF estimation comes from Xmipp3 or from a Consensus with Xmipp3 estimations.'
+                     )
         form.addParam("saveSpace", BooleanParam, default=True, label="Remove intermediate files", expertLevel=LEVEL_ADVANCED)
 
         form.addSection(label='Next Reference')
