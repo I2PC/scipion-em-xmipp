@@ -1,6 +1,8 @@
 # ******************************************************************************
 # *
-# * Authors:     Erney Ramirez Aportela (eramirez@cnb.csic.es)
+# * Authors: Erney Ramirez Aportela (eramirez@cnb.csic.es)
+# *          Daniel Marchan Torres (da.marchan@cnb.csic.es)
+# *          Yunior C. Fonseca Reyna (cfonseca@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -23,26 +25,34 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
-import os
-import emtable
 import enum
+import sys
+import emtable
+import os
+from datetime import datetime
+import time
 import numpy as np
 
+from pwem.protocols import ProtClassify2D
+from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
-                                        BooleanParam, EnumParam, IntParam, GPU_LIST)
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.object import Set
+from pyworkflow.protocol.params import IntParam, StringParam, PointerParam, EnumParam, BooleanParam, FloatParam
+from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED
 from pyworkflow.constants import BETA
 
-from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D, Transform, SetOfParticles
+from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
 from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
-
 from xmipp3 import XmippProtocol
-from xmipp3.convert import (writeSetOfParticles, writeSetOfClasses2D, xmippToLocation,
-                            readSetOfParticles, matrixFromGeometry, createItemMatrix)
 
-import pwem.emlib.metadata as md
+from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
+                            writeSetOfClasses2D, xmippToLocation, matrixFromGeometry)
+
+OUTPUT_CLASSES = "outputClasses"
+OUTPUT_AVERAGES = "outputAverages"
+PCA_FILE = "pca_done.txt"
+CLASSIFICATION_FILE = "classification_done.txt"
+LAST_DONE_FILE = "last_done.txt"
 
 
 class XMIPPCOLUMNS(enum.Enum):
@@ -87,7 +97,6 @@ ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
                   }
 
 
-
 def updateEnviron(gpuNum):
     """ Create the needed environment for pytorch programs. """
     print("updating environ to select gpu %s" % (gpuNum))
@@ -98,28 +107,29 @@ def updateEnviron(gpuNum):
 
 CONTRAST_AVERAGES_FILE = 'classes_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
-        
-class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
-    """ Classifies a set of images. """
-    
+
+
+class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProtocol):
+    """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming,
+        enabling efficient processing of large datasets.  """
+
     _label = 'alignPCA-2D'
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
     _devStatus = BETA
-    
+
     # Mode
     CREATE_CLASSES = 0
     UPDATE_CLASSES = 1
-    
+
+    _possibleOutputs = {OUTPUT_CLASSES: SetOfClasses2D,
+                        OUTPUT_AVERAGES: SetOfAverages}
+
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
-        form = self._defineCommonParams(form)
-        form.addParallelSection(threads=1, mpi=24)
-
-    def _defineCommonParams(self, form):
         form.addHidden(GPU_LIST, StringParam, default='0',
                        label="Choose GPU ID",
                        help="GPU may have several cores. Set it to zero"
@@ -166,135 +176,406 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         form.addParam('training', IntParam, default=100000, expertLevel=LEVEL_ADVANCED,
                       label="particles for training",
                       help='Number of particles for PCA training')
+        form.addSection(label='Classification')
+        form.addParam('classificationBatch', IntParam, default=75000,
+                      label="particles for initial classification in streaming",
+                      help='Number of particles for an initial classification to compute the 2D references in streaming')
 
-        return form
+        form.addSection(label='Compute')
+        form.addParam('classificationMPIs', IntParam, default=4,
+                      label="MPIs",
+                      help= 'MPI is used to parallelize CTF correction.' 
+                            ' The CTF is corrected using the xmipp_wiener_2d function.' 
+                            ' If multiple processors are available, it is recommended'
+                            ' to set this value as high as possible (e.g., 24, 32...).')
 
-    # --------------------------- INSERT steps functions ------------------------
-    def _insertAllSteps(self):
+        form.addParallelSection(threads=3, mpi=1)
 
-        """ Mainly prepare the command line for call classification program"""
-    
-        updateEnviron(self.gpuList.get())
-        
-        self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
-        self.imgsXmd = self._getTmpPath('images.xmd')
-        self.imgsFn = self._getTmpPath('images.mrc')
+    # --------------------------- INSERT steps functions ----------------------
+    def stepsGeneratorStep(self) -> None:
+        self._initialStep()
+        self.newDeps = []
+        newParticlesSet = self._loadEmptyParticleSet()
+
+        if self.isContinued() and False:
+            self.info('Continue protocol')
+            self._updateVarsToContinue()
+
+        checkInterval = 5
+
+        while not self.finish:
+            particlesSet = self._loadInputParticleSet()
+            self.streamState = particlesSet.getStreamState()
+
+            where = None
+            if self.lastCreationTime:
+                where = 'creation>"' + str(self.lastCreationTime) + '"'
+            tmp = None
+            newCount = 0
+
+            for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
+                tmp = particle.getObjCreation()
+                newParticlesSet.append(particle.clone())
+                newCount += 1
+
+            particlesSet.close()
+
+            if tmp is not None:
+                self.lastCreationTime = tmp
+
+            if newCount == 0:
+                self.info('No new particles')
+            else:
+                self.info('%d new particles in batch' % len(newParticlesSet))
+                self.info('Last creation time REGISTER %s' % self.lastCreationTime)
+
+                if self._doClassification(newParticlesSet):
+                    self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
+                    newParticlesSet = self._loadEmptyParticleSet()
+
+            if self.streamState == Set.STREAM_CLOSED:
+                self.info('Stream closed')
+                if len(newParticlesSet):
+                    self.info('Finish processing with last batch %d' % len(newParticlesSet))
+                    self.lastRound = True
+
+                    # Force one more iteration to flush last batch
+                    if self._doClassification(newParticlesSet):
+                        self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
+                        newParticlesSet = self._loadEmptyParticleSet()
+                else:
+                    self._insertFunctionStep(self.closeOutputStep,
+                                             prerequisites=self.newDeps,
+                                             needsGPU=False)
+                    self.finish = True
+                    continue
+
+            with self._lock:  # Add this lock so it will not block the iterItems of the classify method
+                self.inputParticles.get().close()  # If this is not close then it blocks the input protocol
+            time.sleep(checkInterval)
+            sys.stdout.flush()
+
+        sys.stdout.flush()
+
+    # --------------------------- STEPS functions -------------------------------
+    def _initialStep(self):
+        self.finish = False
+        self.lastCreationTime = 0
+        self.lastCreationTimeProcessed = 0
+        self.streamState = Set.STREAM_OPEN
+        self.lastRound = False
+        self.pcaLaunch = False
+        self.classificationLaunch = False
+        self.classificationRound = 0
+        self.firstTimeDone = False
+        self.staticRun = False
+        # Initialize files
+        self._initFnStep()
+
+    def _initFnStep(self):
+        self.inputFn = self.inputParticles.get().getFileName()
+        self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
+        self.imgsXmd = self._getTmpPath('images_.xmd')  # Wiener
+        self.imgsFn = self._getTmpPath('images_.mrc') # Wiener
         self.refXmd = self._getTmpPath('references.xmd')
-        self.ref = self._getTmpPath('references.mrcs')
+        self.ref = self._getExtraPath('classes.mrcs')
+        self.sigmaProt = self.sigma.get()
+        if self.sigmaProt == -1:
+            self.sigmaProt = self.inputParticles.get().getDimensions()[0] / 3
+
         self.sampling = self.inputParticles.get().getSamplingRate()
-        self.acquisition = self.inputParticles.get().getAcquisition()
-        mask = self.mask.get()
-        sigma = self.sigma.get()
-        if sigma == -1:
-            sigma = self.inputParticles.get().getDimensions()[0]/3
-        particlesTrain = min(self.training.get(), self.inputParticles.get().getSize())
         resolution = self.resolution.get()
         if resolution < 2 * self.sampling:
             resolution = (2 * self.sampling) + 0.5
+        self.resolutionPca = resolution
 
-    
-        self._insertFunctionStep('convertInputStep', 
-                                self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn) 
-                
-        self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma, particlesTrain, resolution)
-    
-        self._insertFunctionStep('createOutputStep')
+        if self.mode.get() == self.UPDATE_CLASSES:
+            self.numberClasses = len(self.initialClasses.get())
+        else:
+            self.numberClasses = self.numberOfClasses.get()
+
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
+
+    def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
+        self._updateFnClassification()
+        classStep = self._insertFunctionStep(self.runClassificationSteps,
+                                             newParticlesSet,
+                                             prerequisites=[],
+                                             needsGPU=True)
+        updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
+                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep,
+                                              needsGPU=False)
+        self.newDeps.append(updateStep)
+
+    def runClassificationSteps(self, newParticlesSet):
         
+        self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+        
+        numTrain = min(len(newParticlesSet), self.training.get())
+        self.classification(self.imgsFn, self.numberClasses, self.imgsOrigXmd,
+                            self.mask.get(), self.sigmaProt, numTrain, self.resolutionPca)
+        # self.classificationLaunch = False
 
-    #--------------------------- STEPS functions -------------------------------
     def convertInputStep(self, input, outputOrig, outputMRC):
         writeSetOfParticles(input, outputOrig)
-        
-        if self.mode == self.UPDATE_CLASSES: 
-            
-            if isinstance(self.initialClasses.get(), SetOfClasses2D):
-                writeSetOfClasses2D(self.initialClasses.get(),
-                                    self.refXmd, writeParticles=False)
-            else:
-                writeSetOfParticles(self.initialClasses.get(),
-                                    self.refXmd)
-                       
-            args = ' -i  %s -o %s  '%(self.refXmd, self.ref)
-            self.runJob("xmipp_image_convert", args, numberOfMpi=1)
-            
-        
-        if self.correctCtf: 
+
+        if self.correctCtf.get():
+            # ------------ WIENER -----------------------
             args = ' -i %s  --operate  randomize'%(outputOrig)
             self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
             
             args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
-            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
+            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.classificationMPIs.get())
             
-        else:      
-            args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
-            self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
-        
-    
-    
+        else:
+            args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
+            self.runJob("xmipp_image_convert", args)
+
+        # For classification update
+        if self.mode.get() == self.UPDATE_CLASSES and not self.firstTimeDone:
+            initial2DClasses = self.initialClasses.get()
+            self.info('Write classes')
+            if isinstance(initial2DClasses, SetOfClasses2D):
+                writeSetOfClasses2D(initial2DClasses,
+                                    self.refXmd, writeParticles=False)
+            else:
+                writeSetOfParticles(initial2DClasses,
+                                    self.refXmd,
+                                    alignType=ALIGN_NONE)
+
+            args = ' -i  %s -o %s ' % (self.refXmd, self.ref)
+            self.runJob("xmipp_image_convert", args)
+            self.firstTimeDone = True
+
     def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain, resolutionTrain):
-        args = ' -i %s -s %s -c %s  -t %s -hr %s -p %s -o %s/classes -stExp %s'  % \
-                (inputIm, self.sampling, numClass,  numTrain, resolutionTrain, self.coef.get(), self._getExtraPath(), stfile)
+        args = ' -i %s -s %s -c %s -t %s -hr %s -p %s  -o %s/classes -stExp %s' % \
+               (inputIm, self.sampling, numClass, numTrain, resolutionTrain, self.coef.get(), self._getExtraPath(),
+                stfile)
         if mask:
-            args += ' --mask --sigma %s '%(sigma) 
-    
-        if self.mode == self.UPDATE_CLASSES:
-            args += ' -r %s '%(self.ref)
-    
+            args += ' --mask --sigma %s ' % (sigma)
+
+        if self.mode.get() == self.UPDATE_CLASSES or self._isClassificationDone():
+            args += ' -r %s ' % self.ref
+
         env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = ''
-        self.runJob("xmipp_alignPCA_2D", args, numberOfMpi=1, env=env)
+        env = self._setEnvVariables(env)
+        self.runJob("xmipp_alignPCA_2D", args, env=env)
         
         args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
         self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+
+    def updateOutputSetOfClasses(self, lastCreationTime, streamMode):
+        outputName = OUTPUT_CLASSES
+        outputClasses, update = self._loadOutputSet(outputName)
+
+        self._fillClassesFromLevel(outputClasses, update)
+        self._updateOutputSet(outputName, outputClasses, streamMode)
+        # self._updateOutputAverages(update)
+
+        if not update:  # First time
+            self._defineSourceRelation(self._getInputPointer(), outputClasses)
+            self._setClassificationDone()
+            self.numberClasses = len(outputClasses)  # In case the original number of classes is not reached
+
+        self.lastCreationTimeProcessed = lastCreationTime
+        self.info(r'Last creation time processed UPDATED is %s' % str(self.lastCreationTimeProcessed))
+        self._writeLastDone(str(self.lastCreationTimeProcessed))
+        self._writeLastClassificationRound(self.classificationRound)
+
+        self.info(r'Last classification round processed is %d' % self.classificationRound)
+        self.classificationRound += 1
+
+    def closeOutputStep(self):
+        self._closeOutputSet()
+
+    # --------------------------- UTILS functions -----------------------------
+    def _loadInputParticleSet(self):
+        """ Returns te input set of particles"""
+        self.debug("Loading input db: %s" % self.inputFn)
+        partSet = SetOfParticles(filename=self.inputFn)
+        partSet.loadAllProperties()
+
+        return partSet
+
+    def _getInputPointer(self):
+        return self.inputParticles
+
+    def _loadEmptyParticleSet(self):
+        partSet = SetOfParticles(filename=self.inputFn)
+        partSet.loadAllProperties()
+        copyPartSet = self._createSetOfParticles()
+        copyPartSet.copyInfo(partSet)
+
+        return copyPartSet
+
+    def _setEnvVariables(self, env):
+        """ Method to set all the environment variables needed to run PCA program """
+        env['LD_LIBRARY_PATH'] = ''
+        # Limit the number of threads
+        env['OMP_NUM_THREADS'] = '12'
+        env['MKL_NUM_THREADS'] = '12'
+        return env
+
+    def _updateFnClassification(self):
+        """Update input based on the iteration it is"""
+        self.imgsOrigXmd = updateFileName(self.imgsOrigXmd, self.classificationRound)
+        self.imgsXmd = updateFileName(self.imgsXmd, self.classificationRound)
+        self.imgsFn = updateFileName(self.imgsFn, self.classificationRound)
+        self.info('Starts classification round: %d' % self.classificationRound)
+        self.classificationRound += 1
+
+    def _newParticlesToProcess(self):
+        particlesFile = self.inputFn
+        now = datetime.now()
+
+        lastCheck = getattr(self, "lastCheck", now)
+        self.lastCheck = lastCheck
+
+        mTime = datetime.fromtimestamp(os.path.getmtime(particlesFile))
+        self.debug("Last check: %s, modification: %s"
+                   % (lastCheck, prettyTime(mTime)))
+
+        fileUnchanged = lastCheck > mTime
+        alreadyProcessedSomething = bool(getattr(self, "lastCreationTime", None))
+        isLastRound = bool(getattr(self, "lastRound", False))
+
+        hasNewParticles = not (fileUnchanged and alreadyProcessedSomething and not isLastRound)
+
+        self.lastCheck = now
+        return hasNewParticles
+
+    def _fillClassesFromLevel(self, clsSet, update=False):
+        """ Create the SetOfClasses2D from a given iteration. """
+        self._createModelFile()
         
-        
-    def createOutputStep(self):
-        """ Store the SetOfClasses2D object
-        resulting from the protocol execution.
+        self._loadClassesInfo(self._getExtraPath(CONTRAST_AVERAGES_FILE))
+        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE))
+
+        params = {}
+        if update:
+            self.info(r'Last creation time processed is %s' % str(self.lastCreationTimeProcessed))
+            params = {"where": 'creation>"' + str(self.lastCreationTimeProcessed) + '"'}
+
+        with self._lock:
+            clsSet.classifyItems(updateItemCallback=self._updateParticle,
+                                 updateClassCallback=self._updateClass,
+                                 itemDataIterator=mdIter,  # relion style
+                                 iterParams=params,
+                                 doClone=False,  # So the creation time is maintained
+                                 raiseOnNextFailure=False)  # So streaming can happen
+
+    def _loadOutputSet(self, outputName):
         """
-    
-        inputParticles = self.inputParticles#.get()
-        
-        # imgSet = self._createSetOfParticles()
-        # imgSet.copyInfo(inputParticles)
-        # imgSet.setSamplingRate(inputParticles.getSamplingRate())
-        # imgSet.copyItems(inputParticles,
-        #              updateItemCallback=self._createItemMatrix,
-        #              itemDataIterator=md.iterRows(self._getExtraPath(AVERAGES_IMAGES_FILE),
-        #                                           sortByLabel=md.MDL_ITEM_ID))
-        
+        Load the output set if it exists or create a new one.
+        """
+        outputSet = getattr(self, outputName, None)
+        update = False
+        if outputSet is None:
+            outputSet = self._createSetOfClasses2D(self._getInputPointer())
+            outputSet.setStreamState(Set.STREAM_OPEN)
+        else:
+            update = True
 
-        
+        return outputSet, update
 
-        classes2DSet = self._createSetOfClasses2D(inputParticles)
-        # classes2DSet = self._createSetOfClasses2D(imgSet)
-        self._fillClassesFromLevel(classes2DSet)
+    def _loadOutputAverageSet(self):
+        """
+        Load an empty output setOfAverages
+        """
+        outputRefs = self._createSetOfAverages()  # We need to create always an empty set since we need to rebuild it
+        partSet = SetOfParticles(filename=self.inputFn)
+        partSet.loadAllProperties()
+        outputRefs.copyInfo(partSet)
+        outputRefs.setSamplingRate(self.sampling)
+        outputRefs.setAlignment(ALIGN_2D)
 
-        self._defineOutputs(outputClasses=classes2DSet)
-        self._defineSourceRelation(self.inputParticles, classes2DSet)
-        
-    #     self.createOutputAverages(classes2DSet)
-    #
-    # def createOutputAverages(self, outputClasses):
-    #     classes = self._getExtraPath('classes.mrcs')
-    #     outRefs = self._createSetOfAverages()
-    #     outRefs.copyInfo(self.inputParticles.get())
-    #     outRefs.setSamplingRate(self.sampling)
-    #     readSetOfParticles(classes, outRefs)
-    #
-    #     outRefs.setAlignment(ALIGN_2D)
-    #     self._defineOutputs(outputAverages=outRefs)
-    #     self._defineSourceRelation(self.inputParticles, outRefs)    
-    
-    # --------------------------- INFO functions --------------------------------
+        return outputRefs
+
+    def _doClassification(self, newParticlesSet):
+        """ Three cases for launching Classification
+            - First round of classification: enough particles and PCA done
+            - Update classification: classification done, PCA done and enough batch size
+            - First or update classification with a smaller batch: last round of particles and not classification launch
+        """
+        n = len(newParticlesSet)
+        b = self.classificationBatch.get()
+        if self.classificationLaunch:
+            return False
+
+        batchReady = n >= b
+        lastRoundReady = self.lastRound
+
+        return batchReady or lastRoundReady
+
+
+    def _isClassificationDone(self):
+        done = False
+        if os.path.exists(self._getExtraPath(CLASSIFICATION_FILE)):
+            done = True
+
+        if self.mode == self.UPDATE_CLASSES:
+            done = True
+
+        return done
+
+    def _setClassificationDone(self):
+        with open(self._getExtraPath(CLASSIFICATION_FILE), "w"):
+            self.debug("Creating Classification DONE file")
+
+    def _writeLastClassificationRound(self, classificationRound):
+        with open(self._getExtraPath(CLASSIFICATION_FILE), "w") as file:
+            file.write('%d' % classificationRound)
+
+    def _getLastClassificationRound(self):
+        with open(self._getExtraPath(CLASSIFICATION_FILE), "r") as file:
+            content = file.read()
+            return int(content)
+
+    def _writeLastDone(self, creationTime):
+        """ Write to a text file the last item creation time done. """
+        with open(self._getExtraPath(LAST_DONE_FILE), 'w') as file:
+            file.write('%s' % creationTime)
+
+    def _getLastDone(self):
+        # Open the file in read mode and read the number
+        with open(self._getExtraPath(LAST_DONE_FILE), "r") as file:
+            content = file.read()
+        return str(content)
+
+    def _updateVarsToContinue(self):
+        """ Method to if needed and the protocol is set to continue then it will see in which state it was stopped """
+
+        if self._isClassificationDone():
+            self.lastCreationTime = self._getLastDone()
+            self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
+        else:
+            self.lastCreationTime = ''
+            self.classificationRound = 1
+
+        self.lastCreationTimeProcessed = self.lastCreationTime
+        # Convert the string to a datetime object
+        self.lastCheck = datetime.strptime(self.lastCreationTime, '%Y-%m-%d %H:%M:%S')
+
     def _validate(self):
         """ Check if the installation of this protocol is correct.
         Can't rely on package function since this is a "multi package" package
         Returning an empty list means that the installation is correct
-        and there are not errors. If some errors are found, a list with
+        and there are no errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        
         errors = []
         if self.inputParticles.get().getDimensions()[0] > 256:
             errors.append("You should resize the particles."
@@ -305,7 +586,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         if er:
             errors+=er
         return errors
-
+    
     def _warnings(self):
         validateMsgs = []
         if self.inputParticles.get().getDimensions()[0] > 128:
@@ -315,7 +596,7 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             validateMsgs.append("Particle sizes bigger than 256 may"
                                 " saturate the GPU memory.")
         return validateMsgs
-
+    
     def _summary(self):
         summary = []
 
@@ -327,13 +608,6 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
         return summary
 
     # #--------------------------- UTILS functions -------------------------------
-    def _createItemMatrix(self, item, row):
-        createItemMatrix(item, row, align=ALIGN_2D)
-            # forzar el objId para preservar el orden real del XMD       
-        itemId = int(row.getValue(md.MDL_ITEM_ID))
-        item.setObjId(itemId)
-
-        
     # EMTABLE IMPLEMENTATION
     def _updateParticle(self, item, row):
         if row is None:
@@ -346,8 +620,6 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             else:
                 self.error('The particles ids are not synchronized')
                 setattr(item, "_appendItem", False)
-            # item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
-            # item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -407,25 +679,6 @@ class XmippProtClassifyPca(ProtClassify2D, XmippProtocol):
             self._classesInfo[classNumber + 1] = (index, fn, row)
         self._numClass = index
 
-    def _fillClassesFromLevel(self, clsSet, update=False):
-        """ Create the SetOfClasses2D from a given iteration. """
-        self._createModelFile()
-        self._loadClassesInfo(self._getExtraPath(CONTRAST_AVERAGES_FILE))
-        # self._loadClassesInfo(self._getExtraPath('classes_classes.star'))
-        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE))
-
-        params = {}
-        if update:
-            self.info(r'Last particle processed id is %s' % self.lastParticleProcessedId)
-            params = {"where": "id > %s" % self.lastParticleProcessedId}
-
-        # the particle with orientation parameters (all_parameters)
-        with self._lock:
-            clsSet.classifyItems(updateItemCallback=self._updateParticle,
-                                 updateClassCallback=self._updateClass,
-                                 itemDataIterator=mdIter,  # relion style
-                                 iterParams=params)
-    
 # --------------------------- Static functions --------------------------------
 def rowToAlignmentEmtable(alignmentRow, alignType):
     """
@@ -453,12 +706,12 @@ def rowToAlignmentEmtable(alignmentRow, alignType):
             shifts[2] = alignmentRow.get(XMIPPCOLUMNS.shiftZ.value, default=0.)
             if flip:
                 angles[1] = angles[1] + 180  # tilt + 180
-                angles[2] = - angles[2]    # - psi, COSS: this is mirroring X
-                shifts[0] = - shifts[0]     # -x
+                angles[2] = - angles[2]  # - psi, COSS: this is mirroring X
+                shifts[0] = - shifts[0]  # -x
         else:
             psi = alignmentRow.get(XMIPPCOLUMNS.anglePsi.value, default=0.)
             rot = alignmentRow.get(XMIPPCOLUMNS.angleRot.value, default=0.)
-            if not np.isclose(rot, 0., atol=1e-6 ) and not np.isclose(psi, 0., atol=1e-6):
+            if not np.isclose(rot, 0., atol=1e-6) and not np.isclose(psi, 0., atol=1e-6):
                 print("HORROR rot and psi are different from zero in 2D case")
 
             angles[0] = psi + rot
@@ -483,3 +736,9 @@ def rowToAlignmentEmtable(alignmentRow, alignType):
 
     return alignment
 
+
+# --------------------------- Static functions --------------------------------
+def updateFileName(filepath, classRound):
+    filename = os.path.basename(filepath)
+    newFilename = f"{filename[:filename.find('_')]}_{classRound}{filename[filename.rfind('.'):]}"
+    return os.path.join(os.path.dirname(filepath), newFilename)

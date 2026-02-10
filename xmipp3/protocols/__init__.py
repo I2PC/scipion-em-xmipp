@@ -30,8 +30,7 @@ from .protocol_preprocess import *
 
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
-from .protocol_alignPCA_2D import XmippProtClassifyPca
-from .protocol_alignPCA_2D_streaming import XmippProtClassifyPcaStreaming
+from .protocol_alignPCA_2D import XmippProtClassifyPcaStreaming
 from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
