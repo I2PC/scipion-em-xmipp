@@ -122,6 +122,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
     CREATE_CLASSES = 0
     UPDATE_CLASSES = 1
 
+    _possibleOutputs = {OUTPUT_CLASSES: SetOfClasses2D,
+                        OUTPUT_AVERAGES: SetOfAverages}
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
