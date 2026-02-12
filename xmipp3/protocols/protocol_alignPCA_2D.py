@@ -577,9 +577,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         the error messages will be returned.
         """
         errors = []
-        if self.inputParticles.get().getDimensions()[0] > 256:
-            errors.append("You should resize the particles."
-                          " Sizes smaller than 128 pixels are recommended.")
         er = self.validateDLtoolkit()
         if not isinstance(er, list):
             er = [er]
