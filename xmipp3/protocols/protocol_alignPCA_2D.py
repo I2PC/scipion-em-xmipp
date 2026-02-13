@@ -97,13 +97,13 @@ ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
                   }
 
 
-def updateEnviron(gpuNum):
-    """ Create the needed environment for pytorch programs. """
-    print("updating environ to select gpu %s" % (gpuNum))
-    if gpuNum == '':
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+# def updateEnviron(gpuNum):
+#     """ Create the needed environment for pytorch programs. """
+#     print("updating environ to select gpu %s" % (gpuNum))
+#     if gpuNum == '':
+#         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+#     else:
+#         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 
 CONTRAST_AVERAGES_FILE = 'classes_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
@@ -301,6 +301,9 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         return strGpus[:-1]
 
     def setGPU(self, oneGPU=False):
+        print("aqui va la gpu")
+        print(self.getGpusList)
+        exit()
         if oneGPU:
             gpus = self.getGpusList(",")[0]
         else:
