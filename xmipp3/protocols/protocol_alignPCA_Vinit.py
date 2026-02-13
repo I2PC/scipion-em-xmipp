@@ -31,7 +31,8 @@ from os.path import join, exists, split
 import os
 import numpy as np
 
-from pyworkflow import VERSION_2_0
+from pyworkflow import VERSION_3_0
+from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, IntParam, GPU_LIST)
@@ -62,6 +63,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_pyTorch'
     _devStatus = BETA
+    
     
     def __init__(self, **args):
         ProtRefine3D.__init__(self, **args)
