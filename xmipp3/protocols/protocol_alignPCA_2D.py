@@ -273,6 +273,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self._initFnStep()
 
     def _initFnStep(self):
+        updateEnviron(self.gpuList.get())
         self.inputFn = self.inputParticles.get().getFileName()
         self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
         self.imgsXmd = self._getTmpPath('images_.xmd')  # Wiener
@@ -294,20 +295,20 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         else:
             self.numberClasses = self.numberOfClasses.get()
 
-    # def getGpusList(self, separator):
-    #     strGpus = ""
-    #     for elem in self._stepsExecutor.getGpuList():
-    #         strGpus = strGpus + str(elem) + separator
-    #     return strGpus[:-1]
-    #
-    # def setGPU(self, oneGPU=False):
-    #     if oneGPU:
-    #         gpus = self.getGpusList(",")[0]
-    #     else:
-    #         gpus = self.getGpusList(",")
-    #     os.environ["CUDA_VISIBLE_DEVICES"] = gpus
-    #     self.info(f'Visible GPUS: {gpus}')
-    #     return gpus
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
 
     def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
         self._updateFnClassification()
@@ -372,7 +373,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
         env = self.getCondaEnv()
         env = self._setEnvVariables(env)
-        updateEnviron(self.gpuList.get())
         self.runJob("xmipp_alignPCA_2D", args, env=env)
         
         args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
