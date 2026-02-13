@@ -1,3 +1,6 @@
+## Release 28.0.0
+- More scipion-em-xmipp
+
 ## Release 27.0.0
 - More scipion-em-xmipp
    - Updated xmipp3-installer dependency (2.1.0 with configuration flags that can be set using environment variables.)
