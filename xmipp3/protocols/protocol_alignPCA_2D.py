@@ -375,6 +375,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
         env = self.getCondaEnv()
         env = self._setEnvVariables(env)
+        updateEnviron(self.gpuList.get())
         self.runJob("xmipp_alignPCA_2D", args, env=env)
         
         args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
