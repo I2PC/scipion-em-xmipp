@@ -97,13 +97,13 @@ ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
                   }
 
 
-# def updateEnviron(gpuNum):
-#     """ Create the needed environment for pytorch programs. """
-#     print("updating environ to select gpu %s" % (gpuNum))
-#     if gpuNum == '':
-#         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-#     else:
-#         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+def updateEnviron(gpuNum):
+    """ Create the needed environment for pytorch programs. """
+    print("updating environ to select gpu %s" % (gpuNum))
+    if gpuNum == '':
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    else:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 
 CONTRAST_AVERAGES_FILE = 'classes_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
