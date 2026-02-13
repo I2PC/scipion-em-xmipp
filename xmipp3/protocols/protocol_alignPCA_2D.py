@@ -295,20 +295,20 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         else:
             self.numberClasses = self.numberOfClasses.get()
 
-    def getGpusList(self, separator):
-        strGpus = ""
-        for elem in self._stepsExecutor.getGpuList():
-            strGpus = strGpus + str(elem) + separator
-        return strGpus[:-1]
-
-    def setGPU(self, oneGPU=False):
-        if oneGPU:
-            gpus = self.getGpusList(",")[0]
-        else:
-            gpus = self.getGpusList(",")
-        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
-        self.info(f'Visible GPUS: {gpus}')
-        return gpus
+    # def getGpusList(self, separator):
+    #     strGpus = ""
+    #     for elem in self._stepsExecutor.getGpuList():
+    #         strGpus = strGpus + str(elem) + separator
+    #     return strGpus[:-1]
+    #
+    # def setGPU(self, oneGPU=False):
+    #     if oneGPU:
+    #         gpus = self.getGpusList(",")[0]
+    #     else:
+    #         gpus = self.getGpusList(",")
+    #     os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+    #     self.info(f'Visible GPUS: {gpus}')
+    #     return gpus
 
     def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
         self._updateFnClassification()
