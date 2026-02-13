@@ -1,5 +1,7 @@
 ## Release 28.0.0
-- More scipion-em-xmipp
+- New protocols
+   - alignPCA_2D: Performs a 2D classification of particles using PCA. This method is optimized to run in streaming,
+        enabling efficient processing of large datasets. 
 
 ## Release 27.0.0
 - More scipion-em-xmipp
