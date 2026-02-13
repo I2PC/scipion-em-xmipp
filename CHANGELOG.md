@@ -1,3 +1,16 @@
+## Release 27.0.0
+- More scipion-em-xmipp
+   - Updated xmipp3-installer dependency (2.1.0 with configuration flags that can be set using environment variables.)
+   - Major version because of deprecated protocol in previous version; DeepCenter
+
+## Release 26.2.0
+- More scipion-em-xmipp
+   - xmipp3-installer package installed from pypi, reverting previous temporal fix
+   - Added new dependencie to solve error with libicu18
+ 
+- Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols](https://i2pc.github.io/docs/Utils/Deprecated-programs/index.html)))
+   - DeepCenter
+  
 ## Release 26.1.0
 - Protocols updated
   - deep_micrograph_cleaner: Showing thumbnails of micrographs with the mask and the coordinates stamps

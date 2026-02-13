@@ -160,7 +160,8 @@ class Plugin(pwem.Plugin):
             "libjpeg-turbo",
         ]
 
-        CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng"
+        CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
+        CONDA_ICU_PACKAGE = 'icu=72'
 
         if Config.isCondaInstallation():
             condaEnvPath = os.environ['CONDA_PREFIX']
@@ -168,7 +169,7 @@ class Plugin(pwem.Plugin):
 
             commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
             #commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
-            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE)
+            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE + CONDA_ICU_PACKAGE)
             commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
@@ -177,15 +178,12 @@ class Plugin(pwem.Plugin):
                 neededProgs=['conda'],
                 default=True
             )
-        xmipp3_installer_cmd = f'pip install "xmipp3-installer @ git+{XMIPP3_INSTALLER_URL}@{_xmipp3_installerV}" '
         if develMode:
             xmippSrc = 'xmippDev'
             installCommands = [
-		        (f'{xmipp3_installer_cmd } && '
-				 f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
+		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
 		         f'cd {xmippSrc} && '
-		         #f'git checkout {branchTest} && '
 		         f'./xmipp ', COMPILE_TARGETS)
 	        ]
 
@@ -200,8 +198,7 @@ class Plugin(pwem.Plugin):
         else:
             xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
-                (f'{xmipp3_installer_cmd } && '
-				 f'cd .. && rm -rf {xmippSrc} && '
+                (f'cd .. && rm -rf {xmippSrc} && '
                  f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                  f'cd {xmippSrc} && '
                  f'./xmipp', COMPILE_TARGETS)
