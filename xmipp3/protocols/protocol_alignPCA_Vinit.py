@@ -106,7 +106,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         form.addParam('resolution',FloatParam, label="max resolution", default=12,
                       help='Maximum resolution to be consider for alignment')
-        form.addParam('coef' ,FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
+        form.addParam('coef' ,FloatParam, label="% variance", default=1.0, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
         form.addParam('filter',FloatParam, label="filter resolution", default=8, expertLevel=LEVEL_ADVANCED,
@@ -151,7 +151,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         for cl in range (self.classes):
             refVol = self._getTmpPath('randomVol_class%s.mrc'%cl)+ ':mrc'
             if self.inputVolumes.get() is None:
-                self._insertFunctionStep('initRandomVol', self.imgsFnXmd, self._getTmpPath('random_class%s.xmd'%(cl)), refVol, symmetry)
+                self._insertFunctionStep('initRandomVol', self.imgsFnXmd, self.imgsFn, self._getTmpPath('random_class%s.xmd'%(cl)), refVol, symmetry)
             else:
                 img=ImageHandler()
                 vol=self.inputVolumes.get()
@@ -263,8 +263,9 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         moveFile(refIm+'.doc', refIm+'.xmd')
         
         
-    def initRandomVol(self, inputXMD, outputXMD, outputVOL, symmetry):
-        args = ' -s %s  -o %s --random_angles' %(inputXMD, outputXMD)
+    def initRandomVol(self, inputXMD, inputMRC, outputXMD, outputVOL, symmetry):
+        # args = ' -s %s  -o %s --random_angles' %(inputXMD, outputXMD)
+        args = ' -s %s -i %s -o %s --initial_angles' %(inputXMD, inputMRC, outputXMD)
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
