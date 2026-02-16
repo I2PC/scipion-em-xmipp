@@ -316,10 +316,10 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         # self._filterVolume(output, output, self.resolution.get())
         self._filterVolume(output, output, resol)
         #positivity
-        self._positivity(output)
+        # self._positivity(output)
         #automatic mask
-        if iter < 7:
-            self._applyMaskThreshold(output)
+        # if iter < 7:
+        #     self._applyMaskThreshold(output)
         #gaussian mask
         # self._applyGaussianMask(output)
         #mask
