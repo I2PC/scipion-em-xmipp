@@ -141,8 +141,17 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
+        form.addParam('correctCTF', BooleanParam, default=False,
+                      label='Perform CTF correction',
+                      help='Caution! Disabling CTF correction is not recommended. Use only if you have already'
+                      ' pre-corrected CTF in your images, or if you deliberately want to leave it uncorrected.'
+                     )
         form.addParam('correctEnvelope', BooleanParam, default=False,
-                      label='Correct CTF envelope')
+                      condition='correctCTF',
+                      label='Correct CTF envelope',
+                      help='Currently, only Xmipp3 CTF supports envelope calculations. This parameter will only'
+                      ' work if your CTF estimation comes from Xmipp3 or from a Consensus with Xmipp3 estimations.'
+                     )
         form.addParam("saveSpace", BooleanParam, default=True, label="Remove intermediate files", expertLevel=LEVEL_ADVANCED)
 
         form.addSection(label='Next Reference')
@@ -719,7 +728,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnNewParticles,R),numberOfMpi=min(self.numberOfMpi.get(),24))
         fnSource=join(fnDir,"images.xmd")
 
-        if not self.inputParticles.get().isPhaseFlipped():
+        if not self.inputParticles.get().isPhaseFlipped() and self.correctCTF.get():
             self.runJob("xmipp_ctf_correct_phase", "-i %s --sampling_rate %f" % (fnSource, TsCurrent),
                         numberOfMpi=min(self.numberOfMpi.get(), 24))
 
@@ -1092,7 +1101,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     args+=" --optimizeAngles --max_angular_change %f"%maxAngle
                 if self.contDefocus or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     args+=" --optimizeDefocus --max_defocus_change %f"%self.contMaxDefocus.get()
-                if self.inputParticles.get().isPhaseFlipped():
+                if self.inputParticles.get().isPhaseFlipped() and self.correctCTF.get():
                     args+=" --phaseFlipped"
                 #if self.weightResiduals:
                 #    args+=" --oresiduals %s"%join(fnDirLocal,"residuals%02i.stk"%i)
@@ -1359,7 +1368,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 hasCTF = row.containsLabel(emlib.MDL_CTF_DEFOCUSU) or row.containsLabel(emlib.MDL_CTF_MODEL)
                 fnCorrectedImagesRoot=join(fnDirCurrent,"images_corrected%02d"%i)
                 deleteStack = False
-                if hasCTF:
+                if hasCTF and self.correctCTF.get():
                     args="-i %s -o %s.stk --save_metadata_stack %s.xmd --keep_input_columns"%(fnAngles,fnCorrectedImagesRoot,fnCorrectedImagesRoot)
                     args+=" --sampling_rate %f"%TsCurrent
                     if self.correctEnvelope:
