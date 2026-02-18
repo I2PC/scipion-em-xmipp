@@ -235,15 +235,15 @@ class Plugin(pwem.Plugin):
                            tar='void.tgz',
                            default=True)
 
-            for name, env in DLTK_CONDA_ENVS.items():
-                versionId = env.get('versionId', None)
+            for name, envName in DLTK_CONDA_ENVS.items():
+                versionId = envName.get('versionId', None)
                 target = f'{name}-{versionId}.yml'
                 commandsCreate = []
                 commandsCreate.append(
                     'conda env create -f %s || conda env update -f %s'
-                    % (env['requirements'], env['requirements']))
+                    % (envName['requirements'], envName['requirements']))
                 commandsCreate.append('touch %s' % target)
-
+                print(f'commandsCreate: {commandsCreate}')
                 env.addPackage(name, version=versionId,
                                urlSuffix='external',
                                commands=commandsCreate,
