@@ -232,7 +232,7 @@ class Plugin(pwem.Plugin):
             env.addPackage(DLTK_MODELS,
                            commands=[(command, DLTK_V)],
                            version=DLTK_MODELS_VERSION,
-                           tar=DLTK_MODELS + '.tgz',
+                           tar='void.tgz',
                            default=True)
 
             for name, env in DLTK_CONDA_ENVS.items():
