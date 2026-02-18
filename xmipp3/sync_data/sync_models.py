@@ -253,7 +253,7 @@ def unTarModels(dirname):
     os.system(cmd)
 
 if __name__ == '__main__':
-
+    print('In sync_models')
     mode = sys.argv[1]
 
     if mode == 'download':
