@@ -375,9 +375,9 @@ def syncModels(env):
 
     print(f"{in_progress_task} Deep Learning models")
 
-    cmd = [(f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels'), DLTK_V]
+    cmd = f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels'
     print(f'cmd: {cmd}')
-    env.addPackage(DLTK_MODELS, commands=cmd, tar=DLTK_MODELS + '.tgz', default=True)
+    env.addPackage(DLTK_MODELS, commands=[(cmd, DLTK_V)], tar=DLTK_MODELS + '.tgz', default=True)
 
 def manageCUDA(plugin):
     nvidiaDriverVer = getNvidiaDriverVersion(plugin)
