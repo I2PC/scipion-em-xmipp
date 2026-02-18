@@ -226,7 +226,10 @@ class Plugin(pwem.Plugin):
             print('scipion-em-xmippDLTK not installed')
             sys.exit(0)
         else:
-            syncModels(env)
+            command, DLTK_V = syncModels(env)
+            env.addPackage(DLTK_MODELS, commands=[(command, DLTK_V)],
+                           tar=DLTK_MODELS + '.tgz', default=True)
+
             for name, env in DLTK_CONDA_ENVS.items():
                 versionId = env.get('versionId', None)
                 target = f'{name}-{versionId}.yml'
@@ -377,7 +380,7 @@ def syncModels(env):
 
     cmd = f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels'
     print(f'cmd: {cmd}')
-    env.addPackage(DLTK_MODELS, commands=[(cmd, DLTK_V)], tar=DLTK_MODELS + '.tgz', default=True)
+    return cmd, DLTK_V
 
 def manageCUDA(plugin):
     nvidiaDriverVer = getNvidiaDriverVersion(plugin)
