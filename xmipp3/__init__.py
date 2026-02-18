@@ -227,8 +227,13 @@ class Plugin(pwem.Plugin):
             sys.exit(0)
         else:
             command, DLTK_V = syncModels()
-            env.addPackage(DLTK_MODELS, commands=[(command, DLTK_V)],
-                           tar=DLTK_MODELS + '.tgz', default=True)
+            print(f'(command, DLTK_V): {(command, DLTK_V)}')
+
+            env.addPackage(DLTK_MODELS,
+                           commands=[(command, DLTK_V)],
+                           version=DLTK_MODELS_VERSION,
+                           tar=DLTK_MODELS + '.tgz',
+                           default=True)
 
             for name, env in DLTK_CONDA_ENVS.items():
                 versionId = env.get('versionId', None)
@@ -379,7 +384,6 @@ def syncModels():
     print(f"{in_progress_task} Deep Learning models")
 
     cmd = f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels'
-    print(f'cmd: {cmd}')
     return cmd, DLTK_V
 
 def manageCUDA(plugin):
