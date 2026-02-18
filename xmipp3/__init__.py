@@ -45,6 +45,7 @@ _currentDepVersion = '1.0'
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 DLTK_MODELS = "DLTK_MODELS"
+DLTK_MODELS_VERSION = '1.0.0'
 URL_MODELS = "https://scipion.cnb.csic.es/downloads/scipion/software/em"
 NVIDIA_DRIVER_VAR = 'XMIPP3_NVIDIA_DRIVERS'
 
@@ -54,6 +55,7 @@ _logo = version._logo
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
 _xmipp3_installerV = "v2.0.4"
+
 
 
 class Plugin(pwem.Plugin):
@@ -356,7 +358,7 @@ class Plugin(pwem.Plugin):
 
 
 def syncModels(env):
-    cmd = []
+    DLTK_V = f'installed-{DLTK_MODELS}-{DLTK_MODELS_VERSION}'
     models_home = os.path.join(os.path.dirname(
         os.path.dirname(
             os.path.dirname(os.path.abspath(__file__)))), DLTK_MODELS)
@@ -373,10 +375,9 @@ def syncModels(env):
 
     print(f"{in_progress_task} Deep Learning models")
 
-    cmd.append(f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels')
+    cmd = [(f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels'), DLTK_V]
     print(f'cmd: {cmd}')
-    env.addPackage(DLTK_MODELS, urlSuffix='external',
-                   commands=cmd, deps=[], tar=DLTK_MODELS + '.tgz', default=True)
+    env.addPackage(DLTK_MODELS, commands=cmd, tar=DLTK_MODELS + '.tgz', default=True)
 
 def manageCUDA(plugin):
     nvidiaDriverVer = getNvidiaDriverVersion(plugin)
