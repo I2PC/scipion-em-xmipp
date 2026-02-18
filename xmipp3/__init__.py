@@ -227,8 +227,7 @@ class Plugin(pwem.Plugin):
             sys.exit(0)
         else:
             command, DLTK_V = syncModels()
-            print(f'(command, DLTK_V): {(command, DLTK_V)}')
-
+            print(f'(command, DLTK_V): {(command, DLTK_V)}\n')
             env.addPackage(DLTK_MODELS,
                            commands=[(command, DLTK_V)],
                            version=DLTK_MODELS_VERSION,
@@ -244,7 +243,7 @@ class Plugin(pwem.Plugin):
                     'conda env create -f %s || conda env update -f %s'
                     % (envName['requirements'], envName['requirements']))
                 commandsCreate.append('touch %s' % target)
-                print(f'commandsCreate: {commandsCreate}')
+                print(f'commandsCreate: {commandsCreate}\n')
                 env.addPackage(name, version=versionId,
                                urlSuffix='external',
                                commands=[(commandsCreate, DLTK_V)],
@@ -383,7 +382,7 @@ def syncModels():
         completed_task = "downloaded"
 
     print(f"{in_progress_task} Deep Learning models")
-
+    print(f'\n\nos.getcwd(): {os.getcwd()}')
     cmd = f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels'
     return cmd, DLTK_V
 
