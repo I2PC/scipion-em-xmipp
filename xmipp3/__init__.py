@@ -387,9 +387,7 @@ def syncModels():
     BASE_DIR = Path(__file__).resolve().parent
     sync_models_path = BASE_DIR / "sync_data" / "sync_models.py"
 
-    print(f'sync_models_path: {sync_models_path}')
-
-    cmd = f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels'
+    cmd = f'python {sync_models_path} {task} {models_home} {URL_MODELS} DLmodels'
     return cmd, DLTK_V
 
 def manageCUDA(plugin):
