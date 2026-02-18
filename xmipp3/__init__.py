@@ -238,6 +238,7 @@ class Plugin(pwem.Plugin):
             for name, envName in DLTK_CONDA_ENVS.items():
                 versionId = envName.get('versionId', None)
                 target = f'{name}-{versionId}.yml'
+                DLTK_V = f'installed-{name}-{versionId}'
                 commandsCreate = []
                 commandsCreate.append(
                     'conda env create -f %s || conda env update -f %s'
@@ -246,7 +247,7 @@ class Plugin(pwem.Plugin):
                 print(f'commandsCreate: {commandsCreate}')
                 env.addPackage(name, version=versionId,
                                urlSuffix='external',
-                               commands=commandsCreate,
+                               commands=[(commandsCreate, DLTK_V)],
                                deps=[], tar=name + '.tgz',
                                detault=True)
 
