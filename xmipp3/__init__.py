@@ -36,12 +36,18 @@ from scipion.install.funcs import CondaCommandDef
 from .base import *
 from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL
+import sys
+from conda_envs import DLTK_CONDA_ENVS
 
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _currentDepVersion = '1.0'
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
+DLTK_MODELS = "DLTK_MODELS"
+URL_MODELS = "https://scipion.cnb.csic.es/downloads/scipion/software/em"
+NVIDIA_DRIVER_VAR = 'XMIPP3_NVIDIA_DRIVERS'
+
 
 type_of_version = version.type_of_version
 _logo = version._logo
@@ -137,7 +143,7 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        
+        print('Inside defineBinaries')
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
@@ -213,7 +219,26 @@ class Plugin(pwem.Plugin):
 	            )
 
         ## EXTRA PACKAGES ##
-        installDeepLearningToolkit(cls, env)
+        print('\nIn DEFINE BINARIES\n')
+        if not manageCUDA(cls):
+            print('scipion-em-xmippDLTK not installed')
+            sys.exit(0)
+        else:
+            syncModels(env)
+            for name, env in DLTK_CONDA_ENVS.items():
+                versionId = env.get('versionId', None)
+                target = f'{name}-{versionId}.yml'
+                commandsCreate = []
+                commandsCreate.append(
+                    'conda env create -f %s || conda env update -f %s'
+                    % (env['requirements'], env['requirements']))
+                commandsCreate.append('touch %s' % target)
+
+                env.addPackage(name, version=versionId,
+                               urlSuffix='external',
+                               commands=commandsCreate,
+                               deps=[], tar=name + '.tgz',
+                               detault=True)
 
     @classmethod
     def __getBundleDirectory(cls):
@@ -227,10 +252,156 @@ class Plugin(pwem.Plugin):
         print(f'pluginDir: {pluginDir}\n, bundleDir: {bundleDir}\n, isBundle: {isBundle}')
         return bundleDir if isBundle else None
 
+# def getNvidiaDriverVersion(plugin):
+#     """Attempt to retrieve the NVIDIA driver version using different methods.
+#     Only returns if a valid version string is found.
+#     """
+#     commands = [
+#         ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+#         ["cat", "/sys/module/nvidia/version"]
+#     ]
+#
+#     for cmd in commands:
+#         try:
+#             output = subprocess.Popen(
+#                 cmd,
+#                 env=plugin.getEnviron(),
+#                 stdout=subprocess.PIPE,
+#                 stderr=subprocess.PIPE
+#             ).communicate()[0].decode('utf-8').strip()
+#
+#             # Check if the output matches a version pattern like 530.30 or 470
+#             match = re.match(r'^(\d+)', output)
+#             if match:
+#                 return match.group(1)  # Return just the major version (e.g., "530")
+#
+#         except (ValueError, TypeError, FileNotFoundError, subprocess.SubprocessError):
+#             continue  # Try next method
+#
+#     return None  # No valid version found
+#
+# def installDeepLearningToolkit(plugin, env):
+#
+#     preMsgs = []
+#     cudaMsgs = []
+#     nvidiaDriverVer = None
+#     if os.environ.get('CUDA', 'True') == 'True':
+#         nvidiaDriverVer = getNvidiaDriverVersion(plugin)
+#
+#     if nvidiaDriverVer is None:
+#         preMsgs.append("Not nvidia driver found. Type: "
+#                        " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
+#         preMsgs.append(
+#             "CUDA will NOT be USED. (not found or incompatible)")
+#         msg = ("Tensorflow installed without GPU. Just CPU computations "
+#                "enabled (slow computations).")
+#         cudaMsgs.append(msg)
+#         useGpu = False
+#
+#     else:
+#         if int(nvidiaDriverVer) < NVIDIA_DRIVERS_MINIMUM_VERSION:
+#             preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
+#             cudaMsgs.append(f"Your NVIDIA drivers are too old (<{NVIDIA_DRIVERS_MINIMUM_VERSION}). "
+#                             "Tensorflow was installed without GPU support. "
+#                             "Just CPU computations enabled (slow computations)."
+#                             f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
+#                             "set CUDA=True in 'scipion.conf' file")
+#             useGpu = False
+#         else:
+#             preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
+#             msg = "Tensorflow will be installed with CUDA SUPPORT."
+#             cudaMsgs.append(msg)
+#             useGpu = True
+#
+#     # commands  = [(command, target), (cmd, tgt), ...]
+#     cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))
+#
+#     now = datetime.now()
+#     installDLvars = {'modelsUrl': "https://scipion.cnb.csic.es/downloads/scipion/software/em",
+#                      'syncBin': plugin.getHome('bin/xmipp_sync_data'),
+#                      'modelsDir': plugin.getHome('models'),
+#                      'modelsPrefix': "models_UPDATED_on",
+#                      'xmippLibToken': 'xmippLibToken',
+#                      'libXmipp': plugin.getHome('lib/libXmipp.so'),
+#                      'preMsgsStr': ' ; '.join(preMsgs),
+#                      'afterMsgs': ", > ".join(cudaMsgs)}
+#
+#     installDLvars.update({'modelsTarget': "%s_%s_%s_%s"
+#                                           % (installDLvars['modelsPrefix'],
+#                                              now.day, now.month, now.year)})
+#
+#     modelsDownloadCmd = ("rm %(modelsPrefix)s_* %(xmippLibToken)s 2>/dev/null ; "
+#                          "echo 'Downloading pre-trained models...' ; "
+#                          "%(syncBin)s update %(modelsDir)s %(modelsUrl)s DLmodels && "
+#                          "touch %(modelsTarget)s && echo ' > %(afterMsgs)s'"
+#                          % installDLvars,                # End of command
+#                          installDLvars['modelsTarget'])  # Target
+#
+#     xmippInstallCheck = ("if ls %(libXmipp)s > /dev/null ; "
+#                          "then touch %(xmippLibToken)s; echo ' > %(preMsgsStr)s' ; "
+#                          "else echo ; echo ' > Xmipp installation not found, "
+#                          "please install it first (xmippSrc or xmippBin*).';echo;"
+#                          " fi" % installDLvars,           # End of command
+#                          installDLvars['xmippLibToken'])  # Target
+#
+#     env.addPackage(XMIPP_DLTK_NAME, version='1.0', urlSuffix='external',
+#                    commands=[xmippInstallCheck]+cmdsInstall+[modelsDownloadCmd],
+#                    deps=[], tar=XMIPP_DLTK_NAME+'.tgz')
+#
+
+    @classmethod
+    def validateInstallation(cls):
+        """ Check if the binaries are properly installed. """
+        pass
+
+
+def syncModels(env):
+    cmd = []
+    models_home = os.path.join(os.path.dirname(
+        os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))), DLTK_MODELS)
+
+    if os.path.isdir(models_home):
+      task = "update"
+      in_progress_task = "Updating"
+      completed_task = "updated"
+    else:
+        pwutils.makePath(models_home)
+        task = "download"
+        in_progress_task = "Downloading"
+        completed_task = "downloaded"
+
+    print(f"{in_progress_task} Deep Learning models")
+
+    cmd.append(f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels')
+    print(f'cmd: {cmd}')
+    env.addPackage(DLTK_MODELS, urlSuffix='external',
+                   commands=cmd, deps=[], tar=DLTK_MODELS + '.tgz', default=True)
+
+def manageCUDA(plugin):
+    nvidiaDriverVer = getNvidiaDriverVersion(plugin)
+
+    if nvidiaDriverVer is None:
+        print("Not nvidia driver found. Type: nvidia-smi --query-gpu=driver_version --format=csv,noheader")
+        return False
+    else:
+        if int(nvidiaDriverVer) < NVIDIA_DRIVERS_MINIMUM_VERSION:
+            print("Incompatible driver %s" % nvidiaDriverVer)
+            print(f"Your NVIDIA drivers are too old (<{NVIDIA_DRIVERS_MINIMUM_VERSION}). "
+            	f"drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed")
+            return False
+        else:
+            print("CUDA support found. Driver version: %s" % nvidiaDriverVer)
+            return True
+
 def getNvidiaDriverVersion(plugin):
     """Attempt to retrieve the NVIDIA driver version using different methods.
     Only returns if a valid version string is found.
     """
+    nvidiaDriver =  readNvidiaDriverVar()
+    if nvidiaDriver:
+        return nvidiaDriver
+
     commands = [
         ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
         ["cat", "/sys/module/nvidia/version"]
@@ -255,70 +426,12 @@ def getNvidiaDriverVersion(plugin):
 
     return None  # No valid version found
 
-def installDeepLearningToolkit(plugin, env):
-
-    preMsgs = []
-    cudaMsgs = []
-    nvidiaDriverVer = None
-    if os.environ.get('CUDA', 'True') == 'True':
-        nvidiaDriverVer = getNvidiaDriverVersion(plugin)
-
-    if nvidiaDriverVer is None:
-        preMsgs.append("Not nvidia driver found. Type: "
-                       " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
-        preMsgs.append(
-            "CUDA will NOT be USED. (not found or incompatible)")
-        msg = ("Tensorflow installed without GPU. Just CPU computations "
-               "enabled (slow computations).")
-        cudaMsgs.append(msg)
-        useGpu = False
-
-    else:
-        if int(nvidiaDriverVer) < NVIDIA_DRIVERS_MINIMUM_VERSION:
-            preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
-            cudaMsgs.append(f"Your NVIDIA drivers are too old (<{NVIDIA_DRIVERS_MINIMUM_VERSION}). "
-                            "Tensorflow was installed without GPU support. "
-                            "Just CPU computations enabled (slow computations)."
-                            f"To enable CUDA (drivers>{NVIDIA_DRIVERS_MINIMUM_VERSION} needed), "
-                            "set CUDA=True in 'scipion.conf' file")
-            useGpu = False
+def readNvidiaDriverVar():
+    output = os.environ.get(NVIDIA_DRIVER_VAR)
+    if output:
+        m = re.match(r'^(\d+)', output)
+        if m:
+            value = m.group(1)
+            return value
         else:
-            preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
-            msg = "Tensorflow will be installed with CUDA SUPPORT."
-            cudaMsgs.append(msg)
-            useGpu = True
-
-    # commands  = [(command, target), (cmd, tgt), ...]
-    cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))
-
-    now = datetime.now()
-    installDLvars = {'modelsUrl': "https://scipion.cnb.csic.es/downloads/scipion/software/em",
-                     'syncBin': plugin.getHome('bin/xmipp_sync_data'),
-                     'modelsDir': plugin.getHome('models'),
-                     'modelsPrefix': "models_UPDATED_on",
-                     'xmippLibToken': 'xmippLibToken',
-                     'libXmipp': plugin.getHome('lib/libXmipp.so'),
-                     'preMsgsStr': ' ; '.join(preMsgs),
-                     'afterMsgs': ", > ".join(cudaMsgs)}
-
-    installDLvars.update({'modelsTarget': "%s_%s_%s_%s"
-                                          % (installDLvars['modelsPrefix'],
-                                             now.day, now.month, now.year)})
-
-    modelsDownloadCmd = ("rm %(modelsPrefix)s_* %(xmippLibToken)s 2>/dev/null ; "
-                         "echo 'Downloading pre-trained models...' ; "
-                         "%(syncBin)s update %(modelsDir)s %(modelsUrl)s DLmodels && "
-                         "touch %(modelsTarget)s && echo ' > %(afterMsgs)s'"
-                         % installDLvars,                # End of command
-                         installDLvars['modelsTarget'])  # Target
-
-    xmippInstallCheck = ("if ls %(libXmipp)s > /dev/null ; "
-                         "then touch %(xmippLibToken)s; echo ' > %(preMsgsStr)s' ; "
-                         "else echo ; echo ' > Xmipp installation not found, "
-                         "please install it first (xmippSrc or xmippBin*).';echo;"
-                         " fi" % installDLvars,           # End of command
-                         installDLvars['xmippLibToken'])  # Target
-
-    env.addPackage(XMIPP_DLTK_NAME, version='1.0', urlSuffix='external',
-                   commands=[xmippInstallCheck]+cmdsInstall+[modelsDownloadCmd],
-                   deps=[], tar=XMIPP_DLTK_NAME+'.tgz')
+            print(f'{NVIDIA_DRIVER_VAR} found but value no valid: {m}')
