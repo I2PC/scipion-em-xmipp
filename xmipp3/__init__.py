@@ -226,7 +226,7 @@ class Plugin(pwem.Plugin):
             print('scipion-em-xmippDLTK not installed')
             sys.exit(0)
         else:
-            command, DLTK_V = syncModels(env)
+            command, DLTK_V = syncModels()
             env.addPackage(DLTK_MODELS, commands=[(command, DLTK_V)],
                            tar=DLTK_MODELS + '.tgz', default=True)
 
@@ -360,7 +360,7 @@ class Plugin(pwem.Plugin):
         pass
 
 
-def syncModels(env):
+def syncModels():
     DLTK_V = f'installed-{DLTK_MODELS}-{DLTK_MODELS_VERSION}'
     models_home = os.path.join(os.path.dirname(
         os.path.dirname(
