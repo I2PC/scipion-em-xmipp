@@ -38,7 +38,7 @@ from .version import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL
 import sys
 from conda_envs import DLTK_CONDA_ENVS
-
+from pathlib import Path
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _currentDepVersion = '1.0'
@@ -383,6 +383,12 @@ def syncModels():
 
     print(f"{in_progress_task} Deep Learning models")
     print(f'\n\nos.getcwd(): {os.getcwd()}')
+
+    BASE_DIR = Path(__file__).resolve().parent
+    sync_models_path = BASE_DIR / "sync_data" / "sync_models.py"
+
+    print(f'sync_models_path: {sync_models_path}')
+
     cmd = f'python /sync_data/sync_models.py {task} {models_home} {URL_MODELS} DLmodels'
     return cmd, DLTK_V
 
