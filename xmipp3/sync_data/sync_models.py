@@ -38,6 +38,7 @@ def blue(text):
 def download(destination=None, url=None, dataset=None):
     """ Download all the data files mentioned in url/dataset/MANIFEST
     """
+    print(f'Download: \n destination: {destination}, url: {url},dataset: {dataset},')
     isDLmodel = dataset=="DLmodels"
     if not isDLmodel:
         # First make sure that we ask for a known dataset.
