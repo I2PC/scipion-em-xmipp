@@ -264,8 +264,8 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         
     def initRandomVol(self, inputXMD, inputMRC, outputXMD, outputVOL, symmetry):
-        # args = ' -s %s  -o %s --random_angles' %(inputXMD, outputXMD)
-        args = ' -s %s -i %s -o %s --initial_angles' %(inputXMD, inputMRC, outputXMD)
+        args = ' -s %s  -o %s --random_angles' %(inputXMD, outputXMD)
+        # args = ' -s %s -i %s -o %s --initial_angles' %(inputXMD, inputMRC, outputXMD)
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
