@@ -79,19 +79,21 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
-        cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
-        cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
+        # cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
+        # cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
         """ Create the needed environment for Xmipp programs. """
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
+        cls.CUDA_LIB = cls.getVar(XMIPP_CUDA_LIB)
+        cls.CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN)
 
-        environ.update({
-            CMAKE_CUDA_COMPILER: cls.getVar(XMIPP_CUDA_LIB),
-            CMAKE_CUDA_HOST_COMPILER: cls.getVar(XMIPP_CUDA_BIN)
-        }, position=pwutils.Environ.BEGIN)
+        # environ.update({
+        #     CMAKE_CUDA_COMPILER: cls.getVar(XMIPP_CUDA_LIB),
+        #     CMAKE_CUDA_HOST_COMPILER: cls.getVar(XMIPP_CUDA_BIN)
+        # }, position=pwutils.Environ.BEGIN)
         print(f'\nenviron.get(CMAKE_CUDA_COMPILER): {environ.get(CMAKE_CUDA_COMPILER)}')
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
@@ -143,6 +145,12 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
+        # Fix CUDA variables
+        env.update({
+            CMAKE_CUDA_COMPILER: cls.CUDA_LIB,
+            CMAKE_CUDA_HOST_COMPILER: cls.CUDA_BIN
+        }, position=pwutils.Environ.BEGIN)
+
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
