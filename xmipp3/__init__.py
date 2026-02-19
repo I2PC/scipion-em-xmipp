@@ -184,7 +184,7 @@ class Plugin(pwem.Plugin):
                 default=True
             )
         if develMode:
-            #print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {env.get('XMIPP3_CMAKE_CUDA_COMPILER')}")
+            print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {os.environ('XMIPP3_CMAKE_CUDA_COMPILER')}")
 
             xmippSrc = 'xmippDev'
             installCommands = [
