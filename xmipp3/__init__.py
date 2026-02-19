@@ -185,13 +185,13 @@ class Plugin(pwem.Plugin):
 
         CUDA_LIB = os.environ.get('XMIPP_CUDA_LIB')
         CUDA_BIN = os.environ.get('XMIPP_CUDA_BIN')
-
+        varsToEnv = {}
+        if CUDA_LIB:
+            varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = CUDA_LIB
+        if CUDA_BIN:
+            varsToEnv['XMIPP3_CMAKE_CUDA_HOST_COMPILER'] = CUDA_BIN
 
         if develMode:
-            print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {os.environ.get('XMIPP3_CMAKE_CUDA_COMPILER')}")
-            print(f"\nenviron['XMIPP_HOME'] : {os.environ.get('XMIPP_HOME')}")
-
-
             xmippSrc = 'xmippDev'
             installCommands = [
 		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
@@ -207,10 +207,7 @@ class Plugin(pwem.Plugin):
 	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
 	            updateCuda=True,
 	            default=True,
-                vars={
-                    'XMIPP3_CMAKE_CUDA_COMPILER': CUDA_LIB,
-                    'XMIPP3_CMAKE_CUDA_HOST_COMPILER': CUDA_BIN
-                }
+                vars=varsToEnv
 	        )
         else:
             xmippSrc = f'xmipp3-{version._binVersion}'
