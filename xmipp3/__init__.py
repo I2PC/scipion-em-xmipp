@@ -43,6 +43,9 @@ _currentDepVersion = '1.0'
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
+CMAKE_CUDA_COMPILER = 'XMIPP3_CMAKE_CUDA_COMPILER'
+CMAKE_CUDA_HOST_COMPILER = 'XMIPP3_CMAKE_CUDA_HOST_COMPILER'
+
 type_of_version = version.type_of_version
 _logo = version._logo
 _currentDepVersion = version._currentDepVersion
@@ -86,9 +89,10 @@ class Plugin(pwem.Plugin):
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
 
         environ.update({
-            'PATH': cls.getVar(XMIPP_CUDA_BIN),
-            'LD_LIBRARY_PATH': cls.getVar(XMIPP_CUDA_LIB)
-        }, position=pwutils.Environ.END)
+            CMAKE_CUDA_COMPILER: cls.getVar(XMIPP_CUDA_LIB),
+            CMAKE_CUDA_HOST_COMPILER: cls.getVar(XMIPP_CUDA_BIN)
+        }, position=pwutils.Environ.BEGIN)
+        print(f'\nenviron.get(CMAKE_CUDA_COMPILER): {environ.get(CMAKE_CUDA_COMPILER)}')
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
@@ -101,6 +105,8 @@ class Plugin(pwem.Plugin):
             'PYTHONPATH': getXmippPath('pylib')
                              }, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
+        print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {environ['XMIPP3_CMAKE_CUDA_COMPILER']}")
+
 
         # Add path to python lib folder
         environ.addLibrary(Config.getPythonLibFolder())
@@ -137,7 +143,7 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        
+
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
@@ -179,6 +185,9 @@ class Plugin(pwem.Plugin):
                 default=True
             )
         if develMode:
+            print(
+                f"\nenviron['CMAKE_CUDA_COMPILER'] : {env['XMIPP3_CMAKE_CUDA_COMPILER']}")
+
             xmippSrc = 'xmippDev'
             installCommands = [
 		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
@@ -322,3 +331,5 @@ def installDeepLearningToolkit(plugin, env):
     env.addPackage(XMIPP_DLTK_NAME, version='1.0', urlSuffix='external',
                    commands=[xmippInstallCheck]+cmdsInstall+[modelsDownloadCmd],
                    deps=[], tar=XMIPP_DLTK_NAME+'.tgz')
+
+
