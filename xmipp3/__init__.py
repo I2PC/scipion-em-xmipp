@@ -183,8 +183,12 @@ class Plugin(pwem.Plugin):
                 neededProgs=['conda'],
                 default=True
             )
+
+
         if develMode:
-            print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {os.environ['XMIPP3_CMAKE_CUDA_COMPILER']}")
+            print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {os.environ.get('XMIPP3_CMAKE_CUDA_COMPILER')}")
+            print(f"\nenviron['XMIPP_HOME'] : {os.environ.get('XMIPP_HOME')}")
+
 
             xmippSrc = 'xmippDev'
             installCommands = [
