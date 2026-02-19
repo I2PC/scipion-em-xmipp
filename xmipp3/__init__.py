@@ -79,16 +79,12 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
-        # cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
-        # cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
         """ Create the needed environment for Xmipp programs. """
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
-        cls.CUDA_LIB = cls.getVar(XMIPP_CUDA_LIB)
-        cls.CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN)
 
         # environ.update({
         #     CMAKE_CUDA_COMPILER: cls.getVar(XMIPP_CUDA_LIB),
@@ -145,6 +141,7 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
+
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
@@ -184,12 +181,10 @@ class Plugin(pwem.Plugin):
                 commands=commands.getCommands(),
                 neededProgs=['conda'],
                 default=True,
-                vars={
-                    'CMAKE_CUDA_COMPILER': cls.CUDA_LIB,
-                    'CMAKE_CUDA_HOST_COMPILER': cls.CUDA_BIN
-                }
             )
 
+        CUDA_LIB = os.environ.get(XMIPP_CUDA_LIB)
+        CUDA_BIN = os.environ.get(XMIPP_CUDA_BIN)
 
         if develMode:
             print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {os.environ.get('XMIPP3_CMAKE_CUDA_COMPILER')}")
@@ -210,7 +205,11 @@ class Plugin(pwem.Plugin):
 	            commands=installCommands,
 	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
 	            updateCuda=True,
-	            default=True
+	            default=True,
+                vars={
+                    'XMIPP3_CMAKE_CUDA_COMPILER': CUDA_LIB,
+                    'XMIPP3_CMAKE_CUDA_HOST_COMPILER': CUDA_BIN
+                }
 	        )
         else:
             xmippSrc = f'xmipp3-{version._binVersion}'
