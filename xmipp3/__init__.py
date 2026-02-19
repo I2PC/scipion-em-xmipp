@@ -145,12 +145,6 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        # Fix CUDA variables
-        env.update({
-            CMAKE_CUDA_COMPILER: cls.CUDA_LIB,
-            CMAKE_CUDA_HOST_COMPILER: cls.CUDA_BIN
-        }, position=pwutils.Environ.BEGIN)
-
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
@@ -189,7 +183,11 @@ class Plugin(pwem.Plugin):
                 tar='void.tgz',
                 commands=commands.getCommands(),
                 neededProgs=['conda'],
-                default=True
+                default=True,
+                vars={
+                    'CMAKE_CUDA_COMPILER': cls.CUDA_LIB,
+                    'CMAKE_CUDA_HOST_COMPILER': cls.CUDA_BIN
+                }
             )
 
 
