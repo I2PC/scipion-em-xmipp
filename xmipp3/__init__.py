@@ -103,7 +103,7 @@ class Plugin(pwem.Plugin):
             'PYTHONPATH': getXmippPath('pylib')
                              }, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
-        print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {environ['XMIPP3_CMAKE_CUDA_COMPILER']}")
+        #print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {environ['XMIPP3_CMAKE_CUDA_COMPILER']}")
 
 
         # Add path to python lib folder
@@ -183,8 +183,9 @@ class Plugin(pwem.Plugin):
                 default=True,
             )
 
-        CUDA_LIB = os.environ.get(XMIPP_CUDA_LIB)
-        CUDA_BIN = os.environ.get(XMIPP_CUDA_BIN)
+        CUDA_LIB = os.environ.get('XMIPP_CUDA_LIB')
+        CUDA_BIN = os.environ.get('XMIPP_CUDA_BIN')
+
 
         if develMode:
             print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {os.environ.get('XMIPP3_CMAKE_CUDA_COMPILER')}")
