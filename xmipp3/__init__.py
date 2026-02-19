@@ -143,7 +143,6 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
@@ -185,8 +184,7 @@ class Plugin(pwem.Plugin):
                 default=True
             )
         if develMode:
-            print(
-                f"\nenviron['CMAKE_CUDA_COMPILER'] : {env['XMIPP3_CMAKE_CUDA_COMPILER']}")
+            #print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {env.get('XMIPP3_CMAKE_CUDA_COMPILER')}")
 
             xmippSrc = 'xmippDev'
             installCommands = [
@@ -202,7 +200,7 @@ class Plugin(pwem.Plugin):
 	            commands=installCommands,
 	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
 	            updateCuda=True,
-	            default=False
+	            default=True
 	        )
         else:
             xmippSrc = f'xmipp3-{version._binVersion}'
