@@ -78,6 +78,8 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
+        cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
+        cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
