@@ -43,7 +43,7 @@ import xmipp3
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
 from xmipp3.protocols import XmippProtCompareReprojections
 from xmipp3.protocols import XmippProtGenerateReprojections
-from xmipp3 import XmippProtocol
+from xmipp3.base import XmippProtocol
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
