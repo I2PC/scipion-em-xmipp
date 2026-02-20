@@ -86,11 +86,9 @@ class Plugin(pwem.Plugin):
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
 
-        # environ.update({
-        #     CMAKE_CUDA_COMPILER: cls.getVar(XMIPP_CUDA_LIB),
-        #     CMAKE_CUDA_HOST_COMPILER: cls.getVar(XMIPP_CUDA_BIN)
-        # }, position=pwutils.Environ.BEGIN)
-        #print(f'\nenviron.get(CMAKE_CUDA_COMPILER): {environ.get(CMAKE_CUDA_COMPILER)}')
+        cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
+        environ.addLibrary(cudaLib)
+        print(f"\ncudaLib : {cudaLib}")
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
@@ -103,8 +101,6 @@ class Plugin(pwem.Plugin):
             'PYTHONPATH': getXmippPath('pylib')
                              }, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
-        #print(f"\nenviron['CMAKE_CUDA_COMPILER'] : {environ['XMIPP3_CMAKE_CUDA_COMPILER']}")
-
 
         # Add path to python lib folder
         environ.addLibrary(Config.getPythonLibFolder())
@@ -183,13 +179,10 @@ class Plugin(pwem.Plugin):
                 default=True,
             )
 
-        CUDA_LIB = os.environ.get('XMIPP_CUDA_LIB')
         CUDA_BIN = os.environ.get('XMIPP_CUDA_BIN')
         varsToEnv = {}
-        if CUDA_LIB:
-            varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = CUDA_LIB
         if CUDA_BIN:
-            varsToEnv['XMIPP3_CMAKE_CUDA_HOST_COMPILER'] = CUDA_BIN
+            varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = CUDA_BIN
 
         if develMode:
             xmippSrc = 'xmippDev'
@@ -223,7 +216,8 @@ class Plugin(pwem.Plugin):
 	                commands=installCommands,
 	                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
 	                updateCuda=True,
-	                default=not develMode
+	                default=not develMode,
+                    vars=varsToEnv
 	            )
 
         ## EXTRA PACKAGES ##
