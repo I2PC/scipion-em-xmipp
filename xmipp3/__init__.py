@@ -90,7 +90,7 @@ class Plugin(pwem.Plugin):
         #     CMAKE_CUDA_COMPILER: cls.getVar(XMIPP_CUDA_LIB),
         #     CMAKE_CUDA_HOST_COMPILER: cls.getVar(XMIPP_CUDA_BIN)
         # }, position=pwutils.Environ.BEGIN)
-        print(f'\nenviron.get(CMAKE_CUDA_COMPILER): {environ.get(CMAKE_CUDA_COMPILER)}')
+        #print(f'\nenviron.get(CMAKE_CUDA_COMPILER): {environ.get(CMAKE_CUDA_COMPILER)}')
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
