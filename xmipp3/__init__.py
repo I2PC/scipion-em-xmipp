@@ -197,7 +197,7 @@ class Plugin(pwem.Plugin):
 		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
 		         f'cd {xmippSrc} && '
-		         f'./xmipp ', COMPILE_TARGETS)
+		         f'./xmipp all', COMPILE_TARGETS)
 	        ]
 
             env.addPackage(
