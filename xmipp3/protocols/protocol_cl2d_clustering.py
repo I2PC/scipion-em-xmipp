@@ -30,7 +30,7 @@ from pwem.protocols import ProtAnalysis2D
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         EnumParam, LEVEL_ADVANCED, LT, GT)
 from pyworkflow import NEW, BETA
-from xmipp3 import XmippProtocol
+from xmipp3.base import XmippProtocol
 
 FN = "class_representatives"
 RESULT_FILE = 'best_clusters_with_names.txt'

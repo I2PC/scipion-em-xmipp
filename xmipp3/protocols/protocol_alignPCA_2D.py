@@ -43,7 +43,7 @@ from pyworkflow.constants import BETA
 
 from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
 from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
-from xmipp3 import XmippProtocol
+from xmipp3.base import XmippProtocol
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
                             writeSetOfClasses2D, xmippToLocation, matrixFromGeometry)
