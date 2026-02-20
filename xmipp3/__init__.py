@@ -44,7 +44,6 @@ _currentDepVersion = '1.0'
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
 CMAKE_CUDA_COMPILER = 'XMIPP3_CMAKE_CUDA_COMPILER'
-CMAKE_CUDA_HOST_COMPILER = 'XMIPP3_CMAKE_CUDA_HOST_COMPILER'
 
 type_of_version = version.type_of_version
 _logo = version._logo
