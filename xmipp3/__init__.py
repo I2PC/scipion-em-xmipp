@@ -88,7 +88,6 @@ class Plugin(pwem.Plugin):
 
         cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
         environ.addLibrary(cudaLib)
-        print(f"\ncudaLib : {cudaLib}")
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
