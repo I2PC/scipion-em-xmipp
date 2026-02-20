@@ -198,7 +198,7 @@ class Plugin(pwem.Plugin):
 	            commands=installCommands,
 	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
 	            updateCuda=True,
-	            default=True,
+	            default=False,
                 vars=varsToEnv
 	        )
         else:
