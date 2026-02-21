@@ -104,6 +104,9 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                   
         form.addSection(label='Pca training')
         
+        form.addParam('training', IntParam, default=-1, expertLevel=LEVEL_ADVANCED,
+                      label="particles for training",
+                      help='Number of particles for PCA training')
         form.addParam('resolution',FloatParam, label="max resolution", default=12,
                       help='Maximum resolution to be consider for alignment')
         form.addParam('coef' ,FloatParam, label="% variance", default=1.0, expertLevel=LEVEL_ADVANCED,
@@ -278,8 +281,13 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
     
     def pcaTraining(self, inputIm, resolutionTrain):
-        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -o %s/train_pca  --batchPCA'% \
-                (inputIm, self.sampling, resolutionTrain, self.coef.get(), self._getExtraPath())
+        if self.training.get() == -1:
+            numTrain = self.inputParticles.get().getSize()
+        else:
+            numTrain = min(self.inputParticles.get().getSize(), self.training.get())
+            
+        args = ' -i %s -t %s -s %s -hr %s -lr 530 -p %s -o %s/train_pca  --batchPCA'% \
+                (inputIm, numTrain, self.sampling, resolutionTrain, self.coef.get(), self._getExtraPath())
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
