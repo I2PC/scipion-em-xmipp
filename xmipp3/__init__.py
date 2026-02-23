@@ -176,13 +176,13 @@ class Plugin(pwem.Plugin):
                 tar='void.tgz',
                 commands=commands.getCommands(),
                 neededProgs=['conda'],
-                default=True,
+                default=True
             )
 
         CUDA_BIN = os.environ.get('XMIPP_CUDA_BIN')
         varsToEnv = {}
         if CUDA_BIN:
-            varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = CUDA_BIN
+            varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(XMIPP_CUDA_BIN, 'nvcc')
 
         if develMode:
             xmippSrc = 'xmippDev'
@@ -330,5 +330,3 @@ def installDeepLearningToolkit(plugin, env):
     env.addPackage(XMIPP_DLTK_NAME, version='1.0', urlSuffix='external',
                    commands=[xmippInstallCheck]+cmdsInstall+[modelsDownloadCmd],
                    deps=[], tar=XMIPP_DLTK_NAME+'.tgz')
-
-
