@@ -179,7 +179,7 @@ class Plugin(pwem.Plugin):
                 default=True
             )
 
-        CUDA_BIN = os.environ.get('XMIPP_CUDA_BIN')
+        CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
         varsToEnv = {}
         if CUDA_BIN:
             varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(XMIPP_CUDA_BIN, 'nvcc')
