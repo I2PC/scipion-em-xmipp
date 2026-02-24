@@ -41,7 +41,7 @@ INPUT_HALF2_BASENAME="inputHalf2.mrc"
 INPUT_MASK_BASENAME="inputMask.mrc"
 POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
 
-class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
+class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.base.XmippProtocol):
     """    
     Given a map the protocol performs automatic deep post-processing to enhance visualization. Usage guide at
     https://github.com/rsanchezgarc/deepEMhancer
