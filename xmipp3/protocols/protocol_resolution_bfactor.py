@@ -65,7 +65,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         form.addSection(label='Input')
 
         form.addParam('pdbfile', PointerParam, pointerClass='AtomStruct',
-                      label="Atomic model2", important=True,
+                      label="Atomic model", important=True,
                       help='Select an atomic model. The atom positions will be taken'
                            ' to estimate the local resolution around them and then, the '
                            ' local resolution associated to each residue.')
