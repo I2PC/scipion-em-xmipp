@@ -36,7 +36,8 @@ from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
 from pwem.objects import Volume
 from xmipp3.base import XmippProtocol
-import xmipp3
+from pwem.emlib import Image
+
 
 def updateEnviron(gpuNum):
     """ Create the needed environment for TensorFlow programs. """
@@ -266,7 +267,7 @@ class XmippProtDeepRes(ProtAnalysis3D, XmippProtocol):
         return min_res, max_res, median_res
     
     def createChimeraOutput(self, vol, value):
-        Vx = xmipp3.Image(vol)
+        Vx = Image(vol)
         V = Vx.getData()
         Zdim, Ydim, Xdim = V.shape
 #        Vout = V

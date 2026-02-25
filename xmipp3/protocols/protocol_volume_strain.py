@@ -29,9 +29,10 @@ import os
 from pyworkflow.protocol.params import PointerParam, StringParam
 from pwem.protocols import ProtAnalysis3D
 
+from xmipp3.base import getXmippPath
 import xmipp3
 
-        
+
 class XmippProtVolumeStrain(ProtAnalysis3D):
     """Compares two volume states to analyze local strains and rotations. This protocol helps study structural changes by quantifying deformation and dynamic behavior between different conformations."""
     _label = 'calculate strain'
@@ -72,7 +73,7 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
     #--------------------------- STEPS functions ---------------------------------------------------
     def calculateStrain(self, fnVol0, fnVolF, fnMask):
         fnRoot=self._getExtraPath('result')
-        mirtDir = xmipp3.base.getXmippPath('external', 'mirt')
+        mirtDir = getXmippPath('external', 'mirt')
         # -wait -nodesktop
         args=('''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''
               % (fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot))
