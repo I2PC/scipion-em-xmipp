@@ -30,7 +30,7 @@ from pyworkflow.protocol.params import PointerParam, StringParam
 from pwem.protocols import ProtAnalysis3D
 
 from xmipp3.base import getXmippPath
-import xmipp3
+from xmipp3 import Plugin
 
 
 class XmippProtVolumeStrain(ProtAnalysis3D):
@@ -77,7 +77,7 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
         # -wait -nodesktop
         args=('''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''
               % (fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot))
-        self.runJob("matlab", args, env=xmipp3.Plugin.getMatlabEnviron(mirtDir))
+        self.runJob("matlab", args, env=Plugin.getMatlabEnviron(mirtDir))
     
     def prepareOutput(self):
         volDim = self.inputVolume0.get().getDim()[0]
