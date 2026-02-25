@@ -39,7 +39,7 @@ import pyworkflow.protocol.constants as cons
 from pwem.objects import SetOfMicrographs, Image, Set, Float
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
-from xmipp3 import emlib
+from pwem.emlib import Image
 from xmipp3.convert import getScipionObj
 from pyworkflow import UPDATED, PROD
 
@@ -475,7 +475,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 # --------------------- WORKERS --------------------------------------
 def applyTransform(imag_array, M, shape):
     '''Apply a transformation(M) to a np array(imag) and return it in a given shape'''
-    imag = emlib.Image()
+    imag = Image()
     imag.setData(imag_array)
     imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
     return imag.getData()
