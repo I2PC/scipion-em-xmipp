@@ -57,10 +57,214 @@ class AlignVolPartOutputs(enum.Enum):
 
 class XmippProtAlignVolumeParticles(ProtAlignVolume):
     """ 
-    Aligns a volume (inputVolume) using a Fast Fourier method
-    with respect to a reference one (inputReference).
+     Aligns a volume (inputVolume) using a Fast Fourier method
+     with respect to a reference one (inputReference).
      The obtained alignment parameters are used to align the set of particles or subtomograms
      (inputParticles) that generated the input volume.
+
+     AI Generated:
+
+        What this protocol does and when to use it
+
+        Align Volume and Particles is designed for a very practical situation
+        in cryo-EM (and also subtomogram averaging): you already have an input
+        volume reconstructed from a set of particles (or subtomograms), and you
+        want that volume to match a reference volume in orientation and
+        position. Once the protocol finds the rigid-body transformation that
+        aligns the input volume to the reference, it propagates exactly the
+        same transformation to the underlying particle orientations/transforms.
+        In other words, it is a “volume-level registration” step that
+        automatically updates the corresponding particle set so everything
+        stays consistent.
+
+        Biologically, this is useful whenever you want to compare, merge, or
+        re-express particle metadata in the coordinate system of a reference
+        map. Typical examples include bringing results from different
+        refinements into the same frame, standardizing orientations before
+        downstream classification/analysis, or aligning two reconstructions
+        from related conditions so that particle poses become directly
+        comparable.
+
+        A key requirement is that the input particles/subtomograms must
+        already have alignment information (orientation/shift matrices).
+        If the particle set is not aligned yet, the protocol will not run.
+
+        Inputs: what you need to provide
+
+        You will provide three inputs: a reference volume, an input volume,
+        and the input particles (or subtomograms) that generated that input
+        volume. The alignment is computed only between the two volumes, but
+        the output includes both an aligned version of the input volume and a
+        transformed particle set whose poses have been updated.
+
+        From a user perspective, the most important conceptual point is
+        consistency: the input particle set should correspond to the input
+        volume you are aligning. If you accidentally provide a particle set
+        that does not match the input volume (for example, from a different
+        refinement or different half-set), the protocol may still run but the
+        resulting particle transforms will not be meaningful.
+
+        Alignment mode: Global vs Local
+
+        The protocol offers two alignment modes, intended to balance
+        robustness and speed.
+
+        If you choose Global alignment, the protocol performs a broad,
+        “global” search using the Fast Fourier approach. This is typically
+        the right choice when you do not trust the initial relative orientation
+        between the two volumes, for example when the input volume comes from
+        a different pipeline, a different processing branch, or when you
+        suspect the map might be rotated or shifted with respect to the
+        reference.
+
+        If you choose Local alignment, the protocol performs a local refinement
+        around the current pose. This is faster and is best used when the input
+        volume is already close to the reference (for example, when you are
+        just making small adjustments, or when both maps come from similar
+        processing with only mild differences).
+
+        In practice, many biological users start with Global for safety when
+        integrating results across workflows, and switch to Local when
+        refining a known alignment.
+
+        Consider mirrors: handling handedness and mirror solutions
+
+        The Consider mirrors option enables the alignment procedure to
+        evaluate mirrored solutions. This can matter when there is a
+        possibility of a mirror ambiguity between maps, or when you suspect a
+        handedness-related discrepancy. In most routine workflows where all
+        processing has been consistent, you will keep this disabled. However,
+        it becomes relevant when comparing volumes coming from different
+        sources or historical datasets, or when you have reasons to suspect
+        that the map might be mirrored with respect to the reference.
+
+        Because mirror solutions can sometimes produce deceptively good
+        correlation scores, it is good practice to enable this option only when
+        you have a concrete motivation and to validate the result visually and
+        biologically (for example by checking known chiral features, helix
+        handedness, or consistency with atomic models).
+
+        Symmetry group: what it means here
+
+        You can specify a symmetry group (e.g., c1, c2, d7, i1, etc.) using
+        Xmipp’s symmetry conventions. Biologically, symmetry can help alignment
+        when the object is symmetric, but it also introduces the usual
+        interpretation caveat: a symmetric object may have multiple equivalent
+        orientations.
+
+        In many workflows you will leave this as c1 unless you are working with
+        a truly symmetric assembly and you want the alignment to treat
+        symmetry-equivalent poses appropriately. If your goal is to make
+        particle poses comparable between two analyses of the same symmetric
+        complex, setting the correct symmetry can prevent avoidable mismatches.
+        On the other hand, if you care about a specific asymmetric feature
+        (bound ligand, partial occupancy, asymmetric subunit), forcing symmetry
+        may not be desirable.
+
+        Wrap option: advanced edge behavior during alignment
+
+        The Wrap parameter controls whether the input volume is treated as
+        wrapping around at the borders during alignment. Most biological users
+        will not need to change this. If your map is well boxed and the object
+        is not interacting with the borders, leaving wrap disabled is typically
+        safe and avoids artifacts that can appear when densities are allowed
+        to “wrap” across edges.
+
+        Masking: focusing the alignment on the biologically relevant region
+
+        As with most volume alignment problems, masking can be decisive.
+        This protocol allows you to apply a mask to the volumes during
+        alignment, so that the transformation is driven primarily by the
+        region you care about.
+
+        If you enable masking, you can choose either a circular (spherical)
+        mask or a binary mask file. The circular mask is quick and can work
+        well for compact particles. The binary mask is more flexible and is
+        usually preferred for real biological cases where only part of the
+        structure is stable or informative, such as multi-domain proteins,
+        flexible complexes, membrane proteins with large solvent regions, or
+        when you want to align using a conserved core while ignoring a
+        variable periphery.
+
+        A biologically sensible mask typically includes the rigid, conserved
+        domain(s) and excludes highly flexible regions and noise-dominated
+        solvent. If the alignment is unstable or “snaps” to the wrong solution,
+        applying a focused mask is often the first and most effective remedy.
+
+        What happens internally from the user point of view: resizing and
+        consistency
+
+        The protocol ensures that the reference and input volume are
+        compatible in size before alignment. If their box dimensions
+        differ, it will adjust the reference volume to match the input
+        volume dimension for the purpose of the alignment. For a biological
+        user, the takeaway is that you should still aim to provide volumes
+        with consistent sampling and comparable boxing, because extreme
+        differences in box definition, filtering, or masking style can still
+        complicate interpretation even if the dimensions are made compatible.
+
+        Outputs: what you get and how to interpret it
+
+        After running, the protocol produces two outputs.
+
+        First, it generates an aligned version of the input volume,
+        transformed into the coordinate system of the reference. This output
+        is the most direct way to visually check whether the alignment makes
+        biological sense: you can overlay it with the reference, compare
+        sections, or inspect key landmarks.
+
+        Second, it produces a new aligned particle (or subtomogram) set. In
+        \this output set, each particle’s existing transformation matrix is
+        updated by composing it with the volume-to-volume alignment
+        transformation. Conceptually, you can think of it as re-expressing
+        all particle poses in the coordinate frame of the reference map,
+        while preserving each particle’s relative orientation/shift within
+        the reconstruction.
+
+        This particle output is the main reason the protocol exists: it lets
+        you continue downstream processing—classification, refinement,
+        comparison, export—without having to manually reframe orientations.
+
+        Practical guidance: common processing scenarios
+
+        If your goal is simply to bring an existing reconstruction into the
+        frame of a known reference so that you can compare them or create
+        consistent figures, the typical workflow is to run the protocol in
+        Global mode, optionally with a mask around the stable core, and then
+        verify by overlay in a viewer.
+
+        If your goal is to merge or compare particle metadata across pipelines,
+        the particle output becomes the key product. In that case, it is worth
+        being conservative: use a mask that focuses on the most reliable region
+        and validate the aligned volume carefully, because any mistake at the
+        volume alignment step will be propagated to every particle.
+
+        If your volumes are already nearly aligned (for example, coming from
+        two very similar refinements or from consecutive steps of the same
+        workflow), then Local mode is usually sufficient and faster. This is a
+        common choice when you want a gentle correction rather than a full
+        re-registration.
+
+        If you suspect a mirror discrepancy or handedness issue between
+        datasets, enabling Consider mirrors can help detect it, but it should
+        be treated as a hypothesis-testing tool: always validate the chosen
+        solution with biological constraints.
+
+        A final note on requirements and validation
+
+        This protocol assumes that the input particles/subtomograms already
+        contain alignment transforms. It does not perform particle alignment
+        itself; instead, it transfers a volume-derived rigid transformation
+        onto existing particle poses. Because of that, a good validation habit
+        is to (1) visually check the aligned input volume against the
+        reference, and (2) if you intend to use the aligned particles for
+        further refinement, run a quick downstream sanity check (for example,
+        a short refinement or a quick comparison of angular distributions)
+        to confirm that the new frame is consistent.
+
+        If you want, I can also write a short “recommended settings by
+        scenario” paragraph specifically for SPA vs subtomogram averaging
+        (when subtomograms are present), still in the same textual style.
      """
     _label = 'align volume and particles'
     _possibleOutputs = AlignVolPartOutputs
