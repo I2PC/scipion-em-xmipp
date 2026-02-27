@@ -60,6 +60,188 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
     Performs soft alignment validation of a set of particles previously aligned
     confronting them using Graph filtered correlations representation. This
     protocol produces an histogram with two groups of particles.
+
+    AI Generated:
+
+    What this protocol is for
+
+        Angular graph consistency is a soft validation tool for single-particle
+        datasets in which particles have already been assigned orientations
+        (projection directions) with respect to a 3D reference volume. Instead
+        of redoing a full refinement, the protocol asks a different question:
+        “Are the assigned orientations internally consistent and stable when
+        confronted with nearby directions in projection space?” The underlying
+        idea is that reliable alignments tend to live in a “good neighborhood”:
+        if a particle truly matches a given projection direction, it should
+        also correlate strongly with very close-by directions in the projection
+        manifold, and the behavior of those correlations should be smooth and
+        coherent. When an assignment is wrong (or weakly determined),
+        correlations tend to be less stable and can drift toward a different
+        direction when you examine the neighborhood.
+
+        For a biological user, this protocol is primarily a quality-control
+        step. It helps you identify particles that are likely to be within a
+        reliable assignment zone versus particles that behave as if their
+        orientation is uncertain, inconsistent, or potentially incorrect. The
+        outcome is especially useful when you want to clean a dataset before
+        high-resolution refinement, or when you suspect that a portion of the
+        data may have been aligned incorrectly (for instance due to low SNR,
+        strong heterogeneity, preferred orientation, contamination, or an
+        imperfect reference).
+
+        Inputs and what they must contain
+
+        You provide an input volume (the 3D reference used to generate
+        projections) and a set of input particles that must already contain
+        alignment information (projection alignment). In practical terms, the
+        particles must have their assigned angles and shifts available; this
+        protocol is not intended for raw, unaligned particles. You also specify
+        the symmetry group of the particle (e.g., c1, c2, d7, etc.), because
+        symmetry affects what “nearby directions” mean and how angular
+        distances are interpreted.
+
+        What the protocol does, in plain terms
+
+        The protocol builds a projection library from the input volume using
+        the chosen symmetry and an angular sampling step (the spacing between
+        projection directions). It then compares each experimental particle
+        against projections in a way that emphasizes neighborhood structure:
+        it uses graph-filtered correlations to assess whether the particle’s
+        correlation landscape is compatible with a stable assignment.
+        Conceptually, you can think of it as checking whether the assigned
+        direction sits inside a smooth, high-correlation region of the
+        projection space rather than being a fragile, isolated maximum.
+
+        To make this validation more robust, the protocol also performs a set
+        of preprocessing steps that most users will appreciate even if they
+        never look at them explicitly: particles and references are brought to
+        a suitable sampling regime, images are masked in a way that reduces
+        boundary artifacts, and a low-pass target is applied so that the
+        validation focuses on signal that is actually reliable at the current
+        stage.
+
+        The end result is that each particle gets additional validation-related
+        measures, such as correlation with an optimal direction inferred from
+        the graph neighborhood, correlation with the originally assigned
+        direction, and an angular distance that describes how far the
+        “graph-preferred” direction is from the assigned one. These measures
+        are then used to separate particles into a “more reliable” region and
+        a “more questionable” region.
+
+        Key parameters and how to choose them biologically
+
+        The angular sampling (degrees) sets how dense the projection library
+        is. Smaller values give a finer angular grid, which can improve
+        sensitivity in detecting small angular instabilities, but it increases
+        computational cost. For many biological datasets, a few degrees is a
+        reasonable compromise, especially for validation rather than full
+        refinement. If you choose a very coarse sampling, the method may miss
+        subtle inconsistencies; if you choose a very fine sampling, it can
+        become heavier without necessarily improving practical decisions.
+
+        The target resolution (Å) is one of the most important knobs for robust
+        behavior. The protocol low-pass filters the particles to this
+        resolution before validation. Biologically, this is a good idea
+        because at this stage you usually want to validate orientations using
+        signal that is genuinely present in the data. Too aggressive (too
+        high-resolution) targets tend to make validation unstable because
+        high-frequency content is noisy and alignment at those frequencies can
+        be misleading. That is why the protocol recommends staying in the range
+        of roughly 8–10 Å unless you have a strong reason to deviate. If your
+        dataset is still early-stage or very noisy, staying closer to 10 Å can
+        make the validation more conservative and stable; if you have a strong
+        dataset with good SNR, you might lean toward 8 Å.
+
+        The correlation level for validation defines how strict the validation
+        should be in terms of correlation thresholds. Biologically, think of
+        it as how demanding you want to be: a higher threshold will flag more
+        particles as questionable (more conservative filtering), while a lower
+        threshold will accept more particles as reliable (more permissive). The
+        protocol guidance to keep it roughly between 0.90 and 0.97 is consistent
+        with typical practice: below that you may accept too much junk; above
+        that you may start discarding borderline-but-useful particles,
+        especially in heterogeneous or flexible specimens.
+
+        The minimum and maximum allowed tilt angles control which tilt angles
+        are considered in the projection space exploration. For many
+        single-particle datasets you will leave the defaults unless you have
+        a specific reason. These limits become relevant when you know that
+        certain tilt regions are physically implausible or when you want to
+        restrict validation to a region of orientation space. The “maximum tilt
+         without mirror check” parameter is related to how mirror ambiguity is
+         treated at high tilts; as a biological user, you normally only touch
+         this if you are explicitly dealing with mirror-related issues or
+         unusual acquisition geometry.
+
+        Finally, the symmetry group must match the specimen. If the symmetry is
+        wrong, the notion of angular distance and neighborhood consistency
+        becomes distorted, and the validation will be less meaningful. In
+        symmetric complexes, symmetry also implies that multiple directions
+        are equivalent; the protocol’s checks are symmetry-aware, which is
+        exactly what you want when deciding whether an assignment is stable.
+
+        Outputs and how to use them in practice
+
+        The main output is a new particle set (outputParticles) where each
+        particle carries updated projection-alignment metadata that includes
+        the validation descriptors. In addition, the protocol typically
+        produces an auxiliary particle set (often interpreted as a “suggested
+        disabling” subset) where particles judged as unreliable by the combined
+        criteria are marked as disabled. Biologically, this gives you a very
+        direct workflow option: you can take the auxiliary output and continue
+        refinement using only the particles that remain enabled, or you can
+        use it as a diagnostic to understand how much of your dataset appears
+        unstable.
+
+        The protocol also reports a concise global summary in terms of the
+        percentage of particles likely to be within the reliable assignment
+        zone. This is useful as a quick health indicator. If the percentage
+        is close to 100%, it suggests that most assignments are stable under
+        neighborhood-based validation. If it is substantially lower, it
+        indicates that a nontrivial fraction of particles behave as if their
+        orientation is unreliable, which can happen for many biological
+        reasons: strong compositional heterogeneity, conformational variability,
+        poor SNR, contamination, strong preferred orientation (causing
+        ambiguous views), or even a mismatch between the reference and the true
+        particle population.
+
+        How to interpret the result biologically (and what to do next)
+
+        When you obtain a high reliable percentage, you can usually proceed with
+        more confidence into high-resolution refinement or into analyses that
+        assume stable orientations (for example, certain forms of heterogeneity
+        analysis). It does not prove correctness, but it is reassuring evidence
+        that the alignment landscape is not fragile.
+
+        When you obtain a moderate or low reliable percentage, you should resist
+        the temptation to treat the protocol as a simple “reject button” without
+        thinking biologically. A large questionable fraction may indeed
+        indicate many misassigned particles, but it may also reflect real
+        biological heterogeneity (multiple conformations or compositions) where
+        a single reference forces unstable assignments. In those cases, the
+        right response may be to split the dataset (classification), improve
+        the reference, apply better masks, or adjust upstream alignment strategy
+        rather than simply discarding data.
+
+        A very practical use is to run this protocol after an initial angular
+        assignment/refinement, remove the most unreliable tail (using the
+        auxiliary output), and then rerun refinement. Often, this improves
+        convergence and reduces overfitting driven by poorly aligned particles.
+        In facility workflows, it can also serve as an objective QA step to
+        compare different processing branches: the branch that yields more
+        consistent angular assignments under this validation is often the
+        more robust one.
+
+        Recommended “default mindset”
+
+        Most biological users can treat this protocol as a conservative
+        validation step: keep the default target resolution unless you have a
+        clear reason, use an angular sampling that is not excessively fine, and
+        interpret the flagged particles as “needs scrutiny” rather than
+        “definitely wrong.” It is particularly valuable when your next steps
+        are sensitive to angular correctness, such as high-resolution
+        refinement, subtle difference mapping, or downstream interpretation
+        where misalignment can masquerade as biology.
     """
     _label = 'angular graph consistency'
     
