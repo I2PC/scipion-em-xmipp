@@ -45,8 +45,7 @@ from pyworkflow.protocol.constants import (STATUS_NEW)
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem import emlib
-import xmipp3
-from xmipp3.convert import setXmippAttribute, getScipionObj
+from xmipp3.convert import ctfModelToRow, micrographToRow, ALIGN_NONE, setXmippAttribute, getScipionObj
 
 ACCEPTED = 'Accepted'
 DISCARDED = 'Discarded'
@@ -523,9 +522,9 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         """ Write the proper metadata for Xmipp from a given CTF """
         ctfMd.clear()
         ctfRow = Row()
-        xmipp3.convert.ctfModelToRow(ctf, ctfRow)
-        xmipp3.convert.micrographToRow(ctf.getMicrograph(), ctfRow,
-                                       alignType=xmipp3.convert.ALIGN_NONE)
+        ctfModelToRow(ctf, ctfRow)
+        micrographToRow(ctf.getMicrograph(), ctfRow,
+                                       alignType=ALIGN_NONE)
         ctfRow.addToMd(ctfMd)
 
     def initializeRejDict(self):
