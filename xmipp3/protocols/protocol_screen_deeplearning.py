@@ -73,6 +73,14 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
                       label='Continue training on previously trainedModel?',
                       default=True, condition='doContinue',
                       help='If you set to *Yes*, you should provide training set')
+        
+        form.addParam('resizeSize', params.IntParam, default=64,
+                      allowsNull=False,
+                      label='Resize layer size',
+                      help='Size of the resize layer. All input particles will be resized to this size. '
+                             'It should be big enough to keep relevant information, but small enough to avoid overfitting. '
+                             'Typical values are 64 or 128. It should be smaller than the box size of the input particles.'
+        )
 
         form.addParam('inTrueSetOfParticles', params.PointerParam,
                       label="True particles", pointerClass='SetOfParticles',
@@ -276,6 +284,9 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
                                                                            fnamesPos, fnamesNeg, weightsPos, weightsNeg)
         args += " -e %s -l %s -r %s -m %s " % (nEpochs, self.learningRate.get(), self.l2RegStrength.get(),
                                                self.nModels.get())
+        
+        args += " --resize %s " % self.resizeSize.get()
+
         if not self.auto_stopping.get():
             args += " -s"
 
@@ -309,6 +320,8 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
 
         args = " -n %s --mode score -i %s -o %s " % (netDataPath, fnamesPred, outParticlesPath)
 
+        args += " --resize %s " % self.resizeSize.get()
+
         if posTestDict and negTestDict:
             fnamesPosTest, weightsPosTest = self.__dataDict_toStrs(posTestDict)
             fnamesNegTest, weightsNegTest = self.__dataDict_toStrs(negTestDict)
@@ -318,8 +331,10 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
             args += " -g %s" % (gpuToUse)
         if not numberOfThreads is None:
             args += " -t %s" % (numberOfThreads)
+        env = self.getCondaEnv()
+        env["LD_LIBRARY_PATH"] = "/home/miceta/software/miniforge/envs/xmipp_DLTK_v1.0/lib:" + env["LD_LIBRARY_PATH"]
         self.runJob('xmipp_deep_consensus', args, numberOfMpi=1,
-                    env=self.getCondaEnv())
+                    env=env)
 
     def createOutputStep(self):
         imgSet = self.predictSetOfParticles.get()
