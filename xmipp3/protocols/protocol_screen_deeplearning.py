@@ -27,7 +27,7 @@
 import os
 import re
 
-from pyworkflow import VERSION_2_0
+from pyworkflow import VERSION_3_0
 from pyworkflow.utils.path import copyTree
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtProcessParticles
@@ -42,8 +42,8 @@ N_MAX_NEG_SETS = 5
 class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
     """ Protocol for screening particles using deep learning. """
     _label = 'screen deep learning'
-    _lastUpdateVersion = VERSION_2_0
-    _conda_env = 'xmipp_DLTK_v0.3'
+    _lastUpdateVersion = VERSION_3_0
+    _conda_env = 'xmipp_DLTK_v1.0'
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -283,8 +283,10 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
             args += " -g %s" % (gpuToUse)
         if not numberOfThreads is None:
             args += " -t %s" % (numberOfThreads)
+        env = self.getCondaEnv()
+        env["LD_LIBRARY_PATH"] = "/home/miceta/software/miniforge/envs/xmipp_DLTK_v1.0/lib:" + env["LD_LIBRARY_PATH"]
         self.runJob('xmipp_deep_consensus', args, numberOfMpi=1,
-                    env=self.getCondaEnv())
+                    env=env)
 
     def predict(self, posTestDict, negTestDict, predictDict):
         """
