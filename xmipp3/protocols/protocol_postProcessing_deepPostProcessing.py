@@ -31,7 +31,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, EnumParam, LEV
                                         StringParam, GPU_LIST, BooleanParam, IntParam)
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Volume
-import xmipp3
+from xmipp3.base import XmippProtocol
 from pyworkflow.utils import createLink
 
 INPUT_VOL_BASENAME="inputVol.mrc"
@@ -41,7 +41,7 @@ INPUT_HALF2_BASENAME="inputHalf2.mrc"
 INPUT_MASK_BASENAME="inputMask.mrc"
 POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
 
-class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
+class XmippProtDeepVolPostProc(ProtAnalysis3D, XmippProtocol):
     """    
     Given a map the protocol performs automatic deep post-processing to enhance visualization. Usage guide at
     https://github.com/rsanchezgarc/deepEMhancer

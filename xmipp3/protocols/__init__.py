@@ -30,6 +30,7 @@ from .protocol_preprocess import *
 
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
+from .protocol_alignPCA_2D import XmippProtClassifyPcaStreaming
 from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
@@ -40,8 +41,6 @@ from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
 from .protocol_cl2d_clustering import XmippProtCL2DClustering
-from .protocol_classify_pca import XmippProtClassifyPca
-from .protocol_classify_pca_streaming import XmippProtClassifyPcaStreaming
 #from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
 from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
@@ -133,7 +132,6 @@ from .protocol_volume_consensus import XmippProtVolConsensus
 from .protocol_volume_local_adjust import XmippProtLocalVolAdj
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
-from .protocol_deep_center import XmippProtDeepCenter
 from .protocol_compute_likelihood import XmippProtComputeLikelihood
-from .protocol_deep_center_predict import XmippProtDeepCenterPredict
 from .protocol_deep_embed_training import XmippProtDeepEmbedTraining
+

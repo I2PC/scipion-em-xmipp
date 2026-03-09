@@ -36,7 +36,7 @@ from pwem.protocols import ProtParticlePicking
 
 import pwem.emlib.metadata as MD
 from xmipp3.convert import writeSetOfCoordinates, readSetOfCoordsFromPosFnames
-from xmipp3 import XmippProtocol
+from xmipp3.base import XmippProtocol
 
 IN_COORDS_POS_DIR_BASENAME= "pickNoiseInPosCoordinates"
 OUT_COORDS_POS_DIR_BASENAME= "pickNoiseOutPosCoordinates"

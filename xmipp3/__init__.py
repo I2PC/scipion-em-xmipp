@@ -43,6 +43,8 @@ _currentDepVersion = '1.0'
 # Requirement version variables
 NVIDIA_DRIVERS_MINIMUM_VERSION = 450
 
+CMAKE_CUDA_COMPILER = 'XMIPP3_CMAKE_CUDA_COMPILER'
+
 type_of_version = version.type_of_version
 _logo = version._logo
 _currentDepVersion = version._currentDepVersion
@@ -85,10 +87,8 @@ class Plugin(pwem.Plugin):
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
 
-        environ.update({
-            'PATH': cls.getVar(XMIPP_CUDA_BIN),
-            'LD_LIBRARY_PATH': cls.getVar(XMIPP_CUDA_LIB)
-        }, position=pwutils.Environ.END)
+        cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
+        environ.addLibrary(cudaLib)
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
@@ -137,7 +137,7 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        
+
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
@@ -160,7 +160,8 @@ class Plugin(pwem.Plugin):
             "libjpeg-turbo",
         ]
 
-        CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng"
+        CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
+        CONDA_ICU_PACKAGE = 'icu=72'
 
         if Config.isCondaInstallation():
             condaEnvPath = os.environ['CONDA_PREFIX']
@@ -168,7 +169,7 @@ class Plugin(pwem.Plugin):
 
             commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
             #commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
-            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE)
+            commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE + CONDA_ICU_PACKAGE)
             commands.touch("deps_installed.txt")
             env.addPackage(
                 'xmippDep', version=_currentDepVersion,
@@ -177,16 +178,19 @@ class Plugin(pwem.Plugin):
                 neededProgs=['conda'],
                 default=True
             )
-        xmipp3_installer_cmd = f'pip install "xmipp3-installer @ git+{XMIPP3_INSTALLER_URL}@{_xmipp3_installerV}" '
+
+        CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
+        varsToEnv = {}
+        if CUDA_BIN:
+            varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(CUDA_BIN, 'nvcc')
+
         if develMode:
             xmippSrc = 'xmippDev'
             installCommands = [
-		        (f'{xmipp3_installer_cmd } && '
-				 f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
+		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
 		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
 		         f'cd {xmippSrc} && '
-		         #f'git checkout {branchTest} && '
-		         f'./xmipp ', COMPILE_TARGETS)
+		         f'./xmipp all', COMPILE_TARGETS)
 	        ]
 
             env.addPackage(
@@ -195,13 +199,13 @@ class Plugin(pwem.Plugin):
 	            commands=installCommands,
 	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
 	            updateCuda=True,
-	            default=False
+	            default=False,
+                vars=varsToEnv
 	        )
         else:
             xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
-                (f'{xmipp3_installer_cmd } && '
-				 f'cd .. && rm -rf {xmippSrc} && '
+                (f'cd .. && rm -rf {xmippSrc} && '
                  f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                  f'cd {xmippSrc} && '
                  f'./xmipp', COMPILE_TARGETS)
@@ -212,7 +216,8 @@ class Plugin(pwem.Plugin):
 	                commands=installCommands,
 	                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
 	                updateCuda=True,
-	                default=not develMode
+	                default=not develMode,
+                    vars=varsToEnv
 	            )
 
         ## EXTRA PACKAGES ##

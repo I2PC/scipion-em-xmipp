@@ -37,7 +37,7 @@ from pyworkflow.object import (Float, Integer)
 from pwem.objects import AtomStruct
 from pwem.convert import Ccp4Header
 from pwem.convert.atom_struct import toPdb, toCIF, AtomicStructHandler, addScipionAttribute
-import xmipp3
+from pwem.emlib import Image
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
@@ -340,10 +340,10 @@ class XmippProtValFit(ProtAnalysis3D):
                            self.origin, self.sampling, Ccp4Header.START)
 
         """Diveded by resolution"""
-        Vx = xmipp3.Image(self._getFileName(RESTA_FILE))
+        Vx = Image(self._getFileName(RESTA_FILE))
         V=Vx.getData()
-        Vmask = xmipp3.Image(self._getFileName(MASK_FILE_MRC)+':mrc').getData()
-        Vres = xmipp3.Image(self._getFileName(BLOCRES_HALF_FILE)+':mrc').getData()
+        Vmask = Image(self._getFileName(MASK_FILE_MRC)+':mrc').getData()
+        Vres = Image(self._getFileName(BLOCRES_HALF_FILE)+':mrc').getData()
         Vt = V
         Zdim, Ydim, Xdim = V.shape
 
