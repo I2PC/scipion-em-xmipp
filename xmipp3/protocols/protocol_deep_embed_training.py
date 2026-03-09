@@ -67,6 +67,9 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                       default=10.0,
                       expertLevel=LEVEL_ADVANCED,
                       help="Standard deviation of the shift perturbations used during training")
+        form.addParam('embeddingDim', IntParam, label="Embedding dimension",
+                      expertLevel=LEVEL_ADVANCED,
+                      default=128)
 
         form.addSection(label="Training")
 
@@ -118,6 +121,14 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputSet):
         writeSetOfParticles(inputSet, self.fnImgs)
+        if inputSet.hasCTF():
+            fnWiener = self._getTmpPath("wienerCorrected.mrc")
+            args =  ' -i  %s -o %s --sampling_rate %s '%\
+                    (self.fnImgs, fnWiener, inputSet.getSamplingRate())
+            self.runJob("xmipp_ctf_correct_wiener2d", args,
+                        numberOfMpi=self.numberOfMpi.get())
+            self.fnImgs = self._getTmpPath("wienerCorrected.xmd")
+
         if self.trainSetSize.get()>0:
             self.runJob("xmipp_metadata_utilities","-i %s --operate random_subset %d -o %s"%\
                         (self.fnImgs,self.trainSetSize, self.fnImgsTrain), numberOfMpi=1)
@@ -126,9 +137,13 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
 
     def train(self):
         gpuId = self.setGpu(oneGPU=True)
-        args = "-i %s --omodel %s --maxEpochs %d --batchSize %d --gpu %s --learningRate %f --sigmaShift %f"%\
-                (self.fnImgsTrain, self._getExtraPath("model.h5"), self.numEpochs, self.batchSize, gpuId,
-                 self.learningRate, self.sigmaShift)
+        args = "-i %s --omodel %s --maxEpochs %d --batchSize %d --gpu %s "\
+               "--learningRate %f --sigmaShift %f --embeddingDim %d "\
+               "--ocentroids %s"%\
+                (self.fnImgsTrain, self._getExtraPath("model.h5"),
+                 self.numEpochs, self.batchSize, gpuId,
+                 self.learningRate, self.sigmaShift, self.embeddingDim,
+                 self._getExtraPath("centroids.npy"))
         self.runJob(f"xmipp_deep_embed_training", args, numberOfMpi=1, env=self.getCondaEnv())
 
     def predict(self):
