@@ -62,6 +62,9 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         form.addParam('inputParticles', PointerParam, label="Input images",
                       pointerClass='SetOfParticles, SetOfAverages',
                       help='The set does not need to be centered or have alignment parameters')
+        form.addParam('imageSize', IntParam, label="Image size before embedding",
+                      expertLevel=LEVEL_ADVANCED,
+                      default=64)
         form.addParam('sigmaShift', FloatParam,
                       label="Std.Dev. Shift",
                       default=10.0,
@@ -69,7 +72,7 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                       help="Standard deviation of the shift perturbations used during training")
         form.addParam('embeddingDim', IntParam, label="Embedding dimension",
                       expertLevel=LEVEL_ADVANCED,
-                      default=128)
+                      default=4)
 
         form.addSection(label="Training")
 
@@ -100,8 +103,8 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         self.fnImgsTrain = self._getTmpPath('imgsTrain.xmd')
         self._insertFunctionStep("convertInputStep", self.inputParticles.get())
         self._insertFunctionStep("train")
-        #self._insertFunctionStep("predict" )
-        #self._insertFunctionStep("createOutputStep")
+        self._insertFunctionStep("predict" )
+        self._insertFunctionStep("createOutputStep")
 
     def getGpusList(self, separator):
         strGpus = ""
@@ -131,7 +134,8 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
 
         if self.trainSetSize.get()>0:
             self.runJob("xmipp_metadata_utilities","-i %s --operate random_subset %d -o %s"%\
-                        (self.fnImgs,self.trainSetSize, self.fnImgsTrain), numberOfMpi=1)
+                        (self.fnImgs,self.trainSetSize, self.fnImgsTrain),
+                        numberOfMpi=1)
         else:
             createLink(self.fnImgs, self.fnImgsTrain)
 
@@ -139,23 +143,34 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         gpuId = self.setGpu(oneGPU=True)
         args = "-i %s --omodel %s --maxEpochs %d --batchSize %d --gpu %s "\
                "--learningRate %f --sigmaShift %f --embeddingDim %d "\
-               "--ocentroids %s"%\
+               "--imgSize %d --ocentroids %s"%\
                 (self.fnImgsTrain, self._getExtraPath("model.h5"),
                  self.numEpochs, self.batchSize, gpuId,
                  self.learningRate, self.sigmaShift, self.embeddingDim,
-                 self._getExtraPath("centroids.npy"))
-        self.runJob(f"xmipp_deep_embed_training", args, numberOfMpi=1, env=self.getCondaEnv())
+                 self.imageSize, self._getExtraPath("centroids.npy"))
+        self.runJob(f"xmipp_deep_embed_training", args, numberOfMpi=1,
+                    env=self.getCondaEnv())
 
     def predict(self):
         gpuId = self.setGpu(oneGPU=True)
         fnModel = self._getExtraPath("model.h5")
-        args = "-i %s --gpu %s --model %s -o %s" % (self.fnImgs, gpuId, fnModel, self._getExtraPath('particles.xmd'))
-        self.runJob("xmipp_deep_embed_predict", args, numberOfMpi=1, env=self.getCondaEnv())
+        args = "-i %s --gpu %s --imodel %s -o %s --batchSize %d --imgSize %d " \
+               "--icentroids %s" % \
+               (self.fnImgs, gpuId, fnModel, self._getTmpPath(
+                   'particles.xmd'), self.batchSize, self.imageSize,
+                self._getExtraPath("centroids.npy"))
+        self.runJob("xmipp_deep_embed_predict", args, numberOfMpi=1,
+                    env=self.getCondaEnv())
 
     def createOutputStep(self):
-        fnPredict = self._getExtraPath("particles.xmd")
+        fnOut = self._getExtraPath('particles.xmd')
+        self.runJob("xmipp_metadata_utilities",
+                    f"-i {self._getTmpPath('imgs.xmd')} "\
+                    f"--set join {self._getTmpPath('particles.xmd')}"\
+                    f" itemId itemId -o {fnOut}",
+                    numberOfMpi=1)
         outputSet = self._createSetOfParticles()
-        readSetOfParticles(fnPredict, outputSet)
+        readSetOfParticles(fnOut, outputSet)
         outputSet.copyInfo(self.inputParticles.get())
         outputSet.setAlignment2D()
         self._defineOutputs(outputParticles=outputSet)
