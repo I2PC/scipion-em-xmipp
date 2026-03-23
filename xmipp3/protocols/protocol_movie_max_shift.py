@@ -65,7 +65,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                                              above are met.
     """
     _label = 'movie maxshift'
-    _devStatus = UPDATED
+    _devStatus = PROD
     _lastUpdateVersion = VERSION_3_0
     _possibleOutputs = {OUTPUT_MICS: SetOfMicrographs,
                         OUTPUT_MICS_DW: SetOfMicrographs,
