@@ -64,7 +64,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
      """
     _label = 'align volume and particles'
     _possibleOutputs = AlignVolPartOutputs
-    _devStatus = UPDATED
+    _devStatus = PROD
     nVols = 0
 
     
