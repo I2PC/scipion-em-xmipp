@@ -31,7 +31,7 @@ import numpy as np
 import copy
 
 from pyworkflow import VERSION_3_0
-from pyworkflow import UPDATED
+from pyworkflow import UPDATED, PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
