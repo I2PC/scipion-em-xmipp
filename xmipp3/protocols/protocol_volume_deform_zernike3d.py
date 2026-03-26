@@ -160,7 +160,7 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
         self.runJob("xmipp_image_header", params)
 
     def createOutputStep(self):
-        if self.targetResolution.get() != 3.0:
+        if round(self.targetResolution.get(), 2) != 3.0:
             correctionFactor = self.targetResolution.get() / 3.0
             with open(self._getExtraPath('Volumes_clnm.txt'), 'r') as fid:
                 lines = fid.readlines()
