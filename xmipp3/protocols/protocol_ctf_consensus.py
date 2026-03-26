@@ -62,6 +62,211 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     Protocol to make a selection of meaningful CTFs in basis of the defocus
     values, the astigmatism, the resolution, other Xmipp parameters, and
     the agreement with a secondary CTF for the same set of micrographs.
+
+    AI Generated:
+
+    ## Overview
+
+    The CTF Consensus protocol evaluates the quality of estimated CTF
+    parameters and separates reliable micrographs from questionable ones. Its
+    main purpose is to retain micrographs whose CTF estimation is physically
+    plausible and internally consistent, while discarding those that are likely
+    to be inaccurate or of poor quality.
+
+    In practical cryo-EM workflows, this protocol is typically used after CTF
+    estimation and before particle picking, extraction, or downstream
+    reconstruction. At this stage, a poor CTF fit can propagate problems
+    throughout the workflow, reducing alignment accuracy and ultimately
+    limiting map quality. For that reason, a careful selection of CTFs is one
+    of the most important quality-control steps in single-particle analysis.
+
+    For a biological user, this protocol offers two complementary strategies.
+    First, it can filter CTFs using standard criteria such as defocus range,
+    astigmatism, and estimated resolution. Second, it can compare two
+    independent CTF estimations of the same micrographs and evaluate their
+    agreement. This second option is especially valuable when one wants a more
+    robust selection than that provided by a single estimation program alone.
+
+    ## Inputs and General Workflow
+
+    The protocol requires as input a **set of CTF estimations** associated with
+    a set of micrographs. These CTFs are evaluated against a set of user-defined
+    criteria. Micrographs whose CTFs satisfy all selected criteria are placed
+    in the accepted output, while those that fail one or more conditions are
+    placed in a discarded output.
+
+    Optionally, the protocol can also use a **secondary CTF estimation** for
+    the same micrographs. In this mode, the protocol computes a consensus score
+    describing how well both estimations agree. If the disagreement is too
+    large, the micrograph is rejected even if the primary estimation alone
+    looks acceptable.
+
+    The result is therefore not only a filtered set of CTFs, but also a
+    filtered set of micrographs, split into accepted and discarded subsets.
+
+    ## Defocus Selection
+
+    Defocus is one of the most basic and informative CTF parameters. The
+    protocol allows the user to define a minimum and maximum defocus range,
+    in Angstroms. Any micrograph whose estimated defocus falls outside this
+    interval is discarded.
+
+    Biologically and experimentally, this is useful because micrographs
+    acquired with extremely low or extremely high defocus may be unsuitable
+    for the intended analysis. Very low defocus may reduce contrast and make
+    particle detection difficult, whereas very high defocus can degrade
+    high-resolution information and complicate accurate correction.
+
+    In routine work, the appropriate range depends on the acquisition strategy
+    of the dataset. A narrow range is suitable when acquisition conditions were
+    tightly controlled. A wider range is safer when the dataset comes from
+    heterogeneous sessions or older collections.
+
+    ## Astigmatism and Astigmatism Percentage
+
+    The protocol can also evaluate the magnitude of astigmatism, defined by the
+    difference between the two principal defocus values. Large astigmatism
+    often indicates problems in microscope alignment, specimen preparation,
+    or CTF fitting.
+
+    Two related criteria are available. One is the absolute astigmatism,
+    expressed in Angstroms. The other is the astigmatism percentage, which
+    normalizes the astigmatism by the average defocus. This relative measure is
+    often more informative because it accounts for the overall defocus level
+    of the micrograph.
+
+    From a practical perspective, the astigmatism percentage is particularly
+    useful when comparing micrographs across a wide defocus range. A moderate
+    absolute astigmatism may be acceptable at high defocus but problematic at
+    low defocus. For this reason, many users find the percentage threshold more
+    robust than the absolute threshold alone.
+
+    ## Resolution Threshold
+
+    The estimated CTF resolution is another common selection criterion. The
+    protocol allows the user to define a resolution threshold in Angstroms, and
+    any CTF estimate worse than this threshold is discarded.
+
+    This parameter should be interpreted carefully. It does not mean that the
+    corresponding micrograph will necessarily support that resolution in the
+    final reconstruction, but it does provide an indication of how well the CTF
+    oscillations are fitted. Poor estimated resolution often reflects low
+    signal, contamination, ice problems, drift, or inaccurate fitting.
+
+    In routine biological work, this parameter is often one of the most useful
+    global indicators of micrograph quality. However, it should not be
+    interpreted in isolation. Some micrographs may have a modest CTF fit but
+    still contribute valuable particles, especially in difficult datasets.
+
+    ## Xmipp-Specific Criteria
+
+    When the CTF estimation has been performed with Xmipp, the protocol can use
+    a set of additional internal quality indicators. These include measures
+    related to the position of the first zero, the balance of astigmatism, the
+    correlation between experimental and estimated CTF oscillations, the CTF
+    margin, iceness, and non-astigmatic validity.
+
+    These parameters are more specialized than defocus or resolution and are
+    usually most helpful when one wants a more stringent and technically
+    informed selection. In particular, they can help detect micrographs with
+    suspicious CTF fits even when the standard global parameters still
+    appear acceptable.
+
+    For most biological users, these criteria are best seen as refinement tools
+    rather than the first line of filtering. A reasonable strategy is to begin
+    with general thresholds and use the Xmipp-specific criteria only if the
+    dataset still contains questionable micrographs or if particularly high
+    data quality is required.
+
+    ## Consensus Between Two CTF Estimations
+
+    One of the most powerful features of this protocol is the possibility of
+    comparing two independent CTF estimations of the same micrographs. In this
+    mode, the protocol calculates a **consensus resolution**, which measures
+    the resolution at which the phase difference between the two CTF models
+    becomes significant.
+
+    Conceptually, if two independent estimations agree well up to a certain
+    resolution, confidence in the CTF assignment increases. If they diverge at
+    relatively low resolution, the estimation is likely unreliable. The user
+    can define a minimum consensus resolution, and any micrograph failing this
+    agreement criterion is discarded.
+
+    This consensus approach is especially valuable in difficult datasets, such
+    as those with low contrast, thick ice, strong contamination, or subtle
+    fitting ambiguities. It is also useful when validating a new CTF estimation
+    procedure against a more established one.
+
+    ## Averaging or Preserving Metadata in Consensus Mode
+
+    When using two CTF inputs, the protocol offers different ways to handle the
+    resulting metadata. One option is to keep the primary CTF parameters
+    unchanged while simply annotating the output with agreement statistics
+    relative to the secondary estimation. Another option is to average common
+    metadata such as defocus and astigmatism angle between the two estimations.
+
+    Averaging may be useful when both estimations are of comparable quality and
+    one wants a consensus description rather than privileging one method.
+    However, in many practical workflows it is safer to preserve the primary
+    metadata and use the secondary estimation only as a validation reference.
+
+    The protocol can also include all metadata from the secondary CTF in the
+    output, which can be useful for later inspection or troubleshooting.
+
+    ## Outputs and Their Interpretation
+
+    The protocol generates up to four outputs: accepted CTFs, accepted
+    micrographs, discarded CTFs, and discarded micrographs. This separation is
+    very helpful because it allows the user not only to continue processing
+    with the accepted subset, but also to inspect the rejected subset and
+    understand why those micrographs were excluded.
+
+    In consensus mode, the output CTFs may also contain additional attributes
+    describing the agreement between the two estimations, such as consensus
+    resolution, defocus differences, angle differences, and secondary quality
+    measures.
+
+    From a biological perspective, the accepted set should represent the
+    subset of micrographs most likely to support reliable downstream analysis.
+    The discarded set is equally informative, since it often reveals recurring
+    acquisition or sample problems such as poor ice, strong astigmatism, or
+    unstable focusing conditions.
+
+    ## Practical Recommendations
+
+    In most workflows, it is wise to begin with conservative and biologically
+    reasonable criteria. Defocus range, astigmatism percentage, and estimated
+    resolution usually provide a solid first pass. These parameters are easy to
+    interpret and often remove the clearly problematic micrographs.
+
+    If two CTF estimations are available, consensus filtering is highly
+    recommended for important datasets. Agreement between two methods provides
+    a stronger basis for acceptance than any single metric alone.
+
+    When using stringent thresholds, users should remember that over-filtering
+    can unnecessarily reduce the dataset size. This is especially relevant in
+    challenging biological samples where data are already limited. It is
+    therefore good practice to inspect both accepted and discarded micrographs
+    visually and assess whether the chosen criteria are biologically and
+    experimentally justified.
+
+    Xmipp-specific criteria are best reserved for cases where a more refined
+    discrimination is needed, or when one has experience interpreting these
+    indicators.
+
+    ## Final Perspective
+
+    The CTF Consensus protocol is fundamentally a quality-control and selection
+    tool. Its purpose is not merely to reject poor micrographs, but to provide
+    a more trustworthy foundation for all subsequent cryo-EM analysis.
+
+    For biological users, this protocol is particularly valuable because it
+    transforms a set of technical CTF estimates into a practical decision:
+    which micrographs are reliable enough to keep. Careful use of defocus,
+    astigmatism, resolution, and consensus agreement can substantially improve
+    the robustness of downstream particle processing and final structural
+    interpretation.
+
     """
     _label = 'ctf consensus'
     _devStatus = PROD
