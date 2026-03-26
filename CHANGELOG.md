@@ -1,3 +1,60 @@
+## Release 28.0.1
+- More scipion-em-xmipp
+    - Fixing the XMIPP_CUDA_BIN behaves
+
+## Release 28.0.0
+- New protocols
+   - alignPCA_2D: Performs a 2D classification of particles using PCA. This method is optimized to run in streaming,
+        enabling efficient processing of large datasets
+
+- More scipion-em-xmipp
+   - Incorporated XMIPP_CUDA_LIB and XMIPP_CUDA_BIN variables from scipion.conf
+
+## Release 27.0.0
+- More scipion-em-xmipp
+   - Updated xmipp3-installer dependency (2.1.0 with configuration flags that can be set using environment variables.)
+   - Major version because of deprecated protocol in previous version; DeepCenter
+
+## Release 26.2.0
+- More scipion-em-xmipp
+   - xmipp3-installer package installed from pypi, reverting previous temporal fix
+   - Added new dependencie to solve error with libicu18
+ 
+- Protocols deprecated (For more details visit [this](https://github.com/I2PC/xmipp/wiki/Deprecating-programs-and-protocols](https://i2pc.github.io/docs/Utils/Deprecated-programs/index.html)))
+   - DeepCenter
+  
+## Release 26.1.0
+- Protocols updated
+  - deep_micrograph_cleaner: Showing thumbnails of micrographs with the mask and the coordinates stamps
+  - protocol_extract_particles, protocol_preprocess, protocol_compute_likelihood, protocol_extract_particles_pairs: fix typo
+
+- More scipion-em-xmipp
+   - xmipp3-installer package installed from github release and not from pypi
+
+## Release 26.0.2
+- More scipion-em-xmipp
+   - Remove scipion dependencies from requirements   
+
+## Release 26.0.1
+- More scipion-em-xmipp
+   - Fix on xmipp installation flag
+     
+## Release 26.0.0
+- Protocols updated
+   - deep_micrograph_screen:  updated enviroment to tensorFlow2 and models updated to  
+   - movie_max_shif: Change the criteria to evaluate the shift
+   - crop_resize: Crop/Resize half maps too, if they are available
+   - resolution3D: The FSC can be computed now using the two halves
+   - align_volume_and_particles: Allow considering mirrors in align volume and particles
+
+- More scipion-em-xmipp
+   - Disable xmippDep by default (the dependencies will not be installed by default in the Scipion environment), but installing just the libstdcxx dependence
+   - Script to generate the protocols map (https://i2pc.github.io/docs/protocolsMap.html#)
+   - Remove Relion dependency from TestXmippDenoiseParticles
+   - parse json to report summary installation errors
+   - View all classes added for XmippProtConsensusClasses
+
+
 ## Release 3.25.06.0 - Rhea
 - New protocols
    - compute_likelihood: This protocol computes the likelihood of a set of particles with assigned angles when compared to a set of maps or atomic modelS

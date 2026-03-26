@@ -46,8 +46,7 @@ import pyworkflow.utils as pwutils
 from pyworkflow.protocol import params, STATUS_NEW
 import pwem.emlib.metadata as md
 from pwem import emlib
-import xmipp3
-from xmipp3 import XmippProtocol
+from xmipp3.base import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput, IN_COORDS_POS_DIR_BASENAME
 from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             micrographToCTFParam, writeSetOfParticles,
@@ -82,7 +81,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
     _stepsCheckSecs = 5              # time in seconds to check the steps
-    _devStatus = UPDATED
+    _devStatus = PROD
 
 
     USING_INPUT_COORDS = False

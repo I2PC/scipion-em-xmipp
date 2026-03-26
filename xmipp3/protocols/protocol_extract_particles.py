@@ -50,7 +50,7 @@ FACTOR_BOXSIZE = 1.5
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Extracts particle images from micrographs based on provided coordinates. This essential step prepares particle stacks for further processing such as classification and reconstruction."""
     _label = 'extract particles'
-    _devStatus = UPDATED
+    _devStatus = PROD
     RESIZE_FACTOR = 0
     RESIZE_DIMENSIONS = 1
     RESIZE_SAMPLINGRATE = 2
@@ -182,12 +182,12 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                       help='Pixels outside this circle are assumed to be noise '
                            'and their stddev is set to 1. Radius for '
                            'background circle definition (in pix.). If this '
-                           'value is 0, then half the box size is used.')
+                           'value is less than or equal to 0, then half the box size is used.')
         
         form.addParam('patchSize', params.IntParam, default=-1, 
                       label='Patch size for the variance filter (px)', 
                       expertLevel=LEVEL_ADVANCED,
-                      help='Windows size to make the variance filtter and '
+                      help='Windows size to make the variance filter and '
                            'compute the Gini coeff. A twice of the particle '
                            'size is recommended. Set at -1 applies 1.5*BoxSize.')
 

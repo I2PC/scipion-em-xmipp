@@ -33,16 +33,32 @@ import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
 
+import mrcfile
+from scipy.ndimage import zoom
+import matplotlib
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+matplotlib.use('Agg')
+from matplotlib.patches import Circle
+from matplotlib.collections import PatchCollection
+
 from xmipp3.base import XmippProtocol
 from xmipp_base import createMetaDataFromPattern
 from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
+from pyworkflow import BETA, UPDATED, NEW, PROD
+import numpy as np
+import mrcfile
+import matplotlib.pyplot as plt
 
+MAX_SIZE_THUMB=512
+NUM_THUMBNAILS=45
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Removes coordinates located in carbon regions or large impurities in micrographs using a pre-trained deep learning model. This screening improves particle picking accuracy by filtering out false positives from contaminated areas."""
     _label = 'deep micrograph cleaner'
     _conda_env= "xmipp_MicCleaner"
+    _devStatus = PROD
 
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
@@ -111,6 +127,12 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         form.addParam("saveMasks", params.BooleanParam, default=False,expertLevel=params.LEVEL_ADVANCED,
                       label="saveMasks", help="Save predicted masks?")
 
+        form.addParam("saveMicThumbnailWithMask", params.BooleanParam, default=True, expertLevel=params.LEVEL_ADVANCED,
+                      condition='saveMasks == True',
+                      label="Save thumbnails (mics and mask)",
+                      help="Save a set of 50 micrographs with the predicted masks stamp and coords stamp")
+
+
         form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
                        label="Use GPU for execution",
                        help="This protocol has both CPU and GPU implementation. "
@@ -122,13 +144,31 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                        help="Add a list of GPU devices that can be used.")
 
         # form.addParallelSection(threads=4, mpi=1)
-    
+
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
+
+
     #--------------------------- INSERT steps functions ------------------------
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
         # before the actual processing
         pwutils.makePath(self._getExtraPath('inputCoords'))
         pwutils.makePath(self._getExtraPath('outputCoords'))
+        pwutils.makePath(self._getExtraPath('thumbnails'))
         if self.saveMasks.get():
           pwutils.makePath(self._getExtraPath("predictedMasks"))
         self._setupBasicProperties()
@@ -160,7 +200,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
     def extractMicrographListStepOwn(self, micKeyList, *args):
         micList = []
-
         for micName in micKeyList:
             mic = self.micDict[micName]
             micDoneFn = self._getMicDone(mic)
@@ -178,7 +217,12 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         self._computeMaskForMicrographList(micList, *args)
 
+        thumbnailCounter = 0
         for mic in micList:
+            if self.saveMicThumbnailWithMask.get():
+                if thumbnailCounter <= NUM_THUMBNAILS:
+                    self._generateThumbnail(mic)
+                    thumbnailCounter += 1
             # Mark this mic as finished
             open(self._getMicDone(mic), 'w').close()
 
@@ -199,7 +243,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           args += ' -o %s' % self._getExtraPath('outputCoords')
           args += ' -b %d' % self.getBoxSize()
           args += ' -s 1' #Downsampling is automatically managed by scipion
-          args += ' -d %s' % self.getModel('deepMicrographCleaner', 'defaultModel.keras')
+          args += ' -d %s' % self.getModel('deepMicrographCleanerTF2', 'defaultModel.h5')
 
           if self.threshold.get() > 0:
               args += ' --deepThr %f ' % (1-self.threshold.get())
@@ -208,14 +252,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
               args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
 
           if self.useGpu.get():
-              if self.useQueueForSteps() or self.useQueue():
-                  args += ' -g all '
-              else:
-                  args += ' -g %s'%(",".join([str(elem) for elem in self.getGpuList()]))
-          else:
-              args += ' -g -1'
+              gpuId = self.setGPU(oneGPU=False)
+              args += f' -g {gpuId} '
 
-          os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
@@ -510,3 +549,126 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         self._defineSourceRelation(inputset,
                                    Pointer(value=self, extended=outputName))
         self._store()
+
+    def _generateThumbnail(self, mic):
+        """
+        Generate a thumbnail PNG for a given micrograph.
+
+        Steps performed:
+        1. Load the micrograph from MRC file and normalize pixel values to 0-255.
+        2. Optionally read particle coordinates from a .pos file.
+        3. Optionally read a predicted mask from a .mrc file.
+        4. Resize the image, mask, and scale coordinates if larger than maxSize.
+        5. Overlay the mask in blue and draw particles as red circles.
+        6. Save the final thumbnail as a PNG with minimal padding and compression.
+
+        Parameters
+        ----------
+        mic : Micrograph object
+            The micrograph to generate the thumbnail for.
+        maxSize : int, optional
+            Maximum size (in pixels) for the thumbnail (default is 512).
+
+        Returns
+        -------
+        None
+            The thumbnail is saved directly to the 'thumbnails' directory.
+        """
+        micFn = mic.getFileName()
+        micBase = pwutils.removeBaseExt(os.path.basename(micFn))
+
+        posFn = self._getExtraPath('outputCoords', micBase + '.pos')
+        maskFn = self._getExtraPath('predictedMasks', micBase + '.mrc')
+        thumbFn = self._getExtraPath('thumbnails', micBase + '.png')
+        if os.path.exists(thumbFn):
+            return
+
+        # --- Read micrograph ---
+        with mrcfile.open(micFn, permissive=True) as mrc:
+            img = mrc.data.astype(np.float32)
+
+        # --- Normalize and convert to uint8 ---
+        p1, p99 = np.percentile(img, (1, 99))
+        img = np.clip((img - p1) / (p99 - p1), 0, 1)
+        img = (img * 255).astype(np.uint8)
+
+        # --- Read coordinates ---
+        if  os.path.exists(posFn):
+            coords = self.read_star_coordinates(posFn)
+
+        # --- Read mask ---
+        mask = None
+        if os.path.exists(maskFn):
+            with mrcfile.open(maskFn, permissive=True) as mrc:
+                mask = mrc.data.astype(np.float32)
+            mask = np.clip(mask, 0.0, 1)
+
+        # --- Resize image, mask, and scale coordinates/radius ---
+        h, w = img.shape
+        scale = max(MAX_SIZE_THUMB / h, MAX_SIZE_THUMB / w)
+
+        if scale < 1.0:
+            # Bilinear resize for image
+            img = zoom(img, (scale, scale), order=1, prefilter=False).astype(np.uint8)
+            # Nearest neighbor resize for mask
+            if mask is not None:
+                mask = zoom(mask, (scale, scale), order=0)
+            # Scale coordinates
+            if coords:
+                coords = [(x * scale, y * scale) for x, y in coords]
+
+        radius = (self.getBoxSize() * scale) / 4
+        h, w = img.shape
+
+        # --- Create figure ---
+        fig, ax = plt.subplots(figsize=(w / 100, h / 100), dpi=100)
+        ax.set_position([0, 0, 1, 1])  # axes fill figure
+        ax.axis('off')
+        # --- Show image ---
+        ax.imshow(img, cmap='gray', origin='upper', vmin=0, vmax=255)
+        # --- Overlay mask in blue ---
+        if mask is not None:
+            ax.imshow(mask, cmap='YlGnBu', origin='upper', alpha=mask)
+
+        # --- Fix axes, remove background and borders ---
+        ax.set_xlim(0, w)
+        ax.set_ylim(h, 0)
+        ax.set_facecolor('none')
+
+        # --- Draw particles using PatchCollection ---
+        if coords:
+            patches = [Circle((x, y), radius=radius) for x, y in coords]
+            collection = PatchCollection(patches, edgecolor='red', facecolor='none', linewidth=1)
+        ax.add_collection(collection)
+
+        # --- Save thumbnail ---
+        plt.savefig(thumbFn, dpi=80, bbox_inches=None, pad_inches=0, pil_kwargs={"compress_level": 4})
+        plt.close(fig)
+
+    def read_star_coordinates(self, posFn):
+        coords = []
+        with open(posFn) as f:
+            lines = f.readlines()
+
+        in_data_particles = False
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+
+            if line.startswith('data_particles'):
+                in_data_particles = True
+                continue
+            if not in_data_particles:
+                continue
+
+            if line.startswith('loop_') or line.startswith('_'):
+                continue
+
+            parts = line.split()
+            if len(parts) >= 4:
+                x = float(parts[2])
+                y = float(parts[3])
+                coords.append((x, y))
+
+        return coords

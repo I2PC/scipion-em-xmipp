@@ -58,7 +58,7 @@ class XmippProtRansac(ProtInitialVolume):
     sample consensus (RANSAC) approach.    
      """
     _label = 'ransac'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     def __init__(self, **args):
         ProtInitialVolume.__init__(self, **args)

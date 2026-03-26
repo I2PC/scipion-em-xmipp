@@ -35,7 +35,9 @@ from pyworkflow.object import Float
 from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
 from pwem.objects import Volume
-import xmipp3
+from xmipp3.base import XmippProtocol
+from pwem.emlib import Image
+
 
 def updateEnviron(gpuNum):
     """ Create the needed environment for TensorFlow programs. """
@@ -58,7 +60,7 @@ METADATA_MASK_FILE = 'metadataresolutions'
 FN_METADATA_HISTOGRAM = 'mdhist'
 
 
-class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
+class XmippProtDeepRes(ProtAnalysis3D, XmippProtocol):
     """    
     A deep-learning-based method designed to estimate local resolution in cryo-electron microscopy maps. It analyzes 3D structural features directly from the map data to assign local resolution values to beach voxel of a 3D map.. Using models trained on simulated and experimental data, DeepRes provides spatially resolved estimates that reflect variations in structural clarity across the map. The method captures subtle improvements from post-processing steps, offering a refined view of resolution distribution that supports better interpretation and validation of cryo-EM structures.
     """
@@ -265,7 +267,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         return min_res, max_res, median_res
     
     def createChimeraOutput(self, vol, value):
-        Vx = xmipp3.Image(vol)
+        Vx = Image(vol)
         V = Vx.getData()
         Zdim, Ydim, Xdim = V.shape
 #        Vout = V

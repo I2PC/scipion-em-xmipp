@@ -157,8 +157,8 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
                       help='Angstroms.')
         form.addParam('doNormalize', BooleanParam, default=False,
                       label='Normalize', 
-                      help='It subtract a ramp in the gray values and normalizes'
-                           'so that in the background there is 0 mean and'
+                      help='It subtracts a ramp in the gray values and normalizes '
+                           'so that in the background there is 0 mean and '
                            'standard deviation 1.')
         form.addParam('normType', EnumParam, condition='doNormalize',
                       label='Normalization type', expertLevel=LEVEL_ADVANCED,
@@ -169,10 +169,10 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
                            'Ramp: subtract background + NewXmipp')
         form.addParam('backRadius', IntParam, default=-1, condition='doNormalize',
                       label='Background radius', expertLevel=LEVEL_ADVANCED,
-                      help='Pixels outside this circle are assumed to be noise and'
-                           'their stddev is set to 1. Radius for background'
-                           'circle definition (in pix.).'
-                           'If this value is 0, then half the box size is used.')
+                      help='Pixels outside this circle are assumed to be noise and '
+                           'their stddev is set to 1. Radius for background '
+                           'circle definition (in pix.). '
+                           'If this value is less than or equal to 0, then half the box size is used.')
         form.addParam('doCenter', BooleanParam, default=False,
                       label='Center images')
         form.addParam('doPhaseFlip', BooleanParam, default=False,

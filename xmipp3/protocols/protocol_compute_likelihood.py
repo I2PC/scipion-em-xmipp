@@ -57,7 +57,7 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
     _label = 'log likelihood'
     _lastUpdateVersion = VERSION_1_1
     _possibleOutputs = {"reprojections": SetOfParticles}
-    _devStatus = NEW
+    _devStatus = PROD
     stepsExecutionMode = STEPS_PARALLEL
 
     # Normalization enum constants
@@ -105,8 +105,8 @@ class XmippProtComputeLikelihood(ProtAnalysis3D):
 
         form.addParam('doNorm', BooleanParam, default=False,
                       label='Normalize', expertLevel=LEVEL_ADVANCED,
-                      help='Whether to subtract background gray values and normalize'
-                           'so that in the background there is 0 mean and'
+                      help='Whether to subtract background gray values and normalize '
+                           'so that in the background there is 0 mean and '
                            'standard deviation 1. This is applied to particles and volumes')
         form.addParam('normType', EnumParam, condition='doNorm',
                       label='Particle normalization type', expertLevel=LEVEL_ADVANCED,

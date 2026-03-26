@@ -73,7 +73,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     """
 
     _label = 'picking consensus'
-    _devStatus = UPDATED
+    _devStatus = PROD
     _possibleOutputs = ProtPickingConsensusOutput
     outputName = ProtPickingConsensusOutput.consensusCoordinates.name
     FN_PREFIX = 'consensusCoords_'

@@ -57,7 +57,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
     """
     _label = 'local MonoRes'
     _lastUpdateVersion = VERSION_1_1
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)

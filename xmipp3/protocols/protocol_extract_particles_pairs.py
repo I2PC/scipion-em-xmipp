@@ -158,7 +158,7 @@ class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):
                            'phase flip is not recommended.')
         form.addParam('doNormalize', BooleanParam, default=True,
                       label='Normalize (Recommended)',
-                      help='It subtract a ramp in the gray values and '
+                      help='It subtracts a ramp in the gray values and '
                            'normalizes so that in the background there is 0 '
                            'mean and standard deviation 1.')
         form.addParam('normType', EnumParam,
