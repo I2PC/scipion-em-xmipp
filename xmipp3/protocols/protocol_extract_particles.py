@@ -48,7 +48,9 @@ from pyworkflow import BETA, UPDATED, NEW, PROD
 FACTOR_BOXSIZE = 1.5
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
-    """Extracts particle images from micrographs based on provided coordinates. This essential step prepares particle stacks for further processing such as classification and reconstruction."""
+    """Extracts particle images from micrographs based on provided coordinates.
+    This essential step prepares particle stacks for further processing such as
+    classification and reconstruction."""
     _label = 'extract particles'
     _devStatus = PROD
     RESIZE_FACTOR = 0
@@ -191,6 +193,13 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                            'compute the Gini coeff. A twice of the particle '
                            'size is recommended. Set at -1 applies 1.5*BoxSize.')
 
+        form.addParam('doEvalVar', params.BooleanParam, default=True,
+                      label='Evaluate variance',
+                      help='Evaluate the variance around the particle. It '
+                           'helps identifying bad particles later through '
+                           'some characterization of the particle environment '
+                           '(it adds the ScoreGini and ScoreVar variables).')
+
         form.addParallelSection(threads=4, mpi=1)
     
     #--------------------------- INSERT steps functions ------------------------
@@ -228,15 +237,16 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             # the required command line parameters (except input/ouput files)
             micOps = []
 
-            try:
-                # Compute the variance and Gini coeff. of the part. and mic., resp.
-                args  =  '--pos %s' % fnPosFile
-                args += ' --mic %s' % fnLast
-                args += ' --patchSize %d' % patchSize
-                self.runJob('xmipp_coordinates_noisy_zones_filter', args)
-            except:
-                print("'xmipp_coordinates_noisy_zones_filter' have failed for "
-                      "%s micrograph. We continue..." % mic.getMicName())
+            if self.doEvalVar:
+                try:
+                    # Compute the variance and Gini coeff. of the part. and mic., resp.
+                    args  =  '--pos %s' % fnPosFile
+                    args += ' --mic %s' % fnLast
+                    args += ' --patchSize %d' % patchSize
+                    self.runJob('xmipp_coordinates_noisy_zones_filter', args)
+                except:
+                    print("'xmipp_coordinates_noisy_zones_filter' have failed for "
+                          "%s micrograph. We continue..." % mic.getMicName())
 
             def getMicTmp(suffix):
                 return self._getTmpPath(baseMicName + suffix)
