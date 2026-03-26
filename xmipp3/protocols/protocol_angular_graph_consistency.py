@@ -466,7 +466,6 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
                 return
 
         print("Preparing references to sampling rate=", TsCurrent)
-        fnMask = ''
         newXDim = self.readInfoField(fnDir, "size", emlib.MDL_XSIZE)
         oldXdim = self.readInfoField(fnDirPrevious, "size", emlib.MDL_XSIZE)
         fnPreviousVol = join(fnDirPrevious, "volume.vol") 
@@ -489,9 +488,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         if self.nextPositivity:
             self.runJob('xmipp_transform_threshold', '-i %s --select below 0 --substitute value 0' % fnReferenceVol, numberOfMpi=1)
 
-        if fnMask != '':
-            cleanPath(fnMask)
-        self.writeInfoField(fnDir, "count", emlib.MDL_COUNT, int(2)) 
+        self.writeInfoField(fnDir, "count", emlib.MDL_COUNT, int(2))
 
     def cleanDirectory(self):
         fnDirCurrent = self._getExtraPath("Iter1") 

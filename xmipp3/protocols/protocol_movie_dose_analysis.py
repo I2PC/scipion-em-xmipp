@@ -402,8 +402,6 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         errors = []
-        if errors:
-            errors.append("")
         return errors
 
     def _summary(self):

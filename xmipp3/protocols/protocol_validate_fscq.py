@@ -91,7 +91,7 @@ class XmippProtValFit(ProtAnalysis3D):
                       label="PDB File path: ", important=True,
                       help='Specify a path to desired PDB structure.')
 
-        group.addParam('pdbMap', PointerParam, pointerClass='Volume',
+        group.addParam('pdbMap_', PointerParam, pointerClass='Volume',
                       label="Volume from PDB: ", allowsNull=True,
                       help='Volume created from the PDB.'
                            ' The volume should be aligned with the reconstruction map.'
@@ -204,8 +204,8 @@ class XmippProtValFit(ProtAnalysis3D):
                         Ccp4Header.START)
 
         """Create map from PDB """
-        if self.pdbMap.hasValue():
-            pdbvolume = self.pdbMap.get()
+        if self.pdbMap_.hasValue():
+            pdbvolume = self.pdbMap_.get()
             self.pdbvol = pdbvolume.getFileName()
 
             self.pdbmap = self._getFileName(OUTPUT_PDBMRC_FILE)
@@ -252,7 +252,7 @@ class XmippProtValFit(ProtAnalysis3D):
             self.maskFn = self._getFileName(MASK_FILE_MRC)
             self.mask_xmipp = self._getFileName(MASK_FILE)
 
-            if (not self.pdbMap.hasValue()):
+            if (not self.pdbMap_.hasValue()):
 
                 params = ' -i %s' % self._getFileName(OUTPUT_PDBVOL_FILE)+'.vol'
                 params += ' -o %s' % self.mask_xmipp
