@@ -193,7 +193,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                            'compute the Gini coeff. A twice of the particle '
                            'size is recommended. Set at -1 applies 1.5*BoxSize.')
 
-        form.addParam('doEvalVar', params.BooleanParam, default=True,
+        form.addParam('doEvalVar', params.BooleanParam, default=False,
                       label='Evaluate variance',
                       help='Evaluate the variance around the particle. It '
                            'helps identifying bad particles later through '
