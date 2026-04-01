@@ -46,12 +46,130 @@ from xmipp3.convert import xmippToLocation, writeSetOfClasses2D
 
 
 class XmippProtCL2DMap(ProtAnalysis2D):
-    """ Create a low dimensional mapping from a SetOfClasses2D with interactive selection of classes.
-    Use mouse left-click to select/deselect classes individually or mouse right-click to select/deselect
-    several classes."""
+    """ Create a low dimensional mapping from a SetOfClasses2D with interactive
+    selection of classes. Use mouse left-click to select/deselect classes
+    individually or mouse right-click to select/deselect several classes.
+
+    AI Generated:
+
+    This protocol helps you explore and curate your 2D classes visually. It
+    takes a set of 2D class averages and places them in a 2D map where similar
+    classes appear close to each other. You can then interactively select the
+    classes you want to keep and export them as a new set.
+
+    Think of it as a visual “landscape” of your 2D classes that helps you:
+
+    - Identify groups of similar views
+    - Detect outliers or junk classes
+    - Separate different conformations or compositions
+    - Select coherent subsets for downstream processing
+
+    When should you use this?
+
+    You typically use this protocol after running 2D classification (e.g.,
+    CL2D, Relion 2D, etc.) when:
+
+    - You have many classes and it’s hard to interpret them one by one.
+    - You suspect the presence of heterogeneous conformations.
+    - You want to quickly identify junk clusters or rare views.
+    - You want to define a clean subset of classes for 3D refinement.
+    - Instead of manually browsing dozens or hundreds of class averages in a
+    grid, this protocol shows them in a meaningful spatial organization.
+
+    What does the map represent?
+
+    Each point in the map corresponds to one 2D class average.
+
+    Classes that look similar (same view, similar signal) tend to appear near
+    each other.
+
+    Classes that are very different (different view, contamination, broken
+    particles) tend to be far apart.
+
+    The map can optionally color classes according to their occupancy (how many
+    particles they contain).
+
+    This makes it much easier to see structure in your classification results.
+
+    How to use the interactive selection
+
+    If interactive mode is enabled (default):
+
+    - A window opens showing the 2D map.
+    - Each class average appears as a small image at its position.
+
+    You can:
+    - Left-click on a class to select or deselect it.
+    - Right-click and drag to select/deselect multiple classes at once.
+    - Use the zoom slider to change thumbnail size.
+    - Use Select all / Select none buttons.
+    - Selected classes are highlighted in green.
+    - When you close the window, you will be asked whether you want to save
+    the selection. If you confirm, a new set of 2D classes is created
+    containing only the selected classes.
+
+    If interactive selection is disabled, all classes are selected automatically.
+
+    Choosing the mapping method
+
+    You can choose different dimensionality reduction methods (PCA, Diffusion
+    Maps, etc.) and distance metrics (Euclidean or Correlation).
+
+    For most users:
+
+    PCA + Correlation is a good default.
+
+    If the map looks messy or unstructured, you can try another method (e.g.,
+    Diffusion Maps) to see if separation improves.
+
+    You don’t need to understand the mathematics to use this effectively—just
+    check whether the map produces meaningful grouping.
+
+    What do you get as output?
+
+    You get a new SetOfClasses2D containing only the classes you selected.
+
+    This new set can be used for:
+
+    - Exporting selected classes
+    - Creating a clean subset of particles
+    - Feeding into 3D reconstruction
+    - Further classification steps
+
+    The original classes remain untouched.
+
+    Practical workflow example
+
+    Run 2D classification.
+
+    Use this protocol to map the classes.
+
+    In the map:
+
+    - Select the large, coherent cluster of good-looking classes.
+    - Deselect obvious junk or tiny, isolated classes.
+    - Export the selection.
+    - Use the selected classes (or their particles) for 3D refinement.
+
+    This approach is especially powerful when your dataset contains subtle
+    heterogeneity that is not obvious from simple grid browsing.
+
+    Why this is useful
+
+    Manual selection of classes can be subjective and tedious. The 2D map:
+
+    - Gives a global overview of your classification.
+    - Makes outliers immediately visible.
+    - Helps detect continuous variability.
+    - Speeds up dataset cleaning.
+
+    In short, it turns class inspection from a linear browsing task into a
+    structured, intuitive visual decision process.
+    """
     
     _label = '2D classes mapping'
-    red_methods = ['PCA', 'LTSA', 'DM', 'LLTSA', 'LPP', 'kPCA', 'pPCA', 'LE', 'HLLE', 'SPE', 'NPE']
+    red_methods = ['PCA', 'LTSA', 'DM', 'LLTSA', 'LPP', 'kPCA', 'pPCA', 'LE',
+                   'HLLE', 'SPE', 'NPE']
     distances = ['Euclidean', 'Correlation']
     CLASSES_MD = 'classes.xmd'
     

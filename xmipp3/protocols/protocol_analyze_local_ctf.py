@@ -39,7 +39,151 @@ CITE ='Fernandez-Gimenez2023b'
 
 class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     """Assigns to each micrograph a coefficient (R2) which evaluates the result of the
-        local defocus adjustment and displays the local defocus for all the particles in each micrograph."""
+       local defocus adjustment and displays the local defocus for all the
+       particles in each micrograph.
+
+       AI Generated:
+
+       What this protocol is for
+
+        Analyze local defocus is a quality-control and diagnostic protocol
+        intended for workflows where you have already estimated a local defocus
+        per particle (for example, after running a local CTF
+        refinement/adjustment step). Its purpose is not to refine CTF again,
+        but to evaluate how coherent and interpretable the local defocus field
+        is within each micrograph, and to help you detect micrographs where
+        local defocus estimates behave suspiciously or are inconsistent with
+        a simple physical model.
+
+        From a biological user’s viewpoint, the protocol answers two practical
+        questions. First, “do the local defocus values across particles in a
+        micrograph follow a plausible smooth trend (like a tilt plane)?”
+        Second, “which micrographs show a reliable local defocus pattern and
+        which ones may be problematic and should be inspected or down-weighted?”
+
+        Inputs and what they must contain
+
+        You provide two inputs: a set of micrographs and a set of particles.
+        The particle set must contain two essential pieces of information:
+        each particle must be linked to a micrograph (so the protocol knows
+        which micrograph it comes from), and each particle must already have
+        a local defocus assigned in its CTF parameters. The protocol also uses
+        particle coordinates within the micrograph (x, y), because it evaluates
+        how defocus varies spatially across the image.
+
+        In practice, this protocol is typically placed immediately after a step
+        that assigns per-particle local CTF/defocus (or after importing
+        particles that already include local defocus). If the particle set
+        does not actually contain local defocus values, the analysis will not
+        be meaningful.
+
+        What the protocol computes (conceptually)
+
+        For each micrograph, the protocol collects all particles belonging to
+        it and looks at the mean defocus per particle, computed as the average
+        of DefocusU and DefocusV. It then fits a very simple spatial model
+        where defocus is approximated by a plane over the micrograph
+        coordinates, i.e., defocus changes linearly with x and y. This is a
+        physically sensible first-order approximation for common causes of
+        local defocus variation such as specimen tilt or smooth ice thickness
+        gradients.
+
+        Once this plane is fitted, the protocol measures how well the
+        particle-wise defocus values follow that plane. The main summary metric
+        it produces per micrograph is an R² coefficient, which you can
+        interpret as “how much of the observed variation in local defocus can
+        be explained by a smooth planar trend.” Values closer to 1 indicate
+        that local defocus estimates behave consistently and follow a coherent
+        spatial pattern; values near 0 indicate that the estimates are poorly
+        explained by a plane, which can happen when local defocus is noisy,
+        unstable, or driven by artifacts.
+
+        In addition to the global per-micrograph score, the protocol also
+        stores per-particle information describing the fitted plane and the
+        residual for each particle, meaning the difference between the
+        particle’s local defocus and the value predicted by the plane at that
+        coordinate. Biologically, residual maps are useful because they
+        highlight localized regions where local CTF behaves oddly—often
+        corresponding to contamination, thick ice patches, drift/charging
+        effects, carbon edges, or other micrograph-level problems.
+
+        Outputs and how to use them
+
+        The protocol produces an output SetOfMicrographs that is essentially
+        the same as your input micrograph set, but with an additional
+        per-micrograph attribute: the R² score of the local defocus analysis.
+        In Scipion, you can use this output as a convenient way to sort,
+        filter, or select micrographs based on how well-behaved local defocus
+        appears to be.
+
+        A typical biological workflow is to inspect the distribution of R²
+        values and then decide whether to exclude the worst micrographs, to
+        inspect them visually, or to reconsider local CTF settings upstream.
+        For example, if you observe a subset of micrographs with very low R²,
+        those micrographs often correspond to acquisition problems (poor CTF
+        estimation, strong astigmatism not captured well, drift, charging, ice
+        gradients too complex, or simply too few particles to support a stable
+        local model). Conversely, a dataset where most micrographs show high
+        R² usually indicates that local defocus is being estimated consistently
+        and that per-particle CTF refinement is likely providing a meaningful
+        correction.
+
+        Although the protocol’s primary formal output is the micrograph set
+        with R², the analysis also prepares the underlying per-particle spatial
+        defocus/residual information for visualization. In practice, this
+        enables viewers to display, micrograph by micrograph, how local defocus
+        values are distributed across the particle coordinates and where
+        residuals concentrate. For a biological user, this is often the most
+        intuitive diagnostic: you can immediately see whether defocus changes
+        smoothly across the field of view or whether it looks patchy and
+        incoherent.
+
+        Interpreting R² biologically (what high and low values usually mean)
+
+        A high R² typically means that local defocus values vary smoothly
+        across the micrograph in a way consistent with a simple planar trend.
+        This is what you would expect if local defocus is mostly driven by tilt
+        or other smooth gradients and if per-particle CTF estimation is stable.
+        Such micrographs are generally “safe” with respect to local CTF
+        behaviour.
+
+        A low R² means that the planar model explains little of the observed
+        variation. This does not automatically imply that the micrograph is
+        unusable, but it is a warning sign that local defocus estimates may be
+        dominated by noise or by effects more complex than a plane. Common
+        biological/experimental reasons include strong non-planar ice thickness
+        variation, local distortions, contamination, carbon edges, charging,
+        poor signal-to-noise, or simply that the micrograph contains too few
+        particles (so the fit becomes unstable). Low R² micrographs are often
+        good candidates for targeted inspection and may be candidates for
+        exclusion or down-weighting depending on the downstream sensitivity.
+
+        One subtlety to keep in mind is that if the particles in a micrograph
+        happen to have nearly constant estimated defocus (very little spread),
+        the R² can be uninformative; in those cases, you should rely more on
+        visual inspection and on upstream CTF diagnostics. Practically, this
+        tends to happen when local defocus estimation collapses to a constant
+        value or when the particle distribution does not cover the micrograph
+        broadly enough.
+
+        Practical ways to use this protocol in a workflow
+
+        This protocol is most powerful as part of a quality-control loop.
+        After running local defocus estimation, you run Analyze local defocus,
+        then you examine micrographs ranked by R², and you decide on one of
+        three actions: keep everything if R² is consistently high; manually
+        inspect and possibly exclude a subset of poor micrographs if there is
+        a tail of low values; or, if many micrographs have poor scores, revisit
+        the upstream local CTF settings, particle picking/extraction quality,
+        or micrograph preprocessing.
+
+        For biological projects where subtle high-resolution features matter,
+        this analysis can be particularly useful because unstable local defocus
+        often translates into weaker high-frequency signal in 2D/3D refinement.
+        Filtering out the worst micrographs (or at least understanding why they
+        behave poorly) can make the difference between a dataset that refines
+        cleanly and one that stalls.
+        """
     _label = 'analyze local defocus'
     _lastUpdateVersion = VERSION_2_0
     

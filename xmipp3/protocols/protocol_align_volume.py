@@ -47,7 +47,134 @@ ALIGN_ALGORITHM_FAST_FOURIER = 3
 
 class XmippProtAlignVolume(ProtAlignVolume):
     """ 
-    Aligns a set of 3D volumes using cross-correlation or Fast Fourier Transform methods. The alignment allows direct comparison or averaging of volumes by bringing them into a common spatial frame.
+    Aligns a set of 3D volumes using cross-correlation or Fast Fourier Transform methods. The alignment allows direct
+    comparison or averaging of volumes by bringing them into a common spatial frame.
+
+    AI Generated:
+
+    Align Volume (XmippProtAlignVolume) — User Manual
+        Overview
+
+        The Align Volume protocol aligns one or more 3D volumes to a common reference using Xmipp
+        cross-correlation–based methods. Its main purpose is to place maps in the same spatial frame so they can be
+        compared, averaged, or further analyzed in a biologically meaningful way. In typical cryo-EM workflows, this
+        step becomes essential when volumes originate from different reconstructions, different processing strategies,
+        or different biochemical conditions.
+
+        For a biological user, the most common situations include comparing conformational states, standardizing maps
+        before visualization or modeling, or producing an averaged consensus volume from several reconstructions. The
+        protocol is designed to work both in exploratory analyses and in more demanding, publication-level workflows.
+
+        Inputs and General Workflow
+
+        The protocol requires a reference volume, which defines the coordinate system, and one or more input
+        volumes, which will be transformed to match the reference. A good practical rule is to choose as reference
+        the map with the highest quality or the one representing the biologically most relevant state. Ideally, all
+        volumes should share the same voxel size and similar box size. Large structural differences between the
+        reference and the inputs may lead to unstable or biologically meaningless alignments.
+
+        Optionally, the protocol can compute an average volume after alignment. This is useful when combining several
+        reconstructions of the same state to improve signal or reduce noise. However, biological caution is needed:
+        averaging heterogeneous conformations will blur flexible regions and may hide meaningful variability.
+
+        Masking: Focusing the Alignment
+
+        Masking is one of the most biologically important options in this protocol because it determines which
+        regions of the map drive the alignment. When masking is disabled, the algorithm uses the full volume, which
+        is acceptable for compact, globular complexes with limited flexibility. In many real cryo-EM cases, however,
+        applying a mask significantly improves robustness.
+
+        The protocol allows either a circular mask or a binary mask file. The circular mask is simple and convenient
+        for globular particles or quick exploratory runs. The user only needs to provide a radius in pixels. In
+        contrast, the binary mask is more powerful and is generally preferred for complex biological systems such as
+        multi-domain proteins, membrane proteins, or assemblies with flexible appendages. In these cases, focusing
+        the alignment on the stable core of the structure often yields much more reliable results.
+
+        From a biological perspective, the mask should include the structurally conserved region and exclude large
+        solvent areas or highly mobile domains. Poor masking is one of the most common causes of suboptimal alignment.
+
+        Choice of Alignment Algorithm
+
+        The protocol offers several alignment strategies that differ mainly in robustness and computational cost.
+        For most routine biological work, the Fast Fourier method is the recommended starting point. It provides
+        results comparable to exhaustive searches but at a much lower computational cost, making it well suited for
+        large datasets or facility pipelines such as those commonly handled within Scipion environments.
+
+        The Exhaustive search performs a full exploration of the parameter space. Although slower, it is more robust
+        when the relative orientation between volumes is largely unknown. This option becomes useful in difficult cases,
+        for example when comparing reconstructions obtained from very different pipelines or when strong misalignment
+        is suspected.
+
+        The Local method is designed for refinement around a known orientation. It is very fast but relies on good
+        initial estimates. Biological users typically employ it when volumes are already approximately aligned and only
+        fine adjustments are needed.
+
+        Finally, the Exhaustive + Local strategy combines both approaches. It first performs a global search and then r
+        efines locally, offering a good balance between robustness and precision. This option is particularly suitable
+        for challenging datasets where both reliability and accuracy are important.
+
+        Angular and Shift Search Ranges
+
+        Advanced users can control the angular and translational search space. In many biological workflows the default
+        values work well, but understanding their meaning can help in difficult cases.
+
+        Angular ranges determine how broadly the protocol explores possible orientations. When the relative orientation
+        between volumes is unknown, wide angular ranges are appropriate, although they increase computation time. When
+        volumes are already roughly aligned, narrowing the search and reducing the angular step improves precision and
+        speed.
+
+        Similarly, the shift ranges define how far the protocol searches for translations in X, Y, and Z. If maps are
+        well centered, small ranges are sufficient and more efficient. Larger ranges should only be used when
+        significant mis-centering is expected. Excessively large search spaces can dramatically increase runtime
+        without improving biological relevance.
+
+        The protocol also allows a scale search. This is mainly useful when comparing volumes that may have small
+        magnification differences or slightly mismatched voxel sizes, for example when combining data processed with
+        different software packages or acquired under different microscope calibrations. If voxel sizes are known to be
+        consistent, scale optimization is usually unnecessary.
+
+        Local Alignment Initialization
+
+        When the Local algorithm is selected, the user can provide initial angles and shifts. These parameters
+        guide the refinement and should reflect the best available prior knowledge. In iterative cryo-EM
+        workflows—such as when refining class averages or comparing closely related reconstructions—providing good
+        initial values significantly improves convergence and speed. An optional scale optimization can also be enabled
+        in this mode when small magnification differences are suspected.
+
+        Outputs and Their Interpretation
+
+        After execution, the protocol produces the aligned volume or set of volumes, each accompanied by the
+        corresponding rigid transformation. If multiple inputs are provided, the outputs preserve their identity but
+        are now expressed in the reference coordinate frame.
+
+        If averaging was requested, an additional average volume is produced. Biologically, this average enhances
+        common structural features and reduces noise, but it should be interpreted carefully. When structural
+        heterogeneity is present, averaging may obscure meaningful differences rather than reveal them.
+
+        Practical Recommendations
+
+        In routine biological practice, it is often best to begin with the Fast Fourier method using default parameters
+        and inspect the visual quality of the alignment. If results appear unstable—particularly in flexible
+        complexes—introducing an appropriate binary mask usually provides the largest improvement. For difficult cases
+        with large orientation uncertainty, switching to the Exhaustive + Local strategy is often effective.
+
+        When working with near-identical reconstructions, the Local method provides very fast refinement. Conversely,
+        when preparing volumes for quantitative comparison or publication figures, it is advisable to tighten angular
+        steps and carefully verify the results visually.
+
+        Web-Oriented Variant
+
+        The Align Volume Web protocol is a streamlined version intended for web visualization environments. It disables
+        masking and uses the Fast Fourier method by default to ensure rapid execution in remote or facility portals.
+        This variant is particularly suitable for quick comparisons and interactive visualization services but is less
+        flexible than the full protocol for demanding biological analyses.
+
+        Final Perspective
+
+        For most cryo-EM users, volume alignment is not merely a geometric operation but a biologically meaningful
+        step that can strongly influence downstream interpretation. Careful selection of the reference, thoughtful
+        masking of flexible regions, and an alignment strategy matched to the biological question are the key
+        elements for reliable results.
      """
     _label = 'align volume'
     nVols = 0

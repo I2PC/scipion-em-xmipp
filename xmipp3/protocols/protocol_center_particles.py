@@ -42,7 +42,140 @@ OUTPUT_CLASSES = 'outputClasses'
 OUTPUT_PARTICLES = 'outputParticles'
 
 class XmippProtCenterParticles(ProtClassify2D):
-    """ Recenters particles that are initially un-centered by computing alignment shifts relative to a reference point. Proper centering enhances the accuracy of subsequent classification and refinement steps. """
+    """ Recenters particles that are initially un-centered by computing
+    alignment shifts relative to a reference point. Proper centering enhances
+    the accuracy of subsequent classification and refinement steps.
+
+    AI Generated:
+
+    What this protocol is for
+
+    Center particles is a corrective protocol aimed at a very common practical
+    problem in cryo-EM workflows: particles that are systematically off-center
+    after picking/extraction or after an early alignment/classification step.
+    Even small centering errors can reduce the quality of 2D class averages,
+    bias alignment, and ultimately harm 3D refinement—especially when particles
+    are small, have weak signal, or when you are trying to push resolution.
+
+    This protocol takes an existing SetOfClasses2D (i.e., 2D classes with their
+    member particles) and recenters the particles by computing and applying a
+    consistent centering transform derived from the class information. The
+    outcome is a new set of 2D classes and a new particle set in which the
+    particles have been repositioned so that their centers are better aligned,
+    improving downstream classification and refinement stability.
+
+    A biological way to think about it is: you already have a meaningful set of
+    class averages, but the particles contributing to them are not properly
+    centered; this protocol uses the class centering information to “pull”
+    particles toward the correct center, producing cleaner averages and
+    better-behaved alignment in later steps.
+
+    What you need to provide
+
+    You provide two inputs:
+
+    First, Input Classes: a SetOfClasses2D. This should be a set of classes
+    that already contains the particle members and their current 2D alignment
+    parameters. In practice, it is usually the output of a 2D classification
+    step (or any step that produces classes with assigned shifts/angles for
+    their particles).
+
+    Second, a Set of micrographs associated with those classes. This is
+    required because the protocol also updates particle coordinates
+    consistently with the new centering, and those coordinates are defined
+    relative to the micrographs. Conceptually, this input tells Scipion how the
+    particles relate back to the original images once their centering offsets
+    are adjusted.
+
+    What the protocol does, in practical terms
+
+    The protocol first computes a centering transform for each class
+    representative (the class average). Using those class-level centering
+    transforms, it then propagates the correction to all particles in each
+    class by updating their 2D alignment parameters and adjusting their
+    coordinates accordingly. The protocol is careful to keep the particle
+    identity and class membership consistent, but it modifies the metadata so
+    that the particle is effectively re-expressed as “more centered”.
+
+    Importantly, this is not “another 2D classification”; it is a centering and
+    bookkeeping step that uses the class-derived shifts to correct particle
+    placement. You typically run it when you have evidence that the dataset is
+    systematically shifted—e.g., class averages look sharp but consistently
+    off-center, or you see that the highest-density region is not around the
+    box center.
+
+    Outputs: what you get and how to use them
+
+    The protocol produces two outputs:
+
+    outputClasses: a new SetOfClasses2D whose class representatives correspond
+    to the centered results, and whose class members carry the updated 2D
+    alignment metadata. This is the natural output to inspect if you want to
+    see whether class averages look better centered and whether the classes are
+    more interpretable.
+
+    outputParticles: a new SetOfParticles containing the recentered particles.
+    This is the output you would typically feed into subsequent steps such as
+    another round of 2D classification, 3D initial model workflows, or
+    refinement pipelines, because many downstream algorithms behave better when
+    particles are well centered.
+
+    A key point for biological processing is that the protocol gives you both a
+    class-level and a particle-level product. If your next step is another 2D
+    classification, you would normally use outputParticles. If you want to
+    visually validate the effect quickly, you look at outputClasses and confirm
+    that the averages are now centered.
+
+    How to interpret the summary information
+
+    After running, the protocol writes a short summary that includes how many
+    particles required meaningful displacement and an estimate of the average
+    displacement magnitude (in pixels). Biologically, this helps you understand
+    whether you are correcting a subtle nuisance (small average shifts) or a
+    major systematic problem (large shifts affecting a significant fraction of
+    particles). If a large percentage of particles needed strong displacement,
+    it may also indicate upstream issues such as mis-centered picking
+    coordinates, extraction offsets, or a mismatch between picking and
+    extraction box definitions.
+
+    When this protocol is most useful (typical scenarios)
+
+    This protocol is especially useful when:
+
+    Your particles were extracted with a box center that does not coincide with
+    the true particle center (common when using coarse picking or when the
+    coordinate reference is inconsistent between programs).
+
+    You have decent 2D classes but the averages are consistently displaced from
+    the box center, suggesting systematic centering bias.
+
+    You want to “clean up” centering before starting 3D, because poor centering
+    can make initial model generation unstable and can worsen angular
+    assignment.
+
+    It is also often helpful as a stabilizing step between early 2D
+    classification rounds: run 2D classification, center particles using this
+    protocol, then run a second 2D classification that benefits from
+    better-centered inputs.
+
+    What this protocol does not replace
+
+    Centering improves the geometry of the dataset, but it does not solve
+    problems such as wrong picks, severe heterogeneity, strong contamination,
+    or poor CTF correction. If class averages are bad because the particles are
+    not the same object or are too noisy, centering will not “fix” that. Its
+    role is more specific: it improves consistency by making sure that the
+    object of interest sits near the box center across particles.
+
+    Practical advice for biological users
+
+    A simple way to decide whether to use this protocol is to visually inspect
+    2D class averages: if many good-looking classes have their main density
+    displaced from the center, centering is likely worth doing. After running,
+    inspect the new class averages and, if they look more consistently centered,
+    continue downstream with outputParticles to benefit from improved alignment
+    behavior.
+    """
     _label = 'center particles'
     _lastUpdateVersion = VERSION_2_0
     _possibleOutputs = {OUTPUT_CLASSES:SetOfClasses2D, OUTPUT_PARTICLES:SetOfParticles}
