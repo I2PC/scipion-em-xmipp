@@ -26,6 +26,8 @@
 # **************************************************************************
 
 import numpy as np
+import os
+from Bio.PDB import PDBParser, MMCIFParser, PDBIO
 
 from pwem.emlib.image import ImageHandler
 from pwem.objects import FSC
@@ -117,12 +119,12 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
     def _insertAllSteps(self):
 
         # 1 Check the input and convert to mrc if it is the case
-        self._insertFunctionStep('convertInputStep')
+        self._insertFunctionStep(self.convertInputStep)
 
         # 2 Carry out the matching betweent the local resolution per residue and bfactor
-        self._insertFunctionStep('matchingBfactorLocalResolution')
+        self._insertFunctionStep(self.matchingBfactorLocalResolution)
 
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep(self.createOutputStep)
 
     def mrc_convert(self, fileName, outputFileName):
         """Check if the extension is .mrc, if not then uses xmipp to convert it
@@ -153,8 +155,35 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         bfactor column substituted by the normalized local resolution. This is the (local
         resolution - fscResolution)/fscResolution.
         """
+        fnPDB = self.pdbfile.get().getFileName()
+        fnList, chainList = self.splitPdbByChains(fnPDB, output_folder=self._getExtraPath())
+        print(fnList)
+        for idx, fn in enumerate(fnList):
+            params = ' --atmodel %s' % fn
+            params += ' --vol %s' % self.vol
+            if self.normalizeResolution.get():
+                params += ' --fscResolution %s' % self.fscResolution.get()
+            params += ' --sampling %f' % self.inputMap.get().getSamplingRate()
+            if self.medianEstimation.get():
+                params += ' --useMedian '
+            if self.centered.get():
+                params += ' --centered '
+            params += ' -o %s' % self._getExtraPath()
 
-        params = ' --atmodel "%s"' % self.pdbfile.get().getFileName()
+            self.runJob('xmipp_resolution_pdb_bfactor', params)
+            chain = str(chainList[idx])
+            src = self._getExtraPath('bfactor_resolution.xmd')
+            dst = self._getExtraPath('bfactor_resolution'+chain+'.xmd')
+
+            os.rename(src, dst)
+
+            src = self._getExtraPath('chimeraPDB.pdb')
+            dst = self._getExtraPath('chimeraPDB_'+chain+'.pdb')
+
+            os.rename(src, dst)
+
+        pdbFull = self.convertCifToPDB(fnPDB)
+        params = ' --atmodel %s' % pdbFull
         params += ' --vol %s' % self.vol
         if self.normalizeResolution.get():
             params += ' --fscResolution %s' % self.fscResolution.get()
@@ -167,7 +196,81 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
 
         self.runJob('xmipp_resolution_pdb_bfactor', params)
 
+
     def createOutputStep(self):
         outputPdb = AtomStruct()
-        outputPdb.setFileName(self._getExtraPath("chimeraPDB.pdb"))
+        outputPdb.setFileName(self._getExtraPath('chimeraPDB.pdb'))
         self._defineOutputs(outputStructure=outputPdb)
+    
+    def convertCifToPDB(self, file_path):
+        filename = os.path.basename(file_path)
+        base_name, ext = os.path.splitext(filename)
+    
+        if ext.lower() == ".pdb":
+            parser = PDBParser(QUIET=True)
+        elif ext.lower() == ".cif":
+            parser = MMCIFParser(QUIET=True)
+        else:
+            raise ValueError('Wrong extension it is not a .pdb or .cif')
+
+        structure = parser.get_structure(base_name, file_path)
+        io = PDBIO()
+        io.set_structure(structure)
+
+        pdbFull = self._getExtraPath(base_name+'.pdb')
+        io.save(pdbFull)
+        return pdbFull
+
+    def splitPdbByChains(self, file_path, output_folder='splitChains'):
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+        
+        filename = os.path.basename(file_path)
+        base_name, ext = os.path.splitext(filename)
+    
+        if ext.lower() == ".pdb":
+            parser = PDBParser(QUIET=True)
+        elif ext.lower() == ".cif":
+            parser = MMCIFParser(QUIET=True)
+        else:
+            raise ValueError('Wrong extension it is not a .pdb or .cif')
+
+        structure = parser.get_structure(base_name, file_path)
+
+        io = PDBIO()
+
+        model = structure[0]
+        fnList = []
+        chainList = []
+
+        for chain in model:
+            chain_id = chain.get_id()
+        
+            out_name = f'{base_name}chain{chain_id}.pdb'
+            out_path = os.path.join(output_folder, out_name)
+
+            io.set_structure(chain)
+            io.save(out_path)
+        
+            fnList.append(out_path)
+            chainList.append(chain_id)
+            self.parseAndFixPDB(out_path)
+        return fnList, chainList
+
+    def parseAndFixPDB(self, fnPDB):
+        with open(fnPDB, 'r+') as pdbFile:
+            allLines = pdbFile.readlines()
+            pdbFile.seek(0)
+            for line in allLines:
+                bfactorStr = line[60:66]
+                try:
+                    bfactorFloat = float(bfactorStr)
+                    fixedBfactor = str(bfactorFloat)[:5]
+
+                    line2 = line[0:60] + ' ' + fixedBfactor + line[67::]# + '\n'
+
+                    pdbFile.write(line2)
+                except:
+                    continue
+
+        pdbFile.close()
