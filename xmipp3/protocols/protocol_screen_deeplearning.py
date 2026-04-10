@@ -144,14 +144,14 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
                            'Not recommended for very small data sets (<100 true particles)')
         form.addParam('l2RegStrength', params.FloatParam,
                       label="Regularization strength",
-                      default=1e-5, expertLevel=params.LEVEL_ADVANCED,
+                      default=1e-5,
                       condition="not doContinue or keepTraining",
                       help='L2 regularization for neural network weights.'
                            'Make it bigger if suffering overfitting. '
                            'Typical values range from 1e-1 to 1e-6')
         form.addParam('nModels', params.IntParam,
                       label="Number of models for ensemble",
-                      default=2, expertLevel=params.LEVEL_ADVANCED,
+                      default=2,
                       condition="not doContinue",
                       help='Number of models to fit in order to build an ensemble. '
                            'Tipical values are 1 to 5. The more the better '
@@ -287,8 +287,10 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
         
         args += " --resize %s " % self.resizeSize.get()
 
-        if not self.auto_stopping.get():
-            args += " -s"
+        if self.auto_stopping.get() is False:
+            args += " -s no"
+        else:
+            args += " -s yes"
 
         if not gpuToUse is None:
             args += " -g %s" % (gpuToUse)
