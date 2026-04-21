@@ -38,7 +38,7 @@ from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import IntParam, StringParam, PointerParam, EnumParam, BooleanParam, FloatParam
-from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED
+from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED, USE_GPU
 from pyworkflow.constants import BETA
 
 from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
@@ -97,6 +97,9 @@ ALIGNMENT_DICT = {"shiftX": XMIPPCOLUMNS.shiftX.value,
                   }
 
 
+
+
+
 def updateEnviron(gpuNum):
     """ Create the needed environment for pytorch programs. """
     print("updating environ to select gpu %s" % (gpuNum))
@@ -130,11 +133,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
-        form.addHidden(GPU_LIST, StringParam, default='0',
-                       label="Choose GPU ID",
-                       help="GPU may have several cores. Set it to zero"
-                            " if you do not know what we are talking about."
-                            " First core index is 0, second 1 and so on.")
 
         form.addSection(label='Input')
 
@@ -189,7 +187,17 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                             ' If multiple processors are available, it is recommended'
                             ' to set this value as high as possible (e.g., 24, 32...).')
 
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation. "
+                            "Select the one you want to use. CPU may become "
+                            "quite slow.")
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used.")
+
         form.addParallelSection(threads=3, mpi=1)
+
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -273,7 +281,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self._initFnStep()
 
     def _initFnStep(self):
-        updateEnviron(self.gpuList.get())
+        # updateEnviron(self.gpuList.get())
         self.inputFn = self.inputParticles.get().getFileName()
         self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
         self.imgsXmd = self._getTmpPath('images_.xmd')  # Wiener
@@ -346,6 +354,23 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             self.runJob("xmipp_image_convert", args)
             self.firstTimeDone = True
 
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
+
+
     def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain, resolutionTrain):
         args = ' -i %s -s %s -c %s -t %s -hr %s -p %s  -o %s/classes -stExp %s' % \
                (inputIm, self.sampling, numClass, numTrain, resolutionTrain, self.coef.get(), self._getExtraPath(),
@@ -355,6 +380,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
         if self.mode.get() == self.UPDATE_CLASSES or self._isClassificationDone():
             args += ' -r %s ' % self.ref
+
+        if self.useGpu.get():
+            gpuId = self.setGPU(oneGPU=False)
+            args += f' -g {gpuId} '
 
         env = self.getCondaEnv()
         env = self._setEnvVariables(env)
