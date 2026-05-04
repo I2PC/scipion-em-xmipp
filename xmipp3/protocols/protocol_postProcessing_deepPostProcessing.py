@@ -43,8 +43,290 @@ POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
 
 class XmippProtDeepVolPostProc(ProtAnalysis3D, XmippProtocol):
     """    
-    Given a map the protocol performs automatic deep post-processing to enhance visualization. Usage guide at
-    https://github.com/rsanchezgarc/deepEMhancer
+    Given a map the protocol performs automatic deep post-processing to enhance
+    visualization. Usage guide at https://github.com/rsanchezgarc/deepEMhancer
+
+    AI Generated
+
+    ## Overview
+
+    The deepEMhancer protocol performs automatic deep-learning-based
+    post-processing of cryo-EM maps.
+
+    Its purpose is to improve the visual interpretability of a map by enhancing
+    structural features, sharpening density, and suppressing noise-like regions.
+    The protocol uses a trained neural network model from deepEMhancer and
+    produces a post-processed volume that can be inspected, interpreted, or used
+    for visualization.
+
+    deepEMhancer is especially useful when the user wants to obtain a visually
+    clearer map from an unsharpened, unmasked input volume or from a pair of half
+    maps. However, the output should be interpreted carefully. The protocol
+    enhances the map using a learned model; it does not replace standard
+    validation, FSC analysis, local resolution estimation, or careful inspection of
+    the original data.
+
+    ## Inputs and General Workflow
+
+    The protocol can work with either:
+
+    - a single input volume;
+    - two half maps.
+
+    The input data are converted or linked as MRC files. If half maps are used,
+    they may be read from the half-map information attached to an imported volume,
+    or they may be provided explicitly as two separate volumes.
+
+    The protocol then runs the deepEMhancer post-processing program using the
+    selected normalization strategy, neural-network model, GPU, and batch size. The
+    resulting post-processed map is registered in Scipion as an output volume.
+
+    The output volume preserves the sampling rate and origin information from the
+    input volume or half maps.
+
+    ## Input Volume
+
+    When **Would you like to use half maps?** is set to **No**, the protocol uses a
+    single **Input Volume**.
+
+    This input should be an unmasked and non-sharpened map. This is important
+    because deepEMhancer expects input maps that have not already been strongly
+    post-processed. If a map has already been sharpened, masked, or aggressively
+    filtered, the neural-network output may be less reliable or may overemphasize
+    features introduced by previous processing.
+
+    The input volume should correspond to the structure that the user wants to
+    enhance for visualization and interpretation.
+
+    ## Use of Half Maps
+
+    When **Would you like to use half maps?** is set to **Yes**, the protocol uses
+    two half maps instead of a single full map.
+
+    Half maps are independently reconstructed maps from two halves of the particle
+    data. They contain useful information about signal and noise consistency and
+    are often the preferred input for post-processing and validation workflows.
+
+    The protocol supports two ways of providing half maps:
+
+    - using half maps already attached to an imported volume;
+    - providing half map 1 and half map 2 explicitly as separate volumes.
+
+    Using half maps can give the post-processing method additional information
+    about reproducible signal and noise behavior.
+
+    ## Half Maps Attached to the Volume
+
+    If **Are the half maps included in the volume?** is set to **Yes**, the
+    protocol obtains the half-map file names from the selected input volume.
+
+    This is the usual option when the volume was imported or generated in Scipion
+    with associated half maps.
+
+    If this option is set to **No**, the user must provide **Volume Half 1** and
+    **Volume Half 2** manually.
+
+    The two half maps should correspond to the same reconstruction, have the same
+    box size, sampling rate, origin, and orientation, and represent independent
+    halves of the same dataset.
+
+    ## Input Normalization
+
+    The **Input normalization** parameter is one of the most important settings of
+    the protocol.
+
+    Normalization is critical because the neural network expects map intensities
+    to be on a scale compatible with the data used during training. Poor
+    normalization can lead to poor enhancement, excessive sharpening, loss of
+    density, or artificial-looking results.
+
+    The protocol provides three normalization modes:
+
+    - automatic normalization;
+    - normalization from noise statistics;
+    - normalization from a binary mask.
+
+    If the result is not satisfactory, trying a different normalization strategy is
+    often one of the first things to do.
+
+    ## Automatic Normalization
+
+    With **Automatic normalization**, the protocol estimates the required
+    normalization automatically.
+
+    This is the simplest option and is often a good starting point. It avoids the
+    need to provide a mask or explicit noise statistics.
+
+    However, automatic normalization may fail in some cases, especially if the map
+    has unusual intensity distribution, strong artifacts, large empty regions,
+    strong masking effects, or non-standard preprocessing.
+
+    If the output looks too aggressive, too weak, or biologically implausible, the
+    user should consider trying one of the other normalization modes.
+
+    ## Normalization from Statistics
+
+    With **Normalization from statistics**, the user provides the mean and standard
+    deviation of the noise.
+
+    The parameters are:
+
+    - **noise mean**;
+    - **noise standard deviation**.
+
+    This mode gives the user more control over the input intensity scaling. It can
+    be useful when the noise statistics are known or can be estimated reliably from
+    background regions.
+
+    Incorrect noise statistics can strongly affect the result. A wrong standard
+    deviation may cause the model to under-enhance or over-enhance the map.
+
+    ## Normalization from Binary Mask
+
+    With **Normalization from binary mask**, the user provides a binary mask
+    indicating which voxels correspond to protein and which correspond to
+    background.
+
+    The mask should contain:
+
+    - value 1 for protein or molecular density;
+    - value 0 for non-protein or background.
+
+    The mask should be as tight as possible while still including the relevant
+    protein density. A mask that is too loose may include too much background in
+    the normalization. A mask that is too tight may exclude real density and affect
+    the enhancement.
+
+    When this normalization mode is selected, the protocol uses a model checkpoint
+    specifically intended for masked normalization.
+
+    ## Model Power
+
+    The **Model power** parameter selects which deepEMhancer model target is used.
+
+    The available options are:
+
+    **Tight target** produces a more sharpened result. It may enhance structural
+    features strongly, but in some cases it may also remove or suppress weak
+    regions of the protein.
+
+    **Wide target** is less aggressive. It usually preserves more regions of the
+    protein, although the output may appear less sharply enhanced.
+
+    **HighRes** is recommended for high-resolution volumes.
+
+    The choice depends on the quality of the map and the purpose of the
+    post-processing. For visualization, the tight model may be attractive, but the
+    wide model can be safer when weak or flexible regions should be preserved.
+
+    ## Cleaning Small Connected Components
+
+    The option **Remove small CC after processing** enables an additional cleaning
+    step that removes small connected components after post-processing.
+
+    These small components are often noise-like isolated regions. Removing them can
+    make the output map cleaner.
+
+    The cleaning strength is controlled by **Relative size CC to remove**, which
+    defines the relative size of connected components to remove as a fraction of
+    the total number of positive voxels.
+
+    This option can slightly improve visual results, but it should be used with
+    care. In unusual cases, small real protein regions could be removed, especially
+    for fragmented, flexible, or low-occupancy density.
+
+    ## Batch Size
+
+    The **Batch size** parameter controls how many cubes of the volume are processed
+    simultaneously by the neural network.
+
+    A larger batch size may improve GPU utilization and speed. A smaller batch size
+    uses less GPU memory.
+
+    If a CUDA out-of-memory error occurs, reduce the batch size. If GPU memory is
+    underused and processing is slow, increasing the batch size may improve
+    performance.
+
+    This parameter affects computational performance, not the biological meaning of
+    the output.
+
+    ## GPU Execution
+
+    deepEMhancer uses GPU execution.
+
+    The protocol allows selecting the GPU ID through the hidden GPU parameter. In a
+    queue environment, the protocol can use the GPU resources assigned by the
+    queue. Otherwise, it uses the selected GPU list.
+
+    The protocol also enables TensorFlow GPU memory growth to reduce the chance
+    that the process reserves all GPU memory at once.
+
+    If the required deep-learning toolkit or trained model is not available, the
+    protocol validation reports an installation error.
+
+    ## Output Volume
+
+    The main output is **Volume**, the deepEMhancer post-processed map.
+
+    The output volume is written as an MRC file and registered in Scipion with the
+    same sampling rate and origin as the input map or half maps.
+
+    This volume is intended primarily for enhanced visualization and
+    interpretation. It may help reveal secondary-structure elements, connectivity,
+    and local features more clearly than the raw or unsharpened input map.
+
+    The output should be compared with the original map and, when available, with
+    the half maps, FSC curves, and local-resolution estimates.
+
+    ## Interpretation and Cautions
+
+    deepEMhancer produces an enhanced map using a learned model. This can be very
+    useful, but it also means that the output should not be interpreted as a purely
+    experimental density map in the same way as the original reconstruction.
+
+    Enhanced features should be checked against the input map, half maps, and
+    independent validation evidence. This is especially important for weak density,
+    flexible regions, ligands, peripheral domains, or regions near the noise level.
+
+    The protocol is a post-processing and visualization tool. It does not replace
+    map validation.
+
+    ## Practical Recommendations
+
+    Use unmasked, non-sharpened maps as input when using a single volume.
+
+    Use half maps when they are available, because they provide information about
+    reproducible signal.
+
+    Start with automatic normalization. If the result is unsatisfactory, try
+    normalization from a binary mask or from noise statistics.
+
+    Use the tight model when stronger sharpening is desired and the density is
+    robust. Use the wide model when preserving weak or extended regions is more
+    important. Use the high-resolution model for high-resolution maps.
+
+    Inspect the output together with the original input map. Do not rely only on
+    the enhanced map for biological conclusions.
+
+    Reduce the batch size if GPU memory errors occur.
+
+    Use the cleaning option cautiously, especially for maps with small real
+    features, flexible regions, or fragmented density.
+
+    ## Final Perspective
+
+    deepEMhancer is a deep-learning-based post-processing protocol for improving
+    the visual quality of cryo-EM maps.
+
+    For biological users, its main value is that it can produce clearer and more
+    interpretable density maps, especially for visualization, figure preparation,
+    and model-building guidance.
+
+    The enhanced map should be treated as an aid to interpretation, not as a
+    replacement for the original reconstruction or for standard validation
+    procedures. Used carefully, deepEMhancer can be a powerful tool for revealing
+    structural features while keeping the user aware of the need for independent
+    validation.
     """
     _label = 'deepEMhancer'
     _conda_env = 'xmipp_deepEMhancer'

@@ -42,7 +42,315 @@ OUTPUT_MICROGRAPHS = 'outputMicrographs'
 
 
 class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
-    """This protocol preprocesses micrographs by performing several operations: cropping borders, take logarithm in order to have a linear relationship, removing bad pixels, invert contrast, downsampling micrograph, denoising, normalize the micrograph, gaussian filter and low or high filter. These steps help improve data quality before particle picking and reconstruction."""
+    """This protocol preprocesses micrographs by performing several operations:
+    cropping borders, take logarithm in order to have a linear relationship,
+    removing bad pixels, invert contrast, downsampling micrograph, denoising,
+    normalize the micrograph, gaussian filter and low or high filter. These
+    steps help improve data quality before particle picking and reconstruction.
+
+    AI Generated
+
+    ## Overview
+
+    The Preprocess Micrographs protocol applies a sequence of image-processing
+    operations to a set of micrographs.
+
+    Micrograph preprocessing can be useful before particle picking, visual
+    inspection, quality control, or some downstream image-processing steps. The
+    protocol offers several optional operations, including border cropping,
+    logarithmic transformation, bad-pixel removal, contrast inversion,
+    downsampling, denoising, Gaussian smoothing, high-pass filtering, low-pass
+    filtering, and normalization.
+
+    The operations are applied in the order shown in the form. This is important:
+    changing which options are enabled changes the resulting image, and the order
+    of operations can affect the final appearance of the micrographs.
+
+    The output is a new set of preprocessed micrographs.
+
+    ## Inputs and General Workflow
+
+    The main input is a **SetOfMicrographs**.
+
+    For each input micrograph, the protocol creates an output micrograph file in
+    MRC format. It then applies the selected preprocessing operations one after
+    another. Each enabled operation uses the output of the previous operation as
+    its input.
+
+    The protocol can work with streaming input. As new micrographs become
+    available, they are processed and appended to the output set.
+
+    The final output set preserves the relevant metadata from the input
+    micrographs, with sampling rate updated when downsampling is applied.
+
+    ## Input Micrographs
+
+    The **Input micrographs** parameter defines the micrograph set to be
+    preprocessed.
+
+    These micrographs may come from movie alignment, import, previous
+    preprocessing, or other Scipion-compatible workflows.
+
+    The selected preprocessing operations should depend on the goal. For example,
+    micrographs prepared for visual picking may benefit from contrast inversion or
+    filtering, whereas micrographs intended for quantitative downstream processing
+    should be modified more cautiously.
+
+    This protocol does not estimate CTF, pick particles, or extract particles. It
+    only modifies the micrograph images.
+
+    ## Order of Operations
+
+    The protocol explicitly applies operations in the following order:
+
+    1. crop borders;
+    2. take logarithm;
+    3. remove bad pixels;
+    4. invert contrast;
+    5. downsample;
+    6. denoise;
+    7. Gaussian filter;
+    8. high-pass filter;
+    9. low-pass filter;
+    10. normalize.
+
+    This order matters. For example, downsampling before filtering is not the same
+    as filtering before downsampling. Similarly, normalization after filtering
+    produces different intensity statistics from normalization before filtering.
+
+    Users should therefore think of the protocol as a pipeline of selected
+    operations, not as a set of independent options.
+
+    ## Crop Borders
+
+    The **Crop borders?** option removes a fixed number of pixels from the borders
+    of each micrograph.
+
+    The **Pixels to crop** parameter defines how many pixels are removed from each
+    border.
+
+    Cropping is useful when micrograph borders contain artifacts, dark edges,
+    alignment artifacts, detector artifacts, or regions that should not be used for
+    particle picking.
+
+    Cropping reduces the final image size. Users should make sure that no useful
+    particle-containing region is removed.
+
+    ## Take Logarithm
+
+    The **Take logarithm?** option applies a logarithmic transformation to the
+    micrograph intensities.
+
+    The transformation has the form:
+
+    \[
+    a - b \ln(x + c)
+    \]
+
+    where \(x\) is the original pixel value and \(a\), \(b\), and \(c\) are the
+    parameters provided by the user.
+
+    This option is mainly relevant for acquisition systems where the raw gray
+    values are related to transmission and need to be converted into a density-like
+    scale. The default parameters correspond to a historical setting used for a
+    specific scanner configuration.
+
+    Most modern direct-electron detector workflows do not usually require this
+    step. It should only be enabled when the user knows that this transformation is
+    appropriate for the input data.
+
+    ## Remove Bad Pixels
+
+    The **Remove bad pixels?** option replaces extreme outlier pixels.
+
+    The **Multiple of Stddev** parameter defines the threshold in units of standard
+    deviation. Pixel values beyond this threshold are considered outliers and are
+    substituted by a local median value.
+
+    This operation is useful when micrographs contain hot pixels, dead pixels,
+    spikes, or other isolated detector artifacts. A typical value is around 5
+    standard deviations.
+
+    If the threshold is too strict, real high-contrast features may be altered. If
+    it is too permissive, some bad pixels may remain.
+
+    ## Invert Contrast
+
+    The **Invert contrast?** option multiplies the micrograph by -1.
+
+    This changes the sign convention of the image contrast. Some workflows or
+    software packages expect particles to appear as bright density on a darker
+    background, while others use the opposite convention.
+
+    Contrast inversion does not change the spatial information, but it affects the
+    visual appearance and may affect compatibility with downstream protocols.
+
+    Users should enable this option only when the downstream workflow expects the
+    opposite contrast convention from the input micrographs.
+
+    ## Downsample Micrographs
+
+    The **Downsample micrographs?** option reduces the size of the micrographs by a
+    given factor.
+
+    The **Downsampling factor** defines how much the micrographs are reduced. The
+    factor must be larger than 1, and non-integer values are allowed.
+
+    Downsampling reduces computational cost and file size. It is useful for quick
+    visual inspection, particle picking at lower resolution, or workflows where
+    high-resolution micrographs are not required.
+
+    However, downsampling removes high-frequency information. It should be used
+    carefully if the downstream workflow needs the original resolution.
+
+    When downsampling is applied, the output sampling rate is updated by
+    multiplying the input sampling rate by the downsampling factor.
+
+    ## Denoising
+
+    The **Denoising** option applies a denoising method to the micrographs.
+
+    The **Max. number of iterations** parameter controls how many iterations are
+    used. More iterations may produce a stronger or cleaner denoising effect but
+    increase computation time.
+
+    Denoising can make micrographs easier to inspect and may help some picking
+    workflows. However, excessive denoising can alter fine details or create an
+    over-smoothed appearance.
+
+    For quantitative reconstruction workflows, denoising should be used cautiously
+    and usually only when the downstream method is designed to work with denoised
+    images.
+
+    ## Gaussian Filter
+
+    The **Gaussian filter** option applies a Gaussian smoothing filter in real
+    space.
+
+    The **Gaussian sigma** parameter controls the width of the smoothing kernel in
+    pixels. Larger values produce stronger smoothing.
+
+    Gaussian filtering can reduce high-frequency noise and make large features
+    more visible. It may be useful for visual inspection or particle picking.
+
+    However, it also blurs the image. A large sigma can reduce the visibility of
+    fine details and should not be used if those details are important for later
+    processing.
+
+    ## High-Pass Filter
+
+    The **Highpass filter** option removes very low-frequency variations from the
+    micrograph.
+
+    The **Cutoff frequency** is given in normalized frequency units, below 0.5.
+    For example, to remove patterns larger than 500 pixels, a cutoff of 1/500 =
+    0.002 can be used.
+
+    The **Transition bandwidth** controls the smoothness of the transition around
+    the cutoff. It is also expressed in normalized frequency units.
+
+    High-pass filtering is useful for removing slow background gradients, large
+    illumination variations, or very broad artifacts. It can make particles easier
+    to see when the background varies strongly across the micrograph.
+
+    If the cutoff is too high, biologically meaningful low-frequency information
+    may be removed.
+
+    ## Low-Pass Filter
+
+    The **Lowpass filter** option removes high-frequency information from the
+    micrograph.
+
+    The **Cutoff frequency** is expressed in normalized frequency units, below 0.5.
+    For example, if the user wants to remove crystalline ice at 4 Å and the pixel
+    size is 0.5 Å, the normalized cutoff would be 0.5 / 4 = 0.125.
+
+    The **Transition bandwidth** controls how smooth the transition is in Fourier
+    space. The number of pixels in Fourier space is approximately the transition
+    bandwidth multiplied by the image dimension.
+
+    Low-pass filtering can reduce high-frequency noise or suppress unwanted
+    high-frequency artifacts. However, it also removes fine detail and should be
+    chosen according to the goal of the preprocessing.
+
+    ## Normalize Micrograph
+
+    The **Normalize micrograph?** option normalizes each micrograph to have
+    approximately zero mean and unit standard deviation.
+
+    Normalization makes intensity scales more comparable across micrographs. This
+    can be useful for visual inspection, picking, or algorithms that expect similar
+    intensity statistics across images.
+
+    However, normalization changes absolute intensity scaling. Users should
+    consider whether downstream protocols rely on original intensity values before
+    enabling this option.
+
+    ## Output Micrographs
+
+    The main output is **outputMicrographs**.
+
+    This output contains the preprocessed micrographs. Each output micrograph
+    corresponds to one input micrograph and is written in the protocol output
+    directory.
+
+    The output set preserves the original micrograph information when possible. If
+    downsampling is applied, the sampling rate of the output set is updated to
+    reflect the new pixel size.
+
+    These output micrographs can be used in later protocols such as particle
+    picking, visual inspection, or additional preprocessing.
+
+    ## Streaming Behavior
+
+    The protocol supports streaming micrograph input.
+
+    When new micrographs appear in the input set, the protocol inserts processing
+    steps for them and updates the output micrograph set progressively. The output
+    stream remains open while the input stream is open and is closed when all
+    micrographs have been processed.
+
+    This makes the protocol suitable for automated and facility workflows where
+    micrographs arrive progressively during acquisition or movie processing.
+
+    ## Practical Recommendations
+
+    Enable only the preprocessing operations that are needed for the specific
+    workflow. Unnecessary preprocessing can alter the data and complicate later
+    interpretation.
+
+    For visual picking, contrast inversion, downsampling, high-pass filtering, or
+    mild smoothing may be useful.
+
+    For quantitative downstream processing, be more conservative. Avoid strong
+    filtering or denoising unless the downstream method explicitly expects it.
+
+    Use bad-pixel removal when isolated detector artifacts are visible.
+
+    Use high-pass filtering to remove large-scale background gradients, but avoid
+    cutoffs that remove particle-scale signal.
+
+    Use low-pass filtering when suppressing high-frequency noise or artifacts, but
+    remember that it removes fine information.
+
+    After preprocessing, inspect representative output micrographs to verify that
+    particles remain visible, contrast is appropriate, and no strong artifacts have
+    been introduced.
+
+    ## Final Perspective
+
+    Preprocess Micrographs is a flexible micrograph-level image-processing
+    protocol. It allows users to prepare micrographs for inspection, picking, or
+    specific downstream workflows by applying a controlled sequence of operations.
+
+    For biological users, the most important point is to choose preprocessing steps
+    that help the intended task without unnecessarily altering the experimental
+    signal.
+
+    Used carefully, the protocol can improve visibility, remove artifacts, reduce
+    file size, and standardize image appearance before subsequent cryo-EM
+    processing steps.
+    """
     _label = 'preprocess micrographs'
 
     _possibleOutputs = {OUTPUT_MICROGRAPHS: SetOfMicrographs}
