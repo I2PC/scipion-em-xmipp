@@ -82,7 +82,7 @@ There are different merit values to be calculated:
                            'is larger than this value).\n '
                            '  Percentage (reject a given percentage for '
                            'this criteria).')
-        form.addParam('maxZscore', FloatParam, default=3, validators=[Positive],
+        form.addParam('maxZscore_', FloatParam, default=3, validators=[Positive],
                       condition='autoParRejection==1', label='zScore threshold',
                       help='Maximum Zscore.')
         form.addParam('percentage', IntParam, default=5, label='Percentage (%)',
@@ -280,7 +280,7 @@ There are different merit values to be calculated:
             args += "-t Particles@%s " % self.fnInputOldMd
 
         if self.autoParRejection == self.REJ_MAXZSCORE:
-            args += "--zcut " + str(self.maxZscore.get())
+            args += "--zcut " + str(self.maxZscore_.get())
         elif self.autoParRejection == self.REJ_PERCENTAGE:
             args += "--percent " + str(self.percentage.get())
 
@@ -344,7 +344,7 @@ There are different merit values to be calculated:
         if self.autoParRejection is not None:
             metStr = self.ZSCORE_CHOICES[self.autoParRejection.get()]
             if self.autoParRejection.get() == self.REJ_MAXZSCORE:
-                metStr += " = %.2f" % self.maxZscore.get()
+                metStr += " = %.2f" % self.maxZscore_.get()
             elif self.autoParRejection.get() == self.REJ_PERCENTAGE:
                 metStr += " = %.2f" % self.percentage.get()
             sumRejMet['Zscore'] = ("Zscore rejection method: " + metStr)
@@ -410,7 +410,7 @@ There are different merit values to be calculated:
                                      particlesRejected is not None else '')
             rejectionText = ['',  # REJ_NONE
                              ' and removing those not reaching %s%s'
-                             % (str(self.maxZscore.get()),
+                             % (str(self.maxZscore_.get()),
                                 particlesRejectedText),  # REJ_MAXZSCORE
                              ' and removing worst %s percent %s'
                              % (str(self.percentage.get()),

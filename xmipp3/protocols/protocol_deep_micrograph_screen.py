@@ -470,7 +470,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           if self.useGpu.get():
               gpuId = self.setGPU(oneGPU=False)
               args += f' -g {gpuId} '
-
+          self.info(f'args: {args}')
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
@@ -792,7 +792,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         """
         micFn = mic.getFileName()
         micBase = pwutils.removeBaseExt(os.path.basename(micFn))
-
+        coords = None
         posFn = self._getExtraPath('outputCoords', micBase + '.pos')
         maskFn = self._getExtraPath('predictedMasks', micBase + '.mrc')
         thumbFn = self._getExtraPath('thumbnails', micBase + '.png')
@@ -855,7 +855,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         if coords:
             patches = [Circle((x, y), radius=radius) for x, y in coords]
             collection = PatchCollection(patches, edgecolor='red', facecolor='none', linewidth=1)
-        ax.add_collection(collection)
+            ax.add_collection(collection)
 
         # --- Save thumbnail ---
         plt.savefig(thumbFn, dpi=80, bbox_inches=None, pad_inches=0, pil_kwargs={"compress_level": 4})

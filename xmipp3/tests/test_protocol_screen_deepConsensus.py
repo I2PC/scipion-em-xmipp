@@ -102,9 +102,9 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       kwargs = {
         'nEpochs' : 1.0,
         'nModels' :2,
-        'extractingBatch':3,
-        'trainingBatch':3,
-        'predictingBatch':3
+        'extractingBatch':2,
+        'trainingBatch':2,
+        'predictingBatch':2
       }
       #inputCase controls the input model of the protocol: previous protocol model, new model, pretrained
       inputCaseKwargs = {'numberOfThreads': 1} if inputCase<4 else {'numberOfThreads': 4}

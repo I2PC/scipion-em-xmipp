@@ -387,8 +387,8 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
 
                 minVal = np.amin(correlationFunction)
                 maxVal = np.amax(correlationFunction)
-                minLoc = np.where(correlationFunction == minVal)
-                maxLoc = np.where(correlationFunction == maxVal)
+                minLoc = np.nonzero(correlationFunction == minVal)
+                maxLoc = np.nonzero(correlationFunction == maxVal)
 
                 if abs(minVal) > abs(best_cor):
                     corLoc = translation_correction(minLoc,est_gain_array.shape)
@@ -552,8 +552,8 @@ def invert_array(gain,thres=0.01,depth=1):
 def array_zeros_to_median(a, thres=0.01, depth=1):
     '''Return an array, replacing the zeros (values under a threshold) with the median of
     its surrounding values (with a depth)'''
-    idxs = np.where(np.abs(a) < thres)[0]
-    idys = np.where(np.abs(a) < thres)[1]
+    idxs = np.nonzero(np.abs(a) < thres)[0]
+    idys = np.nonzero(np.abs(a) < thres)[1]
 
     for i in range(len(idxs)):
         sur_values = xmutils.surrounding_values(a, idxs[i], idys[i], depth)
