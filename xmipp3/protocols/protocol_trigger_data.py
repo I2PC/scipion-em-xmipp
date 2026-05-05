@@ -54,6 +54,263 @@ class XmippProtTriggerData(EMProtocol, Protocol):
             - If "Split items to multiple sets?" is _No_:
                 Only one output is returned and it is growing up in batches of
                 a certain number of items (completely in streaming).
+
+    AI Generated
+
+    ## Overview
+
+    The Trigger Data protocol controls when a set of images is released to the next
+    step of a workflow.
+
+    In streaming cryo-EM workflows, images may arrive progressively. Sometimes a
+    downstream protocol should not start immediately with the first image, but only
+    after a minimum number of items has accumulated. This protocol acts as a
+    trigger: it waits until the input set contains enough images and then creates
+    one or more output sets.
+
+    The protocol can work in several modes:
+
+    - release one closed subset and finish;
+    - release one output set that keeps growing in streaming mode;
+    - release multiple closed batches;
+    - wait for a stop signal from another Trigger Data protocol;
+    - send a stop signal to another Trigger Data protocol.
+
+    This makes the protocol useful for coordinating streaming workflows, batching
+    data, delaying downstream execution, or stopping a stream when another branch
+    has collected enough data.
+
+    ## Inputs and General Workflow
+
+    The input is a Scipion **SetOfImages**.
+
+    The protocol periodically checks the input set. When enough new images are
+    available, it creates or updates the corresponding output set. The minimum
+    number of items required to release an output is controlled by the **Minimum
+    output size** parameter.
+
+    Depending on the selected options, the output may be a single closed set, a
+    single growing streaming set, or several closed batches.
+
+    The protocol also includes optional signaling between Trigger Data protocols.
+    One Trigger Data run can create a signal file that tells another Trigger Data
+    run to stop waiting and close its output.
+
+    ## Input Images
+
+    The **Input images** parameter defines the image set to monitor.
+
+    Although the form refers to images generically, the protocol works with the
+    specific input set class selected by the user. For example, the input may be a
+    set of particles, micrographs, or another Scipion image set type derived from
+    SetOfImages.
+
+    The output set keeps the same type and metadata as the input set.
+
+    ## Minimum Output Size
+
+    The **Minimum output size** parameter defines how many input items are needed
+    before the protocol releases an output.
+
+    For example, if the minimum output size is 10000, the protocol waits until at
+    least 10000 images are available before releasing data.
+
+    In static-output mode, this defines the size of the closed subset that is
+    released. In streaming mode, it defines the threshold at which the output set
+    starts being released. In batch mode, it defines the size of each output batch.
+
+    If the input stream closes before this number is reached, the protocol can
+    release the available items because no more data are expected.
+
+    ## Send All Items to Output
+
+    The **Send all items to output?** option controls whether the protocol behaves
+    as a streaming pass-through or as a one-time trigger.
+
+    If this option is **No**, the protocol releases only one closed subset with the
+    selected minimum number of items and then finishes. This is useful when a
+    downstream step should receive a fixed-size subset.
+
+    If this option is **Yes**, the protocol continues running in streaming mode.
+    After the threshold is reached, it keeps sending new input items to the output.
+
+    This is the most common option when the user wants to delay the beginning of a
+    streaming workflow but then allow the stream to continue.
+
+    ## Static Output Mode
+
+    Static output mode is obtained when **Send all items to output?** is set to
+    **No**.
+
+    In this mode, the protocol waits until the input set contains the selected
+    number of images. It then creates one closed output set and finishes.
+
+    No additional input items are sent to the output after that point.
+
+    This mode is useful for workflows that require a fixed initial subset, for
+    example to train a model, estimate parameters, or run a preliminary analysis on
+    a controlled number of images.
+
+    ## Full Streaming Mode
+
+    Full streaming mode is obtained when **Send all items to output?** is set to
+    **Yes** and **Split items to multiple sets?** is set to **No**.
+
+    In this mode, once the minimum output size is reached, the protocol creates a
+    single output set. This output set remains open and continues growing as new
+    items arrive in the input.
+
+    When the input stream closes, the output stream is also closed.
+
+    This mode is useful when a downstream workflow should start only after enough
+    data have accumulated, but should then continue processing all subsequent data.
+
+    ## Semi-Streaming Batch Mode
+
+    Semi-streaming batch mode is obtained when **Send all items to output?** is
+    set to **Yes** and **Split items to multiple sets?** is set to **Yes**.
+
+    In this mode, the protocol creates multiple closed output sets. Each output set
+    contains approximately the selected minimum number of items.
+
+    For example, if the minimum output size is 5000, the protocol releases a first
+    closed batch of 5000 items, then a second closed batch when another 5000 items
+    are available, and so on.
+
+    If the input stream closes and there are remaining items that do not fill a
+    complete batch, the final smaller batch is still released.
+
+    This mode is useful for workflows that should process data in independent
+    closed batches rather than as one continuously growing stream.
+
+    ## Wait for Signal to Stop the Stream
+
+    The **Wait for signal to stop the stream?** option makes the protocol wait for
+    a stop signal from another Trigger Data protocol.
+
+    When enabled, the protocol monitors a signal file named `STOP_STREAM.TXT` in
+    its protocol directory. When that file appears, the protocol stops the stream
+    and closes its output.
+
+    This option is useful when two workflow branches need to coordinate. For
+    example, one branch may collect a sufficient number of images and then signal
+    another branch to stop waiting.
+
+    The help recommends using this option together with **Send all items to
+    output?** enabled and a minimum size of 1.
+
+    ## Send Signal to Stop a Stream
+
+    The **Send signal to stop a stream?** option makes this protocol send a stop
+    signal to another Trigger Data protocol.
+
+    When enabled, the user selects a **Trigger data protocol**. Once this protocol
+    has accumulated the selected minimum number of images, it writes the
+    `STOP_STREAM.TXT` signal file into the selected protocol directory.
+
+    The connected Trigger Data protocol can then detect the signal and close its
+    stream.
+
+    This option is useful for coordinating two streaming branches.
+
+    ## Trigger Data Protocol
+
+    The **Trigger data protocol** parameter is used when **Send signal to stop a
+    stream?** is enabled.
+
+    It should point to another Trigger Data protocol that is configured to wait for
+    a stop signal.
+
+    The protocol validates that the selected target is indeed a Trigger Data
+    protocol. If no valid connected protocol is selected, it reports an error.
+
+    ## Delay
+
+    The **Delay** parameter controls how often the protocol checks for new input
+    items or trigger conditions.
+
+    The value is expressed in seconds and must be greater than 3 seconds.
+
+    A shorter delay makes the protocol respond more quickly to new data but checks
+    the input more frequently. A longer delay reduces checking frequency but may
+    delay output updates.
+
+    The default value is 10 seconds.
+
+    ## Output Name and Type
+
+    The output name is generated from the input image type.
+
+    For example, if the input is a set of particles, the output will be named
+    `outputParticles`. If the input is a set of micrographs, the output will be
+    named `outputMicrographs`.
+
+    The output set has the same class and metadata structure as the input set.
+
+    In batch mode, outputs are numbered, such as `outputParticles1`,
+    `outputParticles2`, and so on.
+
+    ## Stream Closure
+
+    The protocol closes its outputs when the selected finishing condition is met.
+
+    In static mode, the output is closed immediately after the fixed-size subset is
+    released.
+
+    In full streaming mode, the output remains open until the input stream closes,
+    or until a stop signal is received when signal waiting is enabled.
+
+    In batch mode, each batch output is closed immediately after it is created.
+
+    If the input stream closes before the minimum size is reached, the protocol can
+    still release the available images and close the output because no more input
+    items are expected.
+
+    ## Summary Information
+
+    The protocol summary reports the current mode:
+
+    - full streaming;
+    - semi-streaming batches;
+    - static output.
+
+    It also reports whether enough input items have arrived to release an output,
+    how many items are required, and whether an output has already been released.
+
+    This helps the user understand whether the protocol is still waiting, actively
+    streaming, or finished.
+
+    ## Practical Recommendations
+
+    Use static mode when you need exactly one closed subset of a given size.
+
+    Use full streaming mode when you want to delay a streaming workflow until
+    enough data are available, then continue with all new data.
+
+    Use batch mode when downstream protocols should process independent closed
+    chunks of data.
+
+    Use signal waiting and signal sending when two streaming branches need to be
+    coordinated.
+
+    For signal-based workflows, configure the waiting protocol to send all items
+    to output and use a small minimum size, as recommended by the form help.
+
+    Choose a delay that balances responsiveness with unnecessary repeated checks.
+    The default 10 seconds is a reasonable starting point.
+
+    ## Final Perspective
+
+    Trigger Data is a workflow-control protocol rather than an image-processing
+    protocol.
+
+    For biological users, its value is practical orchestration. It helps control
+    when data are released during streaming workflows, when batches are created,
+    and when one branch of a workflow should stop another.
+
+    The protocol does not modify the images. It only copies items from an input
+    image set to one or more output sets according to threshold, streaming, batch,
+    and signaling rules.
     """
     _label = 'trigger data'
     _lastUpdateVersion = VERSION_3_0
