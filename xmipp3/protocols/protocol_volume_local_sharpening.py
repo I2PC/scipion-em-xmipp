@@ -43,7 +43,276 @@ LOCALDEBLUR_METHOD_URL='https://github.com/I2PC/scipion/wiki/XmippProtLocSharp'
 
 class XmippProtLocSharp(ProtAnalysis3D):
     """    
-    Calculates sharpened maps based on a given resolution map. The sharpening process enhances high-resolution features by boosting contrast where the local resolution allows to do so.
+    Calculates sharpened maps based on a given resolution map. The sharpening
+    process enhances high-resolution features by boosting contrast where the
+    local resolution allows to do so.
+
+    AI Generated
+
+    ## Overview
+
+    The LocalDeblur Sharpening protocol performs local sharpening of a cryo-EM map
+    using an associated local-resolution map.
+
+    In cryo-EM, different regions of the same reconstruction may have different
+    local resolution. A single global sharpening factor may therefore be too weak
+    for well-resolved regions and too strong for poorly resolved regions.
+    LocalDeblur addresses this by using a local-resolution map to guide the
+    sharpening process spatially.
+
+    The protocol enhances map features according to the local resolution estimated
+    at each region. It can run for one or several iterations. When several
+    iterations are used, the protocol sharpens the map, re-estimates local
+    resolution using MonoRes, and then sharpens again using the updated resolution
+    map.
+
+    The main output is a sharpened volume. If several iterations are performed,
+    the protocol outputs a set of sharpened volumes, one per iteration.
+
+    ## Inputs and General Workflow
+
+    The protocol requires:
+
+    - an input cryo-EM map;
+    - a local-resolution map.
+
+    The input map and local-resolution map are converted to the format expected by
+    Xmipp. The protocol checks and prepares the background of the resolution map,
+    then creates a binary mask from it. The mask defines the region where local
+    resolution is meaningful.
+
+    The protocol then runs the local sharpening program using the input map,
+    resolution map, sampling rate, regularization parameters, and number of
+    threads. If iterative sharpening is requested, it alternates between
+    sharpening and MonoRes local-resolution estimation.
+
+    At the end, the last sharpened map is written as `sharpenedMap_last.mrc` and
+    registered as the output.
+
+    ## Input Map
+
+    The **Input Map** parameter defines the cryo-EM volume to be sharpened.
+
+    This map should be a reconstruction that the user wants to enhance for
+    visualization, interpretation, or model building. The sampling rate of this
+    volume is used throughout the calculation.
+
+    The input map should correspond to the same coordinate frame and box as the
+    resolution map. If the map and resolution map are not aligned or do not have
+    compatible dimensions, the local sharpening will not be meaningful.
+
+    ## Resolution Map
+
+    The **Resolution Map** parameter provides the local-resolution information used
+    to guide sharpening.
+
+    LocalDeblur was specially designed to work with resolution maps obtained from
+    MonoRes, but the protocol help also indicates that resolution maps from ResMap
+    and BlocRes are accepted.
+
+    The resolution map should contain local-resolution values in angstroms. Regions
+    outside the molecule should ideally be zero or clearly distinguishable from the
+    valid resolution region.
+
+    The quality of the sharpening depends strongly on the quality of this
+    resolution map. If the resolution map is noisy, poorly masked, or inconsistent
+    with the input map, the sharpening may be unreliable.
+
+    ## Background Check
+
+    Before sharpening, the protocol checks the background values of the resolution
+    map.
+
+    If the minimum value of the resolution map is larger than a small threshold, it
+    assumes that the background may not be properly set to zero. In that case, it
+    sets the largest background-like values to zero using a thresholding operation.
+
+    This step helps prepare imported resolution maps whose background convention
+    may not be ideal for LocalDeblur.
+
+    ## Binary Mask Creation
+
+    The protocol creates a binary mask from the resolution map.
+
+    It thresholds the resolution map so that voxels below 0.1 are converted into a
+    binary mask. This mask is used by the MonoRes re-estimation step when iterative
+    sharpening is performed.
+
+    The mask should represent the region where the local-resolution values are
+    valid. If the resolution map background is not correct, the mask may be wrong,
+    and the sharpening may be affected.
+
+    ## Lambda
+
+    The **lambda** parameter is a regularization parameter.
+
+    The method normally determines this parameter automatically. The form help
+    indicates that lambda is directly related to convergence. Increasing it may
+    accelerate convergence, but it also increases the risk of falling into local
+    minima.
+
+    The default value is 1. In the protocol, the user-provided lambda value is
+    passed explicitly only in the first iteration when it differs from 1.
+
+    Most users should keep the default value unless they have a specific reason to
+    control convergence behavior.
+
+    ## K Parameter
+
+    The **K** parameter controls part of the sharpening behavior.
+
+    The help text indicates that **K = 0.025** works well for all tested cases and
+    that K should usually remain in the range **0.01–0.05**.
+
+    For maps with FSC resolution worse than 6 Å, the help suggests that **K =
+    0.01** can be a good alternative.
+
+    This is an advanced parameter. Users should normally start with the default and
+    adjust it only if the sharpening appears too weak, too strong, or unstable.
+
+    ## Number of Iterations
+
+    The **No. Iterations** parameter controls how many sharpening rounds are
+    performed.
+
+    If the value is **1**, the protocol performs a single local-sharpening step
+    using the input resolution map.
+
+    If the value is larger than 1, the protocol performs several rounds. In each
+    round, the previously sharpened map is used as input, and MonoRes is run to
+    estimate a new local-resolution map for the next sharpening round.
+
+    If the value is **-1**, the protocol determines the stopping point
+    automatically. It stops when the sharpening convergence criterion stabilizes or
+    when the updated local-resolution range becomes sufficiently narrow.
+
+    ## Iterative MonoRes Re-estimation
+
+    When more than one iteration is requested, the protocol re-estimates local
+    resolution after each sharpening step.
+
+    The MonoRes calculation uses:
+
+    - the current sharpened map;
+    - the binary mask created from the resolution map;
+    - the input map sampling rate;
+    - a minimum resolution of twice the sampling rate;
+    - a maximum resolution derived from the current resolution map;
+    - a step of 0.25 Å;
+    - significance of 0.95.
+
+    This creates an updated local-resolution map that guides the next sharpening
+    iteration.
+
+    ## Automatic Stopping
+
+    When the number of iterations is set to **-1**, the protocol stops
+    automatically according to convergence criteria.
+
+    It monitors the sharpening lambda/cost value stored in the metadata file. If
+    the value changes only slightly between iterations, the protocol stops.
+
+    It can also stop when the range of local-resolution values becomes smaller
+    than a predefined threshold.
+
+    Automatic stopping is useful when the user does not know how many sharpening
+    iterations are appropriate, but the result should still be inspected carefully.
+
+    ## Metadata Parameters
+
+    During sharpening, the protocol writes a metadata file named `params.xmd`.
+
+    This file stores parameters reported by the local sharpening program, including
+    values used to evaluate convergence and the number of internal iterations.
+
+    These metadata are mainly useful for advanced users who want to inspect the
+    behavior of the sharpening process.
+
+    ## Output Volume
+
+    If only one sharpening iteration is performed, the main output is
+    **outputVolume**.
+
+    This output is the final sharpened map, written as:
+
+    `sharpenedMap_last.mrc`
+
+    The output volume keeps the sampling rate and origin of the input volume.
+
+    It is annotated as the last sharpening epoch.
+
+    ## Output Volumes
+
+    If more than one sharpening iteration is performed, the protocol creates
+    **outputVolumes**, a set containing the sharpened maps from the successive
+    iterations.
+
+    Intermediate maps are named according to their iteration, while the final map
+    is stored as `sharpenedMap_last.mrc`.
+
+    This output set allows the user to compare sharpening rounds and choose the map
+    that provides the best balance between enhanced detail and noise amplification.
+
+    ## Imported Resolution Maps
+
+    If the protocol cannot find the internally updated MonoRes resolution map, it
+    prints a warning indicating that the resolution map was probably imported.
+
+    The warning notes that the ideal case is to calculate the resolution map
+    previously in the same project using MonoRes.
+
+    This is not necessarily an error, but it reminds the user that resolution-map
+    compatibility is important for robust local sharpening.
+
+    ## Interpreting the Sharpened Map
+
+    The sharpened output should be interpreted as an enhanced version of the input
+    map.
+
+    LocalDeblur can improve the visibility of high-resolution features where the
+    local-resolution map indicates that such features are supported. However,
+    sharpening can also amplify noise or create misleading visual contrast if the
+    local-resolution map is inaccurate or if parameters are too aggressive.
+
+    Poorly resolved regions should not be overinterpreted simply because the map
+    appears sharper. The sharpened map should always be compared with the original
+    map, half maps, FSC information, and local-resolution estimates.
+
+    ## Practical Recommendations
+
+    Use a local-resolution map that corresponds exactly to the input map.
+
+    Prefer MonoRes resolution maps when available, since LocalDeblur was designed
+    for them.
+
+    Start with the default K and lambda values.
+
+    Use one iteration first. If the result is conservative or if iterative
+    refinement is desired, try multiple iterations and compare the outputs.
+
+    Use automatic iteration only when you are prepared to inspect the sequence of
+    sharpened maps.
+
+    For maps worse than about 6 Å global FSC resolution, consider a smaller K value
+    such as 0.01, as suggested by the protocol help.
+
+    Inspect the sharpened map together with the original map and validation data.
+    Avoid interpreting isolated sharpened features without support from the
+    experimental data.
+
+    ## Final Perspective
+
+    LocalDeblur Sharpening is a local map-enhancement protocol guided by a
+    local-resolution map.
+
+    For biological users, its main value is that it sharpens different regions of
+    a cryo-EM map according to their estimated local resolution, instead of
+    applying a single global sharpening factor.
+
+    The protocol can improve interpretability and model-building guidance, but it
+    should be used as part of a validation-aware workflow. The final map is an
+    enhanced representation of the reconstruction, not a replacement for the
+    original map or for independent validation.
     """
     _label = 'localdeblur sharpening'
     _lastUpdateVersion = VERSION_1_1
