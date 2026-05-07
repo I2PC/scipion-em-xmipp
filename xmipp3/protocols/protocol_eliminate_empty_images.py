@@ -473,7 +473,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                 decision = int(size*100 > meanPop * self.minPopulation.get())
                 self.enableCls[clsId] = ACCEPTED if decision else DISCARDED
         else:
-            self.enableCls = {clsId: ACCEPTED for clsId in ids}
+            self.enableCls = dict.fromkeys(ids, ACCEPTED)
 
     def createOutputClasses(self, suffix, streamingState, enableDict):
         if not self.classesDict or not enableDict:

@@ -143,7 +143,7 @@ class XmippProtSimulateCTF(Prot2D):
             if self.noiseAfter>0:
                 I=xmippLib.Image(fnOut)
                 Idata = I.getData()
-                generator = np.random.default_rng()
+                generator = np.random.default_rng(42) #Provided a seed for this random generator.
                 I.setData(Idata+self.noiseAfter.get()*generator.normal(size=Idata.shape))
                 I.write(fnOut)
 

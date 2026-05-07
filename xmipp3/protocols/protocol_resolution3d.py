@@ -159,7 +159,7 @@ class XmippProtResolution3D(ProtAnalysis3D):
         fnBfactor= self._getPath('bfactor.txt')
         if os.path.exists(fnBfactor):
             f = open(fnBfactor)
-            values = map(float, f.readline().split())
+            values = [float(x) for x in f.readline().split()]
             retval+="   Bfactor: %4.3f"%values[4]
         return [retval]
     
@@ -176,7 +176,7 @@ class XmippProtResolution3D(ProtAnalysis3D):
             fnBfactor= self._getPath('bfactor.txt')
             if os.path.exists(fnBfactor):
                 f = open(fnBfactor)
-                values = map(float, f.readline().split())
+                values = [float(x) for x in f.readline().split()]
                 methodsStr+=" The corresponding Bfactor was %4.3f."%values[4]
         return [methodsStr]
 
