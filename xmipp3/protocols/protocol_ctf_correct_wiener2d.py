@@ -33,7 +33,160 @@ from xmipp3.convert import writeSetOfParticles, xmippToLocation
 
 class XmippProtCTFCorrectWiener2D(ProtProcessParticles):
     """    
-     Performs CTF correction on images using Wiener filtering in 2D. This method enhances image quality by reducing noise and compensating for the contrast transfer function effects in the micrographs or particle images. Use it with caution, preferably only for visualization purposes or when subsequent methods demand it explicitly.
+     Performs CTF correction on images using Wiener filtering in 2D. This
+     method enhances image quality by reducing noise and compensating for the
+     contrast transfer function effects in the micrographs or particle images.
+     Use it with caution, preferably only for visualization purposes or when
+     subsequent methods demand it explicitly.
+
+     AI Generated:
+
+    ## Overview
+
+    The CTF Correct Wiener 2D protocol performs a more complete correction of
+    the contrast transfer function using **Wiener filtering**. Unlike simple
+    phase flipping, this approach attempts to compensate not only for phase
+    reversals but also for the attenuation of signal amplitudes, while
+    simultaneously controlling the amplification of noise.
+
+    In practical cryo-EM workflows, Wiener filtering is a more aggressive form
+    of CTF correction. It can enhance the visual quality of particle images and
+    partially restore high-frequency information that has been damped by the
+    microscope. However, this comes at the cost of introducing assumptions
+    about noise and signal that may not always hold.
+
+    For biological users, this protocol should be understood as a **signal
+    restoration technique** rather than a neutral preprocessing step. It is
+    often useful for visualization or specific methods that require fully
+    CTF-corrected images, but it must be applied with caution in standard
+    reconstruction pipelines.
+
+    ## Inputs and General Workflow
+
+    The protocol takes as input a **set of particles** with associated CTF
+    information. Using this information, it applies a Wiener filter to each
+    image, producing a new set of particles where both phase and amplitude
+    effects of the CTF have been corrected.
+
+    If the input particles have already undergone phase flipping, the protocol
+    detects this and takes it into account during processing, avoiding
+    inconsistent corrections.
+
+    The output is a new particle set with modified images that aim to
+    approximate the true underlying signal more closely than the original data.
+
+    ## Wiener Filtering: Conceptual Understanding
+
+    The Wiener filter is designed to invert the effect of the CTF while
+    controlling noise amplification. In regions where the CTF strongly
+    attenuates the signal, a naive inversion would dramatically amplify noise.
+    The Wiener approach balances this by incorporating a regularization term,
+    preventing unstable corrections.
+
+    From a biological perspective, this means that Wiener-filtered images may
+    show enhanced contrast and clearer structural features. However, they are
+    no longer raw experimental data—they are reconstructed estimates that
+    depend on the assumed noise model.
+
+    This is why Wiener correction is often considered more suitable for
+    visualization or interpretation rather than as a standard input for all
+    processing steps.
+
+    ## Isotropic vs. Anisotropic Correction
+
+    The protocol allows the user to perform an **isotropic correction**, which
+    assumes that there is no astigmatism in the CTF. This simplifies the
+    correction by treating the CTF as radially symmetric.
+
+    This assumption is reasonable when astigmatism is negligible or when a
+    simplified correction is sufficient. However, if astigmatism is
+    significant, ignoring it may lead to suboptimal corrections, particularly
+    at higher resolutions.
+
+    In most practical situations, isotropic correction is acceptable for
+    visualization purposes, but for more precise applications, users should
+    consider whether astigmatism needs to be accounted for explicitly.
+
+    ## Wiener Constant and Noise Control
+
+    A key parameter in Wiener filtering is the **Wiener constant**, which
+    controls the balance between signal restoration and noise suppression.
+
+    Lower values favor stronger correction of the signal but risk amplifying
+    noise. Higher values produce more conservative results, preserving
+    stability at the expense of less aggressive correction.
+
+    When the parameter is set to its default (negative value), the protocol
+    uses a standard heuristic value. For most biological users, this default is
+    appropriate unless there is a specific need to fine-tune the balance between
+    noise and signal.
+
+    ## Padding and Frequency Handling
+
+    The **padding factor** determines how much the image is extended before
+    applying the correction. Padding can improve the accuracy of Fourier-based
+    operations by reducing edge effects.
+
+    Increasing padding may lead to slightly better corrections, especially for
+    high-resolution features, but also increases computational cost. In most
+    cases, the default value provides a reasonable compromise.
+
+    ## Envelope Correction
+
+    The protocol optionally allows correction of the **CTF envelope**, which
+    models additional damping effects such as beam coherence and specimen
+    movement.
+
+    This option should be used with caution. Envelope correction requires that
+    the envelope function is accurately estimated. If this is not the case,
+    applying the correction may introduce artifacts rather than improve the
+    result.
+
+    From a practical standpoint, this option is best reserved for
+    well-characterized datasets where the envelope has been reliably modeled.
+
+    ## Outputs and Their Interpretation
+
+    The protocol produces a new set of particles in which both phase and
+    amplitude effects of the CTF have been corrected using Wiener filtering.
+
+    These particles often display:
+    * Enhanced contrast
+    * Improved visibility of structural features
+    * Partial recovery of high-frequency information
+
+    However, they should not be interpreted as raw experimental data. The
+    correction introduces model-dependent modifications, and therefore the
+    resulting images reflect both the data and the assumptions of the Wiener
+    filter.
+
+    ## Practical Recommendations
+
+    In most cryo-EM workflows, Wiener-filtered particles are best used
+    selectively. They are particularly useful for:
+    * Visualization and inspection of particle quality
+    * Generating illustrative figures
+    * Methods that explicitly require Wiener-corrected inputs
+
+    For standard reconstruction pipelines, many modern algorithms internally
+    handle CTF effects in a statistically optimal way. In such cases, applying
+    Wiener correction beforehand may not be necessary and can even interfere
+    with the assumptions of those methods.
+
+    A good strategy is to use this protocol as a complementary tool rather than
+    a default preprocessing step.
+
+    ## Final Perspective
+
+    The CTF Correct Wiener 2D protocol provides a powerful but model-dependent
+    way to restore image information affected by the microscope optics. By
+    combining signal recovery with noise control, it can produce visually
+    enhanced particle images that are easier to interpret.
+
+    For biological users, the key is to understand its role: it is not simply
+    correcting the data, but reconstructing an estimate of the underlying
+    signal. When used appropriately, it can be highly informative, but it
+    should always be applied with awareness of its assumptions and limitations.
     """
     _label = 'ctf_correct_wiener2d'
     

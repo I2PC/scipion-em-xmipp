@@ -43,7 +43,188 @@ from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, repl
 from pyworkflow import UPDATED, PROD
 
 class XmippProtConvertPdb(ProtInitialVolume):
-    """  Converts atomic structure files in PDB (Protein Data Bank) format into volumetric maps. Converting a PDB to a volume generates a simulated electron density map, useful for validating atomic models, fitting into experimental maps or performing docking."""
+    """  Converts atomic structure files in PDB (Protein Data Bank) format into
+    volumetric maps. Converting a PDB to a volume generates a simulated
+    electron density map, useful for validating atomic models, fitting into
+    experimental maps or performing docking.
+
+    Overview
+
+    The Convert PDBs to Volumes protocol transforms one or more atomic
+    structure files (typically PDB, optionally CIF) into 3D volumetric density
+    maps. The output is a simulated electron density map sampled on a 3D grid,
+    at a user-defined voxel size (Å/px). This is a standard step whenever you
+    want to bring an atomic model into the same “map space” used by cryo-EM.
+
+    From a user perspective, this protocol is most commonly used to:
+    - compare an atomic model to an experimental cryo-EM map (visual
+    inspection, fitting, validation),
+    - generate a reference density from a known structure (for docking or
+    alignment),
+    - prepare model-based volumes for workflows that require volumes as input
+    (e.g., projections, template-based comparisons),
+    - convert multiple models into volumes in a consistent way (e.g.,
+    alternative conformations, homologs, mutants).
+
+    It is a practical bridge between atomic coordinates and volumetric cryo-EM
+    representations.
+
+    Inputs and General Workflow
+    Input structure(s)
+
+    You can provide either:
+    - a single atomic structure (AtomStruct), or
+    - a set of atomic structures (SetOfAtomStructs).
+
+    If you provide a set, the protocol converts each structure independently
+    and outputs a set of volumes.
+
+    Sampling rate (Å/px)
+
+    This parameter defines the voxel size of the simulated volume. It should be
+    chosen to match the voxel size of the experimental map you plan to compare
+    against.
+
+    Practical rule:
+    - If you will fit the simulated volume into an experimental map, use the
+    same sampling rate as the experimental map.
+    - If you only want a qualitative visualization, a slightly coarser
+    sampling may be acceptable, but keep in mind it changes the apparent sharpness.
+
+    Defining the Output Box: Size and Origin
+
+    A crucial practical aspect of PDB→volume conversion is deciding the box
+    size and (optionally) the origin of the output volume. This protocol
+    offers two main strategies.
+
+    Option A — Use an existing volume as a template
+
+    “Use a volume as an empty template?” = Yes
+
+    You provide an input volume, and the protocol uses its:
+    - box size
+    - origin / coordinate frame
+
+    This is the best choice when your goal is direct comparison with an
+    existing cryo-EM map, because it ensures that the simulated volume lives
+    in the same grid and coordinate system.
+
+    Important practical note:
+
+    If you use a template volume, you should typically set Center PDB = No
+    (advanced option).
+    Otherwise, the protocol will re-center the model, which may break the
+    intended correspondence with the template map.
+
+    Use this mode when:
+    - you already have an experimental map and want the model density to
+    match its frame exactly,
+    - you are preparing volumes for subsequent alignment or difference-map
+    analysis.
+
+    Option B — Define the output size explicitly
+
+    If you do not use a template volume, you can control the output size.
+
+    For a set of structures, you provide a single Box side size (px) that
+    will be applied to all.
+
+    For a single structure, you may:
+    - let the protocol estimate a reasonable size automatically, or
+    - enable Set final size? and specify X (and optionally Y, Z).
+
+    Use this mode when:
+    - you want standardized boxes across many models,
+    - you are building references for downstream workflows that require fixed
+    dimensions,
+    - there is no existing experimental map that defines the coordinate frame.
+
+    Centering the Model
+    Center PDB (advanced)
+
+    If enabled, the protocol centers the atomic model using its center of mass
+    before generating the volume.
+
+    This is often convenient when:
+    - you are generating a model map mainly for visualization,
+    - you want the density centered in the box for general use,
+    - you are converting multiple models and want consistent centering.
+
+    However, centering can be problematic if you are trying to preserve an
+    external coordinate frame (for example when matching an experimental map or
+    a template). In those cases, centering should usually be disabled.
+
+    Store centered PDB (advanced)
+
+    If you enable this option, the protocol will also save the centered PDB
+    file(s) in the output directory. This is useful when you want to:
+    - keep a record of the exact coordinates used,
+    - reuse the centered structure in later docking or fitting steps,
+    - share the centered model with collaborators.
+
+    CIF to PDB Conversion
+    Convert CIF to PDB (advanced)
+
+    Some structures are distributed as mmCIF rather than PDB. If you enable
+    this option, CIF inputs will be converted to PDB before volume generation.
+
+    This is generally safe for typical structures, but very large models can
+    sometimes cause conversion difficulties. If conversion fails, a practical
+    workaround is to:
+    - disable conversion and use the CIF directly when possible in your
+    workflow, or
+    - convert the CIF externally using specialized tools before running the
+    protocol.
+
+    Outputs and Their Interpretation
+
+    Depending on whether the input is a single structure or a set, you will
+    obtain:
+    - Output volume (single input). A single Volume object (typically saved as
+    MRC), with the sampling rate set to your chosen value.
+
+    If you used a template volume, the output will also preserve the template’s
+    origin/frame, which is essential for direct overlays.
+
+    - Output volumes (set input). A SetOfVolumes, one volume per input
+    structure, all created using the same sampling rate (and the same box size
+    if you specified one).
+
+    - Output PDB / Output AtomStructs (optional). If you enabled Store centered
+    PDB, the protocol outputs the centered structure(s) linked to the generated
+    volume(s). This is helpful for reproducibility: it lets you know exactly
+    what model coordinates correspond to the simulated density.
+
+    Practical Recommendations
+
+    For model-to-map comparison, start by matching the sampling rate to the
+    experimental map.
+
+    If you want the simulated volume to overlay the experimental map without
+    additional alignment, use the template volume mode and disable centering.
+
+    If you are preparing generic references or a library of model maps,
+    centering is often convenient and makes volumes easier to handle downstream.
+
+    If you plan to process many structures, use a SetOfAtomStructs input and
+    define a consistent box size so all outputs are directly comparable.
+
+    After conversion, always visually inspect the output volume:
+    - is the density fully inside the box?
+    - is it centered as expected?
+    - does the apparent size match the model?
+
+    Final Perspective
+
+    Converting atomic models to volumes is not just a file format
+    transformation—it is a way to place atomic information into the same
+    representation used by cryo-EM maps. The key practical choices are sampling
+    rate, box definition, and whether to preserve an external coordinate frame.
+
+    Used carefully, this protocol provides reliable simulated densities that
+    support fitting, validation, and biologically meaningful comparison between
+    models and experimental reconstructions.
+    """
     _label = 'convert pdbs to volumes'
     _devStatus = PROD
     OUTPUT_NAME1 = "outputVolume"

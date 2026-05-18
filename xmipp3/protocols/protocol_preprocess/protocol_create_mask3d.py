@@ -63,6 +63,420 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
     The mask can be created with a given geometrical shape (Sphere, Box,
     Cylinder...) or it can be obtained from operating on a 3d volume or a
     previous mask.
+
+    AI Generated
+
+    ## Overview
+
+    The Create 3D Mask protocol generates a three-dimensional mask.
+
+    3D masks are used in cryo-EM workflows to define the molecular region, remove
+    background, restrict refinement or validation to a region of interest, create
+    soft boundaries, or prepare maps for local processing. This protocol can create
+    a mask from several sources:
+
+    - an input volume;
+    - a geometrical shape;
+    - a feature file.
+
+    After the initial mask is created, the protocol can optionally post-process it
+    by removing small components, keeping only the largest component, applying
+    symmetry, applying morphological operations, inverting the mask, or smoothing
+    its borders.
+
+    The main output is a Scipion 3D volume mask.
+
+    ## Inputs and General Workflow
+
+    The protocol first creates an initial mask according to the selected source.
+
+    If the source is **Volume**, the mask is created from an input map by
+    thresholding, segmentation, or direct post-processing.
+
+    If the source is **Geometry**, the mask is created from a user-defined
+    geometrical shape such as a sphere, box, crown, cylinder, Gaussian, raised
+    cosine, or raised crown.
+
+    If the source is **Feature File**, the mask is generated from an Xmipp phantom
+    feature file.
+
+    After creation, optional post-processing operations are applied. Finally, the
+    mask is registered in Scipion with the appropriate sampling rate.
+
+    ## Mask Source
+
+    The **Mask source** parameter defines how the initial mask is created.
+
+    There are three options:
+
+    **Volume** creates the mask from an existing 3D volume.
+
+    **Geometry** creates the mask from a user-defined geometrical shape.
+
+    **Feature File** creates the mask from a phantom feature file describing one or
+    more shapes.
+
+    The best option depends on the use case. Volume-derived masks are useful when
+    the mask should follow density. Geometrical masks are useful for simple,
+    reproducible shapes. Feature files are useful for more complex synthetic masks.
+
+    ## Creating a Mask from a Volume
+
+    When **Volume** is selected as the source, the **Input volume** parameter
+    defines the map used to create the mask.
+
+    The protocol supports three operations:
+
+    - **Threshold**;
+    - **Segment**;
+    - **Only postprocess**.
+
+    The sampling rate of the output mask is copied from the input volume.
+
+    This mode is useful when the user wants the mask to follow the density present
+    in an experimental or processed map.
+
+    ## Threshold Operation
+
+    The **Threshold** operation creates a binary mask from the input volume.
+
+    The **Threshold** parameter defines the gray-value cutoff. Voxels with values
+    below the threshold are set to 0, and the remaining voxels become part of the
+    mask.
+
+    This is a simple and common way to create a mask from density.
+
+    The threshold should be chosen carefully. If it is too high, weak but real
+    density may be excluded. If it is too low, background noise may be included.
+
+    ## Segmentation Operation
+
+    The **Segment** operation creates a mask by selecting a region corresponding to
+    a desired size or mass.
+
+    The available segmentation types are:
+
+    **Number of voxels**, where the user specifies the target number of voxels.
+
+    **Number of aminoacids**, where the user specifies the approximate number of
+    amino acids and the protocol uses the sampling rate to estimate the mask.
+
+    **Dalton mass**, where the user specifies the molecular mass in daltons.
+
+    **Automatic**, where the protocol uses Otsu thresholding.
+
+    Segmentation is useful when the expected molecular size is known and the user
+    wants a mask that reflects that approximate amount of density.
+
+    ## Only Postprocess Operation
+
+    The **Only postprocess** operation copies the input volume as the starting
+    mask.
+
+    No thresholding or segmentation is applied at the creation step. The selected
+    post-processing operations are then applied to the copied volume.
+
+    This option is useful when the input is already a mask, or when the user wants
+    to apply additional post-processing to an existing mask-like volume.
+
+    ## Creating a Mask from Geometry
+
+    When **Geometry** is selected as the source, the protocol creates a mask from a
+    geometrical shape.
+
+    The user defines the mask size, sampling rate, shape, and shape-specific
+    parameters. The output mask is cubic, with dimensions:
+
+    \[
+    \text{size} \times \text{size} \times \text{size}
+    \]
+
+    This mode does not require an input volume.
+
+    ## Sampling Rate for Geometry or Feature File
+
+    The **Sampling Rate** parameter is used when the mask source is **Geometry** or
+    **Feature File**.
+
+    It defines the physical voxel size of the generated mask, in angstroms per
+    pixel.
+
+    This value should match the volume or particles that will later use the mask.
+
+    ## Mask Size
+
+    The **Mask size** parameter is used for geometrical masks.
+
+    It defines the cubic dimensions of the generated mask in voxels.
+
+    For example, a size of 128 creates a 128 × 128 × 128 voxel mask.
+
+    The mask size should match the box size of the maps where the mask will be
+    used.
+
+    ## Geometrical Mask Types
+
+    The available 3D geometrical mask types are:
+
+    - Sphere;
+    - Box;
+    - Crown;
+    - Cylinder;
+    - Gaussian;
+    - Raised cosine;
+    - Raised crown.
+
+    Each type exposes its own parameters. These parameters are expressed in pixels
+    or voxels.
+
+    ## Sphere Mask
+
+    A **Sphere** mask creates a spherical region.
+
+    The **Radius** parameter defines the sphere radius in pixels. If the radius is
+    set to **-1**, the protocol uses half the mask size.
+
+    Sphere masks are useful for approximately globular particles or for simple
+    central support regions.
+
+    ## Box Mask
+
+    A **Box** mask creates a cubic or rectangular support region.
+
+    The **Box size** parameter defines the box size. If it is set to **-1**, the
+    protocol uses half the mask size.
+
+    This mask can be useful when the region of interest is approximately
+    rectangular or when the user wants to keep a central cubic region.
+
+    ## Crown Mask
+
+    A **Crown** mask creates a shell-like region between an inner and an outer
+    radius.
+
+    The relevant parameters are:
+
+    - **Inner radius**;
+    - **Outer radius**.
+
+    If the outer radius is set to **-1**, the protocol uses half the mask size.
+
+    Crown masks are useful for selecting a radial shell while excluding the central
+    region.
+
+    ## Cylinder Mask
+
+    A **Cylinder** mask creates a cylindrical region.
+
+    The relevant parameters are:
+
+    - **Radius**;
+    - **Height**.
+
+    If the radius is set to **-1**, the protocol uses half the mask size. If the
+    height is set to **-1**, the protocol uses the full mask size.
+
+    Cylinder masks are useful for elongated particles, filaments, or approximate
+    helical support regions.
+
+    ## Gaussian Mask
+
+    A **Gaussian** mask creates a smooth three-dimensional Gaussian weighting
+    function.
+
+    The **Sigma** parameter defines the Gaussian width in pixels. If sigma is set
+    to **-1**, the protocol uses one sixth of the mask size.
+
+    Gaussian masks are useful when the user wants smooth weighting rather than a
+    hard binary support.
+
+    ## Raised Cosine Mask
+
+    A **Raised cosine** mask creates a smooth radial transition between an inner
+    and an outer radius.
+
+    This is useful when the user wants to avoid sharp mask edges, which can
+    introduce Fourier artifacts.
+
+    The relevant parameters are:
+
+    - **Inner radius**;
+    - **Outer radius**.
+
+    ## Raised Crown Mask
+
+    A **Raised crown** mask creates a crown-like mask with smooth transitions at
+    both borders.
+
+    The relevant parameters are:
+
+    - **Inner radius**;
+    - **Outer radius**;
+    - **Border decay**.
+
+    The border decay controls the falloff at the crown boundaries.
+
+    ## Shift Center
+
+    The **Shift center of the mask?** option allows the user to move the center of
+    a geometrical mask away from the center of the box.
+
+    When enabled, the user provides X, Y, and Z center offsets in pixels.
+
+    This is useful when the region of interest is not centered in the volume.
+
+    ## Creating a Mask from a Feature File
+
+    When **Feature File** is selected, the protocol creates the mask using an
+    Xmipp phantom feature file.
+
+    The feature file describes one or more geometrical features, their operations,
+    densities, centers, and shape-specific parameters. Examples of supported
+    feature types include spheres, blobs, Gaussians, cylinders, double cylinders,
+    cubes, ellipsoids, and cones.
+
+    This option is useful for complex synthetic masks that are easier to describe
+    in a feature file than through the graphical form.
+
+    ## Remove Small Objects
+
+    The **Remove small objects** option removes connected components smaller than
+    a selected size.
+
+    The **Minimum size** parameter defines the minimum component size in voxels.
+
+    This is useful for cleaning masks created from noisy thresholding or
+    segmentation, where small isolated islands may appear outside the main
+    structure.
+
+    The input mask should be binary when using this option.
+
+    ## Keep Largest Component
+
+    The **Keep largest component** option keeps only the largest connected
+    component of the mask.
+
+    This is useful when a thresholded or segmented mask contains several separated
+    regions, and the user wants to keep only the main molecular component.
+
+    The input mask should be binary.
+
+    ## Symmetrize Mask
+
+    The **Symmetrize mask** option applies a selected symmetry group to the mask.
+
+    The **Symmetry group** parameter defines the Xmipp symmetry, with **c1**
+    meaning no symmetry.
+
+    If the mask was created by thresholding or segmentation, the protocol binarizes
+    it again after symmetrization.
+
+    Symmetry should be used only when the biological object and the intended mask
+    are expected to be symmetric.
+
+    ## Morphological Operation
+
+    The **Apply morphological operation** option applies a binary morphological
+    operation to the mask.
+
+    The available operations are:
+
+    **Dilation**, which expands the white region.
+
+    **Erosion**, which shrinks the white region.
+
+    **Closing**, which performs dilation followed by erosion and can remove black
+    holes or gaps.
+
+    **Opening**, which performs erosion followed by dilation and can remove small
+    white objects.
+
+    The **Structural element size** controls the strength of the operation. Larger
+    values produce stronger effects.
+
+    ## Invert the Mask
+
+    The **Invert the mask** option swaps the inside and outside of the mask.
+
+    The protocol multiplies the mask by -1 and then adds 1, converting 1-valued
+    regions to 0 and 0-valued regions to 1.
+
+    This is useful when the user wants to select the complement of the current
+    mask.
+
+    ## Smooth Borders
+
+    The **Smooth borders** option smooths the mask by convolving it with a
+    Gaussian.
+
+    The **Gaussian sigma** parameter defines the width of the smoothing kernel in
+    pixels.
+
+    After smoothing, negative values are clipped to zero.
+
+    Smoothing is often useful for reducing sharp mask boundaries, which can create
+    artifacts in Fourier-space operations.
+
+    ## Output Mask
+
+    The main output is **outputMask**.
+
+    This output is a Scipion **VolumeMask** object pointing to the generated
+    `mask.mrc` file.
+
+    If the source is **Volume**, the output mask uses the sampling rate of the
+    input volume. If the source is **Geometry** or **Feature File**, it uses the
+    sampling rate provided by the user.
+
+    The protocol also writes the sampling rate into the image header.
+
+    ## Interpreting the Output
+
+    The output should be interpreted as a 3D mask created by the selected source
+    and post-processing operations.
+
+    A mask created from a volume reflects density and thresholding or segmentation
+    choices. A geometrical mask reflects user-defined shape parameters. A feature
+    file mask reflects the external feature description.
+
+    The mask may be binary or smoothly weighted, depending on the selected
+    creation and post-processing operations.
+
+    ## Practical Recommendations
+
+    Use volume thresholding for simple density-derived masks.
+
+    Use segmentation when the approximate molecular size or mass is known.
+
+    Use geometrical masks when a simple reproducible shape is sufficient.
+
+    Use feature files for complex synthetic masks.
+
+    Remove small objects and keep the largest component when masks contain
+    unwanted islands.
+
+    Use smoothing before Fourier-space operations or refinement steps where sharp
+    mask edges may cause artifacts.
+
+    Set the sampling rate and box size to match the volume where the mask will be
+    used.
+
+    Inspect the mask visually before using it in downstream protocols.
+
+    Avoid masks that are too tight, because they may remove real density. Avoid
+    masks that are too loose, because they may include solvent and noise.
+
+    ## Final Perspective
+
+    Create 3D Mask is a flexible mask-generation and mask-processing protocol.
+
+    For biological users, its value is that it can create masks from experimental
+    density, from known geometrical shapes, or from feature-file descriptions, and
+    then refine those masks with common post-processing operations.
+
+    The resulting mask can be used in reconstruction, refinement, validation,
+    local-resolution estimation, subtraction, sharpening, or visualization
+    workflows where defining the molecular region is essential.
     """
     _label = 'create 3d mask'
     

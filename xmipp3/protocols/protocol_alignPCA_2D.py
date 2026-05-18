@@ -111,7 +111,228 @@ AVERAGES_IMAGES_FILE = 'classes_images.star'
 
 class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProtocol):
     """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming,
-        enabling efficient processing of large datasets.  """
+        enabling efficient processing of large datasets.
+
+        AI Generated:
+
+        What this protocol is for
+
+        alignPCA-2D performs 2D alignment and classification of single-particle
+        images using a PCA-based approach, and it is designed to work
+        especially well in streaming. The idea is that as particles are being
+        produced upstream (for example, from particle picking/extraction
+        running in streaming), this protocol can periodically take the newest
+        particles, classify them into 2D classes, and continuously update the
+        output classes. For a biological user, the practical benefit is that
+        you can start getting meaningful 2D class averages early, monitor data
+        quality in near real time, and progressively refine the class set as
+        more data arrives, instead of waiting for the full dataset to finish.
+
+        This protocol can be used in two distinct ways. In the create classes
+        mode, it builds a new 2D class set from scratch. In the update classes
+        mode, it does not “invent” new references, but instead aligns and
+        assigns incoming particles to a set of pre-existing 2D classes (either
+        a SetOfClasses2D or a SetOfAverages). That second mode is particularly
+        useful when you want continuity: you already trust a set of references
+        and you want to keep updating them or at least keep assigning particles
+        consistently as the stream grows.
+
+        Inputs and what they should contain
+
+        You provide a single SetOfParticles as input images. Since the protocol
+        can optionally perform CTF correction internally, it expects your
+        particles to have the usual CTF metadata available (defoci, voltage,
+        Cs, etc.) if you plan to enable CTF correction. In practice, this
+        protocol is most comfortable with particle boxes that are not too
+        large; as a rule of thumb, particle sizes around 128 px or smaller
+        are recommended for stable GPU memory use and speed. If you run it on
+        much larger boxes (especially above 256 px), you risk saturating GPU
+        memory, and performance may degrade substantially. Biologically, this
+        is rarely a limitation because 2D classification is typically done on
+        binned or otherwise downscaled particles; you can always classify on
+        smaller boxes first to obtain clean 2D averages and then return to
+        larger boxes later for high-resolution refinement steps.
+
+        GPU selection and compute behaviour in streaming
+
+        Because the core PCA-based alignment/classification is GPU-accelerated,
+        you will choose a GPU ID. If you only have one GPU or you are unsure,
+        leaving the default is usually fine. In a facility context, the
+        important point is to avoid collisions with other GPU-heavy protocols:
+        pick a GPU that is actually free.
+
+        In streaming, the protocol processes particles in batches. It
+        periodically checks the input set for newly created particles (using
+        their creation time), groups them into a growing “new particles”
+        batch, and launches classification whenever the batch is large enough
+        or when the input stream is closed and it needs to flush the final
+        incomplete batch. For the user, this means you will see your 2D classes
+        update stepwise rather than continuously particle-by-particle. This is
+        generally desirable: it avoids constant re-training and keeps
+        throughput high.
+
+        Choosing “create classes” versus “update classes”
+
+        If you choose create_classes, you specify the number of classes you
+        want. This controls how finely the dataset will be partitioned. From a
+        biological standpoint, the right number depends on heterogeneity and
+        dataset size. A smaller number of classes (for example 50) is a
+        reasonable default for monitoring and for early cleaning; larger values
+        can separate subtle views or different particle populations but may
+        also produce more low-occupancy classes, especially early in streaming
+        when the dataset is still small.
+
+        If you choose update_classes, you must provide initial classes. This is
+        ideal when you already have a trusted set of 2D references—perhaps from
+        a previous run, a curated subset, or a high-quality earlier
+        classification—and you want new data to be aligned and assigned in a
+        way that remains consistent with those references. Biologically, this
+        is very useful when you want stable class labels across time, for
+        instance during long microscope sessions or when comparing multiple
+        acquisition sessions against a common reference set.
+
+        CTF correction: why it matters and when to enable it
+
+        The option Correct CTF? controls whether the protocol internally
+        performs a Wiener-like 2D CTF correction before classification. For
+        most biological users, enabling CTF correction is beneficial because
+        it makes particles more comparable in Fourier space across defocus
+        values and typically yields cleaner, more interpretable class averages.
+        This is especially noticeable when defocus ranges are broad or when
+        you care about higher-resolution features in the 2D averages.
+
+        The practical trade-off is compute: CTF correction can be expensive.
+        The protocol therefore allows you to increase MPIs specifically for the
+        CTF correction step. If you have many CPU cores available, increasing
+        this MPI value can speed up the preprocessing significantly. In
+        facility environments, this is often worth doing because it can keep
+        the GPU from idling while waiting for preprocessed particles.
+
+        If you disable CTF correction, the protocol will classify using the
+        raw particle images (converted as-is). This can still be useful for
+        very fast, rough monitoring or when CTF metadata is unreliable, but
+        in many cryo-EM datasets you will obtain more stable classes with
+        correction enabled.
+
+        Gaussian mask: focusing alignment on the particle signal
+
+        The option Use Gaussian Mask? applies a soft, Gaussian-shaped mask
+        to the particle images. Biologically, masking is often beneficial
+        in 2D classification because it reduces the impact of noisy background
+        and edge artifacts introduced by boxing. This tends to stabilize
+        alignments and can prevent classes from being driven by irrelevant
+        high-contrast features near the box border.
+
+        The key parameter is sigma, which controls the width of the Gaussian.
+        If you leave sigma at −1, the protocol automatically sets sigma to
+        approximately one third of the image dimension. That default is usually
+        sensible for general particles. As a biological user, you might
+        consider adjusting sigma when you have unusually large boxes with lots
+        of solvent, or when the particle occupies only a small central region;
+        in those cases, a tighter mask can sometimes yield cleaner averages.
+        Conversely, if you fear truncation of peripheral features (for example,
+        extended domains or detergent belts), a broader mask can be safer.
+
+        PCA training: what the parameters mean in practice
+
+        This protocol uses PCA to build a compact representation of the
+        dataset that supports fast alignment and classification. For the user,
+        the PCA-related parameters mainly affect a balance between speed,
+        stability, and detail.
+
+        The max resolution parameter sets the maximum resolution content
+        considered during alignment. Conceptually, it prevents the algorithm
+        from chasing very high-frequency details that are not stable at the
+        current SNR or that are not needed for robust 2D grouping. Biologically,
+        this is helpful because 2D classification is typically aimed at
+        separating views and major structural features rather than extracting
+        the final high-resolution signal. A value around 8 Å is a common choice
+        for stable alignment in many datasets, but the best setting depends on
+        pixel size and data quality. Importantly, the protocol ensures that
+        this value is not set unrealistically high relative to the sampling:
+        it will enforce a sensible lower bound tied to the pixel size.
+
+        The % variance parameter determines how much variance the PCA model
+        should capture. Higher values generally mean the PCA representation
+        keeps more subtle differences, which can improve accuracy in
+        distinguishing similar views or small conformational changes, but it
+        increases computation and can make the model more sensitive to noise.
+        For most biological workflows, you can keep this around the default
+        unless you have a specific reason: raising it may help when you want
+        more detailed separation; lowering it can speed up early monitoring.
+
+        The particles for training parameter controls how many particles are
+        used to build the PCA model. In streaming, this is particularly
+        important: too small a training set may produce a fragile PCA basis
+        early on, while too large a value increases the initial cost. In
+        practical biological usage, it is often fine to start with a moderate
+        training size so that the protocol begins producing classes early, and
+        then let later rounds refine as more particles arrive.
+
+        Classification in streaming: batch size and what you will see
+
+        The parameter particles for initial classification in streaming
+        defines the batch size threshold that triggers a classification round.
+        Biologically, this controls the “update rhythm” of your classes. A
+        smaller batch size yields more frequent updates and earlier feedback,
+        but each update is based on fewer particles, so early class averages
+        may look noisier or may fluctuate. A larger batch size gives more
+        stable updates but delays feedback.
+
+        A good way to think about it is monitoring versus stability. During
+        acquisition, many users prefer earlier feedback, so a moderate batch
+        size is often best. Once acquisition stabilizes or when running
+        offline, you might increase the batch size to reduce overhead and
+        produce more stable class updates.
+
+        Outputs: what you get and how to interpret it biologically
+
+        The protocol produces a streaming SetOfClasses2D as the main output.
+        As new particles are processed, the class set gets updated: particles
+        receive class assignments and in-plane alignment parameters, and each
+        class gets an updated representative image (the class average). This
+        output is what you will inspect to judge particle quality, preferred
+        orientations, contamination, aggregation, and general dataset
+        heterogeneity.
+
+        A secondary output type may be a SetOfAverages, depending on the
+        workflow and how downstream consumers use the references, but the
+        main biological deliverable is the evolving 2D class set.
+
+        When interpreting the results during streaming, it is normal that
+        early rounds show unstable or low-quality averages. The most useful
+        early signal is usually whether recognizable projections appear at
+        all and whether junk classes dominate. As more particles accumulate,
+        good classes should become sharper, class occupancy should become
+        more meaningful, and rare views may begin to appear.
+
+        Practical usage patterns (biological perspective)
+
+        A very common workflow is to run this protocol in streaming during
+        acquisition with CTF correction enabled and the Gaussian mask enabled,
+        using a moderate number of classes. This provides rapid, biologically
+        interpretable feedback: you can see whether the sample is good, whether
+        there are multiple particle populations, whether the dataset is
+        dominated by ice contamination or carbon edges, and whether the
+        microscope session is producing useful projections.
+
+        Another common pattern is to first run create_classes to obtain a
+        clean reference set, curate the best classes (removing obvious junk),
+        and then restart in update_classes mode using those curated classes as
+        initial references. This is especially useful for long sessions or
+        multiple sessions, because it stabilizes class identity across time
+        and makes comparisons much easier.
+
+        Warnings and best practices
+
+        This protocol is intended for relatively small particle boxes typical
+        of 2D classification. If your images are large, consider binning or
+        resizing before running it; biologically, you rarely lose anything
+        important for 2D cleaning by doing so, and you gain a lot of stability
+        and speed. Also, because the output evolves during streaming, always
+        interpret early results as provisional; the more useful decisions
+        typically come once several rounds have accumulated enough particles.
+        """
 
     _label = 'alignPCA-2D'
     _lastUpdateVersion = VERSION_3_0

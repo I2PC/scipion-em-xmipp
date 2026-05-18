@@ -61,7 +61,308 @@ OUTPUT_CIF = 'fscq_struct.cif'
 
 class XmippProtValFit(ProtAnalysis3D):
     """
-   Assesses the quality of the fit between a model and experimental data. This protocol evaluates how well a volume or structure matches reference data, guiding improvements in model accuracy.
+   Assesses the quality of the fit between a model and experimental data. This
+   protocol evaluates how well a volume or structure matches reference data,
+   guiding improvements in model accuracy.
+
+   AI Generated
+
+    ## Overview
+
+    The Validate FSC-Q protocol evaluates the local agreement between an atomic
+    model and a cryo-EM map, using the information contained in the two half maps.
+
+    The protocol compares two kinds of local resolution or local agreement:
+
+    - the agreement between the experimental map and a map generated from the
+      atomic model;
+    - the agreement between the two experimental half maps.
+
+    The difference between these quantities is used to estimate how much the atomic
+    model deviates from the signal supported by the experimental data. This
+    information is then assigned to the atoms of the input structure as an FSC-Q
+    score.
+
+    The main output is an atomic structure in CIF format containing an additional
+    Scipion atom-level attribute named `fscq_score`. This structure can be used to
+    visualize which parts of the model agree better or worse with the experimental
+    map.
+
+    ## Inputs and General Workflow
+
+    The protocol requires:
+
+    - an input volume with associated half maps;
+    - an atomic model;
+    - optionally, a volume generated from the atomic model;
+    - optionally, a soft mask.
+
+    The protocol first converts or links the atomic model to a suitable structure
+    file. It prepares the experimental map and the two half maps with the correct
+    sampling rate and origin. If no map from the atomic model is provided, the
+    protocol creates one automatically from the atomic coordinates and locally
+    aligns it to the experimental map.
+
+    The protocol then computes local resolution maps using Bsoft `blocres`:
+
+    - one local map comparing the experimental map and the PDB-derived map;
+    - one local map comparing half map 1 and half map 2.
+
+    It subtracts the half-map agreement from the map-model agreement, producing an
+    FSC-Q-like difference map. It also creates a normalized version divided by the
+    local resolution. Finally, it samples these maps around the atoms of the
+    atomic model and writes the resulting FSC-Q values into output structure files.
+
+    ## Input Volume
+
+    The **Input Volume** parameter defines the experimental cryo-EM map used for
+    validation.
+
+    This volume must have associated half maps. The protocol validates this
+    requirement. If the volume was imported into Scipion, the half maps must also
+    have been imported and linked to the volume.
+
+    The sampling rate of this volume is used throughout the calculation. The input
+    volume, half maps, mask, PDB-derived map, and atomic model must all correspond
+    to the same structure and coordinate frame.
+
+    ## Atomic Model Input
+
+    The atomic model can be provided in two ways.
+
+    If **Input PDB from file** is disabled, the user selects a Scipion
+    **AtomStruct** object through the **Refined PDB** parameter.
+
+    If **Input PDB from file** is enabled, the user provides a file path through
+    the **PDB File path** parameter.
+
+    The protocol accepts common atomic-structure formats such as PDB, ENT, CIF,
+    mmCIF, and compressed CIF files. Internally, it prepares the structure for
+    both PDB-style processing and CIF output annotation.
+
+    The atomic model should already be fitted into the input map. A poorly fitted
+    model will produce misleading FSC-Q values.
+
+    ## Volume from PDB
+
+    The **Volume from PDB** parameter allows the user to provide a map already
+    generated from the atomic model.
+
+    This volume should be aligned with the experimental reconstruction. Providing
+    it can save time and gives the user control over how the model-derived density
+    was generated.
+
+    If no PDB-derived volume is provided, the protocol creates one automatically
+    from the atomic model using the input map sampling rate and box size. It then
+    locally aligns the generated volume to the experimental map.
+
+    The PDB-derived volume is used to compare the atomic model with the
+    experimental density.
+
+    ## Soft Mask
+
+    The **Soft Mask** parameter defines the region used for the local-resolution
+    and map-model comparison.
+
+    If a mask is provided, it is converted to the working map format with the
+    correct origin and sampling rate.
+
+    If no mask is provided, the protocol creates an automatic mask from the
+    PDB-derived map. The automatic mask is obtained by thresholding the model map
+    and applying a dilation operation.
+
+    The mask should include the molecular region to be evaluated while excluding
+    unnecessary background. A poor mask can affect local agreement estimates.
+
+    ## Window Size
+
+    The **window size** parameter defines the size of the sliding local window used
+    for local resolution estimation.
+
+    The value is expressed in pixels or voxels. The default is 20.
+
+    A smaller window gives more localized estimates but can be noisier. A larger
+    window gives smoother and more stable estimates but may blur local differences
+    between nearby regions.
+
+    The chosen value should be appropriate for the map resolution, box size, and
+    level of spatial detail desired in the validation.
+
+    ## Set Origin of Coordinates
+
+    The **Set origin of coordinates** option allows the user to define an explicit
+    origin offset for the maps.
+
+    When enabled, the user provides X, Y, and Z coordinate offsets. The protocol
+    uses these values to create map files with the corresponding origin.
+
+    This option is useful when the atomic model and map require a specific origin
+    convention to be aligned correctly.
+
+    If disabled, the protocol uses zero offsets.
+
+    Correct origin handling is essential. If the model and map are shifted relative
+    to each other, FSC-Q values will not represent true local agreement.
+
+    ## Half-Map Local Resolution
+
+    One branch of the protocol computes a local agreement map between the two half
+    maps.
+
+    This calculation estimates the local signal supported reproducibly by the two
+    independent reconstructions. It uses Bsoft `blocres` with a cutoff of 0.5.
+
+    This half-map local agreement is the experimental baseline against which the
+    map-model agreement is compared.
+
+    ## Map-Model Local Resolution
+
+    The other branch computes local agreement between the experimental map and the
+    PDB-derived map.
+
+    This calculation uses Bsoft `blocres` with a cutoff of 0.67. It estimates how
+    well the atomic model-derived density agrees locally with the experimental map.
+
+    The comparison is performed inside the selected or automatically generated
+    mask.
+
+    ## FSC-Q Difference Map
+
+    After both local maps have been computed, the protocol subtracts the half-map
+    local result from the map-model local result.
+
+    The resulting difference map is written as `diferencia.map`.
+
+    Conceptually, this map represents how much the model-map agreement deviates
+    from the agreement supported by the experimental half maps. Regions where the
+    model behaves differently from the half-map signal may indicate local model
+    problems, poor fit, flexibility, or map/model mismatch.
+
+    ## Normalized FSC-Qr Map
+
+    The protocol also creates a normalized difference map, written as
+    `diferencia_norm.map`.
+
+    This map divides the FSC-Q difference by the local half-map resolution wherever
+    the mask and local-resolution values are valid.
+
+    The normalized value, referred to in the summary as FSC-Qr, provides an
+    alternative score scaled by local resolution. This can help compare deviations
+    across regions with different local resolution.
+
+    ## Assigning FSC-Q to Atoms
+
+    The protocol samples the FSC-Q difference maps around the atoms of the atomic
+    model.
+
+    It uses a sampling radius of 0.8 and writes the sampled values into
+    structure files. The FSC-Q value is first stored in the occupancy field of
+    intermediate structure files, and then transferred into a Scipion CIF
+    attribute named `fscq_score`.
+
+    This produces an atom-level validation annotation that can be visualized or
+    analyzed later.
+
+    ## Output Atomic Structure
+
+    The main output is **outputAtomStruct**.
+
+    This output is a CIF file named `fscq_struct.cif`. It contains the input atomic
+    model with an additional atom-level Scipion attribute:
+
+    `fscq_score`
+
+    The output structure is linked to the input cryo-EM volume.
+
+    If the input atomic model was provided as a Scipion AtomStruct object, the
+    protocol also defines the corresponding transform relation.
+
+    ## Summary Metrics
+
+    The protocol summary reports several global FSC-Q statistics.
+
+    For the raw FSC-Q score, it reports:
+
+    - mean FSC-Q;
+    - absolute mean FSC-Q.
+
+    For the normalized FSC-Qr score, it reports:
+
+    - mean FSC-Qr;
+    - absolute mean FSC-Qr.
+
+    It also reports:
+
+    - total number of atoms analyzed;
+    - number and percentage of atoms with FSC-Q greater than 0.5;
+    - number and percentage of atoms with FSC-Q less than -0.5.
+
+    These values provide a compact summary of the map-model deviations across the
+    atomic model.
+
+    ## Interpreting FSC-Q Values
+
+    FSC-Q values should be interpreted as local map-model agreement annotations.
+
+    Regions with large positive or negative deviations may indicate parts of the
+    model whose agreement with the map differs from the local experimental
+    half-map signal. Such regions deserve closer inspection.
+
+    Potential causes include poor local fitting, wrong side-chain placement,
+    incorrect domain position, flexibility, low occupancy, local map weakness,
+    masking effects, or errors in coordinate origin or alignment.
+
+    The score is not a substitute for visual inspection. It should be used together
+    with the density map, half maps, local resolution, model geometry validation,
+    and biological knowledge.
+
+    ## Requirements and Validation
+
+    The input volume must have associated half maps. If the half maps are missing,
+    the protocol reports an error.
+
+    The user must provide an atomic model, either as a Scipion AtomStruct object or
+    as a file path.
+
+    The protocol also requires the Bsoft plugin, version 3.0.5 or higher. If the
+    plugin is missing or an older unsupported version is detected, validation
+    reports an error.
+
+    ## Practical Recommendations
+
+    Use this protocol after the atomic model has been fitted and refined against
+    the cryo-EM map.
+
+    Make sure the input volume has correctly associated half maps.
+
+    Check that the atomic model, experimental map, half maps, PDB-derived map, and
+    mask are all in the same coordinate frame.
+
+    Provide a PDB-derived map if you have already generated one with the desired
+    parameters and alignment. Otherwise, allow the protocol to generate it
+    automatically.
+
+    Use a mask that covers the molecular region without including excessive
+    background.
+
+    Use the default window size as a starting point, then adjust it if the local
+    scores appear too noisy or too smoothed.
+
+    Inspect regions with large FSC-Q deviations in a molecular viewer together
+    with the original map and half maps.
+
+    ## Final Perspective
+
+    Validate FSC-Q is a map-model validation protocol.
+
+    For biological users, its main value is that it projects local map-model
+    agreement onto the atomic model, producing atom-level FSC-Q annotations. This
+    helps identify which residues or atomic regions agree well with the
+    experimental density and which regions may need closer inspection.
+
+    The protocol is most useful as part of a broader validation workflow, together
+    with visual map inspection, half-map FSC, local resolution, model geometry
+    validation, and biological interpretation.
     """
     _label = 'validate fsc-q'
     _lastUpdateVersion = VERSION_3_0
