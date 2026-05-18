@@ -1894,7 +1894,8 @@ class TestXmippReconstructSignificant(TestXmippBase):
                              MSG_WRONG_GALLERY)
         # Reconstruct significant (default values)
         protReconstructSignificant = self.newProtocol(XmippProtReconstructSignificant,
-                                                      inputSet=protCreateGallery.outputReprojections)
+                                                      inputSet=protCreateGallery.outputReprojections,
+                                                      iter=5)
         self.launchProtocol(protReconstructSignificant)
         self.assertIsNotNone(protReconstructSignificant.getFiles(),
                              MSG_WRONG_RECONSTRUCTION)
@@ -1904,7 +1905,8 @@ class TestXmippReconstructSignificant(TestXmippBase):
         protReconstructSignificant2 = self.newProtocol(XmippProtReconstructSignificant,
                                                        inputSet=protCreateGallery.outputReprojections,
                                                        thereisRefVolume=True,
-                                                       refVolume=protCreatePhantom1.outputVolume)
+                                                       refVolume=protCreatePhantom1.outputVolume,
+                                                       iter=5)
         self.launchProtocol(protReconstructSignificant2)
         self.assertIsNotNone(protReconstructSignificant2.getFiles(),
                              MSG_WRONG_RECONSTRUCTION)
