@@ -42,7 +42,186 @@ IN_COORDS_POS_DIR_BASENAME= "pickNoiseInPosCoordinates"
 OUT_COORDS_POS_DIR_BASENAME= "pickNoiseOutPosCoordinates"
 
 class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
-    """Protocol designed pick noise particles in micrographs and not real particles. The protocol allows you to choose the number of noise particles to extract from each micrograph. Set to -1 for extracting the same amount of noise particles as the number true particles for that micrograph """
+    """Protocol designed pick noise particles in micrographs and not real
+    particles. The protocol allows you to choose the number of noise particles
+    to extract from each micrograph. Set to -1 for extracting the same amount
+    of noise particles as the number true particles for that micrograph.
+
+    AI Generated
+
+    ## Overview
+
+    The Pick Noise protocol generates coordinates corresponding to background or
+    noise regions in micrographs, rather than to true particles.
+
+    The protocol starts from an existing set of particle coordinates. These input
+    coordinates define where the real particles are expected to be. The protocol
+    then selects additional coordinates in the same micrographs, but sufficiently
+    far from the true particle positions, so that the selected boxes should mostly
+    contain background noise.
+
+    The output is a new set of coordinates representing noise particles. These
+    coordinates can be used to extract noise images for training, validation,
+    particle screening, method development, or comparison with real particle
+    images.
+
+    ## Inputs and General Workflow
+
+    The main input is a set of true particle coordinates.
+
+    The protocol first writes the input coordinates into Xmipp `.pos` files, one
+    per micrograph. These files are used by the noise-picking program to know which
+    regions should be avoided.
+
+    The protocol then runs the Xmipp noise-picking tool on the directory containing
+    the micrographs. For each micrograph, it selects coordinates away from the
+    input particle coordinates. Finally, the generated noise coordinates are read
+    back into Scipion as a new coordinate set.
+
+    The output coordinate set is linked to the same micrographs as the input
+    coordinate set.
+
+    ## Input Coordinates
+
+    The **Input coordinates** parameter should point to a SetOfCoordinates
+    containing true particle positions.
+
+    These coordinates define the exclusion regions for noise picking. In other
+    words, the protocol uses them to avoid selecting boxes that overlap with known
+    particles.
+
+    The quality of the noise coordinates depends on the quality of the input
+    particle coordinates. If the input set misses many particles, the protocol may
+    accidentally select some real particles as noise. If the input set contains
+    many false positives, valid background regions may be unnecessarily excluded.
+
+    For this reason, it is preferable to use a reasonably clean particle-coordinate
+    set as input.
+
+    ## Number of Noise Particles
+
+    The **Number of noise particles** parameter controls how many noise coordinates
+    are selected from each micrograph.
+
+    If a positive number is provided, the protocol tries to select that number of
+    noise coordinates per micrograph.
+
+    If the value is set to **-1**, the protocol selects the same number of noise
+    coordinates as the number of true particle coordinates in each micrograph.
+
+    The -1 option is useful when the user wants a balanced set of particle and
+    noise examples. For example, if a micrograph contains 120 particle picks, the
+    protocol will try to generate 120 noise picks for that micrograph.
+
+    ## Box Size
+
+    The protocol uses the box size stored in the input coordinate set.
+
+    This box size defines the approximate region that would be extracted around
+    each coordinate. It is important because noise coordinates should be far enough
+    from true particles that the extracted noise boxes do not contain particle
+    signal.
+
+    If the box size is too small, the exclusion around particles may be too small.
+    If it is too large, the protocol may reject too many possible background
+    positions, especially in crowded micrographs.
+
+    The output noise coordinate set keeps the corresponding box-size information.
+
+    ## Noise Coordinates
+
+    The coordinates produced by this protocol should be interpreted as background
+    or non-particle positions.
+
+    They are not guaranteed to contain pure noise in a strict physical sense.
+    Depending on the micrograph, some boxes may include ice features, carbon,
+    contamination, detector artifacts, or very weak unpicked particles. However,
+    they are selected to avoid the known particle coordinates.
+
+    This makes them useful as negative examples: image boxes that should not
+    represent true particles according to the input coordinate set.
+
+    ## Output Coordinates
+
+    The main output is **outputCoordinates**, a SetOfCoordinates containing the
+    picked noise positions.
+
+    This output is associated with the same micrographs as the input coordinates.
+    It can be passed to particle extraction protocols to extract noise boxes using
+    the same extraction logic used for true particles.
+
+    The output is especially useful when paired with the original particle
+    coordinates. The user can extract both real particles and noise particles and
+    compare them in later workflows.
+
+    ## Typical Uses
+
+    Noise coordinates can be useful in several situations.
+
+    They can be used to train or evaluate particle-picking classifiers, where real
+    particles are positive examples and noise boxes are negative examples.
+
+    They can help test particle-screening methods by providing a known background
+    class.
+
+    They can be useful for estimating background statistics or for comparing
+    particle images with non-particle image patches.
+
+    They can also be used in method-development workflows where algorithms need
+    examples of both signal and noise.
+
+    ## Interpretation and Limitations
+
+    The protocol assumes that regions far from known particle coordinates are
+    reasonable noise candidates.
+
+    This assumption is useful but not perfect. If the micrograph contains many
+    unpicked particles, noise coordinates may include true particles. If the
+    micrograph contains contamination or strong artifacts, some noise coordinates
+    may correspond to structured non-particle features rather than simple
+    background.
+
+    Therefore, the output should be interpreted as “background/noise candidates”
+    rather than a perfectly pure noise set.
+
+    Visual inspection is recommended, especially if the noise coordinates will be
+    used for training machine-learning models.
+
+    ## Practical Recommendations
+
+    Use a clean and representative input coordinate set. The protocol can only
+    avoid particles that are present in the input coordinates.
+
+    Use **-1** for the number of noise particles when you want approximately the
+    same number of noise examples as real particle examples per micrograph.
+
+    Use a fixed positive number when you want the same number of noise coordinates
+    from every micrograph, regardless of particle density.
+
+    Inspect extracted noise boxes before using them for training or validation.
+    Remove micrographs with strong contamination if they produce misleading
+    negative examples.
+
+    Be careful with crowded micrographs. If particles are very dense, it may be
+    difficult to find many background regions that are truly far from particles.
+
+    Remember that the protocol creates coordinates only. To obtain actual noise
+    images, run an extraction protocol using the generated noise coordinates.
+
+    ## Final Perspective
+
+    Pick Noise is a support protocol for generating negative examples from
+    micrographs.
+
+    For biological users, its main value is that it creates a coordinate set of
+    background regions that can be processed in parallel with true particle
+    coordinates. This is useful for particle-picking validation, classifier
+    training, background analysis, and quality-control workflows.
+
+    The protocol is most effective when the input particle coordinates are reliable
+    and when the generated noise coordinates are visually checked before being used
+    as negative examples.
+    """
     _label = 'pick noise'
     _lastUpdateVersion = VERSION_2_0
     

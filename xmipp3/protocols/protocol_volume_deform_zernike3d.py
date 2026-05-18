@@ -36,7 +36,280 @@ from pyworkflow import VERSION_2_0
 
 
 class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
-    """  Performs volume deformation based on Zernike3D functions, allowing flexible adjustments of 3D maps. This protocol aids in modeling conformational changes or correcting structural distortions in volumes.. """
+    """  Performs volume deformation based on Zernike3D functions, allowing
+    flexible adjustments of 3D maps. This protocol aids in modeling
+    conformational changes or correcting structural distortions in volumes.
+
+    AI Generated
+
+    ## Overview
+
+    The Volume Deform - Zernike3D protocol deforms one 3D volume so that it better
+    matches another reference volume.
+
+    The protocol uses Zernike3D and spherical-harmonic deformation functions to
+    estimate a smooth deformation field between two maps. This is useful when two
+    volumes represent related conformations of the same structure and the user
+    wants to describe or model the transformation from one state to another.
+
+    The protocol first brings the two volumes to a common working sampling rate and
+    box size. It then locally aligns the input volume to the reference volume,
+    estimates a Zernike3D deformation, and outputs the deformed volume.
+
+    The main output is a volume corresponding to **Volume 2** after alignment and
+    deformation toward **Volume 1**.
+
+    ## Inputs and General Workflow
+
+    The protocol requires two volumes:
+
+    - **Volume 1**, the reference volume;
+    - **Volume 2**, the volume to be deformed.
+
+    The workflow has four main stages.
+
+    First, the two maps are converted to MRC format, resampled according to the
+    target resolution, and cropped to a common size. Second, the protocol performs
+    a local rigid alignment of Volume 2 to Volume 1. Third, the aligned Volume 2 is
+    deformed toward Volume 1 using Zernike3D deformation functions. Finally, the
+    output volume header is updated with the working sampling rate and the result
+    is registered in Scipion.
+
+    ## Volume 1
+
+    The **Volume 1** parameter defines the reference map.
+
+    This is the volume that Volume 2 will be aligned and deformed toward. It should
+    represent the target conformation or target structural state.
+
+    The reference volume should be reasonably clean and should correspond to the
+    same molecular object or comparable molecular region as Volume 2. If the two
+    volumes represent unrelated structures, the deformation may be mathematically
+    computed but biologically meaningless.
+
+    ## Volume 2
+
+    The **Volume 2** parameter defines the map to be modified.
+
+    This volume is first locally aligned to Volume 1 and then deformed toward it.
+    The output volume should therefore be interpreted as a deformed version of
+    Volume 2 in the coordinate frame of Volume 1.
+
+    Volume 2 should already be roughly comparable to Volume 1. The protocol can
+    perform local alignment, but it is not intended to solve arbitrary large
+    misalignments between unrelated maps.
+
+    ## Target Resolution
+
+    The **Target resolution** parameter defines the resolution scale used to
+    prepare the maps for deformation analysis.
+
+    The protocol computes a working sampling rate as one third of the target
+    resolution, but never finer than the sampling rates of the input volumes. In
+    other words, the maps are resampled so that the selected target resolution is
+    placed at approximately two thirds of the Fourier spectrum.
+
+    The default value is 8 Å, which is appropriate for smooth, medium-resolution
+    deformation analysis.
+
+    A lower numerical target resolution includes finer structural details but may
+    make the deformation more sensitive to noise. A higher value focuses the
+    deformation on coarser global shape changes.
+
+    ## Resampling and Cropping
+
+    Before deformation, both volumes are converted and resampled to a common
+    working sampling rate.
+
+    If the two resampled volumes have different box sizes, the larger one is
+    cropped so that both maps have the same working dimension.
+
+    This preprocessing ensures that the deformation program compares compatible
+    volumes on the same grid.
+
+    Users should make sure that important density is not lost during cropping. If
+    one volume has a much smaller box than the other, the final comparison may
+    ignore density present only in the larger map.
+
+    ## Initial Local Alignment
+
+    Before estimating the deformation, the protocol performs a local rigid
+    alignment.
+
+    Both volumes are first smoothed with a real-space Gaussian filter to improve
+    the robustness of the alignment. The protocol then estimates the local
+    transformation needed to align Volume 2 to Volume 1 and applies that
+    transformation to the original Volume 2.
+
+    This step places Volume 2 into the coordinate frame of Volume 1 before the
+    non-rigid deformation is estimated.
+
+    ## Multiresolution
+
+    The **Multiresolution** parameter controls the filtered versions of the volumes
+    used during Zernike3D deformation.
+
+    The values define the filtering levels used by the deformation program. The
+    default values provide a simple multiresolution strategy, allowing the fit to
+    use information at more than one spatial scale.
+
+    This helps the deformation focus on robust structural differences rather than
+    being driven by a single frequency band.
+
+    ## Sphere Radius
+
+    The **Sphere radius** parameter defines the radius of the sphere where the
+    spherical harmonics are computed.
+
+    If the value is 0, the deformation program uses its default behavior.
+
+    When a positive value is provided, the radius is internally adapted to the
+    working sampling rate. This parameter is advanced and should normally be
+    changed only when the user wants to restrict the deformation support to a
+    specific molecular radius.
+
+    ## Zernike Degree
+
+    The **Zernike Degree** parameter controls the degree of the Zernike polynomials
+    used to describe the deformation.
+
+    Lower values allow only smoother and simpler deformations. Higher values allow
+    more complex deformation fields.
+
+    The default value is 3, which corresponds to a relatively smooth deformation
+    model.
+
+    Increasing this value may help represent more complex conformational changes,
+    but it can also make the deformation more flexible and more sensitive to noise
+    or local artifacts.
+
+    ## Harmonic Degree
+
+    The **Harmonical Degree** parameter controls the degree of the spherical
+    harmonics used in the deformation basis.
+
+    Together with the Zernike degree, it defines the complexity of the deformation
+    field.
+
+    The protocol validates that the Zernike degree must be greater than or equal
+    to the harmonic degree. If the harmonic degree is larger, the protocol reports
+    an error.
+
+    ## Regularization
+
+    The **Regularization** parameter penalizes large deformations.
+
+    Higher values penalize deformation more strongly, producing smoother and more
+    conservative transformations. Lower values allow more flexible deformation.
+
+    Regularization is important because an overly flexible deformation may fit
+    noise or artifacts rather than meaningful conformational differences.
+
+    The default value is intended as a practical compromise.
+
+    ## GPU Execution
+
+    The protocol supports both GPU and CPU execution.
+
+    When GPU execution is enabled, the CUDA implementation of the Zernike3D volume
+    deformation program is used. When GPU execution is disabled, the CPU
+    implementation is used and the number of threads can be applied.
+
+    GPU execution is recommended when available, especially for larger volumes or
+    more complex deformation settings.
+
+    ## Strain Analysis
+
+    The deformation step is run with strain analysis enabled.
+
+    This means that, in addition to producing the deformed output volume, the
+    underlying Zernike3D program can generate deformation-related files describing
+    the estimated transformation and associated deformation quantities.
+
+    These files may be useful for advanced analysis or visualization of the
+    deformation field.
+
+    ## Output Volume
+
+    The main output is **outputVolume**.
+
+    This output is written as:
+
+    `vol1DeformedTo2.mrc`
+
+    Despite the filename, the protocol logic aligns and deforms the input volume
+    toward the reference volume. The output should therefore be interpreted as the
+    deformed version of **Volume 2** in relation to **Volume 1**.
+
+    The output volume is assigned the working sampling rate computed from the
+    target-resolution and input-sampling parameters.
+
+    ## Deformation Coefficients
+
+    The protocol writes Zernike3D deformation information to files with the
+    `Volumes` root name.
+
+    One important file is `Volumes_clnm.txt`, which contains the basis parameters
+    and deformation coefficients. When the target resolution differs from 3 Å, the
+    protocol rescales these coefficients to account for the target-resolution
+    change.
+
+    These files are mainly intended for advanced users who want to inspect or reuse
+    the deformation model.
+
+    ## Interpreting the Result
+
+    The output volume should be interpreted as a deformation-based mapping between
+    two related structures.
+
+    A meaningful result suggests that the differences between the two input maps
+    can be represented by a smooth deformation. This may correspond to domain
+    motions, conformational transitions, flexible fitting, or structural
+    rearrangements.
+
+    However, the deformation is not proof of a physical pathway. It is a
+    mathematical transformation that makes one map resemble another under the
+    chosen Zernike3D basis and regularization.
+
+    The result should be interpreted together with the original maps, local
+    resolution, map quality, and biological context.
+
+    ## Practical Recommendations
+
+    Use this protocol with two related volumes representing the same molecule or
+    comparable molecular regions.
+
+    Make sure the maps are roughly aligned before running the protocol, even though
+    the protocol performs local alignment internally.
+
+    Start with the default target resolution of 8 Å for global conformational
+    differences.
+
+    Use conservative Zernike and harmonic degrees at first. Increase them only
+    when smoother deformation models cannot represent the expected change.
+
+    Keep regularization enabled and avoid very small values unless the maps are
+    clean and the expected deformation is complex.
+
+    Use GPU execution when available.
+
+    Inspect the deformed output together with both original volumes. Check whether
+    the deformation improves agreement without introducing unrealistic distortions.
+
+    ## Final Perspective
+
+    Volume Deform - Zernike3D is a deformable map-registration protocol.
+
+    For biological users, its main value is that it provides a way to model smooth
+    structural changes between two related cryo-EM maps. It can help compare
+    conformational states, study flexible regions, or generate a deformed map that
+    matches a reference state more closely.
+
+    The protocol should be treated as a structural-analysis and modeling tool. Its
+    output is useful for exploring map-to-map differences, but biological
+    interpretation requires validation against the original density and the
+    underlying experimental context.
+     """
     _label = 'volume deform - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
 

@@ -245,7 +245,271 @@ def _getSampling(imgSet):
 
 
 class XmippProtCropResizeParticles(XmippProcessParticles):
-    """ Crop or resize a set of particles """
+    """ Crop or resize a set of particles.
+
+    AI Generated
+
+    ## Overview
+
+    The Crop/Resize Particles protocol changes the image size or sampling rate of
+    a particle set.
+
+    This protocol is useful when particles need to be prepared for another
+    processing step that expects a different box size or pixel size. It can resize
+    particles, crop or window them, or perform both operations in sequence.
+
+    The protocol can also process a 2D mask instead of a particle set. In that
+    case, the output is a resized or cropped mask rather than particles.
+
+    When particles are resized, the protocol updates the sampling rate. If the
+    particles contain coordinates or alignment transformations, these are also
+    scaled so that they remain consistent with the resized images.
+
+    ## Inputs and General Workflow
+
+    The input can be:
+
+    - a set of particles;
+    - a 2D mask.
+
+    The protocol can perform two types of operation:
+
+    - resize;
+    - window operation.
+
+    If both operations are selected, resizing is performed first and the window
+    operation is applied afterwards.
+
+    For particles, the protocol converts the input set to Xmipp metadata, applies
+    the selected operations, and creates a new output particle set. For masks, it
+    applies the selected operations to the mask image and creates a new output
+    mask.
+
+    ## Input Particles or Mask
+
+    The **Input particles/Mask** parameter defines the object to be processed.
+
+    If the input is a particle set, the output is **outputParticles**.
+
+    If the input is a 2D mask, the output is **outputMask**.
+
+    The protocol keeps the input information whenever possible, but updates image
+    locations and sampling-related metadata according to the selected operations.
+
+    ## Resize Particles
+
+    The **Resize particles?** option enables image resizing.
+
+    When this option is enabled, the user must choose a resize method. Resizing
+    changes the particle dimensions and the sampling rate consistently.
+
+    For example, if particles are downsampled by a factor of 0.5, the box size
+    becomes smaller and the sampling rate becomes larger.
+
+    Resizing is useful to reduce computational cost, match another dataset, prepare
+    particles for neural-network methods, or create lower-resolution working
+    copies.
+
+    ## Resize Option
+
+    The **Resize option** parameter defines how the new size is specified.
+
+    The available options are:
+
+    **Sampling Rate**: the user provides the desired output sampling rate.
+
+    **Dimensions**: the user provides the desired output image size in pixels.
+
+    **Factor**: the user provides a multiplicative resize factor.
+
+    **Pyramid**: the user provides a pyramid level. Positive values expand the
+    image and negative values reduce it.
+
+    The chosen option determines how the output size and output sampling rate are
+    computed.
+
+    ## Resize by Sampling Rate
+
+    When **Sampling Rate** is selected, the user provides the desired output pixel
+    size in angstroms per pixel.
+
+    The protocol computes the corresponding resize factor from the current sampling
+    rate and the requested sampling rate.
+
+    This option is useful when the user wants the output particles to match a
+    specific physical pixel size.
+
+    ## Resize by Dimensions
+
+    When **Dimensions** is selected, the user provides the desired output image
+    size in pixels.
+
+    The protocol computes the corresponding resize factor from the input size and
+    the requested size. It also updates the sampling rate accordingly.
+
+    This option is useful when a downstream protocol requires a specific box size,
+    for example 128, 256, or 512 pixels.
+
+    ## Fourier Resize
+
+    The **Use Fourier method to resize?** option is available when resizing by
+    dimensions.
+
+    If enabled, resizing is performed in Fourier space. This is appropriate for
+    downsampling, but it cannot be used to increase the image dimensions.
+
+    If disabled, the protocol uses interpolation-based resizing.
+
+    Fourier resizing is often preferred for reducing image size because it can
+    preserve frequency-domain behavior more naturally. However, it should only be
+    used when the final dimensions are smaller than the original ones.
+
+    ## Resize by Factor
+
+    When **Factor** is selected, the user provides a multiplicative resize factor.
+
+    For example:
+
+    - a factor of 0.5 halves the image size;
+    - a factor of 2 doubles the image size.
+
+    The sampling rate is updated inversely to the factor. Reducing the image size
+    increases the angstrom-per-pixel value, while enlarging the image decreases it.
+
+    ## Resize by Pyramid
+
+    When **Pyramid** is selected, the protocol uses spline-pyramid interpolation.
+
+    Positive pyramid levels expand the image, while negative levels reduce it.
+
+    This option is useful when the user wants pyramid-based interpolation rather
+    than the standard resize methods.
+
+    ## Huge File Option
+
+    The **Huge file** option is intended for very large files.
+
+    When enabled, the protocol avoids the antialiasing filter and uses linear
+    interpolation. This can reduce memory requirements, but it may introduce
+    aliasing artifacts.
+
+    This option should be used only when memory limitations prevent the standard
+    processing from running.
+
+    ## Antialiasing Filter
+
+    When downsampling to a larger sampling rate, the protocol can apply a low-pass
+    filter before resizing, unless **Huge file** is enabled.
+
+    This antialiasing step reduces high-frequency content that would otherwise be
+    folded into lower frequencies during downsampling.
+
+    It is usually desirable when reducing image size.
+
+    ## Apply a Window Operation
+
+    The **Apply a window operation?** option changes the particle or mask box size
+    by cropping or windowing.
+
+    This operation can be used alone or after resizing.
+
+    Windowing is useful when the user wants a specific final box size, while
+    cropping is useful when the user wants to remove a fixed number of pixels from
+    the borders.
+
+    ## Crop Operation
+
+    When the window operation is **crop**, the **Crop size** parameter defines how
+    many pixels are removed from each border.
+
+    For example, if the crop size is 10 pixels, the final image size is reduced by
+    20 pixels in each dimension because 10 pixels are removed from both sides.
+
+    Cropping is useful for removing empty borders or reducing the box around a
+    centered particle.
+
+    ## Window Operation
+
+    When the window operation is **window**, the **Window size** parameter defines
+    the final output size in pixels.
+
+    The image is expanded or cut in all directions so that the origin remains
+    consistent.
+
+    This is useful when the user needs a precise final box size for downstream
+    processing.
+
+    ## Metadata Updates for Particles
+
+    When particles are resized, the protocol updates important metadata.
+
+    The output sampling rate is changed to the new value. If particles have
+    coordinates, the coordinates are scaled by the resize factor. If particles have
+    alignment transformations, the shifts in the transformation matrices are also
+    scaled.
+
+    These updates are important because they keep the particle metadata consistent
+    with the resized images.
+
+    ## Output Particles
+
+    If the input is a particle set, the main output is **outputParticles**.
+
+    This output contains the processed particles after resizing, cropping, or
+    windowing. The output particle set preserves the input metadata and updates
+    image locations, sampling rate, coordinates, and alignment shifts when needed.
+
+    The output can be used in downstream protocols like any other particle set.
+
+    ## Output Mask
+
+    If the input is a 2D mask, the main output is **outputMask**.
+
+    This output contains the resized or cropped mask. It copies the input mask
+    information and updates the sampling rate when resizing is performed.
+
+    This is useful when the same mask needs to be adapted to match resized or
+    windowed particle images.
+
+    ## Validation Rules
+
+    The protocol requires that at least one operation is selected: resizing,
+    windowing, or both.
+
+    If no operation is selected, validation reports an error.
+
+    The protocol also prevents invalid Fourier resizing cases where the Fourier
+    method would be used to increase the image dimensions.
+
+    ## Practical Recommendations
+
+    Use resizing to reduce computational cost or to match a target pixel size.
+
+    Use Fourier resizing when downsampling by dimensions and memory allows it.
+
+    Use the huge-file option only when memory limitations require it.
+
+    Use cropping when you want to remove a fixed number of pixels from the borders.
+
+    Use windowing when you need a precise final box size.
+
+    When resizing particles with coordinates or alignments, rely on this protocol
+    rather than manually resizing images, because it updates the associated
+    metadata.
+
+    Inspect a subset of output particles or masks to confirm that the final size
+    and centering are correct.
+
+    ## Final Perspective
+
+    Crop/Resize Particles is a preparation protocol for changing particle or 2D
+    mask dimensions.
+
+    For biological users, its value is that it adapts particle images to the size
+    and sampling requirements of downstream workflows while preserving consistent
+    metadata. This is especially important when particles have coordinates or
+    alignment shifts that must remain compatible with the processed images.
+    """
     # Protocol constants
     OUTPUT_PARTICLES_NAME = 'outputParticles'
     OUTPUT_MASK_NAME = 'outputMask'
@@ -435,7 +699,275 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
 
 
 class XmippProtCropResizeVolumes(XmippProcessVolumes):
-    """Crops or resizes 3D volumes to a desired size or region of interest. This protocol helps optimize memory usage and focus on relevant structural areas for analysis or comparison."""
+    """Crops or resizes 3D volumes to a desired size or region of interest.
+    This protocol helps optimize memory usage and focus on relevant structural
+    areas for analysis or comparison.
+
+    AI Generated
+
+    ## Overview
+
+    The Crop/Resize Volumes protocol changes the size or sampling rate of one
+    volume or a set of volumes.
+
+    This protocol is useful when maps need to be downsampled, resampled to a target
+    pixel size, cropped to remove borders, windowed to a new box size, or prepared
+    for comparison with other volumes. It can perform resizing, window operations,
+    or both.
+
+    When a single input volume has associated half maps, the protocol applies the
+    same filtering, resizing, and windowing operations to the half maps as well.
+    This keeps the full map and its half maps geometrically consistent.
+
+    ## Inputs and General Workflow
+
+    The input can be:
+
+    - a single volume;
+    - a set of volumes.
+
+    The protocol can perform two types of operation:
+
+    - resize;
+    - window operation.
+
+    If both are enabled, resizing is performed first and the window operation is
+    applied afterwards.
+
+    The protocol writes the processed maps and creates the corresponding Scipion
+    output volume or volume set. Sampling rate and origin information are updated
+    when resizing is performed.
+
+    ## Input Volumes
+
+    The **Input volumes** parameter defines the map or maps to be processed.
+
+    If the input is a single volume, the output is a processed single volume.
+
+    If the input is a set of volumes, the output is a processed volume set.
+
+    The protocol is designed for geometrical preparation of maps. It does not
+    perform alignment, refinement, masking, sharpening, or validation.
+
+    ## Resize Volumes
+
+    The **Resize volumes?** option enables resizing.
+
+    When enabled, the user chooses how to define the new size or sampling rate. The
+    output sampling rate is updated consistently with the selected resize factor.
+
+    Resizing is useful when the user wants to reduce memory usage, match maps from
+    different workflows, create lower-resolution working copies, or prepare maps
+    for algorithms requiring a specific voxel size.
+
+    ## Resize Option
+
+    The **Resize option** parameter defines how the resizing is specified.
+
+    The available options are:
+
+    **Sampling Rate**: define the desired output sampling rate.
+
+    **Dimensions**: define the desired output box size in pixels.
+
+    **Factor**: define a multiplicative resize factor.
+
+    **Pyramid**: define a spline-pyramid level.
+
+    Each option leads to a consistent update of both map dimensions and sampling
+    rate.
+
+    ## Resize by Sampling Rate
+
+    When **Sampling Rate** is selected, the user provides the new voxel size in
+    angstroms per pixel.
+
+    The protocol computes the resize factor from the old sampling rate and the new
+    one.
+
+    This option is useful when volumes need to match a specific physical sampling
+    for downstream comparison or processing.
+
+    ## Resize by Dimensions
+
+    When **Dimensions** is selected, the user provides the final box size in
+    pixels.
+
+    The protocol computes the resize factor and updates the sampling rate
+    accordingly.
+
+    This option is useful when a downstream protocol requires a specific cubic box
+    size.
+
+    ## Fourier Resize
+
+    The **Use Fourier method to resize?** option is available when resizing by
+    dimensions.
+
+    If enabled, resizing is performed in Fourier space. This is intended for
+    reducing the volume size and should not be used to increase dimensions.
+
+    If disabled, interpolation-based resizing is used.
+
+    Fourier resizing can be appropriate when downsampling maps while preserving
+    frequency-domain properties.
+
+    ## Resize by Factor
+
+    When **Factor** is selected, the user provides a resize factor.
+
+    A factor below 1 reduces the map dimensions. A factor above 1 enlarges them.
+
+    The sampling rate is updated inversely to the factor.
+
+    ## Resize by Pyramid
+
+    When **Pyramid** is selected, the protocol uses spline pyramids.
+
+    Positive levels expand the map and negative levels reduce it.
+
+    This option is useful for pyramid-based interpolation workflows.
+
+    ## Huge File Option
+
+    The **Huge file** option is intended for very large volume files.
+
+    When enabled, the protocol disables the antialiasing filter and uses linear
+    interpolation. This reduces memory usage but can introduce aliasing artifacts.
+
+    Use this option only when the standard method cannot be run because of memory
+    limitations.
+
+    ## Antialiasing Filter
+
+    When downsampling to a larger sampling rate, the protocol can apply a
+    low-pass filter before resizing, unless the huge-file option is enabled.
+
+    This prevents high-frequency information from aliasing into lower frequencies.
+
+    The same filter is applied to associated half maps when processing a single
+    volume with half maps.
+
+    ## Apply a Window Operation
+
+    The **Apply a window operation?** option changes the box size of the volume or
+    volume set.
+
+    The operation can be:
+
+    - crop;
+    - window.
+
+    Window operations can be performed alone or after resizing.
+
+    ## Crop Operation
+
+    When the window operation is **crop**, the **Crop size** parameter defines how
+    many pixels are removed from each border.
+
+    If the crop size is 10 pixels, the final box size is reduced by 20 pixels in
+    each dimension.
+
+    Cropping is useful for removing empty borders or reducing box size around a
+    centered map.
+
+    ## Window Operation
+
+    When the window operation is **window**, the **Window size** parameter defines
+    the final output box size in pixels.
+
+    The protocol expands or cuts the volume in all directions while preserving the
+    origin convention as consistently as possible.
+
+    This option is useful when the map must have a specific final box size.
+
+    ## Half-Map Processing
+
+    If the input is a single volume and it has associated half maps, the protocol
+    applies the same operations to the half maps.
+
+    This includes filtering, resizing, and windowing.
+
+    This behavior is important because many validation and post-processing
+    workflows require the full map and half maps to have the same dimensions,
+    sampling rate, and preprocessing history.
+
+    ## Output Sampling Rate
+
+    When resizing is performed, the output sampling rate is updated to the new
+    computed value.
+
+    For a set of volumes, the output set receives the new sampling rate.
+
+    For a single volume, the output volume receives the new sampling rate, and the
+    MRC header is also updated.
+
+    ## Origin Update for Single Volumes
+
+    When resizing a single volume, the protocol adjusts the origin shifts so that
+    the physical coordinate convention remains consistent with the new sampling
+    rate and output dimensions.
+
+    This is important because changing the number of voxels and voxel size can
+    otherwise shift the apparent position of the map in physical space.
+
+    The output volume origin is therefore updated from the input origin, input
+    dimensions, output dimensions, input sampling, and output sampling.
+
+    ## Output Volume or Volume Set
+
+    The main output is **outputVol**.
+
+    If the input is a single volume, this output is the processed volume.
+
+    If the input is a set of volumes, this output is the processed volume set.
+
+    The output can be used in downstream protocols like any other Scipion volume
+    or volume set.
+
+    ## Validation Rules
+
+    The protocol prevents invalid Fourier resizing cases where Fourier resizing
+    would be used to increase the dimensions.
+
+    For volumes, the shared validation is applied to resizing choices.
+
+    Users should additionally ensure that window sizes and crop sizes are
+    reasonable for the input volume dimensions.
+
+    ## Practical Recommendations
+
+    Use resizing by sampling rate when the goal is to match a specific voxel size.
+
+    Use resizing by dimensions when the goal is to obtain a specific box size.
+
+    Use Fourier resizing for downsampling when appropriate.
+
+    Use cropping to remove a fixed border region.
+
+    Use windowing to enforce a precise final box size.
+
+    Use the huge-file option only when memory limitations prevent normal
+    processing.
+
+    For volumes with half maps, this protocol is useful because it keeps the full
+    map and half maps processed consistently.
+
+    After resizing, check the output sampling rate and origin before using the map
+    for alignment, validation, or map-model comparison.
+
+    ## Final Perspective
+
+    Crop/Resize Volumes is a map-preparation protocol.
+
+    For biological users, its value is that it adapts maps to the size and voxel
+    spacing required by downstream processing while preserving important metadata
+    such as sampling rate, origin, and, when present, half-map consistency.
+
+    The protocol should be understood as a geometrical and sampling-rate
+    transformation step. It does not change the biological content of the map, but
+    it prepares the map for more efficient or compatible processing.
+    """
     _label = 'crop/resize volumes'
     _inputLabel = 'volumes'
     _devStatus = UPDATED

@@ -45,7 +45,137 @@ CLASSES_CORE = '_core'
 
 class XmippProtCoreAnalysis(ProtClassify2D):
     """ Analyzes the core of a 2D classification. The core is calculated through
-    the Mahalanobis distance from each image to the center of the class. """
+    the Mahalanobis distance from each image to the center of the class.
+
+    AI Generated:
+
+    ## Overview
+
+    The Core Analysis protocol evaluates the internal consistency of 2D classes
+    by identifying the most representative particles within each class. It is
+    based on statistical distances—specifically the Mahalanobis distance—between
+    each particle and the center of its assigned class. The goal is to
+    distinguish well-aligned, structurally consistent particles (the *core*)
+    from outliers or poorly aligned images (often referred to as *junk*).
+
+    In practical cryo-EM workflows, this protocol is particularly useful after
+    a 2D classification step. Even when classes appear visually clean, they
+    often contain particles that do not fully conform to the dominant structure.
+    Removing these particles improves the quality of downstream steps such as
+    3D reconstruction, refinement, or heterogeneity analysis.
+
+    For a biological user, this protocol provides a principled way to “clean”
+    classes without relying purely on visual inspection, which can be
+    subjective and time-consuming.
+
+    ## Inputs and General Workflow
+
+    The protocol takes as input a **set of 2D classes**, typically produced by
+    a previous classification method. Each class contains particles that are
+    assumed to represent similar projections of the underlying structure.
+
+    The analysis proceeds by modeling the statistical distribution of particles
+    within each class. Using this model, the protocol computes how far each
+    particle deviates from the class center. Particles that deviate strongly
+    are considered less reliable and may be excluded from the class core.
+
+    The result is a refined set of classes that contains only the most
+    representative particles, while outliers are effectively discarded.
+
+    ## Understanding the Concept of “Core”
+
+    The *core* of a class can be understood as the subset of particles that
+    best represent the underlying signal. These particles are mutually
+    consistent in both appearance and alignment.
+
+    In contrast, particles outside the core may arise from several sources:
+
+    * Misalignment during classification
+    * Structural heterogeneity (different conformations)
+    * Noise-dominated images
+    * Contaminants or artifacts
+
+    By focusing on the core, the protocol enhances the structural signal and
+    reduces variability that is not biologically meaningful.
+
+    ## Z-score Thresholds: Controlling Particle Selection
+
+    The main parameters of this protocol are two Z-score thresholds, which
+    control how strictly particles are filtered.
+
+    ### Junk Z-score
+
+    This parameter defines how far a particle can deviate from the class center
+    before being considered an outlier. Lower values make the selection
+    stricter, removing more particles. Higher values are more permissive and
+    retain more images.
+
+    From a practical perspective, values around 2–3 are commonly used. A value
+    near 3 corresponds roughly to keeping particles within the main body of a
+    Gaussian distribution. Reducing this threshold is useful when classes are
+    noisy or suspected to contain significant contamination.
+
+    ### PCA Z-score
+
+    This parameter performs a similar filtering but in a reduced feature space
+    obtained through principal component analysis (PCA). It captures
+    variability in the main modes of variation within the class.
+
+    Biologically, this is particularly relevant when subtle structural
+    differences or alignment inconsistencies exist. The PCA-based filtering can
+    detect outliers that are not obvious in the original space.
+
+    As with the Junk Z-score, lower values enforce stricter filtering.
+
+    ## Outputs and Their Interpretation
+
+    The protocol produces a new set of 2D classes containing only the particles
+    that belong to the *core* of each class.
+
+    Importantly, the class identities are preserved, but their composition
+    changes: each class now contains fewer particles, ideally those that are
+    more consistent and better aligned.
+
+    From a biological standpoint, these refined classes typically show:
+
+    * Sharper structural features
+    * Reduced noise
+    * Improved interpretability
+
+    However, users should be aware that aggressive filtering may remove rare
+    but biologically relevant states. This is particularly important in systems
+    with continuous heterogeneity or multiple conformations.
+
+    ## Practical Recommendations
+
+    In routine workflows, this protocol is best used after an initial 2D
+    classification, especially when preparing data for high-resolution
+    reconstruction.
+
+    A good strategy is to start with moderate Z-score thresholds (around 3)
+    and visually inspect the resulting classes. If classes still appear noisy
+    or blurred, lowering the thresholds can improve consistency.
+
+    For datasets with suspected heterogeneity, caution is advised.
+    Over-filtering may eliminate particles corresponding to minor
+    conformational states, which could be biologically important.
+
+    It is also useful to compare results before and after core analysis.
+    Improvements in class sharpness and downstream reconstruction quality are
+    good indicators that the protocol has been beneficial.
+
+    ## Final Perspective
+
+    Core Analysis is a statistically grounded alternative to manual class
+    cleaning. By identifying the most representative particles within each
+    class, it enhances data quality in a reproducible and objective manner.
+
+    For most cryo-EM users, this protocol serves as a bridge between initial
+    classification and high-quality structural interpretation, helping to
+    ensure that subsequent analyses are based on the most reliable subset of
+    the data.
+
+    """
     
     _label = 'core analysis'
     

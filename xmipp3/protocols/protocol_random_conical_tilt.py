@@ -41,7 +41,293 @@ from xmipp3.convert import getImageLocation, alignmentToRow, convertToMrc
 
 
 class XmippProtRCT(ProtInitialVolume):
-    """Creates initial 3D volumes using 2D classes and particle pairs from tilted images. Applies the Random Conical Tilt (RCT) method to generate unbiased starting volume for structure refinement, even with a small number of image pairs. The volume serves as starting models for further refinement steps. """
+    """Creates initial 3D volumes using 2D classes and particle pairs from
+    tilted images. Applies the Random Conical Tilt (RCT) method to generate
+    unbiased starting volume for structure refinement, even with a small number
+    of image pairs. The volume serves as starting models for further
+    refinement steps.
+
+    AI Generated
+
+    ## Overview
+
+    The Random Conical Tilt protocol creates one or more initial 3D volumes from
+    tilted-pair particle data using the Random Conical Tilt, or RCT, method.
+
+    RCT is a classical strategy for obtaining initial 3D models from pairs of
+    untilted and tilted images. The untilted particles are first aligned or grouped
+    into 2D classes. The corresponding tilted particles are then used, together
+    with the known tilt geometry, to reconstruct a 3D volume.
+
+    This protocol is useful when the user has acquired tilted-pair data and wants
+    to generate starting models for later 3D refinement. Because the geometry of
+    the tilted acquisition provides important orientation information, RCT can
+    produce initial volumes even when no previous 3D reference is available.
+
+    The output is a set of reconstructed initial volumes. Optionally, the protocol
+    also produces low-pass-filtered versions of those volumes.
+
+    ## Inputs and General Workflow
+
+    The protocol requires two related inputs:
+
+    - a set of tilted-pair particles;
+    - a set of input particles or 2D classes with alignment information.
+
+    The tilted-pair particle set provides the relationship between each untilted
+    particle and its tilted counterpart, together with the tilt-angle information.
+    The input particles or classes define the aligned untilted views that will be
+    used to organize the reconstruction.
+
+    The protocol first creates Xmipp metadata linking each untilted particle,
+    tilted particle, 2D alignment, micrograph pair, and tilt angle. Then, for each
+    input class or particle group, it aligns the tilted particles with respect to
+    the corresponding untilted reference and reconstructs a 3D volume using ART
+    reconstruction.
+
+    If filtering is enabled, each reconstructed volume is also low-pass filtered.
+
+    ## Input Particles Tilt Pair
+
+    The **Input particles tilt pair** parameter should point to a
+    **ParticlesTiltPair** object.
+
+    This object contains two linked particle sets:
+
+    - the untilted particles;
+    - the tilted particles.
+
+    It also contains the coordinate-pair and micrograph-pair information needed to
+    associate each particle with its corresponding tilted view. The tilt angles are
+    read from the paired-coordinate metadata.
+
+    This input is the geometrical foundation of the protocol. If the tilted and
+    untilted particles are not correctly paired, the reconstructed RCT volumes will
+    not be reliable.
+
+    ## Input Classes or Particles
+
+    The **Input classes** parameter can be either a set of particles or a set of 2D
+    classes.
+
+    These input images must contain 2D alignment information. The protocol checks
+    this requirement before running.
+
+    If a **SetOfParticles** is provided, the protocol reconstructs one RCT volume
+    from that particle set.
+
+    If a **SetOfClasses** is provided, the protocol reconstructs one RCT volume for
+    each class. This is a common use case: untilted particles are first classified
+    into 2D classes, and then each class is used to generate a separate initial 3D
+    volume from the corresponding tilted particles.
+
+    Using classes can help separate different views, conformations, or particle
+    subsets before RCT reconstruction.
+
+    ## 2D Alignment Requirement
+
+    The input particles or classes must have alignment information.
+
+    This alignment describes how the untilted particles are positioned and rotated
+    within the 2D class or particle set. The protocol uses this information when
+    creating the RCT metadata and when relating untilted and tilted images.
+
+    If the input particles or classes are not aligned, the RCT reconstruction will
+    not have a meaningful orientation framework.
+
+    In practice, users should usually perform 2D alignment or 2D classification on
+    the untilted particles before running this protocol.
+
+    ## Creating RCT Metadata
+
+    The protocol creates an Xmipp metadata file containing the information needed
+    for RCT reconstruction.
+
+    For each particle, the metadata includes:
+
+    - the untilted particle image;
+    - the tilted particle image;
+    - the untilted and tilted micrograph names;
+    - the particle coordinates;
+    - the 2D alignment parameters;
+    - the tilt-pair angles;
+    - the particle identifier.
+
+    This metadata is created separately for each input class or particle group.
+
+    The protocol also accounts for possible differences in sampling rate between
+    the tilted-pair particles and the input aligned particles by scaling the 2D
+    alignment parameters accordingly.
+
+    ## Thin Object Option
+
+    The **Thin Object** option allows the protocol to stretch tilted projections to
+    better match the untilted projections.
+
+    This option may be useful when the specimen is physically thin and the effect
+    of tilting can be approximated by a stretching operation in projection.
+
+    It should be used only when this assumption is appropriate for the specimen.
+    For globular or thick particles, enabling this option may introduce an
+    inappropriate deformation.
+
+    ## Maximum Allowed Shift for Tilted Particles
+
+    The **Maximum allowed shift for tilted particles** parameter defines the
+    largest allowed shift, in pixels, during alignment of the tilted particles.
+
+    Tilted particles whose estimated shift exceeds this value are discarded.
+
+    This is a quality-control parameter. Very large shifts may indicate incorrect
+    pairing, poor tilted-image quality, wrong alignment, or particles that cannot
+    be reliably matched between tilted and untilted views.
+
+    A larger value is more permissive and discards fewer particles. A smaller value
+    is stricter and may remove problematic tilted particles, but it may also remove
+    valid particles if the initial alignment is difficult.
+
+    If the value is set larger than the image size, effectively no particles are
+    discarded by this criterion.
+
+    ## Skip Tilted Translation Alignment
+
+    The **Skip tilted translation alignment** option disables translation alignment
+    of the tilted particles.
+
+    Normally, the protocol aligns the tilted images with respect to the untilted
+    reference or class average. This helps improve the consistency of the tilted
+    particles before reconstruction.
+
+    However, if the tilted images have very low quality, translation alignment may
+    produce poor estimates and may make the reconstruction worse. In such cases,
+    skipping tilted translation alignment can be safer.
+
+    This is an advanced option and should be used when the user has reason to
+    suspect that tilted-particle translation alignment is unreliable.
+
+    ## Reconstruction Parameters
+
+    The **Additional reconstruction parameters** field allows the user to provide
+    extra options for the Xmipp ART reconstruction program.
+
+    The default parameters are intended as a reasonable starting point for RCT
+    initial-volume reconstruction.
+
+    Advanced users can modify these parameters to change reconstruction behavior,
+    such as the number of iterations or regularization-related settings. However,
+    these options should be changed carefully because RCT reconstructions are often
+    based on limited and noisy tilted-pair data.
+
+    Most users should keep the default reconstruction parameters unless they have a
+    specific reason to tune the ART reconstruction.
+
+    ## Filtering Reconstructed Volumes
+
+    The **Filter reconstructed volumes?** option applies a low-pass filter to the
+    reconstructed RCT volumes.
+
+    RCT volumes are often noisy, especially when they are reconstructed from a
+    small number of particle pairs or from tilted images with low signal-to-noise
+    ratio. Low-pass filtering can make the initial volume easier to interpret and
+    more suitable as a starting reference.
+
+    The protocol can output both the unfiltered reconstructed volumes and the
+    filtered versions.
+
+    ## Resolution of the Low-Pass Filter
+
+    The **Resolution of the low-pass filter** parameter defines the cutoff used for
+    filtering the reconstructed volumes, expressed in digital frequency.
+
+    Lower cutoff values apply stronger low-pass filtering. Higher values preserve
+    more high-frequency information.
+
+    For initial models, moderate low-pass filtering is usually appropriate because
+    the goal is to obtain the correct overall shape and orientation, not to
+    interpret high-resolution features.
+
+    Excessively weak filtering may leave noisy artifacts in the initial volume,
+    whereas excessively strong filtering may remove useful shape information.
+
+    ## Output Volumes
+
+    The main output is **outputVolumes**.
+
+    This output contains one reconstructed RCT volume for each input particle group
+    or 2D class. If the input is a single particle set, one volume is produced. If
+    the input is a set of classes, one volume is produced per class.
+
+    The volumes are converted to MRC format and registered in Scipion with the
+    sampling rate of the untilted particles from the tilted-pair input.
+
+    These volumes are intended mainly as initial models for further refinement.
+
+    ## Output Filtered Volumes
+
+    If filtering is enabled, the protocol also produces
+    **outputFilteredVolumes**.
+
+    These are low-pass-filtered versions of the RCT reconstructions. In many
+    workflows, the filtered volumes are more useful as starting references because
+    they suppress noise and emphasize the global shape.
+
+    Users should inspect both filtered and unfiltered outputs when deciding which
+    volume to use for downstream refinement.
+
+    ## Interpreting RCT Volumes
+
+    RCT volumes should be interpreted as initial models, not as final
+    high-resolution reconstructions.
+
+    They are often affected by missing information, noise, limited angular
+    coverage, tilted-image quality, and the number of particles contributing to
+    each class. Their main value is to provide a plausible 3D starting point for
+    later refinement.
+
+    When one volume is reconstructed per 2D class, differences between RCT volumes
+    may reflect different views, conformational states, particle quality, or class
+    composition. Some classes may produce better initial volumes than others.
+
+    ## Practical Recommendations
+
+    Before running RCT, make sure that tilted and untilted particles are correctly
+    paired.
+
+    Use 2D classes from untilted particles when possible. Class averages provide
+    cleaner references for aligning the tilted particles than individual noisy
+    particles.
+
+    Use classes with enough particles. Very small classes may produce noisy or
+    unstable RCT volumes.
+
+    Keep filtering enabled for most initial-model workflows. Filtered RCT volumes
+    are usually more useful for subsequent refinement.
+
+    Inspect the tilted-particle alignment and the resulting volumes. Discarded
+    particles or poor volumes may indicate problems in tilted-pair picking,
+    pairing, or class quality.
+
+    Use the maximum-shift parameter to reject tilted particles that cannot be
+    aligned reliably, but avoid making it too strict at the beginning.
+
+    Treat the output as an initial reference. It should usually be refined further
+    with a standard 3D refinement protocol.
+
+    ## Final Perspective
+
+    Random Conical Tilt is an initial-volume reconstruction protocol for
+    tilted-pair cryo-EM data.
+
+    For biological users, its main value is that it can generate a 3D starting
+    model from experimental tilt-pair geometry, without requiring an external
+    reference. This is especially useful for new specimens or workflows where
+    reference bias should be minimized.
+
+    The reliability of the output depends strongly on correct tilted-pair
+    coordinates, good untilted 2D alignment or classification, and sufficient
+    tilted-particle quality. Used carefully, RCT provides a practical bridge from
+    paired 2D observations to an initial 3D model.
+    """
     _label = 'random conical tilt'
     
     def __init__(self, **args):
