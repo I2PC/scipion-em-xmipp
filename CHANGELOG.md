@@ -1,3 +1,14 @@
+## Release 28.1.0
+- Protocols updated
+    - New complete and verbose help documentation for all protocols
+    - ‎protocol_extract_particles: Particle evaluation is optional now
+- Protocols fixed
+    - Removing "imports xmipp3" from protocols does not need it
+    - Minor bug fixes on more than 9 protocols
+    - Test fixed: TestXmippVarianceFiltering and TestXmippReconstructSignificant 
+- More scipion-em-xmipp
+
+
 ## Release 28.0.1
 - More scipion-em-xmipp
     - Fixing the XMIPP_CUDA_BIN behaves
