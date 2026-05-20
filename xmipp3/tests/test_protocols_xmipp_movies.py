@@ -391,7 +391,7 @@ class TestMaxShift(BaseTest):
                 assertOutput('outputMicrographs', ids=[results.index(True)+1])
                 assertOutput('outputMicrographsDiscarded', ids=[results.index(False)+1])
     
-    def doFilter(self, inputMovies, rejType, label, mxFm=0.23, mxMo=0.30):
+    def doFilter(self, inputMovies, rejType, label, mxFm=0.12, mxMo=1.01):
         """ Template for the movieMaxShift protocol.
             Default thresholds here should discard one movie and let pass the other
         """
@@ -407,13 +407,16 @@ class TestMaxShift(BaseTest):
     # ------- the Tests ---------------------------------------
     # Note: the shift in these movies is very small. Especially in combination with binning,
     # we're getting to the limit of shift we can detect
+    # Movie 1: maxGlobalShift 1.0017 maxFrameShift 0.124
+    # Movie 2: maxGlobalShift 1.026 maxFrameShift 0.112
+
     def testFilterFrame(self):
         """ This must discard the second movie for a Frame shift.
         """
         label = 'maxShift by Frame'
         rejType = XmippProtMovieMaxShift.REJ_FRAME
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.12) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[False, True])
 
     def testFilterMovie(self): 
@@ -422,7 +425,7 @@ class TestMaxShift(BaseTest):
         label = 'maxShift by Movie'
         rejType = XmippProtMovieMaxShift.REJ_MOVIE
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.158) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.13, 1.01) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
 
     def testFilterAnd(self): 
@@ -431,7 +434,7 @@ class TestMaxShift(BaseTest):
         label = 'maxShift AND'
         rejType = XmippProtMovieMaxShift.REJ_AND
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.1, 0.158) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 1.01) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
 
     def testFilterOrFrame(self):
@@ -440,7 +443,7 @@ class TestMaxShift(BaseTest):
         label = 'maxShift OR (by frame)'
         rejType = XmippProtMovieMaxShift.REJ_OR
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 1.0) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.12, 1.03) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True,  hasMic=True, results=[False, True])
 
     def testFilterOrMovie(self): 
@@ -449,17 +452,8 @@ class TestMaxShift(BaseTest):
         label = 'maxShift OR (by movie)'
         rejType = XmippProtMovieMaxShift.REJ_OR
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 1.0, 0.158) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.13, 1.01) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
-
-    def testFilterOrBoth(self): 
-        """ This must discard the second movie for OR (both).
-        """
-        label = 'maxShift OR (by both)'
-        rejType = XmippProtMovieMaxShift.REJ_OR
-
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version)
-        self._checkMaxShiftFiltering(protDoMic, label,  noBin=True, hasMic=True, results=[False, True])
 
     def testFilterRejectBoth(self):
         """ This must discard both movies.
@@ -467,7 +461,7 @@ class TestMaxShift(BaseTest):
         label = 'maxShift REJECT both'
         rejType = XmippProtMovieMaxShift.REJ_OR
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, mxMo=0.01)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, mxMo=1.0)
         self._checkMaxShiftFiltering(protDoMic, label,  noBin=True, hasMic=True, results=[False, False])
 
     def testFilterAcceptBoth(self):

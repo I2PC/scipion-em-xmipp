@@ -152,7 +152,7 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
                       help='Pixels outside this circle are assumed to be '
                            'noise and their stddev is set to 1. Radius for '
                            'background circle definition (in pix.). If this '
-                           'value is 0, then half the box size is used.',
+                           'value is less than or equal to 0, then half the box size is used.',
                       expertLevel=LEVEL_ADVANCED)
 
         form.addParallelSection(threads=3, mpi=1)

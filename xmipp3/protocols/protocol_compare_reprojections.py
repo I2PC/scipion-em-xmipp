@@ -53,13 +53,121 @@ OUTPUTS_FN = "outputs.txt"
 
         
 class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
-    """Compares a set of classes or averages with the corresponding projections of a reference volume.
-    The set of images must have a 3D angular assignment and the protocol computes the residues
-    (the difference between the experimental images and the reprojections). The zscore of the mean
-    and variance of the residues are computed. Large values of these scores may indicate outliers.
-    The protocol also analyze the covariance matrix of the residual and computes the logarithm of
-    its determinant [Cherian2013]. The extremes of this score (called zScoreResCov), that is
-    values particularly low or high, may indicate outliers."""
+    """Compares a set of classes or averages with the corresponding projections
+    of a reference volume. The set of images must have a 3D angular assignment
+    and the protocol computes the residues (the difference between the
+    experimental images and the reprojections). The zscore of the mean
+    and variance of the residues are computed. Large values of these scores
+    may indicate outliers. The protocol also analyze the covariance matrix of
+    the residual and computes the logarithm of its determinant [Cherian2013].
+    The extremes of this score (called zScoreResCov), that is
+    values particularly low or high, may indicate outliers.
+
+    AI Generated:
+
+    This protocol is a sanity-check and diagnostics tool: it compares what your
+    2D data “looks like” against what a 3D reference volume “predicts” it
+    should look like from the corresponding viewing directions. In practice,
+    you use it to (a) detect outliers or problematic classes/particles, (b)
+    check whether an assigned orientation set is consistent with a given map,
+    and (c) optionally decide which map (among several candidates) best
+    explains your data.
+
+    It takes as input a 2D dataset (particles, class averages, 2D classes, or
+    even 3D classes’ projections if provided as 2D images) and a 3D reference
+    (a single volume or a set of volumes / 3D classes). The central requirement
+    is that the 2D images have—or can be given—an angular assignment so they
+    can be matched to reprojections. If your inputs already have reliable
+    projection alignment (Euler angles/shifts), the protocol can reuse it; if
+    not, it can estimate orientations by projection matching against a
+    projection gallery generated from the volume. This “use existing assignment
+    vs. compute one” choice is the most important conceptual switch: the first
+    mode tests the consistency of an existing solution; the second mode
+    searches for the best explanation of your images given the map.
+
+    The output is a new dataset in which each input image (or each class
+    representative) is enriched with the reference reprojection it matched to
+    and several quality scores that summarize the mismatch. Conceptually, for
+    every input image the protocol generates (or retrieves) the best-matching
+    projection of the 3D reference, refines angles/shifts in a local continuous
+    way, and then measures how much of the experimental image is not explained
+    by that reprojection. Those unexplained components are the “residuals.”
+    When residuals are small and structureless, the image is well explained by
+    the reference. When residuals are large or have systematic structure, the
+    image is suspicious: it may be an outlier, belong to a different
+    conformation, be poorly aligned, be contaminated, or the reference map may
+    simply be wrong for that subset.
+
+    From a user’s point of view, there are three practical aims you will
+    typically choose between.
+
+    If you want outlier detection, you run the protocol on a set of class
+    averages (or 2D classes) against a reference volume and inspect the
+    reported residual statistics. Large residual mean/variance scores are a
+    red flag: they indicate that the reprojection consistently fails to
+    explain part of the image, or that the mismatch fluctuates strongly. If
+    you enable the more expensive residual evaluation option, the protocol
+    also characterizes residuals by their covariance structure and reports a
+    score derived from it (the log-determinant idea from Cherian et al.).
+    Extremely high or low values of that covariance-based score can indicate
+    abnormal residual structure—useful for spotting classes that look
+    “explained” by simple variance but still have structured, non-random
+    leftover signal.
+
+    If you want orientation/assignment consistency checking, you provide two
+    things: a dataset with an angular assignment (for example, particles after
+    a refinement step) and the volume that assignment supposedly corresponds
+    to. You keep “use assignment” enabled. The protocol then tests “given
+    these angles, do the reprojections match the images?” This is often the
+    fastest way to detect when a refinement has drifted, when symmetry handling
+    is wrong, when CTF inconsistencies matter, or when a subset of particles
+    is fundamentally incompatible with the map.
+
+    If you want map selection/ranking, you give a set of candidate volumes or
+    3D classes, together with the same 2D dataset, and enable ranking. The
+    protocol evaluates the match for each candidate and reports which volume
+    achieves the best overall score. If the candidates are 3D classes (not
+    just volumes), it can also extract the particles associated with the best
+    class and/or the best volume itself, which is a convenient way to choose
+    the “best explaining” 3D solution and immediately continue processing
+    downstream.
+
+    Several options strongly affect what “match quality” means in practice. The
+    symmetry group matters because it defines which orientations are
+    considered equivalent; the wrong symmetry can make good images look
+    inconsistent or vice versa. The angular sampling controls how densely the
+    protocol searches orientations when it needs to do projection matching;
+    coarse sampling is faster but may miss the correct view and inflate
+    residuals. The “ignore CTF” choice is mainly about whether you want a
+    comparison that resembles what humans expect (CTF ignored: cleaner-looking
+    projections) or what the microscope produced (CTF considered: more faithful
+    to physics). For diagnostics of structural compatibility, ignoring the CTF
+    is often fine; for strict quantitative consistency, including CTF is more
+    principled, but it can make projections look counterintuitive and sometimes
+    harder to interpret visually.
+
+    Downsampling is a practical speed knob. When enabled, both the 2D input
+    and the 3D reference are rescaled to a coarser pixel size (targeting around
+    3 Å/px) to reduce runtime and memory. This usually preserves enough
+    information to flag gross inconsistencies and outliers, but it is not meant
+    for subtle, high-resolution discrepancies. If you are troubleshooting
+    overall heterogeneity or gross alignment problems, downsampling is
+    typically the right choice; if you are testing very fine differences,
+    you may prefer to keep native sampling and accept longer runs.
+
+    What you should expect to obtain at the end is not “a new reconstruction,”
+    but a set of diagnostic outputs per image/class: the matched reprojection,
+    the refined alignment parameters (if refinement was performed), and
+    mismatch/residual scores that let you sort or filter your dataset. The most
+    common workflow is to sort by the residual-related scores, inspect the
+    worst (and sometimes also the best) cases, and then decide whether to
+    remove outliers, split the dataset, adjust symmetry, rerun refinement with
+    a better initial map, or compare against alternative maps.
+
+    In short: use this protocol when you want a practical answer to “does this
+    3D map explain these 2D images, and which images (or which map) are the
+    exceptions?”
+    """
 
     _label = 'compare reprojections'
     _lastUpdateVersion = VERSION_3_0

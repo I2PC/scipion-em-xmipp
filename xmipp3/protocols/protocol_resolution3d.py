@@ -32,11 +32,259 @@ from pwem.objects import FSC
 from pwem.protocols import ProtAnalysis3D
 
 from xmipp3.convert import (getImageLocation)
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
+def _fixMRC(fn):
+    if fn.endswith(".mrc"):
+        return fn+":mrc"
+    else:
+        return fn
 
 class XmippProtResolution3D(ProtAnalysis3D):
-    """ Computes the resolution of 3D volumes using the Fourier Shell Correlation (FSC) criteria. The protocol requires two volumes, which are assumed to be independently reconstructed. In addition, the protocol can also compute the B-factor for the volumes. """
+    """ Computes the resolution of 3D volumes using the Fourier Shell
+    Correlation (FSC) criteria. The protocol requires two volumes, which are
+    assumed to be independently reconstructed. In addition, the protocol can
+    also compute the B-factor for the volumes.
+
+    AI Generated
+
+    ## Overview
+
+    The Resolution 3D protocol estimates the resolution of a 3D reconstruction by
+    computing Fourier Shell Correlation, or FSC, between two independent maps.
+
+    FSC is one of the standard criteria used in cryo-EM to assess the agreement
+    between two 3D volumes as a function of spatial frequency. If two independently
+    derived maps agree at high spatial frequencies, this suggests that the
+    corresponding structural features are reproducible. If the FSC drops at lower
+    frequencies, the map is supported only at coarser resolution.
+
+    This protocol can compute FSC in two ways. It can compare an input volume with
+    a separate reference volume, or it can use the two half maps associated with
+    the input volume. The half-map mode is commonly used for resolution assessment
+    because half maps are independently reconstructed from two halves of the data.
+
+    The protocol can also compute structure-factor information used for estimating
+    a B-factor, which can later be used for map sharpening.
+
+    ## Inputs and General Workflow
+
+    The protocol requires an input volume.
+
+    If FSC calculation is enabled, the protocol needs either:
+
+    - two half maps associated with the input volume; or
+    - a separate reference volume.
+
+    The protocol then runs the Xmipp FSC calculation, producing an FSC metadata
+    file. In addition to FSC, the calculation also includes DPR information.
+
+    If B-factor computation is enabled, the protocol computes the volume structure
+    factor. The resulting file can be used by the analysis tools to estimate or
+    apply a B-factor.
+
+    Finally, the protocol creates an output FSC object that can be viewed and
+    analyzed in Scipion.
+
+    ## Volume to Compare
+
+    The **Volume to compare** parameter is the main input volume.
+
+    This is the map whose resolution or agreement with another map will be
+    evaluated. It may be a reconstruction, a post-processed map, or a volume
+    produced by another Scipion protocol.
+
+    The input volume must have a correct sampling rate, because spatial
+    frequencies are converted into resolution values in angstroms.
+
+    If the half-map mode is used, this volume must also contain links to its
+    associated half maps.
+
+    ## Calculate FSC and DPR
+
+    The **Calculate FSC and DPR?** option controls whether the protocol computes
+    the Fourier Shell Correlation and Differential Phase Residual information.
+
+    When this option is enabled, the protocol compares the two selected maps in
+    Fourier space and writes an FSC metadata file.
+
+    The summary reports resolution estimates at commonly used thresholds,
+    including:
+
+    - FSC = 0.5;
+    - FSC = 0.143;
+    - DPR = 45 degrees.
+
+    These values provide numerical reference points for interpreting the map
+    agreement.
+
+    ## Use Half Maps
+
+    The **Use half maps** option tells the protocol to compute the FSC between the
+    two half maps associated with the input volume.
+
+    This is usually the preferred mode when half maps are available, because the
+    two maps are expected to be independently reconstructed from separate halves of
+    the particle data.
+
+    The protocol checks that the input volume actually has half-map information. If
+    no half maps are associated with the input volume, the protocol reports a
+    validation error.
+
+    Half-map FSC is useful for estimating the reproducible resolution of a
+    reconstruction.
+
+    ## Reference Volume
+
+    The **Reference volume** parameter is used when half maps are not used.
+
+    In this mode, the protocol computes the FSC between the input volume and the
+    selected reference volume.
+
+    This comparison is useful when the user wants to compare two independent
+    reconstructions, two processing results, or a map against a reference map.
+    However, the interpretation depends on how the two volumes were generated. If
+    the maps are not independent, the FSC may overestimate reproducible
+    information.
+
+    The reference volume should have the same box size, sampling, orientation, and
+    position as the input volume for the FSC to be meaningful.
+
+    ## FSC Curve
+
+    The FSC curve describes correlation between the two maps as a function of
+    spatial frequency.
+
+    At low spatial frequencies, FSC usually reflects agreement in the overall
+    shape of the map. At high spatial frequencies, it reflects agreement in finer
+    details.
+
+    A curve that remains high until high spatial frequencies indicates stronger
+    agreement at finer resolution. A curve that drops early indicates that the
+    maps agree only at lower resolution.
+
+    The protocol stores the FSC curve in an output FSC object, which can be plotted
+    and inspected in Scipion.
+
+    ## FSC Thresholds
+
+    The protocol reports resolution values at two FSC thresholds.
+
+    The **FSC = 0.5** criterion is a traditional, stricter threshold. It reports
+    the resolution at which the FSC curve falls below 0.5.
+
+    The **FSC = 0.143** criterion is widely used in modern cryo-EM half-map
+    validation. It gives a less strict but commonly reported resolution estimate.
+
+    The protocol estimates the crossing point by interpolation between neighboring
+    frequency samples. If the curve does not cross the threshold, the reported
+    resolution may be unavailable.
+
+    ## DPR Criterion
+
+    The protocol also reports a **DPR = 45 degrees** resolution estimate.
+
+    DPR stands for Differential Phase Residual. It measures phase agreement between
+    the two volumes in Fourier space. A smaller DPR indicates better phase
+    agreement.
+
+    The reported DPR resolution corresponds to the point where the DPR reaches 45
+    degrees.
+
+    This value complements FSC and provides another way to summarize agreement
+    between the two maps.
+
+    ## Calculate B-Factor
+
+    The **Calculate B-factor?** option computes structure-factor information from
+    the input volume.
+
+    The B-factor describes the falloff of signal amplitude with spatial frequency.
+    In cryo-EM, an estimated B-factor can be used to guide sharpening, where
+    higher-resolution features are enhanced to compensate for attenuation caused by
+    the microscope, detector, reconstruction, and other effects.
+
+    This implementation follows an automated approach based on the methodology of
+    Rosenthal and Henderson.
+
+    After the protocol finishes, the B-factor can be applied through the analysis
+    GUI.
+
+    ## Structure Factor File
+
+    When B-factor computation is enabled, the protocol writes a structure-factor
+    metadata file.
+
+    This file contains the information used to estimate the B-factor. It is not a
+    map by itself, but a diagnostic and post-processing support file.
+
+    The protocol summary reports the structure-factor file, and when the B-factor
+    is available, it also reports the estimated value.
+
+    ## Output FSC
+
+    The main output is **outputFSC**, created when the FSC file exists.
+
+    This output stores the FSC curve as a Scipion FSC object. It can be visualized
+    and used for resolution assessment.
+
+    The output FSC is linked to the input volume and, when a separate reference
+    volume is used, also to the reference volume.
+
+    If only B-factor computation is requested and FSC is disabled, the main result
+    is the structure-factor information rather than an output FSC object.
+
+    ## Interpreting the Results
+
+    The FSC resolution values should be interpreted as indicators of map agreement,
+    not as complete proof of biological correctness.
+
+    A high-resolution FSC estimate is meaningful only when the two maps are
+    independent or appropriately separated, properly aligned, and not affected by
+    masking or overfitting artifacts.
+
+    Half-map FSC is commonly used because the half maps are reconstructed from
+    separate subsets of particles. Comparison with an external reference can be
+    useful, but its interpretation depends on the independence and similarity of
+    the two maps.
+
+    B-factor estimation is useful for sharpening, but excessive sharpening can
+    amplify noise. The sharpened map should always be inspected together with the
+    original map and validation information.
+
+    ## Practical Recommendations
+
+    Use half maps when available. This is usually the most appropriate way to
+    estimate the resolution of a reconstruction.
+
+    Use a separate reference volume when you specifically want to compare two maps.
+    Make sure that they are aligned, have the same box size, and represent the same
+    structure.
+
+    Report both FSC = 0.143 and FSC = 0.5 values when useful, but inspect the full
+    FSC curve rather than relying only on a single number.
+
+    Use B-factor estimation as a guide for sharpening, not as an automatic
+    guarantee of improved interpretability.
+
+    Be cautious when comparing post-processed or heavily masked maps, because
+    masking and post-processing can affect FSC behavior.
+
+    ## Final Perspective
+
+    Resolution 3D is a validation and map-assessment protocol.
+
+    For biological users, its main role is to quantify how reproducible a 3D map is
+    in Fourier space, either by comparing two half maps or by comparing an input
+    map with a reference volume.
+
+    The protocol provides FSC and DPR resolution estimates, and optionally
+    structure-factor information for B-factor estimation. These results should be
+    used together with visual inspection, local resolution, map-model fit, and
+    biological plausibility when assessing a cryo-EM reconstruction.
+    """
     _label = 'resolution 3D'
+    _devStatus = PROD
       
     #--------------------------- DEFINE param functions --------------------------------------------   
     def _defineParams(self, form):
@@ -48,8 +296,11 @@ class XmippProtResolution3D(ProtAnalysis3D):
         form.addParam('doFSC', BooleanParam, default=True,
                       label="Calculate FSC and DPR?", 
                       help='If set True calculate FSC and DPR.')
-        form.addParam('referenceVolume', PointerParam, label="Reference volume", condition='doFSC', 
-                      pointerClass='Volume',
+        form.addParam('useHalves', BooleanParam, default=False,
+                      label="Use half maps",
+                      help='If available.')
+        form.addParam('referenceVolume', PointerParam, label="Reference volume", condition='doFSC and not useHalves',
+                      pointerClass='Volume', allowsNull=True,
                       help='Input volume will be compared to this volume.')  
         form.addParam('doComputeBfactor', BooleanParam, default=True,
                       label="Calculate B-factor?", 
@@ -67,10 +318,7 @@ class XmippProtResolution3D(ProtAnalysis3D):
     def _insertAllSteps(self):
         """Insert all steps to calculate the resolution of a 3D reconstruction. """
         
-        self.inputVol = getImageLocation(self.inputVolume.get())
-        if self.referenceVolume.hasValue():
-            self.refVol = getImageLocation(self.referenceVolume.get())
-        
+        self.inputVol = _fixMRC(getImageLocation(self.inputVolume.get()))
         if self.doFSC:
             self._insertFunctionStep('calculateFscStep')
         if self.doComputeBfactor:
@@ -81,37 +329,28 @@ class XmippProtResolution3D(ProtAnalysis3D):
     def createOutputStep(self):
         fnFSC = self._defineFscName()
         if exists(fnFSC):
-            mData = md.MetaData(self._defineFscName())
+            mData = md.MetaData(fnFSC)
             # Create the FSC object and set the same protocol label
             fsc = FSC(objLabel=self.getRunName())
             fsc.loadFromMd(mData,
                            md.MDL_RESOLUTION_FREQ,
                            md.MDL_RESOLUTION_FRC)
             self._defineOutputs(outputFSC=fsc)
-            self._defineSourceRelation(self.referenceVolume,fsc)
+            if not self.useHalves:
+                self._defineSourceRelation(self.referenceVolume,fsc)
             self._defineSourceRelation(self.inputVolume,fsc)
 
     #--------------------------- STEPS steps functions --------------------------------------------
     def calculateFscStep(self):
         """ Calculate the FSC between two volumes"""
-        #if volume is mrc force to be mrc volume (versus stack)
-        projectPath = self.getProject().getPath()
-        if self.refVol.endswith('.mrc'):
-            refVol = os.path.join(projectPath, self.refVol + ':mrc') # Specify that are volumes to read them properly in xmipp
+        if self.useHalves:
+            fn1, fn2 = [_fixMRC(fn) for fn in self.inputVolume.get().getHalfMaps().split(",")]
         else:
-            refVol = os.path.join(projectPath, self.refVol)
-        if self.inputVol.endswith('.mrc'):
-            inputVol = os.path.join(projectPath, self.inputVol + ':mrc') # Specify that are volumes to read them properly in xmipp
-        else:
-            inputVol = os.path.join(projectPath,self.inputVol)
+            fn1 = self.inputVol
+            fn2 = _fixMRC(getImageLocation(self.referenceVolume.get()))
 
         samplingRate = self.inputVolume.get().getSamplingRate()
-        fscFn = os.path.join(projectPath, self._defineFscName())
-        args = "--ref %s -i %s -o %s --sampling_rate %f --do_dpr" % (refVol,
-                                                                     inputVol,
-                                                                     fscFn,
-                                                                     samplingRate)
-
+        args = "--ref %s -i %s -o %s --sampling_rate %f --do_dpr" % (fn1, fn2, self._defineFscName(), samplingRate)
         self.runJob("xmipp_resolution_fsc", args)
 
     def computeBfactorStep(self):
@@ -145,11 +384,15 @@ class XmippProtResolution3D(ProtAnalysis3D):
     def _validate(self):
         validateMsgs = []
         
-        if not self.inputVolume.hasValue():
-            validateMsgs.append('Please provide an initial volume.')
-        if self.doFSC.get() and not self.referenceVolume.hasValue():
-            validateMsgs.append('Please provide a reference volume.')
-            
+        if self.useHalves:
+            inputVol = self.inputVolume.get()
+            if inputVol and not inputVol.hasHalfMaps():
+                validateMsgs.append('The input volume does not have half maps to use')
+        if self.doFSC and not self.useHalves:
+            referenceVol = self.referenceVolume.get()
+            if not referenceVol:
+                validateMsgs.append('Please, provide a reference map to compute the FSC')
+
         return validateMsgs
     
     def _summary(self):
@@ -157,7 +400,7 @@ class XmippProtResolution3D(ProtAnalysis3D):
         fnBfactor= self._getPath('bfactor.txt')
         if os.path.exists(fnBfactor):
             f = open(fnBfactor)
-            values = map(float, f.readline().split())
+            values = [float(x) for x in f.readline().split()]
             retval+="   Bfactor: %4.3f"%values[4]
         return [retval]
     
@@ -165,13 +408,16 @@ class XmippProtResolution3D(ProtAnalysis3D):
         methodsStr=""
         if self.doFSC.get():
             methodsStr+='We obtained the FSC of the volume %s' % self.getObjectTag('inputVolume')
-            methodsStr+=' taking the volume %s' % self.getObjectTag('referenceVolume') + ' as reference.'
+            if self.useHalves:
+                methodsStr+=" considering its two associated half maps."
+            else:
+                methodsStr+=' taking the volume %s' % self.getObjectTag('referenceVolume') + ' as reference.'
             methodsStr+=self.methodsVar.get("")
         if self.doComputeBfactor.get():
             fnBfactor= self._getPath('bfactor.txt')
             if os.path.exists(fnBfactor):
                 f = open(fnBfactor)
-                values = map(float, f.readline().split())
+                values = [float(x) for x in f.readline().split()]
                 methodsStr+=" The corresponding Bfactor was %4.3f."%values[4]
         return [methodsStr]
 

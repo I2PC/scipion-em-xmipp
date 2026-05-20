@@ -28,9 +28,10 @@ This modules contains constants related to Xmipp3 protocols
 """
 
 # ------------------ Constants values --------------------------------------
-XMIPP_GIT_URL = 'https://github.com/I2PC/xmipp.git'
+XMIPP_GIT_URL = 'https://github.com/I2PC/xmipp3.git'
 XMIPP_URL = 'https://github.com/i2pc/scipion-em-xmipp'
 XMIPP_HOME = 'XMIPP_HOME'
+XMIPP3_INSTALLER_URL = 'https://github.com/I2PC/xmipp3-installer.git'
 NMA_HOME = 'NMA_HOME'
 XMIPP_DLTK_NAME = 'deepLearningToolkit'  # consider to change it to xmipp_DLTK to make short it
 XMIPP_CUDA_BIN = 'XMIPP_CUDA_BIN'

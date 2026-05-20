@@ -39,7 +39,7 @@ import pyworkflow.protocol.constants as cons
 from pwem.objects import SetOfMicrographs, Image, Set, Float
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
-from xmipp3 import emlib
+from pwem.emlib import Image
 from xmipp3.convert import getScipionObj
 from pyworkflow import UPDATED, PROD
 
@@ -48,7 +48,317 @@ OUTPUT_MICS_DISCARDED = "discardedMicrographs"
 AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
 
 class XmippProtTiltAnalysis(ProtMicrographs):
-    """ Estimates the tilt angle of a micrograph by analyzing power spectral density correlations across different image quadrants. This helps discard the ones that have a tilt so high it could negatively affect the posterior processing.
+    """ Estimates the tilt angle of a micrograph by analyzing power spectral
+    density correlations across different image quadrants. This helps discard
+    the ones that have a tilt so high it could negatively affect the posterior
+    processing.
+
+    AI Generated
+
+    ## Overview
+
+    The Tilt Analysis protocol evaluates micrographs to detect possible excessive
+    tilt or tilt-related image inconsistency.
+
+    Highly tilted micrographs can be problematic for downstream cryo-EM processing.
+    Tilt may affect the apparent power spectrum, reduce consistency across the
+    image, and make later CTF estimation, particle picking, or reconstruction less
+    reliable. This protocol analyzes correlations between power spectral density
+    patterns computed from different regions of each micrograph.
+
+    The protocol divides each micrograph into large windows, computes PSDs from
+    the corner regions, compares them with each other and with rotated versions,
+    and summarizes the correlations. Micrographs with sufficiently high mean
+    correlation and sufficiently low correlation variability are accepted. The
+    remaining micrographs are placed in a discarded set.
+
+    The main outputs are two micrograph sets:
+
+    - accepted micrographs;
+    - discarded micrographs.
+
+    Each micrograph is annotated with tilt-analysis statistics and a PSD summary
+    image.
+
+    ## Inputs and General Workflow
+
+    The input is a set of micrographs.
+
+    For each micrograph, the protocol selects large windows from different image
+    regions. It normalizes the windows, computes their power spectral density,
+    extracts central PSD regions corresponding to the selected objective
+    resolution, filters those PSDs, and computes correlations between PSDs.
+
+    The protocol computes statistics from these correlations, including mean,
+    standard deviation, minimum, and maximum. These statistics are attached to the
+    micrograph metadata.
+
+    A double threshold is then applied:
+
+    - the mean correlation must be above the selected threshold;
+    - the standard deviation of correlations must be below the selected threshold.
+
+    Micrographs passing both conditions are written to the output set. The rest are
+    written to the discarded set.
+
+    The protocol supports streaming input and can process new micrographs as they
+    arrive.
+
+    ## Input Micrographs
+
+    The **Input micrographs** parameter defines the micrograph set to be analyzed.
+
+    These micrographs may come from import, movie alignment, dose weighting, or
+    previous preprocessing steps.
+
+    The protocol does not modify the micrograph images themselves. It evaluates
+    their PSD consistency and creates accepted and discarded subsets.
+
+    The input micrographs must have a correct sampling rate, because the
+    objective-resolution parameter is used together with the sampling rate to
+    define the PSD region analyzed.
+
+    ## Automatic Window Size
+
+    The **Estimate automatically the window size?** option controls how the
+    micrograph window size is selected.
+
+    When enabled, the protocol chooses a suitable window size from predefined
+    values:
+
+    - 4096;
+    - 2048;
+    - 1024;
+    - 512;
+    - 256.
+
+    The chosen value must satisfy approximately:
+
+    \[
+    \text{window size} \leq \frac{\text{micrograph size}}{2.5}
+    \]
+
+    This automatic choice helps adapt the analysis to micrographs of different
+    sizes while keeping the windows large enough to compute meaningful PSDs.
+
+    ## Window Size
+
+    The **Window size** parameter is used when automatic window-size estimation is
+    disabled.
+
+    It defines the size of the square windows extracted from the micrograph. The
+    default manual value is 1024 pixels.
+
+    The window size must be at least 256 pixels.
+
+    Larger windows give more stable PSD estimates but require sufficiently large
+    micrographs. Smaller windows are faster and can be used for smaller images, but
+    their PSD estimates may be noisier.
+
+    ## Objective Resolution
+
+    The **Objective resolution** parameter defines the spatial-frequency range
+    used for PSD comparison.
+
+    The protocol crops a central PSD region whose size depends on the micrograph
+    sampling rate and the objective resolution. Conceptually, this focuses the
+    comparison on the part of the PSD relevant to the target resolution.
+
+    The default value is 3 Å.
+
+    A smaller numerical value focuses on higher-resolution information. A larger
+    value focuses on lower-resolution features. The appropriate value depends on
+    the resolution range where tilt-related PSD differences are expected to be
+    informative.
+
+    ## PSD Window Extraction
+
+    For each micrograph, the protocol extracts windows from four corner-like
+    regions of the image.
+
+    Each window is normalized by subtracting its mean and dividing by its standard
+    deviation. The PSD is then computed for the normalized window.
+
+    The PSD is converted and a central subwindow is extracted. This central region
+    is used for the correlation calculations.
+
+    This strategy compares the frequency content of spatially separated regions of
+    the same micrograph.
+
+    ## PSD Rotation and Autocorrelation
+
+    For each PSD window, the protocol also computes a rotated version by rotating
+    the PSD by 90 degrees.
+
+    It then computes the correlation between the original filtered PSD subwindow
+    and its rotated counterpart. These autocorrelation-like values contribute to
+    the final set of correlations.
+
+    This helps detect directional differences in the PSD that may be associated
+    with tilt or anisotropic image behavior.
+
+    ## Correlations Between PSDs
+
+    The protocol computes pairwise correlations between the PSDs extracted from
+    different micrograph regions.
+
+    If the micrograph is consistent, the PSDs from different regions are expected
+    to be similar, leading to higher correlations and lower variability.
+
+    If the micrograph shows strong tilt-related differences, artifacts, or
+    inhomogeneous image quality, the PSDs may differ more strongly, leading to
+    lower mean correlation or higher correlation variability.
+
+    The protocol combines pairwise PSD correlations with the rotated-PSD
+    correlations to summarize each micrograph.
+
+    ## Mean Correlation Threshold
+
+    The **Mean correlation threshold** parameter defines the minimum acceptable
+    mean correlation.
+
+    A micrograph is accepted only if its mean PSD correlation is greater than this
+    threshold.
+
+    The default value is 0.5.
+
+    Increasing the threshold makes the protocol stricter and discards more
+    micrographs. Decreasing the threshold makes it more permissive.
+
+    ## STD Correlation Threshold
+
+    The **STD correlation threshold** parameter defines the maximum acceptable
+    standard deviation of PSD correlations.
+
+    A micrograph is accepted only if the standard deviation of its correlations is
+    lower than this threshold.
+
+    The default value is 0.1.
+
+    This criterion rejects micrographs whose PSD correlations are highly variable,
+    even if the mean correlation is acceptable. Such variability may indicate
+    spatially inconsistent image quality, tilt-related effects, or local artifacts.
+
+    ## Accepted Micrographs
+
+    The **outputMicrographs** output contains the accepted micrographs.
+
+    These are the micrographs satisfying both conditions:
+
+    - mean correlation above the mean-correlation threshold;
+    - standard deviation of correlations below the STD-correlation threshold.
+
+    Each accepted micrograph is annotated with several tilt-analysis attributes,
+    including:
+
+    - mean correlation;
+    - standard deviation of correlation;
+    - minimum correlation;
+    - maximum correlation;
+    - PSD summary image.
+
+    This output can be used in downstream workflows such as CTF estimation,
+    particle picking, or further preprocessing.
+
+    ## Discarded Micrographs
+
+    The **discardedMicrographs** output contains the micrographs that do not pass
+    the tilt-analysis thresholds.
+
+    A micrograph is discarded if its mean correlation is too low, if its
+    correlation standard deviation is too high, or both.
+
+    Discarded micrographs should not automatically be assumed to be unusable in all
+    contexts. They are flagged as potentially problematic according to this PSD
+    correlation analysis. Users may still inspect them visually before deciding
+    whether to remove them permanently.
+
+    ## PSD Summary Image
+
+    For each micrograph, the protocol writes a PSD summary image.
+
+    This image combines the filtered PSD regions used for the analysis. It is
+    stored as a micrograph-associated attribute and can be useful for inspecting
+    why a micrograph was accepted or discarded.
+
+    The PSD image helps the user relate the numerical correlation statistics to the
+    actual frequency-domain appearance of the micrograph.
+
+    ## Streaming Behavior
+
+    The protocol supports streaming micrograph input.
+
+    As new micrographs appear in the input set, the protocol inserts processing
+    steps for them in batches. The default parallel batch size is 8 micrographs.
+
+    The output accepted and discarded sets remain open while the input stream is
+    open. When the input stream is closed and all micrographs have been processed,
+    the output streams are closed.
+
+    This makes the protocol useful in online processing pipelines, where
+    micrographs arrive progressively during data acquisition or movie alignment.
+
+    ## Summary and Monitoring
+
+    During processing, the protocol writes per-micrograph statistics including
+    mean, standard deviation, minimum, and maximum correlation.
+
+    These values are also written to a monitor-summary file that can be used to
+    track the behavior of the protocol during streaming workflows.
+
+    The protocol summary reports available summary information once it has been
+    generated.
+
+    ## Interpreting the Results
+
+    The tilt-analysis scores should be interpreted as PSD-consistency indicators.
+
+    A micrograph with high mean correlation and low standard deviation is more
+    internally consistent according to this analysis. A micrograph with low mean
+    correlation or high variability may have excessive tilt, strong local
+    differences, contamination, poor ice, image artifacts, or other sources of PSD
+    inconsistency.
+
+    The protocol estimates tilt-related problems indirectly. It does not produce a
+    geometrical tilt angle in degrees. Instead, it classifies micrographs based on
+    correlation behavior of PSD windows.
+
+    ## Practical Recommendations
+
+    Use this protocol as an early micrograph quality-control step.
+
+    Start with the default thresholds and inspect accepted and discarded examples.
+
+    Adjust the mean-correlation threshold if the protocol is too permissive or too
+    strict.
+
+    Adjust the STD-correlation threshold when micrographs with strong spatial
+    inconsistency are not being discarded, or when good micrographs are being
+    discarded too aggressively.
+
+    Keep automatic window-size estimation enabled unless there is a specific reason
+    to define a manual window size.
+
+    Inspect the PSD summary images for representative accepted and discarded
+    micrographs.
+
+    Use the accepted output set for downstream processing, but consider visual
+    inspection before permanently excluding discarded micrographs.
+
+    ## Final Perspective
+
+    Tilt Analysis is a micrograph quality-control protocol based on PSD
+    correlation consistency.
+
+    For biological users, its main value is that it helps identify micrographs
+    whose frequency content suggests excessive tilt or spatial inconsistency. By
+    splitting the input into accepted and discarded sets, it provides a practical
+    filter before later steps such as CTF estimation, particle picking, and
+    reconstruction.
+
+    The protocol should be used as a screening aid rather than as the only
+    criterion for rejecting data. Its output is most reliable when combined with
+    visual inspection and other micrograph-quality metrics.
     """
     _label = 'tilt analysis'
     _devStatus = PROD
@@ -475,7 +785,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 # --------------------- WORKERS --------------------------------------
 def applyTransform(imag_array, M, shape):
     '''Apply a transformation(M) to a np array(imag) and return it in a given shape'''
-    imag = emlib.Image()
+    imag = Image()
     imag.setData(imag_array)
     imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
     return imag.getData()

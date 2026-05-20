@@ -52,9 +52,335 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
     by setting it in a Weighted Least Squares framework and
     calculating the weights through a statistical approach based on
     the cumulative density function of different image similarity measures.
+
+    AI Generated
+
+    ## Overview
+
+    The Reconstruct Significant protocol generates an initial 3D volume from a set
+    of 2D classes or averages using statistically significant angular assignments.
+
+    Initial volume generation is one of the most delicate steps in single-particle
+    cryo-EM. The goal is to obtain a plausible 3D map that can be used as a
+    starting point for later refinement, without relying too strongly on an
+    external reference. This protocol approaches the problem by assigning weights
+    to possible image orientations according to statistical criteria and then
+    reconstructing a volume from the most significant image-to-projection matches.
+
+    The method starts with a relatively relaxed significance level and gradually
+    moves toward a stricter one. Early iterations therefore explore a smoother and
+    broader landscape of possible solutions, while later iterations focus on the
+    more reliable angular assignments.
+
+    The output is a reconstructed initial volume.
+
+    ## Inputs and General Workflow
+
+    The main input is a set of 2D classes or averages.
+
+    The protocol converts the input images into Xmipp metadata format. If a
+    reference volume is provided, it can be used to initialize the reconstruction.
+    Otherwise, the protocol starts from a random volume.
+
+    For each iteration, the protocol estimates significant angular assignments for
+    the input images, reconstructs a volume using weighted Fourier reconstruction,
+    centers the volume, masks it, and optionally filters it to a target resolution.
+
+    The significance level changes progressively from the starting value to the
+    final value over the selected number of iterations.
+
+    ## Input Classes
+
+    The **Input classes** parameter should point to a SetOfClasses2D or a set of
+    averages.
+
+    For class inputs, the class representatives are used as the images to
+    reconstruct the initial volume. These class averages should be clean,
+    representative, and preferably cover a broad range of particle views.
+
+    The quality of the output depends strongly on the quality of the input 2D
+    classes. If many classes are noisy, contaminated, duplicated, or inconsistent,
+    the reconstructed volume may be distorted or unstable.
+
+    Before using this protocol, it is usually advisable to remove clearly bad 2D
+    classes.
+
+    ## Symmetry Group
+
+    The **Symmetry group** parameter defines the symmetry assumed during angular
+    assignment and reconstruction.
+
+    If the particle is asymmetric, use **c1**. If the structure has known symmetry,
+    the corresponding Xmipp symmetry group can be specified.
+
+    Correct symmetry can help stabilize reconstruction. However, imposing an
+    incorrect symmetry can introduce artificial density and hide real asymmetric
+    features.
+
+    The protocol also checks that the initial significance is compatible with the
+    selected symmetry. If the starting significance is too low for the symmetry
+    group, the protocol asks the user to increase it.
+
+    ## Reference Volume
+
+    The option **Is there a reference volume(s)?** allows the user to provide an
+    initial 3D reference volume.
+
+    This reference can guide the first iteration. It may be useful when a very
+    rough prior shape is known. For example, a cylindrical reference may help when
+    working with fiber-like specimens. A symmetric reference may also be used as a
+    starting point while reconstructing with lower or no imposed symmetry, allowing
+    the result to break symmetry if supported by the data.
+
+    The reference should be used carefully. If it is too detailed or biologically
+    incorrect, it may bias the initial model. The safest use is as a coarse shape
+    constraint rather than as a high-resolution template.
+
+    If no reference volume is provided, the protocol starts from a random volume.
+
+    ## Angular Sampling
+
+    The **Angular sampling** parameter defines the angular step, in degrees, used
+    to generate the projection gallery.
+
+    A smaller value creates a denser angular search and can give more accurate
+    orientation assignments, but increases computation time. A larger value is
+    faster but may miss relevant orientations.
+
+    For initial model generation, the default value is a reasonable starting point.
+    Advanced users may adjust it depending on particle size, expected angular
+    complexity, and available computational resources.
+
+    ## Tilt Range
+
+    The **Minimum tilt** and **Maximum tilt** parameters restrict the range of tilt
+    angles considered during angular assignment.
+
+    In this convention, 0 degrees corresponds to top views and 90 degrees to side
+    views.
+
+    Restricting the tilt range can be useful when the expected views are limited.
+    For example, fiber-like specimens may be reconstructed mainly from side views,
+    so the user may restrict the search around tilt angles close to 90 degrees.
+
+    This option should be used only when the expected orientation distribution is
+    known. Incorrect tilt restrictions can exclude valid views and bias the initial
+    volume.
+
+    ## Maximum Shift
+
+    The **Maximum shift** parameter defines the allowed in-plane translation during
+    the angular search, in pixels.
+
+    If the value is set to **-1**, the shift search is unrestricted.
+
+    A limited shift can make the alignment more stable when class averages are
+    already centered. A freer shift search may be useful when class averages are
+    not well centered, but it can also increase ambiguity.
+
+    The value should reflect the expected centering accuracy of the input class
+    averages.
+
+    ## Starting and Final Significance
+
+    The protocol uses two key significance parameters:
+
+    - **Starting significance**;
+    - **Final significance**.
+
+    The starting significance defines how relaxed the first iterations are. A value
+    such as 80% means that the protocol begins with a broad, smoother selection of
+    significant matches.
+
+    The final significance defines how strict the last iterations become. A value
+    such as 99.5% means that only more statistically significant assignments have
+    strong influence in the final reconstruction.
+
+    This gradual change is important. Starting too strictly may leave too few
+    images contributing to the reconstruction, producing noisy or unstable maps.
+    Starting more relaxed allows the algorithm to explore a smoother solution
+    space.
+
+    ## Number of Iterations
+
+    The **Number of iterations** parameter defines how many steps are used to move
+    from the starting significance to the final significance.
+
+    More iterations produce a more gradual transition. This may help the volume
+    evolve more smoothly and avoid abrupt changes in angular assignment.
+
+    Fewer iterations are faster but may make the progression from relaxed to strict
+    criteria too abrupt.
+
+    The default value is designed to provide a gradual refinement of the initial
+    volume.
+
+    ## Use IMED
+
+    The **Use IMED** option enables IMED-based weighting.
+
+    IMED is an image similarity measure that can be more discriminative than simple
+    correlation when comparing very similar images. It can therefore help refine
+    the weighting of angular assignments.
+
+    This is an advanced option, but it is enabled by default because it can improve
+    the statistical discrimination among candidate matches.
+
+    ## Strict Direction
+
+    The **Strict direction** option makes the angular-direction selection more
+    selective.
+
+    When this option is enabled, only the most significant experimental images are
+    allowed to contribute to a given direction. This can produce a sharper and more
+    selective reconstruction.
+
+    However, it can also discard many experimental classes. In difficult datasets,
+    only a small number of classes may contribute, making the reconstruction noisy.
+
+    This option should be used carefully. It is useful when the user wants a
+    stricter reconstruction, but it may be too aggressive for small or noisy input
+    sets.
+
+    ## Angular Neighborhood
+
+    The **Angular neighborhood** parameter defines how neighboring directions
+    contribute to the weighting of each image.
+
+    The help text recommends using a value at least twice the angular sampling.
+    This is because neighboring projections can provide useful contextual
+    information when determining the statistical significance of an assignment.
+
+    A larger neighborhood can make the weighting smoother. A smaller neighborhood
+    makes the selection more local and possibly more sensitive to noise.
+
+    ## Fisher Preselection
+
+    The **Do not apply Fisher** option controls whether Fisher's confidence
+    interval on the correlation coefficient is used for preselection.
+
+    By default, images are preselected using this statistical criterion. This helps
+    remove unreliable matches before reconstruction.
+
+    If the option is enabled, this preselection is not applied. This may be useful
+    for testing or specialized workflows, but most users should leave the default
+    behavior unchanged.
+
+    ## Maximum Resolution Option
+
+    The **Use new maximum resolution?** option allows the user to simplify the
+    calculation by keeping only low-frequency information.
+
+    When enabled, the user specifies a **Target resolution** in angstroms. The
+    input images and reference volume, if present, are resampled or filtered
+    accordingly.
+
+    This can reduce computation and make the initial volume search more robust by
+    focusing on global structure rather than noisy high-resolution detail.
+
+    For initial model generation, low- to medium-resolution information is usually
+    more appropriate than high-frequency detail.
+
+    ## Keep Intermediate Volumes
+
+    The **Keep intermediate volumes** option controls whether intermediate volumes
+    and angular assignments are preserved.
+
+    Keeping intermediates is useful for debugging, method development, or detailed
+    inspection of how the reconstruction evolves across iterations.
+
+    Disabling this option saves disk space, which is usually preferable for routine
+    use.
+
+    ## GPU Execution
+
+    The protocol can use GPU acceleration for significant angular assignment and
+    Fourier reconstruction.
+
+    GPU execution is enabled by default. If GPU execution is requested but the
+    required Xmipp CUDA programs are not available, the protocol reports a
+    validation error.
+
+    GPU acceleration is especially useful because the protocol may generate
+    projection galleries and perform many orientation-assignment and reconstruction
+    steps.
+
+    ## Volume Centering and Masking
+
+    After each reconstruction, the protocol performs centering operations and
+    applies a circular mask.
+
+    The centering step compares the volume with its mirrored version and locally
+    aligns it. This helps keep the reconstructed density centered during
+    iterations.
+
+    The circular mask removes density outside the expected volume support and
+    reduces the influence of peripheral noise.
+
+    These operations are part of the internal stabilization of the reconstruction.
+
+    ## Output Volume
+
+    The main output is **outputVolume**.
+
+    This is the final reconstructed volume from the last completed iteration. The
+    volume is converted to MRC format and registered in Scipion with the sampling
+    rate of the input image set.
+
+    The output volume should be interpreted as an initial model suitable for later
+    3D refinement, not as a final high-resolution reconstruction.
+
+    ## Interpreting the Result
+
+    The reconstructed volume represents the structure supported by statistically
+    significant matches between the input 2D images and projections of the evolving
+    3D map.
+
+    A good result should show a plausible global shape consistent with the 2D
+    classes. Fine details should not be overinterpreted at this stage.
+
+    Poor results may occur if the input classes are noisy, if there are too few
+    representative views, if the symmetry is wrong, if the significance criteria
+    are too strict, or if a reference volume biases the search incorrectly.
+
+    ## Practical Recommendations
+
+    Use clean and representative 2D class averages as input. Remove obvious junk
+    classes before running the protocol.
+
+    Use **c1** unless the symmetry is known and biologically justified.
+
+    Start with the default significance schedule. If the reconstruction is too
+    noisy, the final significance may be too strict or too few classes may be
+    contributing.
+
+    Use a reference volume only as a rough guide. Avoid highly detailed references
+    that could bias the initial model.
+
+    Use tilt restrictions only when the expected orientation range is known, such
+    as side-view-dominated fiber datasets.
+
+    Enable the maximum-resolution option when you want to focus the search on
+    low-resolution shape and reduce the influence of noise.
+
+    Inspect the final volume as an initial model and validate it through subsequent
+    refinement and comparison with the input 2D classes.
+
+    ## Final Perspective
+
+    Reconstruct Significant is an initial-volume generation protocol based on
+    statistically weighted angular assignments.
+
+    For biological users, its value is that it can produce a plausible starting
+    volume from 2D classes or averages while controlling which image-to-projection
+    matches are allowed to influence the reconstruction.
+
+    The protocol is most useful when the input classes are clean, the symmetry and
+    tilt-range assumptions are appropriate, and the output is treated as a
+    starting point for further refinement rather than as a final map.
     """
     _label = 'reconstruct significant'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     # --------------------------- DEFINE param functions -----------------------
 

@@ -62,6 +62,324 @@ class XmippProtReconstructSwarm(ProtRefine3D):
        The input set of volumes is considered to be a swarm of volumes and they try to optimize
        the correlation between the volumes and the set of particles. This is an stochastic maximization
        and only a fraction of the particles are used to update the volumes and evaluate them.
+
+       AI Generated
+
+        ## Overview
+
+        The Swarm Consensus protocol refines a set of initial volumes against a set of
+        particles using a swarm-like optimization strategy.
+
+        Instead of starting from a single reference volume, the protocol starts from a
+        set of candidate volumes. These volumes are treated as a swarm. During the
+        iterations, each volume is evaluated according to how well its projections
+        match subsets of the experimental particles. Volumes that perform well are
+        kept as local or global best solutions, and the other volumes are progressively
+        updated toward better-supported regions of the solution space.
+
+        This strategy is useful when the user has several possible initial volumes and
+        wants to combine them into a consensus refinement. It can help explore
+        alternative starting hypotheses and reduce dependence on a single initial
+        reference.
+
+        The protocol produces a final averaged consensus volume and a set of the best
+        volumes found for each member of the swarm.
+
+        ## Inputs and General Workflow
+
+        The protocol requires:
+
+        - a set of full-size particles;
+        - a set of initial volumes;
+        - optionally, a mask.
+
+        The particles are converted to Xmipp metadata format and internally resampled
+        according to the target resolution. The input volumes are also rescaled to the
+        same working sampling rate and box size. If a mask is provided, it is prepared
+        at the same scale.
+
+        The protocol then evaluates the initial volumes. In each iteration, it uses
+        random subsets of particles to update the volumes, post-processes the swarm,
+        evaluates each volume on another subset of particles, and updates the local and
+        global best volumes.
+
+        At the end, it computes an average consensus volume, cleans it, restores the
+        original box size and sampling rate, and creates the final outputs.
+
+        ## Full-Size Images
+
+        The **Full-size Images** parameter defines the particle set used to evaluate
+        and update the swarm.
+
+        These particles should be provided at the finest available sampling rate. The
+        protocol may internally resample them to a coarser working sampling rate based
+        on the target resolution, but the original particle sampling is used again for
+        the final output scale.
+
+        The particle set should be reasonably clean and should correspond to the
+        structure represented by the input volumes. Strong heterogeneity, many
+        contaminants, or very poor particles can make the swarm evaluation unstable.
+
+        ## Initial Volumes
+
+        The **Initial volumes** parameter provides the starting swarm.
+
+        This input must be a set of volumes. Each volume acts as one member of the
+        swarm and is refined and evaluated during the protocol.
+
+        The volumes may represent alternative initial models, different reconstructions,
+        different classes, or different hypotheses about the structure. They should
+        all be plausible enough to generate projections that can be compared with the
+        particles.
+
+        If the initial volumes are very poor, unrelated to the particles, or mutually
+        incompatible, the swarm may not converge to a meaningful consensus.
+
+        ## Particle Radius
+
+        The **Radius of particle** parameter defines the radius, in pixels, of the
+        spherical mask covering the particle in the input images.
+
+        If the value is -1 or otherwise not positive, the protocol uses approximately
+        half the particle box size.
+
+        This radius is used when masking the resampled particle stack and during
+        alignment and reconstruction. It should include the particle density while
+        excluding unnecessary background.
+
+        For elongated or non-spherical particles, the radius should still be chosen to
+        cover the full particle.
+
+        ## Symmetry Group
+
+        The **Symmetry group** parameter defines the symmetry used when generating
+        projection galleries, assigning particle orientations, and reconstructing
+        volumes.
+
+        For asymmetric particles, use **c1**. If the structure has known symmetry, the
+        corresponding Xmipp symmetry group can be specified.
+
+        Symmetry should only be imposed when it is biologically justified. Incorrect
+        symmetry may make different swarm volumes converge toward an artificial or
+        misleading structure.
+
+        ## Mask
+
+        The **Mask** parameter allows the user to provide a volume mask.
+
+        The mask is rescaled to the working sampling rate and box size. It is then used
+        during post-processing and cleaning operations to focus the analysis on the
+        molecular region.
+
+        Mask values should range from 0 to 1. Smooth masks are recommended. A mask that
+        is too tight may remove real density, while a mask that is too loose may allow
+        background noise to influence the swarm.
+
+        ## Number of Iterations
+
+        The **Number of iterations** parameter controls how many swarm update cycles are
+        performed.
+
+        Each iteration updates the candidate volumes, post-processes them, evaluates
+        their agreement with the particles, and updates the best-volume records.
+
+        More iterations allow more time for the swarm to move toward better-supported
+        solutions, but increase computation time. Too few iterations may stop the
+        optimization before the volumes have stabilized.
+
+        The default value is intended to provide a practical refinement schedule.
+
+        ## Target Resolution
+
+        The **Max. Target Resolution** parameter defines the target resolution used for
+        the working representation, in angstroms.
+
+        The protocol chooses a working sampling rate based on this target resolution.
+        The goal is to focus the optimization on low- to medium-resolution information
+        appropriate for comparing initial volumes with particles.
+
+        This is important because swarm consensus is intended to refine global
+        structural hypotheses, not to produce high-resolution detail directly.
+
+        A very aggressive target resolution may make the comparisons noisy or unstable,
+        whereas a conservative value focuses on robust shape information.
+
+        ## Minimum Angle
+
+        The **Min. Angle** parameter defines a lower bound on the angular sampling used
+        during projection matching.
+
+        The protocol estimates an angular step from the working box size, but it does
+        not allow the search to become finer than this minimum value.
+
+        A smaller minimum angle allows a denser angular search but increases
+        computation. A larger value is faster but may reduce angular accuracy.
+
+        This parameter is advanced and should usually be left at its default unless the
+        user has a specific reason to change the angular search density.
+
+        ## Images Used to Update the Swarm
+
+        The **# Images to update** parameter defines how many particles are randomly
+        selected to update each volume during a training step.
+
+        For each volume, the protocol selects a random subset of particles, generates
+        projections of the current volume, assigns orientations to the selected
+        particles, and reconstructs an updated volume from those assignments.
+
+        Using a subset makes the optimization stochastic. This can help the swarm
+        explore the solution space and reduces computation compared with using all
+        particles at every update.
+
+        A larger value gives more stable updates but increases computation. A smaller
+        value is faster but noisier.
+
+        ## Images Used to Evaluate the Swarm
+
+        The **# Images to evaluate** parameter defines how many particles are randomly
+        selected to score each volume during evaluation.
+
+        The evaluation subset is used to estimate how well a given volume explains the
+        particles. The average correlation from the assigned particles is used as a
+        score.
+
+        Using a separate evaluation subset helps compare swarm members without using
+        the full dataset each time.
+
+        A larger evaluation subset gives more stable scores. A smaller subset is
+        faster but may make the ranking of volumes noisier.
+
+        ## Volume Evaluation
+
+        During evaluation, each volume is low-pass filtered to the target resolution
+        and optionally masked. The protocol then selects a random subset of particles,
+        generates a projection gallery from the volume, assigns particle orientations,
+        and computes an average correlation score.
+
+        The best volume globally is stored as the current global best. In addition,
+        each swarm member keeps its own best version across iterations.
+
+        These best-volume records guide later swarm updates and are used to produce
+        the final output set of volumes.
+
+        ## Volume Update Strategy
+
+        After the first iterations, each volume is updated using a swarm-like rule.
+
+        The update depends on two directions:
+
+        - the difference between the current volume and its own best previous version;
+        - the difference between the current volume and the global best volume.
+
+        Random coefficients control how strongly each volume moves in these
+        directions. This gives the protocol a stochastic optimization behavior similar
+        to particle-swarm optimization.
+
+        Conceptually, each volume is encouraged to improve based both on its own
+        history and on the best solution found by the whole swarm.
+
+        ## Post-Processing During Iterations
+
+        After reconstructing new volumes, the protocol computes an average volume,
+        locally aligns individual volumes to that average, and applies cleaning steps.
+
+        The cleaning uses volume restoration tools to remove untrusted background
+        voxels and reduce noise-like components. If a mask is provided, it is used to
+        focus these operations on the relevant region.
+
+        This post-processing helps keep the swarm volumes comparable and reduces
+        spurious differences caused by noise or background artifacts.
+
+        ## Final Average Volume
+
+        At the end of the protocol, an average consensus volume is computed.
+
+        This average combines the best volumes found by the swarm and the global best
+        volume. The final average is then cleaned, resized back to the original
+        particle box size, converted to MRC format, and assigned the original particle
+        sampling rate.
+
+        This final averaged map is the main consensus result of the protocol.
+
+        ## Output Volume
+
+        The main output is **outputVolume**.
+
+        This is the final average consensus volume. It is registered in Scipion with
+        the original sampling rate of the input particles.
+
+        This output should be interpreted as a consensus volume derived from the swarm
+        of initial volumes. It can be used as a refined starting model or as an
+        intermediate result for further refinement.
+
+        ## Output Volumes
+
+        The protocol also produces **outputVolumes**, a set containing the best volume
+        found for each member of the swarm.
+
+        These volumes are useful for inspecting whether the swarm converged to similar
+        solutions or whether different starting volumes retained distinct structural
+        features.
+
+        If the best volumes are very similar, this supports the stability of the
+        consensus. If they remain very different, the dataset may contain
+        heterogeneity, the initial volumes may represent different hypotheses, or the
+        optimization may not have converged.
+
+        ## GPU Execution
+
+        The protocol can use GPU acceleration for the projection-assignment and
+        Fourier-reconstruction steps.
+
+        GPU execution is enabled by default. If GPU execution is requested but Xmipp
+        GPU programs are not available, the protocol reports a validation error.
+
+        GPU acceleration is recommended because the protocol repeatedly generates
+        projection galleries, assigns particles, and reconstructs volumes for several
+        swarm members.
+
+        ## Practical Recommendations
+
+        Use this protocol when you have several plausible initial volumes and want to
+        obtain a consensus refinement from them.
+
+        Provide a reasonably clean particle set. Strong contaminants or severe
+        heterogeneity can make the swarm scores unreliable.
+
+        Use initial volumes that are related to the same structure. Completely
+        unrelated volumes may prevent meaningful convergence.
+
+        Use a mask when you want the evaluation and cleaning to focus on the molecular
+        region.
+
+        Keep the target resolution conservative for initial consensus refinement. The
+        goal is to compare global structure reliably, not to refine high-resolution
+        detail.
+
+        Increase the number of particles used for evaluation if volume scores appear
+        unstable.
+
+        Inspect both the final consensus volume and the output best-volume set. The
+        agreement or disagreement among best volumes is an important diagnostic.
+
+        Use the final output as a starting point for a more standard high-resolution
+        refinement protocol.
+
+        ## Final Perspective
+
+        Swarm Consensus is a multi-reference refinement protocol. It starts from a set
+        of candidate volumes and uses stochastic particle subsets to evaluate, update,
+        and combine them.
+
+        For biological users, its main value is that it can reduce dependence on a
+        single starting model. By allowing several volumes to compete and move toward
+        better-supported solutions, the protocol can help identify a consensus
+        structural hypothesis.
+
+        The output should be treated as a refined starting model or consensus
+        intermediate, not as a final high-resolution reconstruction. Its reliability
+        should be assessed by visual inspection, comparison of the best swarm volumes,
+        and subsequent refinement behavior.
     """
     _label = 'swarm consensus'
     _version = VERSION_2_0

@@ -41,7 +41,193 @@ DEBUG = True
 
 
 class XmippProtExtractUnit(EMProtocol):
-    """ Generates the necessary files for volumes and Fourier Shell Correlation (FSC) curves to submit structural data to the Electron Microscopy Data Bank (EMDB). This protocol ensures proper formatting and data preparation for public deposition.
+    """ Generates the necessary files for volumes and Fourier Shell Correlation
+    (FSC) curves to submit structural data to the Electron Microscopy Data Bank
+    (EMDB). This protocol ensures proper formatting and data preparation for
+    public deposition.
+
+    AI Generated
+
+    ## Overview
+
+    The Extract Asymmetric Unit protocol crops from a symmetric 3D map the
+    region corresponding to a single asymmetric unit, or more generally to the
+    unit cell defined by the selected symmetry. Its main purpose is to isolate
+    the smallest unique structural region that, by application of the symmetry
+    operators, can reproduce the full volume.
+
+    In practical cryo-EM workflows, this protocol is useful when one wants to
+    inspect, analyze, or process only one symmetry-related portion of a map
+    instead of the full reconstruction. This is often relevant for symmetric
+    macromolecular assemblies, where the biologically meaningful interpretation
+    may require focusing on one subunit, one protomer, or one repeated region
+    without the redundancy of the complete symmetric map.
+
+    For a biological user, this protocol is essentially a symmetry-aware
+    cropping tool. It does not refine the map or change its resolution; rather,
+    it extracts the map region corresponding to one symmetry unit in a
+    geometrically consistent way.
+
+    ## Inputs and General Workflow
+
+    The protocol requires an **input volume** and a description of its
+    **symmetry**. Based on that symmetry, Xmipp identifies the region of space
+    corresponding to one asymmetric unit and extracts it from the original map.
+
+    The extraction is additionally controlled by radial limits and an optional
+    expansion factor. These parameters define how tightly or loosely the
+    cropped region should follow the nominal asymmetric unit.
+
+    The output is a new 3D volume containing only the selected unit, with its
+    sampling rate and origin preserved consistently.
+
+    ## Understanding the Asymmetric Unit
+
+    In a symmetric reconstruction, many regions of the map are equivalent by
+    symmetry. The **asymmetric unit** is the smallest non-redundant portion
+    needed to generate the whole structure by applying the symmetry operations.
+
+    Biologically, this is often the most natural region for focused
+    interpretation. For example, in a cyclic or dihedral assembly, one may want
+    to inspect a single repeating subunit; in an icosahedral map, one may want
+    to isolate one symmetry-related wedge of density.
+
+    It is important to note that the extracted asymmetric unit is defined
+    geometrically by the symmetry operators, not necessarily by biochemical
+    boundaries. In some cases, a biological subunit may cross the boundaries of
+    the formal asymmetric unit. Therefore, the result should always be
+    interpreted with the biology of the complex in mind.
+
+    ## Choosing the Symmetry
+
+    The most important parameter is the **symmetry group**. The protocol
+    supports cyclic, dihedral, tetrahedral, octahedral, and several icosahedral
+    conventions.
+
+    This choice must match the symmetry actually imposed or assumed in the
+    reconstruction. If the wrong symmetry is selected, the extracted region will
+    not correspond to the intended structural unit and may be difficult or
+    impossible to interpret biologically.
+
+    For **cyclic** and **dihedral** symmetry, the **symmetry order** must also
+    be provided. This defines, for example, whether the map is C3, C6, D2, D7,
+    and so on.
+
+    In practice, users should use exactly the same symmetry convention that was
+    used in the reconstruction or in the downstream interpretation of the map.
+
+    ## Symmetry Offset
+
+    For cyclic and dihedral symmetries, the protocol allows an **offset** in
+    degrees. This rotates the extracted unit around the symmetry axis before
+    cropping.
+
+    This parameter is useful when the default asymmetric unit boundary is
+    geometrically correct but not the most convenient one for interpretation.
+    By rotating the unit cell, the user can choose a different
+    symmetry-equivalent wedge of the volume.
+
+    From a biological point of view, this can be valuable when one wants the
+    extracted region to better match a recognizable subunit or to avoid
+    cutting through an especially important density region.
+
+    ## Inner and Outer Radius
+
+    The extracted region is also constrained by an **inner radius** and an
+    **outer radius**, both expressed in pixels.
+
+    The **inner radius** defines an internal exclusion zone. This is useful
+    when the central part of the map is not relevant to the unit one wants to
+    isolate, or when one wants to avoid including density near the symmetry axis.
+
+    The **outer radius** defines the maximum radial extent of the cropped
+    region. If this parameter is set to -1, the protocol automatically uses
+    half the box size of the volume.
+
+    In practical terms, these radii allow the user to restrict the asymmetric
+    unit to the radial shell where the relevant density lies. This can be
+    particularly helpful in hollow assemblies, shells, or capsids, where the
+    density is concentrated away from the center.
+
+    ## Expand Factor
+
+    The **expand factor** enlarges the extracted region beyond the exact formal
+    limits of the asymmetric unit.
+
+    This is often biologically useful because strict symmetry boundaries may
+    cut too close to real density, especially when a subunit extends near the
+    edge of the formal unit. A small expansion can make the result easier to
+    inspect and less prone to truncating relevant structural features.
+
+    However, if the expansion is too large, the extracted region may start to
+    include density belonging to neighboring symmetry-related units, which
+    reduces the conceptual clarity of isolating one unit.
+
+    A moderate expansion is often a good compromise when the goal is
+    visualization or local interpretation.
+
+    ## Origin and Sampling Considerations
+
+    The protocol takes into account the **sampling rate** and the **origin** of
+    the input volume when performing the extraction. This is important because
+    the asymmetric unit must be cropped in the correct geometric frame.
+
+    The output volume retains the appropriate sampling and is assigned an origin
+    derived from the cropped map header. This helps ensure that the result
+    remains spatially meaningful and can be used consistently in further
+    visualization or analysis.
+
+    For most biological users, this means that the output is not just a cropped
+    box, but a properly defined volume with geometry preserved.
+
+    ## Outputs and Their Interpretation
+
+    The protocol produces a single **output volume** containing the extracted
+    asymmetric unit.
+
+    This output can be used for:
+    * focused visualization of one symmetry-related region,
+    * local interpretation of a repeating unit,
+    * preparation of figures,
+    * comparison of a single unit across related maps,
+    * or as an intermediate step before more specialized local analysis.
+
+    Biologically, the extracted map should be interpreted as the density
+    corresponding to one symmetry-defined region of the original reconstruction.
+    It is not a new reconstruction, and it does not change the information
+    content of the original map; it simply isolates one part of it.
+
+    ## Practical Recommendations
+
+    A good first step is to make sure that the symmetry assignment matches the
+    original reconstruction exactly. Errors in symmetry choice are the most
+    common source of unintuitive results.
+
+    For many datasets, using the default outer radius and an inner radius of
+    zero is a reasonable starting point. The radii can then be adjusted if the
+    extracted region includes too much empty space or cuts through relevant
+    density.
+
+    The expand factor is often useful when the strictly defined asymmetric unit
+    looks too tight. A small positive value can improve interpretability,
+    especially in protein assemblies where the formal symmetry boundaries do
+    not align perfectly with intuitive biochemical subunits.
+
+    When using cyclic or dihedral symmetry, the offset can be explored if the
+    default extracted wedge is not the most convenient for visualization.
+
+    ## Final Perspective
+
+    The Extract Asymmetric Unit protocol is a symmetry-aware map extraction tool
+    that helps isolate one unique region from a symmetric 3D reconstruction.
+    Its main value is interpretative: it allows the user to examine a
+    non-redundant unit of the map without the visual and structural redundancy
+    of the full symmetric assembly.
+
+    For most cryo-EM users, it is best seen as a focused visualization and
+    analysis aid. When the symmetry is correctly defined and the radial limits
+    are sensibly chosen, it provides a very useful way to study one part of a
+    symmetric map in a cleaner and more biologically manageable form.
     """
     _label = 'extract asymmetric unit'
     _program = ""

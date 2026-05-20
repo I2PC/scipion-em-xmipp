@@ -45,7 +45,219 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
     and variance of the residues are computed. Large values of these scores may indicate outliers.
     The protocol also analyze the covariance matrix of the residual and computes the logarithm of
     its determinant [Cherian2013]. The extremes of this score (called zScoreResCov), that is
-    values particularly low or high, may indicate outliers."""
+    values particularly low or high, may indicate outliers.
+
+    AI Generated
+
+    ## Overview
+
+    The Generate Reprojections protocol compares a set of experimental particle
+    images with the corresponding projections of a reference 3D volume.
+
+    The input images must already have a 3D angular assignment. This means that
+    each image is associated with an orientation describing from which direction it
+    is expected to view the 3D structure. Using these orientations, the protocol
+    projects the input volume and generates synthetic reference images that can be
+    directly compared with the experimental ones.
+
+    This protocol is useful for visual inspection, validation, outlier detection,
+    and quality assessment. It helps the user answer a simple but important
+    question: given the current angular assignment and the reference volume, do the
+    experimental images look like the projections expected from the model?
+
+    The protocol produces two related outputs: one output set containing the
+    experimental images with updated Xmipp metadata, and another output set
+    containing the generated reprojections. These two outputs can be compared to
+    evaluate agreement between data and model.
+
+    ## Inputs and General Workflow
+
+    The protocol requires two main inputs:
+
+    - a set of input particles or images;
+    - a reference volume.
+
+    The input image set must contain projection-alignment information. In practical
+    terms, this means that the particles, classes, or averages must already have
+    assigned Euler angles and shifts from a previous 3D assignment, refinement, or
+    classification step.
+
+    The reference volume is converted to Xmipp format and, if necessary, resized so
+    that its dimensions match the dimensions of the input images. The protocol then
+    uses the angular information associated with each image to generate the
+    corresponding projection of the volume.
+
+    For each input image, the protocol stores the relation between the experimental
+    image and the generated reference projection. This makes it possible to inspect
+    the two sets side by side or to use them in later analysis.
+
+    ## Input Images
+
+    The **Input images** parameter should point to a set of particles or image
+    averages with valid 3D angular assignments.
+
+    This is essential. The protocol does not perform an initial orientation search
+    from scratch in the usual sense of a full refinement protocol. Instead, it uses
+    the angular information already associated with the images to generate the
+    corresponding reprojections of the volume.
+
+    Typical inputs may include:
+
+    - particles after a 3D refinement;
+    - class averages with assigned projection directions;
+    - particles or averages produced by a previous Xmipp angular assignment step.
+
+    If the input images do not have meaningful angular assignments, the generated
+    reprojections will not be biologically interpretable. The comparison is only as
+    good as the orientations provided in the input set.
+
+    ## Reference Volume
+
+    The **Volume to compare images to** is the 3D map that will be projected.
+
+    The volume should represent the structure that the input images are expected to
+    show. In many workflows, this will be the current refined map, an initial model,
+    or a representative volume from a 3D classification result.
+
+    Before generating reprojections, the protocol checks the size of the volume
+    relative to the input images. If the volume dimension differs from the image
+    dimension, the volume is resized to match the image size. This ensures that the
+    generated projections can be directly compared with the input images.
+
+    From a biological point of view, the reference volume defines the structural
+    hypothesis being tested. If the volume does not correspond to the particles, or
+    if it represents a different conformation, the reprojections may differ
+    substantially from the experimental images.
+
+    ## Ignore CTF
+
+    The **Ignore CTF** option controls whether the contrast transfer function is
+    considered when generating reprojections.
+
+    If **Ignore CTF** is enabled, the protocol generates projections that look more
+    like ideal projections of the 3D volume. This is often easier for a human user
+    to interpret visually because the projections resemble the structural content
+    of the map without microscope-induced CTF modulation.
+
+    If **Ignore CTF** is disabled, the generated projections include the effect of
+    the CTF when such information is available. These projections are closer to
+    what the microscope would actually record for each particle. This can be more
+    appropriate for quantitative comparison, but the images may be less intuitive
+    to inspect visually because CTF oscillations and contrast inversions can affect
+    their appearance.
+
+    For visual comparison and user interpretation, ignoring the CTF is often a good
+    starting point. For more microscope-realistic comparisons, the CTF should be
+    included.
+
+    ## Reprojections and Experimental Images
+
+    For each input image, the protocol generates the projection of the reference
+    volume corresponding to the image orientation.
+
+    The experimental image and the generated reprojection should be interpreted as
+    a pair:
+
+    - the experimental image is what was observed in the data;
+    - the reprojection is what the reference volume predicts from the same viewing
+      direction.
+
+    Good agreement suggests that the angular assignment and the reference volume
+    are consistent with the experimental image. Poor agreement may indicate a
+    wrong orientation, a bad particle, conformational heterogeneity, incorrect CTF
+    handling, or a mismatch between the particle and the reference map.
+
+    This comparison is particularly useful when inspecting suspicious particles,
+    classes, or views that appear inconsistent with the current 3D model.
+
+    ## Output Particles
+
+    The first output, **outputParticles**, contains the experimental images selected
+    from the input set, enriched with Xmipp metadata linking them to the generated
+    reference projections.
+
+    These images keep the relevant information from the original input particles,
+    including sampling and alignment information. The protocol also stores
+    metadata fields that point to the original image and to the corresponding
+    reference projection.
+
+    This output is useful when the user wants to continue working with the
+    experimental images while preserving the connection to their model-based
+    reprojections.
+
+    ## Output Projections
+
+    The second output, **outputProjections**, contains the generated projections of
+    the reference volume.
+
+    Each image in this set corresponds to one input image and is generated using
+    the angular assignment associated with that input image. Therefore, the order
+    and correspondence between the experimental images and the reprojections should
+    be preserved.
+
+    This output is useful for visual inspection and for direct comparison with the
+    input particles or averages. For example, the user can compare experimental
+    images and reprojections to assess whether the reference volume explains the
+    observed views.
+
+    ## Interpreting Differences Between Images and Reprojections
+
+    Differences between experimental images and reprojections can have several
+    causes.
+
+    Some differences are expected because experimental cryo-EM particles are noisy,
+    affected by CTF, and may contain small alignment errors. A reprojection of a
+    clean 3D map will usually look cleaner and more regular than a raw particle.
+
+    Large or systematic differences may be more informative. They can suggest that
+    some particles are incorrectly aligned, that they belong to another
+    conformational state, that the reference volume is incomplete or biased, or
+    that some particles are contaminants or damaged views.
+
+    When the input images are class averages, the comparison is often easier to
+    interpret because averaging reduces noise. In that case, clear differences
+    between class averages and reprojections may point to genuine structural
+    heterogeneity or model mismatch.
+
+    ## Practical Recommendations
+
+    Use this protocol after a 3D refinement, angular assignment, or classification
+    step that has produced meaningful projection directions.
+
+    Start with **Ignore CTF** enabled if the goal is visual interpretation. This
+    usually produces cleaner and more intuitive reprojections of the reference map.
+
+    Disable **Ignore CTF** when the goal is to compare the images with projections
+    that are closer to the microscope-recorded signal, provided that reliable CTF
+    information is available.
+
+    Always check that the input image set and the reference volume correspond to
+    the same particle type, box size, and approximate structural state. The
+    protocol can resize the volume to match the image dimensions, but it cannot
+    correct a biologically inappropriate reference.
+
+    When possible, inspect experimental images and reprojections side by side.
+    Look for agreement in the main structural features, not for pixel-perfect
+    identity. Cryo-EM images are noisy and affected by many acquisition and
+    processing factors.
+
+    This protocol is especially useful for identifying outlier classes, suspicious
+    orientations, or particles that do not agree with the current 3D model.
+
+    ## Final Perspective
+
+    Generate Reprojections is a model-comparison protocol. It takes the current
+    3D structural hypothesis and asks how the input images should look if that
+    hypothesis and the assigned orientations are correct.
+
+    For biological users, the value of the protocol lies in making the relationship
+    between particles and volume visible. It helps assess whether the 3D map
+    explains the experimental data, whether some views are problematic, and whether
+    the current angular assignment is plausible.
+
+    Used carefully, this protocol provides an intuitive bridge between 2D particle
+    images and the 3D volume reconstructed from them.
+    """
     _label = 'generate reprojections'
     _lastUpdateVersion = VERSION_2_0
     

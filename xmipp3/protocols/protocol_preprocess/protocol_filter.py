@@ -333,7 +333,266 @@ class XmippFilterHelper():
 
 
 class XmippProtFilterParticles(ProtFilterParticles, XmippProcessParticles):
-    """ Applies Fourier-based filters to a set of particles to enhance or suppress specific frequency components. This helps improve contrast or remove noise, preparing particles for further analysis such as picking. """
+    """ Applies Fourier-based filters to a set of particles to enhance or
+    suppress specific frequency components. This helps improve contrast or
+    remove noise, preparing particles for further analysis such as picking.
+
+    AI Generated
+
+    ## Overview
+
+    The Filter Particles protocol applies frequency-domain, real-space, or
+    wavelet-based filters to a set of particle images.
+
+    Filtering is commonly used in cryo-EM to suppress noise, remove unwanted
+    frequency components, enhance contrast, or prepare particles for downstream
+    processing. This protocol provides several filtering modes, including low-pass,
+    high-pass, band-pass, CTF-based filtering, median filtering, and wavelet
+    filtering.
+
+    The main output is a new particle set containing the filtered particle images.
+
+    ## Inputs and General Workflow
+
+    The input is a set of particles.
+
+    The protocol converts the input particles to Xmipp metadata format, applies the
+    selected filter using `xmipp_transform_filter`, and writes a new image stack
+    and metadata file. The output particle set keeps the input metadata columns
+    whenever possible and points to the filtered images.
+
+    Depending on the selected filter space, the user defines frequency limits,
+    real-space filter mode, or wavelet parameters.
+
+    ## Input Particles
+
+    The **Input particles** parameter defines the particle set to be filtered.
+
+    The particles can be raw, extracted, aligned, classified, or otherwise
+    processed. The protocol does not change particle coordinates, orientations, or
+    CTF metadata, except when a CTF model is used to define a filter.
+
+    The output particles preserve the input metadata and replace the image
+    locations with the filtered image stack.
+
+    ## Filter Space
+
+    The **Filter space** parameter defines the mathematical domain where the
+    filter is applied.
+
+    There are three options:
+
+    **Fourier** applies filters in frequency space. This is the most common choice
+    for low-pass, high-pass, band-pass, or CTF-like filtering.
+
+    **Real** applies a real-space filter. In this protocol, the available real-space
+    mode is median filtering.
+
+    **Wavelets** applies filtering after a wavelet decomposition.
+
+    The appropriate choice depends on the goal of the filtering.
+
+    ## Fourier Filtering
+
+    Fourier filtering modifies the frequency content of the particle images.
+
+    The available Fourier modes for particles are:
+
+    - low pass;
+    - high pass;
+    - band pass;
+    - CTF.
+
+    Low-pass filtering keeps low-frequency information and suppresses high
+    frequencies. High-pass filtering keeps high-frequency information and
+    suppresses low frequencies. Band-pass filtering keeps only a selected frequency
+    range.
+
+    The CTF option applies a CTF filter to the particles, normally for simulated
+    data. It should not be interpreted as a CTF correction.
+
+    ## Low-Pass Filter
+
+    The **low pass** mode preserves frequency components below the selected high
+    frequency cutoff.
+
+    In resolution terms, this removes details finer than the selected highest
+    resolution. It is often used to reduce high-frequency noise or to prepare
+    particles for coarse alignment or classification.
+
+    For example, a low-pass filter at 20 Å keeps broad structural information and
+    suppresses finer details.
+
+    ## High-Pass Filter
+
+    The **high pass** mode preserves frequency components above the selected low
+    frequency cutoff.
+
+    This removes very low-frequency background or slowly varying intensity trends.
+
+    High-pass filtering should be used cautiously because excessive removal of
+    low-frequency information can damage particle contrast and global shape.
+
+    ## Band-Pass Filter
+
+    The **band pass** mode preserves frequency components between the selected low
+    and high frequency limits.
+
+    This is useful when the user wants to focus on a specific frequency range,
+    removing both very low-frequency background and high-frequency noise.
+
+    The band-pass filter is the default Fourier filtering mode.
+
+    ## Resolution or Normalized Frequency
+
+    The **Provide resolution in Angstroms?** option controls how Fourier cutoffs
+    are entered.
+
+    If enabled, the user provides limits as resolutions in angstroms.
+
+    If disabled, the user provides normalized digital frequencies between 0 and
+    0.5, where 0.5 corresponds to Nyquist.
+
+    For biological users, angstrom values are usually easier to interpret. Digital
+    frequencies are useful for technical workflows where the user wants direct
+    control of the Fourier sampling.
+
+    ## Resolution Parameters
+
+    When values are provided in angstroms, the protocol uses:
+
+    - **Lowest** resolution;
+    - **Highest** resolution;
+    - **Decay length**.
+
+    For a band-pass filter, the preserved range lies between the highest and
+    lowest resolution limits. For a low-pass filter, the highest-resolution cutoff
+    is used. For a high-pass filter, the lowest-resolution cutoff is used.
+
+    The decay length controls the smooth transition of the filter.
+
+    ## Normalized Frequency Parameters
+
+    When values are provided as normalized frequencies, the protocol uses:
+
+    - **Lowest** frequency;
+    - **Highest** frequency;
+    - **Frequency decay**.
+
+    Normalized frequencies range from 0 to 0.5.
+
+    A larger normalized frequency corresponds to finer detail. A smaller normalized
+    frequency corresponds to coarser information.
+
+    ## Decay Length
+
+    The decay parameter controls the smoothness of the filter transition.
+
+    The filter uses a raised-cosine-like transition rather than an abrupt cutoff.
+    This helps reduce ringing artifacts caused by sharp frequency truncation.
+
+    A larger decay produces a smoother transition. A smaller decay produces a
+    sharper cutoff.
+
+    ## CTF Filter
+
+    The **ctf** Fourier mode applies a CTF filter to the particles.
+
+    The user may provide a **CTF Object**. If no CTF object is provided, the
+    protocol uses the CTF information associated with the first input particle.
+
+    The protocol converts the CTF information to Xmipp format and applies it as a
+    filter. This option is normally intended for simulated data and should not be
+    used as a replacement for CTF correction.
+
+    ## Real-Space Median Filter
+
+    When **real** filter space is selected, the available mode is **median**.
+
+    Median filtering replaces each pixel by the median of neighboring pixels. This
+    can reduce isolated outlier values or salt-and-pepper-like noise while
+    preserving edges better than a simple average filter.
+
+    Median filtering modifies particle appearance directly in real space and
+    should be used conservatively.
+
+    ## Wavelet Filtering
+
+    When **wavelets** filter space is selected, the protocol performs a wavelet
+    decomposition.
+
+    The available wavelet bases are:
+
+    - DAUB4;
+    - DAUB12;
+    - DAUB20.
+
+    The available wavelet modes are:
+
+    - remove scale;
+    - soft thresholding;
+    - adaptive soft;
+    - central.
+
+    The Bayesian wavelet mode is listed in the interface but is not implemented.
+
+    Wavelet filtering requires particle dimensions to be powers of two. The
+    protocol validates this condition.
+
+    ## Output Particles
+
+    The main output is **outputParticles**.
+
+    This output contains the filtered particle images. It preserves the input
+    particle metadata and stores the new image locations in the filtered stack.
+
+    The output can be used in downstream workflows such as classification,
+    alignment, reconstruction, screening, or visualization.
+
+    ## Validation Rules
+
+    For wavelet filtering, all particle image dimensions must be powers of two.
+
+    If the particle dimensions are not powers of two, the protocol reports a
+    validation error.
+
+    The protocol also assumes that CTF filtering is used only when appropriate CTF
+    information is available, either from a provided CTF object or from the first
+    particle.
+
+    ## Practical Recommendations
+
+    Use low-pass filtering to suppress high-frequency noise or prepare particles
+    for coarse processing.
+
+    Use high-pass filtering only when low-frequency background is problematic.
+
+    Use band-pass filtering when both low-frequency background and high-frequency
+    noise should be reduced.
+
+    Use angstrom-based frequency parameters unless you specifically need normalized
+    digital frequencies.
+
+    Use CTF filtering mainly for simulated data; do not confuse it with CTF
+    correction.
+
+    Use wavelet filtering only when the image dimensions are powers of two.
+
+    Inspect representative filtered particles before using the output in expensive
+    downstream processing.
+
+    ## Final Perspective
+
+    Filter Particles is a general particle-image filtering protocol.
+
+    For biological users, its value is that it allows controlled suppression or
+    selection of image information at different frequency scales. It can improve
+    visualization, reduce noise, or prepare particles for downstream processing,
+    but excessive filtering can remove useful signal.
+
+    The filtered output should therefore be interpreted as a processed version of
+    the original particle set, not as new experimental information.
+    """
     _label = 'filter particles'
     tmpCTF = "ctf.xmd"
 
@@ -419,7 +678,258 @@ class XmippProtFilterParticles(ProtFilterParticles, XmippProcessParticles):
 
 
 class XmippProtFilterVolumes(ProtFilterVolumes, XmippProcessVolumes):
-    """ Applies Fourier filters to 3D volumes, adjusting their frequency content generating a filter volume as output. Filtering can emphasize structural features, reduce noise, or prepare volumes for comparison or refinement. The filter can be applied in Fourier, wavelet or real space, and can be set as band, high or low pass filter. Also can be set the resolution range and the decay length """
+    """ Applies Fourier filters to 3D volumes, adjusting their frequency
+    content generating a filter volume as output. Filtering can emphasize
+    structural features, reduce noise, or prepare volumes for comparison or
+    refinement. The filter can be applied in Fourier, wavelet or real space,
+    and can be set as band, high or low pass filter. Also can be set the
+    resolution range and the decay length.
+
+    AI Generated
+
+    ## Overview
+
+    The Filter Volumes protocol applies Fourier, real-space, or wavelet filters to
+    one volume or to a set of volumes.
+
+    Filtering volumes is useful for reducing noise, limiting the resolution of a
+    map, removing low-frequency background, comparing maps at the same resolution,
+    or preparing volumes for downstream workflows such as alignment, subtraction,
+    visualization, or validation.
+
+    The protocol supports Fourier low-pass, high-pass, and band-pass filters, a
+    real-space median filter, and several wavelet filters.
+
+    The main output is a filtered volume or a filtered set of volumes.
+
+    ## Inputs and General Workflow
+
+    The input can be a single volume or a set of volumes.
+
+    The protocol applies the selected filter using `xmipp_transform_filter`. If
+    the input is a single volume, one filtered map is produced. If the input is a
+    set of volumes, a new filtered volume set is produced while preserving the
+    input metadata.
+
+    The user selects the filtering space and then defines the parameters for the
+    corresponding filter type.
+
+    ## Input Volumes
+
+    The **Input volumes** parameter defines the map or maps to be filtered.
+
+    The input may be a single 3D volume or a set of 3D volumes. The protocol does
+    not align, resize, mask, sharpen, or validate the maps. It only changes their
+    frequency or spatial content according to the selected filter.
+
+    The output maps keep the input metadata as far as possible while pointing to
+    the filtered files.
+
+    ## Filter Space
+
+    The **Filter space** parameter defines where the filter is applied.
+
+    There are three options:
+
+    **Fourier** applies the filter in frequency space.
+
+    **Real** applies a real-space median filter.
+
+    **Wavelets** applies a wavelet-based filter.
+
+    Fourier filtering is the most common option for cryo-EM maps.
+
+    ## Fourier Filtering
+
+    For volumes, Fourier filtering supports three modes:
+
+    - low pass;
+    - high pass;
+    - band pass.
+
+    Unlike the particle-filter protocol, the volume-filter protocol does not expose
+    the CTF filtering mode.
+
+    Fourier filtering is useful when the user wants to control the resolution range
+    of a map.
+
+    ## Low-Pass Filter
+
+    The **low pass** mode keeps low-frequency information and suppresses
+    high-frequency components.
+
+    In cryo-EM terms, it removes features finer than the selected resolution. This
+    is commonly used to compare maps at the same resolution, reduce noise, or
+    prepare a map for initial alignment.
+
+    ## High-Pass Filter
+
+    The **high pass** mode keeps high-frequency components and suppresses
+    low-frequency information.
+
+    This can reduce broad background variations, but it should be used cautiously.
+    Strong high-pass filtering can damage the overall shape and low-resolution
+    contrast of a map.
+
+    ## Band-Pass Filter
+
+    The **band pass** mode keeps frequencies between a lower and an upper cutoff.
+
+    This is useful for focusing on a selected structural scale. It can suppress
+    both slow background variations and high-frequency noise.
+
+    Band-pass filtering is the default Fourier mode.
+
+    ## Resolution or Normalized Frequency
+
+    The **Provide resolution in Angstroms?** option controls how frequency limits
+    are entered.
+
+    If enabled, the user provides cutoffs as resolution values in angstroms.
+
+    If disabled, the user provides normalized digital frequencies between 0 and
+    0.5, where 0.5 is Nyquist.
+
+    Angstrom-based parameters are usually more intuitive for biological
+    interpretation. Normalized frequencies are useful for precise technical
+    control.
+
+    ## Resolution Parameters
+
+    When angstrom values are used, the filter is defined by:
+
+    - **Lowest** resolution;
+    - **Highest** resolution;
+    - **Decay length**.
+
+    For low-pass filtering, the highest-resolution cutoff is used. For high-pass
+    filtering, the lowest-resolution cutoff is used. For band-pass filtering, the
+    preserved range lies between the highest and lowest resolution limits.
+
+    The decay length controls the smooth transition of the filter.
+
+    ## Normalized Frequency Parameters
+
+    When normalized frequency values are used, the filter is defined by:
+
+    - **Lowest** frequency;
+    - **Highest** frequency;
+    - **Frequency decay**.
+
+    Normalized frequencies range from 0 to 0.5.
+
+    These parameters are internally passed directly to the Fourier filter.
+
+    ## Filter Decay
+
+    The decay parameter controls how gradually the filter transitions between
+    preserved and suppressed frequencies.
+
+    A smooth transition helps reduce ringing artifacts that can appear when
+    frequency cutoffs are too abrupt.
+
+    The decay is expressed either in angstroms or normalized frequency units,
+    depending on the selected input convention.
+
+    ## Real-Space Median Filter
+
+    When **real** filter space is selected, the available mode is **median**.
+
+    The median filter replaces each voxel with the median of its local
+    neighborhood. It can reduce isolated spikes or local outliers while preserving
+    some edges better than a simple averaging filter.
+
+    Median filtering changes the map directly in real space and should be used
+    carefully when quantitative density interpretation is important.
+
+    ## Wavelet Filtering
+
+    When **wavelets** filter space is selected, the protocol performs wavelet-based
+    filtering.
+
+    The available wavelet bases are:
+
+    - DAUB4;
+    - DAUB12;
+    - DAUB20.
+
+    The available wavelet modes are:
+
+    - remove scale;
+    - soft thresholding;
+    - adaptive soft;
+    - central.
+
+    The Bayesian wavelet mode is not implemented.
+
+    Wavelet filtering requires the input volume dimensions to be powers of two.
+    The protocol validates this requirement.
+
+    ## Output Volume or Volume Set
+
+    The main output is **outputVol**.
+
+    If the input is a single volume, this output is the filtered volume.
+
+    If the input is a set of volumes, this output is a filtered set of volumes.
+
+    The output can be used in downstream protocols such as map comparison,
+    alignment, subtraction, local analysis, or visualization.
+
+    ## Validation Rules
+
+    For wavelet filtering, all volume dimensions must be powers of two.
+
+    If the dimensions are not powers of two, the protocol reports a validation
+    error.
+
+    Users should also ensure that the selected frequency cutoffs are meaningful
+    for the sampling rate of the input volume.
+
+    ## Interpreting the Filtered Map
+
+    The filtered output is a processed version of the input map.
+
+    Low-pass filtering makes the map smoother and removes finer details. High-pass
+    filtering removes broad low-frequency components. Band-pass filtering isolates
+    a selected frequency range. Median and wavelet filters modify the map according
+    to their own spatial or multiscale criteria.
+
+    Filtering can improve interpretability for some purposes, but it can also
+    remove real signal or introduce artifacts if used too aggressively.
+
+    ## Practical Recommendations
+
+    Use low-pass filtering when comparing maps at the same resolution or when
+    reducing high-frequency noise.
+
+    Use band-pass filtering when focusing on a specific structural scale.
+
+    Use high-pass filtering only when low-frequency background is clearly
+    problematic.
+
+    Use smooth decay values to avoid ringing artifacts.
+
+    Use angstrom-based cutoffs unless normalized frequencies are required.
+
+    Use wavelet filtering only when volume dimensions are powers of two.
+
+    Always inspect the filtered map together with the original map.
+
+    Avoid making biological claims from features that appear only after aggressive
+    filtering.
+
+    ## Final Perspective
+
+    Filter Volumes is a general map-filtering protocol.
+
+    For biological users, its value is that it provides controlled manipulation of
+    the spatial-frequency content of cryo-EM maps. This can help with
+    visualization, comparison, preprocessing, and noise reduction.
+
+    The protocol should be used as a preprocessing or exploratory tool. Its output
+    is filtered density, not newly validated structural information.
+    """
     _label = 'filter volumes'
 
     #--------------------------- UTILS functions ---------------------------------------------------
