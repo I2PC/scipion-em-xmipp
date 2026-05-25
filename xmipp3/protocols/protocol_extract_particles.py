@@ -466,7 +466,86 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 self._getNormalizeArgs(),
                 self.doBorders.get()]
     
+    def _getStreamingBatchSize(self):
+        """ When the input stream is already closed (non-streaming run), put
+        all micrographs into one batch so that _extractMicrographList can
+        saturate all MPI workers.  In streaming mode keep the default
+        one-step-per-micrograph behaviour. """
+        try:
+            if self._isStreamClosed():
+                return 0  # 0 = greedy: all available mics in one step
+        except AttributeError:
+            pass  # coordsClosed not yet set during very early init
+        return self.getAttributeValue('streamingBatchSize', 1)
+
     #--------------------------- STEPS functions -------------------------------
+    def _extractMicrographList(self, micList, doInvert, normalizeArgs, doBorders):
+        """ Extract particles from *micList* exploiting all configured MPI workers.
+
+        Differences from the base-class (serial) implementation:
+
+        1. The base list-step path (extractMicrographListStep) never calls
+           _convertCoordinates, so the required .pos files would be missing.
+           We write them here for every micrograph before launching extraction.
+
+        2. Up to ``numberOfMpi`` extractions run concurrently via a
+           ThreadPoolExecutor.  Each worker calls the existing single-mic
+           _extractMicrograph (self.runJob → subprocess), so subprocesses run
+           in parallel without going through the Scipion step-scheduler loop
+           that introduces 3-second idle gaps between dispatches.
+
+        3. QueueStepExecutor runs fall back to sequential execution because
+           nested queue submissions from ad-hoc worker threads are unsupported.
+        """
+        if not micList:
+            return
+
+        # Write .pos coordinate files for every micrograph in this batch.
+        # extractMicrographListStep (base class) does NOT call _convertCoordinates,
+        # so without this the scissor step would silently find no .pos files
+        # and skip all particles.
+        for mic in micList:
+            self._convertCoordinates(mic, self.coordDict[mic.getObjId()])
+
+        nWorkers = max(1, self.numberOfMpi.get())
+
+        # QueueStepExecutor submits each runJob call as a separate queue job.
+        # Spawning threads inside a step that each submit queue jobs is not a
+        # supported pattern, so fall back to sequential execution there.
+        from pyworkflow.protocol.executor import QueueStepExecutor
+        if nWorkers <= 1 or isinstance(
+                getattr(self, '_stepsExecutor', None), QueueStepExecutor):
+            for mic in micList:
+                self._extractMicrograph(mic, doInvert, normalizeArgs, doBorders)
+            return
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        self.info("Extracting %d micrographs with %d parallel MPI workers"
+                  % (len(micList), nWorkers))
+
+        with ThreadPoolExecutor(max_workers=nWorkers) as executor:
+            futures = {
+                executor.submit(
+                    self._extractMicrograph,
+                    mic, doInvert, normalizeArgs, doBorders
+                ): mic
+                for mic in micList
+            }
+            n = 0
+            reportEvery = max(1, len(micList) // 20)
+            for future in as_completed(futures):
+                mic = futures[future]
+                try:
+                    future.result()
+                    n += 1
+                    if n % reportEvery == 0 or n == len(micList):
+                        self.info("Extracted %d / %d micrographs"
+                                  % (n, len(micList)))
+                except Exception as e:
+                    self.error("Error extracting micrograph %s: %s"
+                               % (mic.getMicName(), str(e)))
+
     def _extractMicrograph(self, mic, doInvert, normalizeArgs, doBorders):
         """ Extract particles from one micrograph """
         fnLast = mic.getFileName()
