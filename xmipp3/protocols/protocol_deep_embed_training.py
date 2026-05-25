@@ -35,6 +35,8 @@ from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 import os
 import xmipp3
 from pyworkflow import BETA, UPDATED, NEW, PROD
+from pyworkflow.protocol import STEPS_PARALLEL
+
 
 class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
     """Train a rotational and shift invariant embedding for images"""
@@ -45,6 +47,7 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
 
     def __init__(self, **args):
         ProtAnalysis2D.__init__(self, **args)
+        self.stepsExecutionMode = STEPS_PARALLEL
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -62,6 +65,8 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         form.addParam('inputParticles', PointerParam, label="Input images",
                       pointerClass='SetOfParticles, SetOfAverages',
                       help='The set does not need to be centered or have alignment parameters')
+        form.addParam('embeddingK', IntParam, label="Number of coarse clusters",
+                      default=100)
         form.addParam('imageSize', IntParam, label="Image size before embedding",
                       expertLevel=LEVEL_ADVANCED,
                       default=64)
@@ -82,7 +87,6 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         form.addParam('numEpochs', IntParam,
                       label="Number of epochs",
                       default=100,
-                      expertLevel=LEVEL_ADVANCED,
                       help="Number of epochs for training.")
 
         form.addParam('batchSize', IntParam,
@@ -96,6 +100,14 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                       default=0.001,
                       expertLevel=LEVEL_ADVANCED,
                       help="Learning rate for training.")
+        
+        form.addSection(label="PCA Alignment")
+        form.addParam('numberOfSubClasses', IntParam, default=50,
+                      condition="not mode",
+                      label='Number of subclasses:',
+                      help='Number of classes to split each cluster coarse cluster determined using the neural network')
+        
+
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -105,6 +117,11 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         self._insertFunctionStep("train")
         self._insertFunctionStep("predict" )
         self._insertFunctionStep("createOutputStep")
+
+        # deps = []
+        # for index in range(int(self.embeddingK)):
+        #     clusterStep = self._insertFunctionStep(self.refineClusterAlignment, index, prerequisites=[splitStep])
+        #     deps.append(clusterStep)
 
     def getGpusList(self, separator):
         strGpus = ""
@@ -143,11 +160,11 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         gpuId = self.setGpu(oneGPU=True)
         args = "-i %s --omodel %s --maxEpochs %d --batchSize %d --gpu %s "\
                "--learningRate %f --sigmaShift %f --embeddingDim %d "\
-               "--imgSize %d --ocentroids %s"%\
+               "--imgSize %d --embeddingK %d --ocentroids %s"%\
                 (self.fnImgsTrain, self._getExtraPath("model.h5"),
                  self.numEpochs, self.batchSize, gpuId,
                  self.learningRate, self.sigmaShift, self.embeddingDim,
-                 self.imageSize, self._getExtraPath("centroids.npy"))
+                 self.imageSize, self.embeddingK, self._getExtraPath("centroids.npy"))
         self.runJob(f"xmipp_deep_embed_training", args, numberOfMpi=1,
                     env=self.getCondaEnv())
 
@@ -161,7 +178,7 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                 self._getExtraPath("centroids.npy"))
         self.runJob("xmipp_deep_embed_predict", args, numberOfMpi=1,
                     env=self.getCondaEnv())
-
+        
     def createOutputStep(self):
         fnOut = self._getExtraPath('particles.xmd')
         self.runJob("xmipp_metadata_utilities",
@@ -170,6 +187,7 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                     f" itemId itemId -o {fnOut}",
                     numberOfMpi=1)
         outputSet = self._createSetOfParticles()
+
         readSetOfParticles(fnOut, outputSet)
         outputSet.copyInfo(self.inputParticles.get())
         outputSet.setAlignment2D()
@@ -177,4 +195,31 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         self._store(outputSet)
         self._defineSourceRelation(self.inputParticles.get(), outputSet)
 
+    # def splitGroups(self):
+    #     fnOut = self._getExtraPath('particles.xmd')
+    #     for cls in range(int(self.embeddingK)):
+    #         outPath = self._getTmpPath(f'particles_cluster_{cls}.xmd')
+    #         self.runJob("xmipp_metadata_utilities",
+    #                 f"-i {fnOut}"\
+    #                 f" --query select \"ref={cls}\"" \
+    #                 f" -o {outPath} ",
+    #                 numberOfMpi=1
+    #             )
+            
+    #         print(f"Write cluster to {outPath}")
 
+    # def _setEnvVariables(self, env):
+    #     """ Method to set all the environment variables needed to run PCA program """
+    #     env['LD_LIBRARY_PATH'] = ''
+    #     # Limit the number of threads
+    #     env['OMP_NUM_THREADS'] = '12'
+    #     env['MKL_NUM_THREADS'] = '12'
+    #     return env
+
+    # def refineClusterAlignment(self, index: int):
+    #     particlesPath = self._getTmpPath(f'particles_cluster_{index}.xmd')
+    #     env = self.getCondaEnv()
+    #     self._setEnvVariables(env)
+
+    #     print(f"Run pca align for {particlesPath}")
+        
