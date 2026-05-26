@@ -115,12 +115,13 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('coef' ,FloatParam, label="% variance", default=1.0, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('filter',FloatParam, label="filter resolution", default=8, expertLevel=LEVEL_ADVANCED,
-                      help='Final resolution of volume filtering')
+
         
         
         form.addSection(label='Reconstruction')
         
+        form.addParam('filter',FloatParam, label="Final Volume Resolution (Å)", default=8,
+              help='Final resolution of volume filtering')
         form.addParam('positivity', BooleanParam, default=True, 
                       label="Enforce non-negativity",
                       help='Enforce non-negativity of structures in real space during optimization. '
@@ -219,7 +220,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                 
             inputXmd = self.imgsFnXmd       
             outMrc = self.outputVolBase  
-            self._insertFunctionStep("globalAlign", inputXmd, outMrc, angle, shift, maxShift, applyShift, saveClass, radius, iter)   
+            self._insertFunctionStep("globalAlign", inputXmd, outMrc, angle, shift, maxShift, applyShift, saveClass, radius)   
             
             # for cl in range(self.classes):
             #
@@ -284,15 +285,15 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob("xmipp_alignPCA_train", args, numberOfMpi=1, env=env)
         
         
-    def globalAlign(self, inputXmd, output, angle, shift, MaxShift, applyShift, saveClass, rad, iter):
+    def globalAlign(self, inputXmd, output, angle, shift, MaxShift, applyShift, saveClass, rad):
         
         if self.training.get() == -1:
             numTrain = self.inputParticles.get().getSize()
         else:
             numTrain = min(self.inputParticles.get().getSize(), self.training.get())
         
-        args = ' -i %s -a %s -amax 180 -sh %s -msh %s  -o %s -stExp %s  -s %s -radius %s -nCl %s -t %s -p %s -hr %s'% \
-                (self.imgsFn, angle, shift, MaxShift, output, inputXmd,\
+        args = ' -i %s -a %s -amax 180 -sh %s -msh %s -vr %s -o %s -stExp %s  -s %s -radius %s -nCl %s -t %s -p %s -hr %s'% \
+                (self.imgsFn, angle, shift, MaxShift, self.filter.get(), output, inputXmd,\
                 self.sampling, rad, self.classes, numTrain, self.coef.get(), self.resolution.get())
         if applyShift:
             args += ' --apply_shifts ' 
