@@ -15,7 +15,7 @@ CONDA_INIT="/home/USERNAME/miniconda/etc/profile.d/conda.sh"
 SCIPION_DIR="/home/USERNAME/scipion3"
 
 # Xmipp base directory
-XMIPP_DIR="${SCIPION_DIR}/xmipp3"
+XMIPP_DIR="${SCIPION_DIR}/xmipp-bundle"
 
 # DeepLearningToolkit output directory
 DLTK_DIR="${SCIPION_DIR}/software/em/deepLearningToolkit"
