@@ -256,7 +256,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         # self.runJob("xmipp_transform_center_image",args, numberOfMpi=1)
         
         #positivity
-        self._positivity(outputConvert)
+        # self._positivity(outputConvert)
         # blur
         # self._applyBlurring(outputConvert)
                 
