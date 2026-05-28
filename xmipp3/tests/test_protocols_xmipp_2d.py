@@ -441,7 +441,7 @@ class TestXmippScreenParticles(TestXmippBase):
         print("--> Running Screen with rejection to maxZScore upper than 2.5")
         protScreenZScore = self.newProtocol(xpsp,
                                             autoParRejection=xpsp.REJ_MAXZSCORE,
-                                            maxZscore=2.5)
+                                            maxZscore_=2.5)
         protScreenZScore.inputParticles.set(self.protImport.outputParticles)
         self.launchProtocol(protScreenZScore)
         self.assertIsNotNone(protScreenZScore.outputParticles,
