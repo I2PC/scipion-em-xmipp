@@ -27,7 +27,8 @@
 # ******************************************************************************
 import enum
 import sys
-from typing import Optional
+import shutil
+from typing import Iterable, Optional
 import emtable
 import os
 from datetime import datetime
@@ -454,8 +455,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
     def updateOutputSetOfClasses(self, subgroupIdx, lastCreationTime, streamMode):
         outputClasses, update = self._loadOutputSet(OUTPUT_CLASSES)
 
-        print(f"Output Classes: {outputClasses}, update: {update}, subgroupIdx: {subgroupIdx}")
-
         self._fillClassesFromLevel(outputClasses, subgroupIdx, update)
         self._updateOutputSet(OUTPUT_CLASSES, outputClasses, streamMode)
         # self._updateOutputAverages(update)
@@ -541,23 +540,23 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.lastCheck = now
         return hasNewParticles
 
-    def _fillClassesFromLevel(self, clsSet, subgroupIdx, update=False):
-        """ Create the SetOfClasses2D from a given iteration. """
-        self._createMergedModelFile(subgroupIdx)
         
-        self._loadClassesInfo(self._getExtraPath(CONTRAST_AVERAGES_FILE))
-        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE))
-
-        print(f"Classes Info: {self._classesInfo}")
+    def _fillClassesFromLevel(self, clsSet: SetOfClasses2D, subgroupIdx: int, update=False):
+        """ Create the SetOfClasses2D from a given iteration. """
+        self._createModelFile(subgroupIdx)
+        
+        # Load the class info from the output of the pca align program
+        classesInfo = self._loadClassesInfo(self._getExtraPath(f"classes_classes.star")) #(self._getExtraPath(CONTRAST_AVERAGES_FILE))
+        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(f"classes_images.star"))
 
         params = {}
-        if update:
+        if False: #update: # TODO: Add state tracking for streamin back in
             self.info(r'Last creation time processed is %s' % str(self.lastCreationTimeProcessed))
             params = {"where": 'creation>"' + str(self.lastCreationTimeProcessed) + '"'}
 
         with self._lock:
             clsSet.classifyItems(updateItemCallback=partial(self._updateParticle, subgroupIdx=subgroupIdx),
-                                 updateClassCallback=self._updateClass,
+                                 updateClassCallback=partial(self._updateClass, classesInfo=classesInfo, subgroupIdx=subgroupIdx),
                                  itemDataIterator=mdIter,  # relion style
                                  iterParams=params,
                                  doClone=False,  # So the creation time is maintained
@@ -703,44 +702,68 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
     # #--------------------------- UTILS functions -------------------------------
     # EMTABLE IMPLEMENTATION
+    # def _convertToGlobalClassLabel(self, classIndex: int, subgroupIndex: int) -> int:
+    #     """
+    #     Convert the index computed within a single subgroup to a gobal index
+
+    #     Args:
+    #         classIndex: The local class index within the subgroup
+    #         subgroupIndex: The index of the subgroup.
+
+    #     Returns:
+    #         The global class index
+        
+    #     """
+    #     assert subgroupIndex >= 0, "Subgroup index is expected to be a positive integer >= 0"
+    #     assert subgroupIndex < self.numberClasses, "Subgroup index is expected to be an integer smaller than number of classes"
+
+    #     classIndex = int(classIndex)
+    #     subgroupIndex = int(subgroupIndex)
+
+    #     return subgroupIndex * self.numberClasses + classIndex
+
     def _updateParticle(self, item, row, *, subgroupIdx):
         if row is None:
             self.info('Row is none finish updating particle')
             setattr(item, "_appendItem", False)
         else:
-            objID = item.getObjId()
-            itemID = row.get(XMIPPCOLUMNS.itemId.value)
             refID = row.get(XMIPPCOLUMNS.ref.value)
-            print(f"ItemID: {itemID} in subgroup {subgroupIdx} with ref {refID}")
+            item.setClassId(refID)
+            item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
 
-            assert objID == itemID, f'The particles ids are not synchronized: {str(objID)} vs {str(refID)}'
-
-            if objID == itemID: #row.get(XMIPPCOLUMNS.itemId.value):
-
-                item.setClassId(refID)
-                item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
-            else:
-                self.error(f'The particles ids are not synchronized: {str(objID)} vs {str(refID)}')
-                setattr(item, "_appendItem", False)
-
-    def _updateClass(self, item):
-        # TODO: This function is most likely broken because it relies on the
-        # global state _classesInfo which gets set in the _loadClassesInfo
-        # method.
+    def _updateClass(self, item, classesInfo, subgroupIdx):
 
         classId = item.getObjId()
-        if classId in self._classesInfo:
-            index, fn, _ = self._classesInfo[classId]
+
+        if classId in classesInfo:
+            index, fn, _ = classesInfo[classId]
             item.setAlignment2D()
             rep = item.getRepresentative()
             rep.setLocation(index, fn)
             rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
 
-    def _createMergedModelFile(self, subgroupIdx):
+    def _mergeMetadataFile(self, inputMetadataPath, targetMetadataPath):
+        if not os.path.exists(targetMetadataPath):
+            shutil.copy(inputMetadataPath, targetMetadataPath)
+        else:
+            self.runJob(
+                "xmipp_metadata_utilities",
+                f"-i {os.path.abspath(inputMetadataPath)} --set union {os.path.abspath(targetMetadataPath)} -o {os.path.abspath(targetMetadataPath)}"
+            )
+
+    def _applyOffset(self, *paths: str, offset: int):
+        for path in paths:
+            path = os.path.abspath(path)
+
+            self.runJob(
+                "xmipp_metadata_utilities",
+                f"-i {path} -o {path} --operate modify_values \"ref=ref+{offset}\""
+            )
+
+    def _createModelFile(self, subgroupIdx):
         """
         This method reads the *_classes_[0-9].star and *_classes_images_[0-9].star
-        files generated by alignPCA and writes the output to the CONTRAST_AVERAGES
-        and AVERAGES_IMAGES files.
+        files generated by alignPCA and updates the data tables
 
         This merges the subgroups back into a single common file.
 
@@ -749,20 +772,34 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         
         """
 
-        with open(self._getExtraPath(f"classes_{subgroupIdx}_classes.star"), 'r') as file:
+        subgroup_classes_metadata_path = self._getExtraPath(f"classes_{subgroupIdx}_classes.star")
+        subgroup_images_metadata_path = self._getExtraPath(f"classes_{subgroupIdx}_images.star")
+
+        classes_metadata_path = self._getExtraPath(CONTRAST_AVERAGES_FILE)
+        images_metadata_path = self._getExtraPath(AVERAGES_IMAGES_FILE)
+
+        # Offset the class ref with the current group
+        offset = subgroupIdx * self.numberClasses
+        self._applyOffset(subgroup_classes_metadata_path, subgroup_images_metadata_path, offset=offset)
+
+        # We have to merge the subgroup starfile into a common file
+        self._mergeMetadataFile(subgroup_classes_metadata_path, classes_metadata_path)
+        self._mergeMetadataFile(subgroup_images_metadata_path, images_metadata_path)
+
+        with open(classes_metadata_path, 'r') as file:
             # Read the lines of the file
             lines = file.readlines()
             
         # Open the file for writing
-        with open(self._getExtraPath(CONTRAST_AVERAGES_FILE), "w") as file:
+        with open(classes_metadata_path, "w") as file:
             # Iterate through the lines
             for line in lines:
                 # Replace "data_" with "data_particles" if found
-                modifiedLine = line.replace("data_", "data_particles")
+                modifiedLine = line.replace("data_noname", "data_particles")
                 # Write the modified line to the file
                 file.write(modifiedLine)
 
-        with open(self._getExtraPath(f"classes_{subgroupIdx}_images.star"), 'r') as file:
+        with open(images_metadata_path, 'r') as file:
             lines = file.readlines()
 
             # Find the index of the last non-empty line
@@ -779,14 +816,15 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             modifiedLines.append(modifiedLine)
 
         # Write the modified lines back to the file
-        with open(self._getExtraPath(AVERAGES_IMAGES_FILE), "w") as file:
+        with open(images_metadata_path, "w") as file:
             file.writelines(modifiedLines)
+
 
     def _loadClassesInfo(self, filename):
         """ Read some information about the produced 2D classes
         from the metadata file.
         """
-        self._classesInfo = {}  # store classes info, indexed by class id
+        _classesInfo = {}  # store classes info, indexed by class id
 
         mdFileName = '%s@%s' % ('particles', filename)
         table = emtable.Table(fileName=filename)
@@ -795,8 +833,9 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             index, fn = xmippToLocation(row.get(XMIPPCOLUMNS.image.value))
             # Store info indexed by id, we need to store the row.clone() since
             # the same reference is used for iteration
-            self._classesInfo[classNumber + 1] = (index, fn, row)
-        self._numClass = index
+            _classesInfo[classNumber + 1] = (index, fn, row)
+
+        return _classesInfo
 
 # --------------------------- Static functions --------------------------------
 def rowToAlignmentEmtable(alignmentRow, alignType):
