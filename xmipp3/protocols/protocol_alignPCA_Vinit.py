@@ -256,7 +256,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         # self.runJob("xmipp_transform_center_image",args, numberOfMpi=1)
         
         #positivity
-        # self._positivity(outputConvert)
+        self._positivity(outputConvert)
         # blur
         # self._applyBlurring(outputConvert)
                 
@@ -326,7 +326,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         #filter
         self._filterVolume(output, output, resol)
         #positivity
-        # self._positivity(output)
+        self._positivity(output)
         #automatic mask
         if iter < 7:
             self._applyMaskThreshold(output)
