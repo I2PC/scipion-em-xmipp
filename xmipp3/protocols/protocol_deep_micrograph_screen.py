@@ -58,7 +58,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Removes coordinates located in carbon regions or large impurities in micrographs using a pre-trained deep learning model. This screening improves particle picking accuracy by filtering out false positives from contaminated areas."""
     _label = 'deep micrograph cleaner'
     _conda_env= "xmipp_MicCleaner"
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)

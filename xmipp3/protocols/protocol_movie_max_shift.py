@@ -31,7 +31,7 @@ import numpy as np
 import copy
 
 from pyworkflow import VERSION_3_0
-from pyworkflow import UPDATED
+from pyworkflow import UPDATED, PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
@@ -65,7 +65,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                                              above are met.
     """
     _label = 'movie maxshift'
-    _devStatus = UPDATED
+    _devStatus = PROD
     _lastUpdateVersion = VERSION_3_0
     _possibleOutputs = {OUTPUT_MICS: SetOfMicrographs,
                         OUTPUT_MICS_DW: SetOfMicrographs,
