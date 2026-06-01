@@ -32,7 +32,7 @@ from typing import Iterable, Optional
 import emtable
 import os
 from datetime import datetime
-from functools import partial, wraps
+from functools import partial, wraps, reduce
 import time
 import numpy as np
 import warnings
@@ -51,6 +51,7 @@ from xmipp3.base import XmippProtocol
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
                             writeSetOfClasses2D, xmippToLocation, matrixFromGeometry)
+from typing import List
 
 OUTPUT_CLASSES = "outputClasses"
 OUTPUT_AVERAGES = "outputAverages"
@@ -243,8 +244,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
                     particleGroups.append(particleGroup)
 
-                particleGroups = enumerate(particleGroups)
-
             else:
                 outputParticleGroup = self._loadEmptyParticleSet(subgroup=0)
                 # outputParticleGroup.setStreamState(Set.STREAM_OPEN)
@@ -260,49 +259,52 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
                 # assert particlesSet.getStreamState() ==  Set.STREAM_OPEN, "StreamState is not OPEN"
                 # assert int(len(outputParticleGroup)) == int(len(particlesSet)), f"ASSERT FAILED! Output is {len(outputParticleGroup)}, but Set is {len(particlesSet)}"
-                particleGroups = enumerate([outputParticleGroup])
+                particleGroups = [outputParticleGroup]
 
-            # particlesSet.close()
+            particlesSet.close()
+            self.streamState = particlesSet.getStreamState()
 
-            for subgroupIdx, particleGroup in particleGroups:
-                self.streamState = particlesSet.getStreamState()
+            if self.lastCreationTime is not None:
+                self.lastCreationTime = particlesSet
 
-                if self.lastCreationTime is not None:
-                    self.lastCreationTime = particlesSet
+            print(f"Num items in particle set: {len(particlesSet)}")
 
-                print(f"Num items in particle set: {len(particlesSet)}")
+            if tmp is not None:
+                self.lastCreationTime = tmp
 
-                if tmp is not None:
-                    self.lastCreationTime = tmp
+            if newCount == 0:
+                self.info('No new particles')
+            else:
+                self.info(f"Last creation time REGISTER {self.lastCreationTime}")
+                raise NotImplementedError("Stream is not implemented")
 
-                if newCount == 0:
-                    self.info('No new particles')
+                # shouldPerformClassification = self._shouldPerformClassificationBatch(particleGroup)
+                # if shouldPerformClassification:
+                #     self._insertClassificationSteps(particleGroup, subgroupIdx, self.lastCreationTime)
+
+            if self.streamState == Set.STREAM_CLOSED:
+                totalLength = reduce(lambda i, group: i + len(group), particleGroups, 0)
+                print(f"Total length: {totalLength}, len in first: {len(particleGroups[0])}")
+
+                if totalLength > 0:
+                    self.lastRound = True
+
+                    # shouldPerformClassification = self._shouldPerformClassificationBatch(particleGroup, isLastRound=True)
+                    # print(f"Should classify (last iter): {shouldPerformClassification}")
+
+                    # Force one more iteration to flush last batch
+                    # if shouldPerformClassification:
+                    self._insertClassificationSteps(
+                        particleGroups,
+                        isLastRound=True,
+                        lastCreationTime=self.lastCreationTime
+                    )
+                        # newParticlesSet = self._loadEmptyParticleSet()
                 else:
-                    self.info(f"New particles in batch: {len(particleGroup)} (Group {subgroupIdx})")
-                    self.info(f"Last creation time REGISTER {self.lastCreationTime}")
-
-                    shouldPerformClassification = self._shouldPerformClassificationBatch(particleGroup)
-                    if shouldPerformClassification:
-                        self._insertClassificationSteps(particleGroup, subgroupIdx, self.lastCreationTime)
-
-                if self.streamState == Set.STREAM_CLOSED:
-                    self.info('Stream closed')
-                    if len(particleGroup) > 0:
-                        self.info('Finish processing with last batch %d' % len(particleGroup))
-                        self.lastRound = True
-
-                        shouldPerformClassification = self._shouldPerformClassificationBatch(particleGroup)
-                        print(f"Should classify (last iter): {shouldPerformClassification}")
-
-                        # Force one more iteration to flush last batch
-                        if shouldPerformClassification:
-                            self._insertClassificationSteps(particleGroup, subgroupIdx, self.lastCreationTime)
-                            # newParticlesSet = self._loadEmptyParticleSet()
-                    else:
-                        self._insertFunctionStep(self.closeOutputStep,
-                                                prerequisites=self.newDeps,
-                                                needsGPU=False)
-                        self.finish = True
+                    self._insertFunctionStep(self.closeOutputStep,
+                                            prerequisites=self.newDeps,
+                                            needsGPU=False)
+                    self.finish = True
 
             with self._lock:  # Add this lock so it will not block the iterItems of the classify method
                 self.inputParticles.get().close()  # If this is not close then it blocks the input protocol
@@ -349,27 +351,26 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         else:
             self.numberClasses = self.numberOfClasses.get()
 
-    def _insertClassificationSteps(self, newParticlesSet: SetOfParticles, subgroup: int, lastCreationTime):
-        print(f"Run classification step for: {newParticlesSet.getFileName()}")
+    def _insertClassificationSteps(self, newParticlesSets: List[SetOfParticles], isLastRound: bool, lastCreationTime):
 
         # self._updateFnClassification(subgroupIdx=subgroup)
 
-        classStep = self._insertFunctionStep(self.runClassificationSteps,
-                                             newParticlesSet,
-                                             subgroup,
-                                             prerequisites=[],
-                                             needsGPU=True)
+        classSteps = []
+        for subgroup, particleSet in enumerate(newParticlesSets):
+            classStep = self._insertFunctionStep(self.runClassificationSteps,
+                                                particleSet,
+                                                subgroup,
+                                                prerequisites=[],
+                                                needsGPU=True)
+            classSteps.append(classStep)
+
         updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
-                                              subgroup,
                                               lastCreationTime,
                                               Set.STREAM_OPEN,
-                                              prerequisites=classStep,
+                                              prerequisites=classSteps,
                                               needsGPU=False)
         
-        # Merge the subgroup into larger SetOfClasses2D, depends on updateStep
-
         self.newDeps.append(updateStep)
-        return updateStep
 
     def runClassificationSteps(self, newParticlesSet, subgroupIdx: int):
         print(f"Run classification step for {self.numberClasses} classes")
@@ -399,6 +400,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             subgroupIdx
         )
 
+        self._mergeClassificationOutputFiles(subgroupIdx)
         # self.classificationLaunch = False
 
     def convertInputStep(self, particles, outputOrig, outputMRC):
@@ -451,10 +453,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(f"classes_{subgroupIdx}_images.star"))
         self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
 
-    def updateOutputSetOfClasses(self, subgroupIdx, lastCreationTime, streamMode):
+    def updateOutputSetOfClasses(self, lastCreationTime, streamMode):
         outputClasses, update = self._loadOutputSet(OUTPUT_CLASSES)
 
-        self._fillClassesFromLevel(outputClasses, subgroupIdx, update)
+        self._fillClassesFromLevel(outputClasses, update)
         self._updateOutputSet(OUTPUT_CLASSES, outputClasses, streamMode)
         # self._updateOutputAverages(update)
 
@@ -540,12 +542,11 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         return hasNewParticles
 
         
-    def _fillClassesFromLevel(self, clsSet: SetOfClasses2D, subgroupIdx: int, update=False):
+    def _fillClassesFromLevel(self, clsSet: SetOfClasses2D, update=False):
         """ Create the SetOfClasses2D from a given iteration. """
-        self._createModelFile(subgroupIdx)
         
         # Load the class info from the output of the pca align program
-        classesInfo = self._loadClassesInfo(self._getExtraPath(f"classes_classes.star")) #(self._getExtraPath(CONTRAST_AVERAGES_FILE))
+        classesInfo = self._loadClassesInfo(self._getExtraPath(f"classes_classes.star"))
         mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(f"classes_images.star"))
 
         params = {}
@@ -554,8 +555,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             params = {"where": 'creation>"' + str(self.lastCreationTimeProcessed) + '"'}
 
         with self._lock:
-            clsSet.classifyItems(updateItemCallback=partial(self._updateParticle, subgroupIdx=subgroupIdx),
-                                 updateClassCallback=partial(self._updateClass, classesInfo=classesInfo, subgroupIdx=subgroupIdx),
+            clsSet.classifyItems(updateItemCallback=self._updateParticle,
+                                 updateClassCallback=partial(self._updateClass, classesInfo=classesInfo),
                                  itemDataIterator=mdIter,  # relion style
                                  iterParams=params,
                                  doClone=False,  # So the creation time is maintained
@@ -588,7 +589,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
         return outputRefs
 
-    def _shouldPerformClassificationBatch(self, newParticlesSet):
+    def _shouldPerformClassificationBatch(self, newParticlesSet, isLastRound):
         """ Three cases for launching Classification
             - First round of classification: enough particles and PCA done
             - Update classification: classification done, PCA done and enough batch size
@@ -608,9 +609,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             return False
 
         batchReady = n >= b
-        lastRoundReady = self.lastRound
 
-        return batchReady or lastRoundReady
+        return batchReady or isLastRound
 
 
     def _isClassificationDone(self):
@@ -721,7 +721,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
     #     return subgroupIndex * self.numberClasses + classIndex
 
-    def _updateParticle(self, item, row, *, subgroupIdx):
+    def _updateParticle(self, item, row):
         if row is None:
             self.info('Row is none finish updating particle')
             setattr(item, "_appendItem", False)
@@ -730,7 +730,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             item.setClassId(refID)
             item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
 
-    def _updateClass(self, item, classesInfo, subgroupIdx):
+    def _updateClass(self, item, classesInfo):
 
         classId = item.getObjId()
 
@@ -759,7 +759,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                 f"-i {path} -o {path} --operate modify_values \"ref=ref+{offset}\""
             )
 
-    def _createModelFile(self, subgroupIdx):
+    def _mergeClassificationOutputFiles(self, subgroupIdx):
         """
         This method reads the *_classes_[0-9].star and *_classes_images_[0-9].star
         files generated by alignPCA and updates the data tables
