@@ -247,6 +247,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
             else:
                 outputParticleGroup = self._loadEmptyParticleSet(subgroup=0)
+                # outputParticleGroup.setStreamState(Set.STREAM_OPEN)
+                # outputParticleGroup.enableAppend()
 
                 for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=cutoffDateCondition):
                     tmp = particle.getObjCreation()
@@ -254,13 +256,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                     # print(len(outputParticleGroup), len(particlesSet))
 
                 with self._lock:
-                    outputParticleGroup.write()
-                    outputParticleGroup.close()
+                    self._store(outputParticleGroup)
 
-                is_equal = int(len(outputParticleGroup)) == int(len(particlesSet))
-                # print("After loop: ", len(outputParticleGroup), len(particlesSet), is_equal, flush=True)
-
-                # assert is_equal, f"ASSERT FAILED! Output is {len(outputParticleGroup)}, but Set is {len(particlesSet)}"
+                # assert particlesSet.getStreamState() ==  Set.STREAM_OPEN, "StreamState is not OPEN"
+                # assert int(len(outputParticleGroup)) == int(len(particlesSet)), f"ASSERT FAILED! Output is {len(outputParticleGroup)}, but Set is {len(particlesSet)}"
                 particleGroups = enumerate([outputParticleGroup])
 
             # particlesSet.close()
