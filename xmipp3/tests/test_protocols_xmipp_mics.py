@@ -500,6 +500,7 @@ class TestXmippExtractParticles(TestXmippBase):
     def testExtractSameAsPicking(self):
         print("Run extract particles from same micrographs as picking")
         protExtract = self.newProtocol(XmippProtExtractParticles,
+                                       doEvalVar=True,
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,
                                        doInvert=False,
@@ -537,6 +538,7 @@ class TestXmippExtractParticles(TestXmippBase):
     def testExtractOriginal(self):
         print("Run extract particles from the original micrographs")
         protExtract = self.newProtocol(XmippProtExtractParticles,
+                                       doEvalVar=True,
                                        boxSize=550,
                                        downsampleType=OTHER,
                                        doInvert=False,
@@ -580,6 +582,7 @@ class TestXmippExtractParticles(TestXmippBase):
     def testExtractBorders(self):
         print("Run Extract particles at border")
         protExtract = self.newProtocol(XmippProtExtractParticles,
+                                       doEvalVar=True,
                                        boxSize=750,
                                        downsampleType=OTHER,
                                        doInvert=False,
@@ -625,7 +628,9 @@ class TestXmippExtractParticles(TestXmippBase):
     def testExtractOther(self):
         print("Run extract particles from original micrographs, with downsampling")
         protExtract = self.newProtocol(XmippProtExtractParticles,
-                                       boxSize=166, downsampleType=OTHER,
+                                       doEvalVar=True,
+                                       boxSize=166, 
+                                       downsampleType=OTHER,
                                        doResize=True,
                                        resizeOption=1,
                                        resizeDim=80,
@@ -678,7 +683,9 @@ class TestXmippExtractParticles(TestXmippBase):
         print("Run extract particles from original micrographs, with downsampling")
         downFactor = 3.0
         protExtract = self.newProtocol(XmippProtExtractParticles,
-                                       boxSize=-1, downsampleType=OTHER,
+                                       doEvalVar=True,
+                                       boxSize=-1,
+                                       downsampleType=OTHER,
                                        doResize=True,
                                        downFactor=downFactor,
                                        doInvert=False,
@@ -699,6 +706,7 @@ class TestXmippExtractParticles(TestXmippBase):
     def testExtractCTF(self):
         print("Run extract particles with CTF")
         protExtract = self.newProtocol(XmippProtExtractParticles,
+                                       doEvalVar=True,
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,
                                        doInvert=False,
@@ -779,11 +787,11 @@ class TestXmippVarianceFiltering(TestXmippBase):
     def testExtractAndVarianceFilteringByScreenParticles(self):
         print("Run extract particles from same micrographs as picking")
         protExtract = self.newProtocol(XmippProtExtractParticles,
+                                       doEvalVar=True,
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,
                                        doInvert=False,
-                                       doFlip=False,
-                                       doEvalVar=True)
+                                       doFlip=False)
         protExtract.setObjLabel("extract-same as picking")
         protExtract.inputCoordinates.set(self.protPP.outputCoordinates)
         self.launchProtocol(protExtract)
@@ -873,6 +881,7 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
 
     def testStreamingAndNonStreaming(self):
         protExtract = self.newProtocol(XmippProtExtractParticles,
+                                       doEvalVar=True,
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,
                                        doInvert=False,
@@ -1035,6 +1044,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     # def testExtractSort(self):
     #     print("Run extract particles with sort by statistics")
     #     protExtract = self.newProtocol(XmippProtExtractParticles,
+    #                                     doEvalVar=True,
     #                                    boxSize=110,
     #                                    downsampleType=SAME_AS_PICKING,
     #                                    doFlip=True, doSort=True,
@@ -1071,6 +1081,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     #     print("Run extract small particles sort by statistics")
     #     downFactor = 3.0
     #     protExtract = self.newProtocol(XmippProtExtractParticles,
+    #                                    doEvalVar=True,
     #                                    boxSize=40,
     #                                    downsampleType=SAME_AS_PICKING,
     #                                    doDownsample=True,
@@ -1138,6 +1149,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     #     downFactor = 3.0
     #
     #     protExtract = self.newProtocol(XmippProtExtractParticles,
+    #                                       doEvalVar=True,
     #                                    boxSize=183, downsampleType=OTHER,
     #                                    doDownsample=True,
     #                                    downFactor=downFactor,
