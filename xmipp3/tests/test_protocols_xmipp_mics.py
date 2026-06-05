@@ -706,6 +706,7 @@ class TestXmippExtractParticles(TestXmippBase):
     def testExtractCTF(self):
         print("Run extract particles with CTF")
         protExtract = self.newProtocol(XmippProtExtractParticles,
+                                       doEvalVar=True,
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,
                                        doInvert=False,
