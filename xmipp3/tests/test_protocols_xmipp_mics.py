@@ -790,8 +790,7 @@ class TestXmippVarianceFiltering(TestXmippBase):
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,
                                        doInvert=False,
-                                       doFlip=False,
-                                       doEvalVar=True)
+                                       doFlip=False)
         protExtract.setObjLabel("extract-same as picking")
         protExtract.inputCoordinates.set(self.protPP.outputCoordinates)
         self.launchProtocol(protExtract)
