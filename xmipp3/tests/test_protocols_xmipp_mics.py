@@ -1044,7 +1044,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     # def testExtractSort(self):
     #     print("Run extract particles with sort by statistics")
     #     protExtract = self.newProtocol(XmippProtExtractParticles,
-                                          doEvalVar=True,
+    #                                     doEvalVar=True,
     #                                    boxSize=110,
     #                                    downsampleType=SAME_AS_PICKING,
     #                                    doFlip=True, doSort=True,
