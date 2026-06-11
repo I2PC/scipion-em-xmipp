@@ -122,7 +122,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         form.addParam('filter',FloatParam, label="Final Volume Resolution (Å)", default=8,
               help='Final resolution of volume filtering')
-        form.addParam('positivity', BooleanParam, default=True, 
+        form.addParam('positivity', BooleanParam, default=False, 
                       label="Enforce non-negativity",
                       help='Enforce non-negativity of structures in real space during optimization. '
                        ' Non-negativity is recommended for ab-initio reconstruction')
@@ -220,7 +220,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                 
             inputXmd = self.imgsFnXmd       
             outMrc = self.outputVolBase  
-            self._insertFunctionStep("globalAlign", inputXmd, outMrc, angle, shift, maxShift, applyShift, saveClass, radius)   
+            self._insertFunctionStep("globalAlign", inputXmd, outMrc, angle, shift, maxShift, applyShift, saveClass, radius, symmetry)   
             
             # for cl in range(self.classes):
             #
@@ -285,15 +285,15 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob("xmipp_alignPCA_train", args, numberOfMpi=1, env=env)
         
         
-    def globalAlign(self, inputXmd, output, angle, shift, MaxShift, applyShift, saveClass, rad):
+    def globalAlign(self, inputXmd, output, angle, shift, MaxShift, applyShift, saveClass, rad, symmetry):
         
         if self.training.get() == -1:
             numTrain = self.inputParticles.get().getSize()
         else:
             numTrain = min(self.inputParticles.get().getSize(), self.training.get())
         
-        args = ' -i %s -a %s -amax 180 -sh %s -msh %s -vr %s -o %s -stExp %s  -s %s -radius %s -nCl %s -t %s -p %s -hr %s'% \
-                (self.imgsFn, angle, shift, MaxShift, self.filter.get(), output, inputXmd,\
+        args = ' -i %s -sym %s -a %s -amax 180 -sh %s -msh %s -vr %s -o %s -stExp %s  -s %s -radius %s -nCl %s -t %s -p %s -hr %s'% \
+                (self.imgsFn, symmetry, angle, shift, MaxShift, self.filter.get(), output, inputXmd,\
                 self.sampling, rad, self.classes, numTrain, self.coef.get(), self.resolution.get())
         if applyShift:
             args += ' --apply_shifts ' 
