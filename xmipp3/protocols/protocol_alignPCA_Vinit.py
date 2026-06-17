@@ -176,7 +176,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         for iter in range(self.iterations):     
             
-            angleGallery, angle, shift, maxShift = self._parameters(iter)
+            # angleGallery, angle, shift, maxShift = self._parameters(iter)
 
             if self.classify and iter > 3:
                 saveClass = True
@@ -220,7 +220,8 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                 
             inputXmd = self.imgsFnXmd       
             outMrc = self.outputVolBase  
-            self._insertFunctionStep("globalAlign", inputXmd, outMrc, angle, shift, maxShift, applyShift, saveClass, radius, symmetry)   
+            # self._insertFunctionStep("globalAlign", inputXmd, outMrc, angle, shift, maxShift, applyShift, saveClass, radius, symmetry)   
+            self._insertFunctionStep("globalAlign", inputXmd, outMrc, applyShift, saveClass, radius, symmetry) 
             
             # for cl in range(self.classes):
             #
@@ -285,15 +286,15 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob("xmipp_alignPCA_train", args, numberOfMpi=1, env=env)
         
         
-    def globalAlign(self, inputXmd, output, angle, shift, MaxShift, applyShift, saveClass, rad, symmetry):
+    def globalAlign(self, inputXmd, output, applyShift, saveClass, rad, symmetry):
         
         if self.training.get() == -1:
             numTrain = self.inputParticles.get().getSize()
         else:
             numTrain = min(self.inputParticles.get().getSize(), self.training.get())
         
-        args = ' -i %s -sym %s -a %s -amax 180 -sh %s -msh %s -vr %s -o %s -stExp %s  -s %s -radius %s -nCl %s -t %s -p %s -hr %s'% \
-                (self.imgsFn, symmetry, angle, shift, MaxShift, self.filter.get(), output, inputXmd,\
+        args = ' -i %s -sym %s -vr %s -o %s -stExp %s  -s %s -radius %s -nCl %s -t %s -p %s -hr %s'% \
+                (self.imgsFn, symmetry, self.filter.get(), output, inputXmd,\
                 self.sampling, rad, self.classes, numTrain, self.coef.get(), self.resolution.get())
         if applyShift:
             args += ' --apply_shifts ' 
