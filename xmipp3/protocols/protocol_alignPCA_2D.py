@@ -284,27 +284,25 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
             if self.streamState == Set.STREAM_CLOSED:
                 totalLength = reduce(lambda i, group: i + len(group), particleGroups, 0)
+                print(f"Insert classification steps (Len: {totalLength})")
                 print(f"Total length: {totalLength}, len in first: {len(particleGroups[0])}")
 
-                if totalLength > 0:
-                    self.lastRound = True
+                # if totalLength > 0:
+                self.lastRound = True
 
-                    # shouldPerformClassification = self._shouldPerformClassificationBatch(particleGroup, isLastRound=True)
-                    # print(f"Should classify (last iter): {shouldPerformClassification}")
+                # Force one more iteration to flush last batch
+                # if shouldPerformClassification:
+                self._insertClassificationSteps(
+                    particleGroups,
+                    isLastRound=True,
+                    lastCreationTime=self.lastCreationTime
+                )
 
-                    # Force one more iteration to flush last batch
-                    # if shouldPerformClassification:
-                    self._insertClassificationSteps(
-                        particleGroups,
-                        isLastRound=True,
-                        lastCreationTime=self.lastCreationTime
-                    )
-                        # newParticlesSet = self._loadEmptyParticleSet()
-                else:
-                    self._insertFunctionStep(self.closeOutputStep,
-                                            prerequisites=self.newDeps,
-                                            needsGPU=False)
-                    self.finish = True
+                # else:
+                self._insertFunctionStep(self.closeOutputStep,
+                                        prerequisites=self.newDeps,
+                                        needsGPU=False)
+                self.finish = True
 
             with self._lock:  # Add this lock so it will not block the iterItems of the classify method
                 self.inputParticles.get().close()  # If this is not close then it blocks the input protocol
@@ -352,17 +350,25 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             self.numberClasses = self.numberOfClasses.get()
 
     def _insertClassificationSteps(self, newParticlesSets: List[SetOfParticles], isLastRound: bool, lastCreationTime):
-
         # self._updateFnClassification(subgroupIdx=subgroup)
 
         classSteps = []
-        for subgroup, particleSet in enumerate(newParticlesSets):
+        for subgroup in range(len(newParticlesSets)):
+            particleSet = newParticlesSets[subgroup]
+
+            if len(particleSet) == 0:
+                print(f"No particles to classify for subgroup {subgroup}, skipping classification step")
+                continue
+
+            print(f"Insert classification step for subgroup {subgroup}, length: {len(particleSet)}")
+            
             classStep = self._insertFunctionStep(self.runClassificationSteps,
                                                 particleSet,
                                                 subgroup,
                                                 prerequisites=[],
                                                 needsGPU=True)
             classSteps.append(classStep)
+            newParticlesSets[subgroup] = self._loadEmptyParticleSet(subgroup=subgroup)
 
         updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
                                               lastCreationTime,
@@ -400,7 +406,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             subgroupIdx
         )
 
-        self._mergeClassificationOutputFiles(subgroupIdx)
         # self.classificationLaunch = False
 
     def convertInputStep(self, particles, outputOrig, outputMRC):
@@ -435,23 +440,39 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             self.runJob("xmipp_image_convert", args)
             self.firstTimeDone = True
 
+    def _deleteTempFiles(self, *paths):
+        for path in paths:
+            if os.path.exists(path):
+                os.remove(path)
+
     def classification(self, inputIm, numClass, stfile, mask, sigma, numTrain, resolutionTrain, subgroupIdx):
-        args = ' -i %s -s %s -c %s -t %s -hr %s -p %s  -o %s/classes_%d -stExp %s' % \
-               (inputIm, self.sampling, numClass, numTrain, resolutionTrain, self.coef.get(), self._getExtraPath(), subgroupIdx,
-                stfile)
+        outputPath = os.path.join(self._getExtraPath(), f"classes_{subgroupIdx}")
+        classesFileExists = os.path.exists(f"{outputPath}classes.star")
+        imagesFileExists = os.path.exists(f"{outputPath}images.star")
+        assert classesFileExists == imagesFileExists, "Both classes.star and images.star files should exist or not exist at the same time"
+
+        print(f"Classification file exists: {classesFileExists}, images file exists: {imagesFileExists}")
+
+        args = f' -i {inputIm} -s {self.sampling} -c {numClass} -t {numTrain} -hr {resolutionTrain} -p {self.coef.get()}  -o {outputPath} -stExp {stfile}'
         if mask:
-            args += ' --mask --sigma %s ' % (sigma)
+            args += f' --mask --sigma {sigma} '
 
         # TODO: Remove the _isClassificationDone() call here, need to check what it does
         if self.mode.get() == self.UPDATE_CLASSES: # or self._isClassificationDone():
-            args += ' -r %s ' % self.ref
+            raise NotImplementedError("Classification update is not implemented yet")
+            # args += ' -r %s ' % self.ref
 
         env = self.getCondaEnv()
         env = self._setEnvVariables(env)
         self.runJob("xmipp_alignPCA_2D", args, env=env)
         
-        args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(f"classes_{subgroupIdx}_images.star"))
+        args = f' -i {self._getExtraPath(f"classes_{subgroupIdx}_images.star")}  --operate  sort itemId'
         self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+
+        self._mergeClassificationOutputFiles(
+            subgroupIdx,
+            updateOffset=(not classesFileExists)
+        )
 
     def updateOutputSetOfClasses(self, lastCreationTime, streamMode):
         outputClasses, update = self._loadOutputSet(OUTPUT_CLASSES)
@@ -511,16 +532,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         env['MKL_NUM_THREADS'] = '12'
         return env
 
-    # def _updateFnClassification(self, subgroupIdx: int):
-    #     """Update input based on the iteration it is"""
-    #     self.imgsOrigXmd = updateFileName(self.imgsOrigXmd, self.classificationRound, subgroupIdx)
-    #     self.imgsXmd = updateFileName(self.imgsXmd, self.classificationRound, subgroupIdx)
-    #     self.imgsFn = updateFileName(self.imgsFn, self.classificationRound, subgroupIdx)
-    #     self.info('Starts classification round: %d (subgroup %d)' % (self.classificationRound, subgroupIdx))
-
-    #     # TODO: Removed incrementing of classificationRound
-    #     # self.classificationRound += 1
-
     def _newParticlesToProcess(self):
         particlesFile = self.inputFn
         now = datetime.now()
@@ -547,7 +558,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         
         # Load the class info from the output of the pca align program
         classesInfo = self._loadClassesInfo(self._getExtraPath(f"classes_classes.star"))
-        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(f"classes_images.star"))
+        
+        outputPath = self._getExtraPath(f"classes_images.star")
+        mdIter = emtable.Table.iterRows('particles@' + outputPath)
+        mdIter = sorted(mdIter, key=lambda row: row.get(XMIPPCOLUMNS.itemId.value)) # Sort the class iterator here
 
         params = {}
         if False: #update: # TODO: Add state tracking for streamin back in
@@ -555,12 +569,14 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             params = {"where": 'creation>"' + str(self.lastCreationTimeProcessed) + '"'}
 
         with self._lock:
-            clsSet.classifyItems(updateItemCallback=self._updateParticle,
-                                 updateClassCallback=partial(self._updateClass, classesInfo=classesInfo),
-                                 itemDataIterator=mdIter,  # relion style
-                                 iterParams=params,
-                                 doClone=False,  # So the creation time is maintained
-                                 raiseOnNextFailure=False)  # So streaming can happen
+            clsSet.classifyItems(
+                updateItemCallback=self._updateParticle,
+                updateClassCallback=partial(self._updateClass, classesInfo=classesInfo),
+                itemDataIterator=iter(mdIter),  # relion style
+                iterParams=params,
+                doClone=False,  # So the creation time is maintained
+                raiseOnNextFailure=False
+            )  # So streaming can happen
 
     def _loadOutputSet(self, outputName):
         """
@@ -699,33 +715,14 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
         return summary
 
-    # #--------------------------- UTILS functions -------------------------------
-    # EMTABLE IMPLEMENTATION
-    # def _convertToGlobalClassLabel(self, classIndex: int, subgroupIndex: int) -> int:
-    #     """
-    #     Convert the index computed within a single subgroup to a gobal index
-
-    #     Args:
-    #         classIndex: The local class index within the subgroup
-    #         subgroupIndex: The index of the subgroup.
-
-    #     Returns:
-    #         The global class index
-        
-    #     """
-    #     assert subgroupIndex >= 0, "Subgroup index is expected to be a positive integer >= 0"
-    #     assert subgroupIndex < self.numberClasses, "Subgroup index is expected to be an integer smaller than number of classes"
-
-    #     classIndex = int(classIndex)
-    #     subgroupIndex = int(subgroupIndex)
-
-    #     return subgroupIndex * self.numberClasses + classIndex
-
+    #--------------------------- UTILS functions -------------------------------
     def _updateParticle(self, item, row):
         if row is None:
             self.info('Row is none finish updating particle')
             setattr(item, "_appendItem", False)
         else:
+            assert item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value)
+
             refID = row.get(XMIPPCOLUMNS.ref.value)
             item.setClassId(refID)
             item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
@@ -759,7 +756,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                 f"-i {path} -o {path} --operate modify_values \"ref=ref+{offset}\""
             )
 
-    def _mergeClassificationOutputFiles(self, subgroupIdx):
+    def _mergeClassificationOutputFiles(self, subgroupIdx, *, updateOffset: bool):
         """
         This method reads the *_classes_[0-9].star and *_classes_images_[0-9].star
         files generated by alignPCA and updates the data tables
@@ -778,7 +775,11 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         images_metadata_path = self._getExtraPath(AVERAGES_IMAGES_FILE)
 
         # Offset the class ref with the current group
-        offset = subgroupIdx * self.numberClasses
+        if updateOffset:
+            offset = subgroupIdx * self.numberClasses
+        else:
+            offset = 0
+    
         self._applyOffset(subgroup_classes_metadata_path, subgroup_images_metadata_path, offset=offset)
 
         # We have to merge the subgroup starfile into a common file
@@ -828,11 +829,13 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         mdFileName = '%s@%s' % ('particles', filename)
         table = emtable.Table(fileName=filename)
 
-        for classNumber, row in enumerate(table.iterRows(mdFileName)):
+        for row in table.iterRows(mdFileName):
             index, fn = xmippToLocation(row.get(XMIPPCOLUMNS.image.value))
+            classRef = row.get(XMIPPCOLUMNS.ref.value)
+
             # Store info indexed by id, we need to store the row.clone() since
             # the same reference is used for iteration
-            _classesInfo[classNumber + 1] = (index, fn, row)
+            _classesInfo[classRef] = (index, fn, row)
 
         return _classesInfo
 

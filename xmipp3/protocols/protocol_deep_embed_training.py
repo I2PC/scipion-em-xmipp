@@ -24,6 +24,7 @@
 # *
 # **************************************************************************
 
+import emtable
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         IntParam, BooleanParam, GPU_LIST)
@@ -31,7 +32,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils import Message
 from pyworkflow.utils.path import createLink
 from pwem.protocols import ProtAnalysis2D
-from xmipp3.convert import readSetOfParticles, writeSetOfParticles
+from xmipp3.convert import readSetOfParticles, writeSetOfParticles, readSetOfClasses2D
 import os
 import xmipp3
 from pyworkflow import BETA, UPDATED, NEW, PROD
@@ -65,7 +66,7 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         form.addParam('inputParticles', PointerParam, label="Input images",
                       pointerClass='SetOfParticles, SetOfAverages',
                       help='The set does not need to be centered or have alignment parameters')
-        form.addParam('embeddingK', IntParam, label="Number of coarse clusters",
+        form.addParam('embeddingK', IntParam, label="Number of clusters to create",
                       default=100)
         form.addParam('imageSize', IntParam, label="Image size before embedding",
                       expertLevel=LEVEL_ADVANCED,
@@ -76,7 +77,6 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help="Standard deviation of the shift perturbations used during training")
         form.addParam('embeddingDim', IntParam, label="Embedding dimension",
-                      expertLevel=LEVEL_ADVANCED,
                       default=4)
 
         form.addSection(label="Training")
@@ -100,14 +100,6 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                       default=0.001,
                       expertLevel=LEVEL_ADVANCED,
                       help="Learning rate for training.")
-        
-        form.addSection(label="PCA Alignment")
-        form.addParam('numberOfSubClasses', IntParam, default=50,
-                      condition="not mode",
-                      label='Number of subclasses:',
-                      help='Number of classes to split each cluster coarse cluster determined using the neural network')
-        
-
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -118,10 +110,6 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         self._insertFunctionStep("predict" )
         self._insertFunctionStep("createOutputStep")
 
-        # deps = []
-        # for index in range(int(self.embeddingK)):
-        #     clusterStep = self._insertFunctionStep(self.refineClusterAlignment, index, prerequisites=[splitStep])
-        #     deps.append(clusterStep)
 
     def getGpusList(self, separator):
         strGpus = ""
@@ -186,40 +174,32 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                     f"--set join {self._getTmpPath('particles.xmd')}"\
                     f" itemId itemId -o {fnOut}",
                     numberOfMpi=1)
-        outputSet = self._createSetOfParticles()
+        
+        with open(fnOut, 'r') as inputs_file:
+            content = inputs_file.read()
 
+        content = content.replace('data_noname', 'data_particles')
+
+        with open(fnOut, 'w') as outfile:
+            outfile.write(content)
+
+        outputSet = self._createSetOfParticles()
         readSetOfParticles(fnOut, outputSet)
         outputSet.copyInfo(self.inputParticles.get())
         outputSet.setAlignment2D()
-        self._defineOutputs(outputParticles=outputSet)
-        self._store(outputSet)
-        self._defineSourceRelation(self.inputParticles.get(), outputSet)
 
-    # def splitGroups(self):
-    #     fnOut = self._getExtraPath('particles.xmd')
-    #     for cls in range(int(self.embeddingK)):
-    #         outPath = self._getTmpPath(f'particles_cluster_{cls}.xmd')
-    #         self.runJob("xmipp_metadata_utilities",
-    #                 f"-i {fnOut}"\
-    #                 f" --query select \"ref={cls}\"" \
-    #                 f" -o {outPath} ",
-    #                 numberOfMpi=1
-    #             )
-            
-    #         print(f"Write cluster to {outPath}")
+        outputClasses = self._createSetOfClasses2D(outputSet)
 
-    # def _setEnvVariables(self, env):
-    #     """ Method to set all the environment variables needed to run PCA program """
-    #     env['LD_LIBRARY_PATH'] = ''
-    #     # Limit the number of threads
-    #     env['OMP_NUM_THREADS'] = '12'
-    #     env['MKL_NUM_THREADS'] = '12'
-    #     return env
+        mdIter = emtable.Table.iterRows('particles@' + fnOut)
+        outputClasses.classifyItems(
+            updateItemCallback=None,
+            updateClassCallback=None,
+            itemDataIterator=iter(mdIter),  # relion style
+            iterParams={},
+            doClone=False,  # So the creation time is maintained
+            raiseOnNextFailure=False
+        )
 
-    # def refineClusterAlignment(self, index: int):
-    #     particlesPath = self._getTmpPath(f'particles_cluster_{index}.xmd')
-    #     env = self.getCondaEnv()
-    #     self._setEnvVariables(env)
-
-    #     print(f"Run pca align for {particlesPath}")
-        
+        self._defineOutputs(outputParticles=outputClasses)
+        self._store(outputClasses)
+        self._defineSourceRelation(self.inputParticles.get(), outputClasses)
