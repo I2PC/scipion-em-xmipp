@@ -37,6 +37,7 @@ from pyworkflow.utils import getExt
 from pwem.objects import Volume
 from xmipp3.base import XmippProtocol
 from pwem.emlib import Image
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 def updateEnviron(gpuNum):
@@ -300,7 +301,7 @@ class XmippProtDeepRes(ProtAnalysis3D, XmippProtocol):
     _label = 'local deepRes'
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
-    
+    _devStatus = UPDATED
     #RESOLUTION RANGE
     LOW_RESOL = 0
     HIGH_RESOL = 1

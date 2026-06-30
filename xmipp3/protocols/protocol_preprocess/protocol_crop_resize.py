@@ -513,6 +513,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
     # Protocol constants
     OUTPUT_PARTICLES_NAME = 'outputParticles'
     OUTPUT_MASK_NAME = 'outputMask'
+    _devStatus = PROD
 
     _label = 'crop/resize particles'
     _inputLabel = 'particles'
@@ -970,7 +971,7 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
     """
     _label = 'crop/resize volumes'
     _inputLabel = 'volumes'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     def __init__(self, **kwargs):
         XmippProcessVolumes.__init__(self, **kwargs)
