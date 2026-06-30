@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-type_of_version = 'devel' #'release' 'devel'
+type_of_version = 'release' #'release' 'devel'
 _logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
 
 _binVersion = 'v6' # Increase it if major release is generated in xmipp
