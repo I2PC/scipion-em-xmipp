@@ -1,6 +1,8 @@
 ## Release 29.0.0
 - Protocols updated
     - protocol_extract_particles: Particle evaluation is optional now
+    - resolution_deepres; updated environment (TensorFlow 1.15 to 2.4)
+    - deep consensus picking (screen_deepConsensus) updated environment (TensorFlow 1.15 to 2.4)
 
 - More scipion-em-xmipp
     - Extended documentation for all protocols   
