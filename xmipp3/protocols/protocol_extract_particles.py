@@ -300,7 +300,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     classification and reconstruction.
     """
     _label = 'extract particles'
-    _devStatus = PROD
+    _devStatus = UPDATED
     RESIZE_FACTOR = 0
     RESIZE_DIMENSIONS = 1
     RESIZE_SAMPLINGRATE = 2
