@@ -1,4 +1,19 @@
-## Release 28.1.0
+## Release 29.0.0
+- Protocols updated
+    - extract_particles: Particle evaluation is optional now
+    - resolution_deepres; updated environment (TensorFlow 1.15 to 2.4)
+    - deep consensus picking (screen_deepConsensus) updated environment (TensorFlow 1.15 to 2.4)
+
+- More scipion-em-xmipp
+    - Extended documentation for all protocols   
+    - Import xmippProtocol from xmipp3.base and not xmipp3 and removing "imports xmipp3"
+    - Fix TestXmippScreenParticles and Testprotocol_screen_deepConsensus
+    - Remove fragile plugin reload workaround during xmipp3 installation
+    - Manual script to install all DLTK environments jut editing three constant and given execution privileges
+    - Relax test deepConcensus trying to reduce the GPU memory requirements
+
+
+- ## Release 28.1.0
 - Protocols updated
     - New complete and verbose help documentation for all protocols
     - ‎protocol_extract_particles: Particle evaluation is optional now
