@@ -1,3 +1,7 @@
+## Release 29.0.1
+- More scipion-em-xmipp
+    - Hotfix: Revert hot plugin reload
+      
 ## Release 29.0.0
 - Protocols updated
     - extract_particles: Particle evaluation is optional now
