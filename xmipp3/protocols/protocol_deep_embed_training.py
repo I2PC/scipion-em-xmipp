@@ -25,6 +25,7 @@
 # **************************************************************************
 
 import emtable
+import pwem
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         IntParam, BooleanParam, GPU_LIST)
@@ -37,7 +38,23 @@ import os
 import xmipp3
 from pyworkflow import BETA, UPDATED, NEW, PROD
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow import Config
 
+
+def getJaxXmippEnvActivation():
+    """ Remove the scipion home and activate the conda environment. """
+    activation = "conda activate xmipp_jax"
+    scipionHome = Config.SCIPION_HOME + os.path.sep
+
+    return activation.replace(scipionHome, "", 1)
+
+
+def getJaxXmippActivationCommand():
+    """ Return the activation command. """
+    return '%s %s' % (
+        xmipp3.Plugin.getCondaActivationCmd(),
+        getJaxXmippEnvActivation()
+    )
 
 class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
     """Train a rotational and shift invariant embedding for images"""
@@ -101,8 +118,18 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help="Learning rate for training.")
 
+        form.addSection(label='Compute')
+        form.addParam('classificationMPIs', IntParam, default=4,
+                      label="MPIs",
+                      help= 'MPI is used to parallelize CTF correction.' 
+                            ' The CTF is corrected using the xmipp_wiener_2d function.' 
+                            ' If multiple processors are available, it is recommended'
+                            ' to set this value as high as possible (e.g., 24, 32...).')
+
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+        cudaLib = pwem.Config.CUDA_LIB
+
         self.fnImgs = self._getTmpPath('imgs.xmd')
         self.fnImgsTrain = self._getTmpPath('imgsTrain.xmd')
         self._insertFunctionStep("convertInputStep", self.inputParticles.get())
@@ -134,7 +161,7 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
             args =  ' -i  %s -o %s --sampling_rate %s '%\
                     (self.fnImgs, fnWiener, inputSet.getSamplingRate())
             self.runJob("xmipp_ctf_correct_wiener2d", args,
-                        numberOfMpi=self.numberOfMpi.get())
+                        numberOfMpi=self.classificationMPIs.get())
             self.fnImgs = self._getTmpPath("wienerCorrected.xmd")
 
         if self.trainSetSize.get()>0:
@@ -153,8 +180,14 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                  self.numEpochs, self.batchSize, gpuId,
                  self.learningRate, self.sigmaShift, self.embeddingDim,
                  self.imageSize, self.embeddingK, self._getExtraPath("centroids.npy"))
-        self.runJob(f"xmipp_deep_embed_training", args, numberOfMpi=1,
-                    env=self.getCondaEnv())
+        
+
+        self.runJob(
+            f"{getJaxXmippActivationCommand()} && XLA_PYTHON_CLIENT_MEM_FRACTION=.95 xmipp_deep_embed_training",
+            args,
+            numberOfMpi=1,
+            env=self.getCondaEnv()
+        )
 
     def predict(self):
         gpuId = self.setGpu(oneGPU=True)
@@ -164,8 +197,13 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
                (self.fnImgs, gpuId, fnModel, self._getTmpPath(
                    'particles.xmd'), self.batchSize, self.imageSize,
                 self._getExtraPath("centroids.npy"))
-        self.runJob("xmipp_deep_embed_predict", args, numberOfMpi=1,
-                    env=self.getCondaEnv())
+        
+        self.runJob(
+            f"{getJaxXmippActivationCommand()} && XLA_PYTHON_CLIENT_MEM_FRACTION=.95 xmipp_deep_embed_predict",
+            args,
+            numberOfMpi=1,
+            env=self.getCondaEnv(_conda_env=self._conda_env)
+        )
         
     def createOutputStep(self):
         fnOut = self._getExtraPath('particles.xmd')
