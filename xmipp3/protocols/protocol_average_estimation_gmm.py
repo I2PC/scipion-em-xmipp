@@ -212,7 +212,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 # str(self._getTmpPath(f"original_distances_{classId}.npy")),
                 # str(output_original_avg_path),
             )
-            self.runJob("xmipp_gmm_average_estimation", script_args, env=env)
+            self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
 
             class_metadata = md.MetaData(output_star_path)
             class_metadata.write(className + "@" + new_metadata_path, MD_APPEND)
