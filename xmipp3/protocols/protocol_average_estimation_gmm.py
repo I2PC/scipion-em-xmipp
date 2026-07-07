@@ -153,7 +153,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 particlesPath,
                 output_path,
             )
-            self.runJob("xmipp_image_convert", args)
+            self.runJob("xmipp_image_convert", args, numberOfMpi=1)
 
     def averageEstimationStep(self):
         """
@@ -190,9 +190,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 f"preprocessed_particles_{classId}.mrc"
             )
             self._preprocessParticles(particles_path, preprocessed_particles_path)
-            class_metadata_path = (
-                Path(preprocessed_particles_path).with_suffix(".xmd").resolve()
-            )
+            class_metadata_path = Path(preprocessed_particles_path).with_suffix(".xmd")
 
             # Prepare output path for the star file with weights
             output_star_name = f"class_particles_{classId}.star"
@@ -202,21 +200,26 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
             # Run the GMM average estimation script for the current class
             # "--out-corrected-avg %s --out-original-avg %s "
-            # --out-weights %s --out-distances %s 
-            script_args = "--input-xmd %s --out-star %s --base-xmd %s --out-corrected-avg %s --rotate-first" % (
-                str(class_metadata_path),
-                str(output_star_path),
-                str(particles_path),
-                str(tmp_corrected_avg_path),
-                # str(self._getTmpPath(f"gmm_weights_{classId}.npy")),
-                # str(self._getTmpPath(f"original_distances_{classId}.npy")),
-                # str(output_original_avg_path),
+            # --out-weights %s --out-distances %s
+            script_args = (
+                "--input-xmd %s --out-star %s --base-xmd %s --out-corrected-avg %s --rotate-first"
+                % (
+                    str(class_metadata_path),
+                    str(output_star_path),
+                    str(particles_path),
+                    str(tmp_corrected_avg_path),
+                    # str(self._getTmpPath(f"gmm_weights_{classId}.npy")),
+                    # str(self._getTmpPath(f"original_distances_{classId}.npy")),
+                    # str(output_original_avg_path),
+                )
             )
-            self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
+            self.runJob(
+                "xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1
+            )
 
             class_metadata = md.MetaData(output_star_path)
             class_metadata.write(className + "@" + new_metadata_path, MD_APPEND)
-            
+
             # # Add the weights to the metadata of the current class
             # class_metadata = md.MetaData()
             # gmm_weights = np.load(self._getTmpPath(f"gmm_weights_{classId}.npy"))
@@ -237,15 +240,18 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 row = old_class_rows[classId]
                 row.setValue(md.MDL_IMAGE, f"{index}@{output_stack_path}")
                 row.addToMd(mdNewClassesBlock)
-        
+
         # Write a metadata file with the corrected averages and convert it to a stack
         tmp_averages_list_xmd = self._getTmpPath("averages_list.xmd")
         mdAveragesToStack.write(tmp_averages_list_xmd)
-        self.runJob("xmipp_image_convert", f"-i {tmp_averages_list_xmd} -o {output_stack_path}")
+        self.runJob(
+            "xmipp_image_convert",
+            f"-i {tmp_averages_list_xmd} -o {output_stack_path}",
+            numberOfMpi=1,
+        )
 
         # Add the classes block with the updated image field to the new metadata file
         mdNewClassesBlock.write("classes@" + new_metadata_path, MD_APPEND)
-
 
     def createOutputStep(self):
         # Create output classes based on the new metadata file with weights
