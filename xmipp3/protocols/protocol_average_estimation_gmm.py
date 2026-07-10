@@ -38,6 +38,7 @@ from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 from pwem.emlib import MD_APPEND
 from pwem.constants import ALIGN_2D
+from pwem.objects import SetOfParticles, SetOfImages
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam
@@ -169,10 +170,14 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         env = self.getCondaEnv()
 
         new_metadata_path = self._getExtraPath("outputClasses.xmd")
-        output_stack_path = self._getExtraPath("corrected_averages.mrcs")
+        original_metadata_path = self._getExtraPath("rawClasses.xmd")
+        output_corrected_stack_path = self._getExtraPath("corrected_averages.mrcs")
+        output_original_stack_path = self._getExtraPath("original_averages.mrcs")
 
         mdNewClassesBlock = md.MetaData()
-        mdAveragesToStack = md.MetaData()
+        mdOriginalClassesBlock = md.MetaData()
+        mdCorrectedAveragesToStack = md.MetaData()
+        mdOriginalAveragesToStack = md.MetaData()
 
         # Copy old classes block to later update the image field with the new average
         oldClassesBlock = md.MetaData("classes@" + self.inputMdName)
@@ -201,18 +206,19 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             output_star_name = f"class_particles_{classId}.star"
             output_star_path = self._getTmpPath(output_star_name)
             tmp_corrected_avg_path = self._getTmpPath(f"corrected_avg_{classId}.mrc")
-            # output_original_avg_path = self._getExtraPath(f"original_avg_{classId}.mrc")
+            tmp_original_avg_path = self._getTmpPath(f"original_avg_{classId}.mrc")
 
             # Run the GMM average estimation script for the current class
             # "--out-corrected-avg %s --out-original-avg %s "
             # --out-weights %s --out-distances %s
             script_args = (
-                "--input-xmd %s --out-star %s --base-xmd %s --out-corrected-avg %s --rotate-first"
+                "--input-xmd %s --out-star %s --base-xmd %s --out-corrected-avg %s --out-original-avg %s --rotate-first"
                 % (
                     str(class_metadata_path),
                     str(output_star_path),
                     str(particles_path),
                     str(tmp_corrected_avg_path),
+                    str(tmp_original_avg_path),
                     # str(self._getTmpPath(f"gmm_weights_{classId}.npy")),
                     # str(self._getTmpPath(f"original_distances_{classId}.npy")),
                     # str(output_original_avg_path),
@@ -224,46 +230,63 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
             class_metadata = md.MetaData(output_star_path)
             class_metadata.write(className + "@" + new_metadata_path, MD_APPEND)
+            class_metadata.write(className + "@" + original_metadata_path, MD_APPEND)
 
-            # # Add the weights to the metadata of the current class
-            # class_metadata = md.MetaData()
-            # gmm_weights = np.load(self._getTmpPath(f"gmm_weights_{classId}.npy"))
-            # original_weights = np.load(self._getTmpPath(f"original_distances_{classId}.npy"))
-            # for row, weight, original_weight in zip(md.iterRows(particles_md), gmm_weights, original_weights):
-            #     new_row = row.clone()
-            #     new_row.setValue(md.MDL_ROBUST_GMM_WEIGHT, float(weight))
-            #     new_row.setValue(md.MDL_ROBUST_ORIGINAL_WEIGHT, float(original_weight))
-            #     new_row.addToMd(class_metadata)
+            # Add the corrected and original averages to the list of averages to be stacked
+            row_corrected_avg = md.Row()
+            row_corrected_avg.setValue(md.MDL_IMAGE, f"1@{tmp_corrected_avg_path}")
+            row_corrected_avg.addToMd(mdCorrectedAveragesToStack)
 
-            # Add the corrected average to the list of averages to be stacked
-            row_avg = md.Row()
-            row_avg.setValue(md.MDL_IMAGE, f"1@{tmp_corrected_avg_path}")
-            row_avg.addToMd(mdAveragesToStack)
+            row_original_avg = md.Row()
+            row_original_avg.setValue(md.MDL_IMAGE, f"1@{tmp_original_avg_path}")
+            row_original_avg.addToMd(mdOriginalAveragesToStack)
 
             # Update the image field of the old class row with the new average and add it to the new metadata block
             if classId in old_class_rows:
-                row = old_class_rows[classId]
-                row.setValue(md.MDL_IMAGE, f"{index}@{output_stack_path}")
+                row = old_class_rows[classId].clone()
+                row.setValue(md.MDL_IMAGE, f"{index}@{output_corrected_stack_path}")
                 row.addToMd(mdNewClassesBlock)
 
+                row2 = old_class_rows[classId].clone()
+                row2.setValue(md.MDL_IMAGE, f"{index}@{output_original_stack_path}")
+                row2.addToMd(mdOriginalClassesBlock)
+
         # Write a metadata file with the corrected averages and convert it to a stack
-        tmp_averages_list_xmd = self._getTmpPath("averages_list.xmd")
-        mdAveragesToStack.write(tmp_averages_list_xmd)
+        tmp_corrected_averages_list_xmd = self._getTmpPath(
+            "corrected_averages_list.xmd"
+        )
+        mdCorrectedAveragesToStack.write(tmp_corrected_averages_list_xmd)
         self.runJob(
             "xmipp_image_convert",
-            f"-i {tmp_averages_list_xmd} -o {output_stack_path}",
+            f"-i {tmp_corrected_averages_list_xmd} -o {output_corrected_stack_path}",
+            numberOfMpi=1,
+        )
+
+        # Write a metadata file with the original averages
+        tmp_original_averages_list_xmd = self._getTmpPath("original_averages_list.xmd")
+        mdOriginalAveragesToStack.write(tmp_original_averages_list_xmd)
+        self.runJob(
+            "xmipp_image_convert",
+            f"-i {tmp_original_averages_list_xmd} -o {output_original_stack_path}",
             numberOfMpi=1,
         )
 
         # Add the classes block with the updated image field to the new metadata file
         mdNewClassesBlock.write("classes@" + new_metadata_path, MD_APPEND)
+        mdOriginalClassesBlock.write("classes@" + original_metadata_path, MD_APPEND)
 
     def createOutputStep(self):
-        # Create output classes based on the new metadata file with weights
-        outputClasses = self._createSetOfClasses2D(
-            self.inputClasses.get().getImagesPointer()
-        )
+        imagesPointer = self.inputClasses.get().getImagesPointer()
+
+        # Create output classes based on the new metadata file with weights,
+        # with the corrected representatives
+        outputClasses = self._createSetOfClasses2D(imagesPointer, "corrected")
         readSetOfClasses2D(outputClasses, self._getExtraPath("outputClasses.xmd"))
+
+        # Create raw output classes based on the new metadata file with weights,
+        # with the original representatives
+        rawClasses = self._createSetOfClasses2D(imagesPointer, "raw")
+        readSetOfClasses2D(rawClasses, self._getExtraPath("rawClasses.xmd"))
 
         # Join the particles from all classes into a single output set of particles
         outputParticles = self._createSetOfParticles()
@@ -275,9 +298,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
 
         # Define protocol outputs: the new set of classes and the joined set of particles
-        self._defineOutputs(
-            outputClasses=outputClasses,
-            outputParticles=outputParticles,
-        )
-        self._defineSourceRelation(self.inputClasses, outputClasses)
+
+        # self._defineOutputs(outputClasses_raw=rawClasses)
+        # self._defineSourceRelation(self.inputClasses, rawClasses)
+
+        self._defineOutputs(outputParticles=outputParticles)
         self._defineSourceRelation(self.inputClasses, outputParticles)
+
+        self._defineOutputs(outputClasses_corrected=outputClasses)
+        self._defineSourceRelation(self.inputClasses, outputClasses)
+
+        self._defineOutputs(outputClasses_raw=rawClasses)
+        self._defineSourceRelation(self.inputClasses, rawClasses)
