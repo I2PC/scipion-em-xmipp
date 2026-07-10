@@ -101,26 +101,31 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
         """Selects the requested class and saves its metadata file."""
-        self.inputMdName = self._getTmpPath("inputClasses.xmd")
+        self.inputMdName = self._getExtraPath("inputClasses.xmd")
 
         # Write the input data as a set of 2D classes
         writeSetOfClasses2D(
             self.inputClasses.get(), self.inputMdName, writeParticles=True
         )
         self.selectedParticlesPaths = []
-        mdBlocks = md.getBlocksInMetaDataFile(self.inputMdName)
+
+        # Get all class ids in input classes file
+        classesBlock = md.MetaData("classes@" + self.inputMdName)
+        class_ids = set()
+        for row in md.iterRows(classesBlock):
+            class_ids.add(row.getValue(md.MDL_REF))
 
         # Identify class IDs to work with: all classes if classId input is <= 0,
         # otherwise the user-requested class.
         classId = self.classId.get()
         if classId > 0:
-            if classId >= len(mdBlocks):
+            if not classId in class_ids:
                 raise ValueError(
-                    "Requested class ID is higher than the number of classes"
+                    "Requested class ID is unavailable in the input classes object"
                 )
-            self.class_names = {classId: mdBlocks[classId]}
+            self.class_names = {classId: "class%06d_images" % classId}
         else:
-            self.class_names = {i: mdBlocks[i] for i in range(1, len(mdBlocks))}
+            self.class_names = {i: "class%06d_images" % i for i in class_ids}
 
         self.sampling_rate = self.inputClasses.get().getSamplingRate()
 
