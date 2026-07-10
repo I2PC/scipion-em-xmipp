@@ -89,6 +89,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             label="Correct CTF?",
             help="If you set to *Yes*, the CTF of the experimental particles will be corrected",
         )
+        form.addParam(
+            "useGpu",
+            BooleanParam,
+            default=True,
+            # expertLevel=LEVEL_ADVANCED,
+            label="Use GPU?",
+            help="If you set to *Yes*, the estimation process will try to use the GPU " \
+            "for hardware acceleration. This might speed up the process if CUDA is available.",
+        )
 
         form.addParallelSection(threads=1, mpi=4)
 
@@ -211,15 +220,17 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             tmp_original_avg_path = self._getTmpPath(f"original_avg_{classId}.mrc")
 
             # Run the GMM average estimation script for the current class
+            device = "cuda" if self.useGpu.get() else "cpu"
             script_args = (
                 "--input-xmd %s --out-star %s --base-xmd %s --out-corrected-avg %s "
-                "--out-original-avg %s --rotate-first"
+                "--out-original-avg %s --device %s --rotate-first"
                 % (
                     str(class_metadata_path),
                     str(output_star_path),
                     str(particles_path),
                     str(tmp_corrected_avg_path),
                     str(tmp_original_avg_path),
+                    device,
                 )
             )
             self.runJob(
