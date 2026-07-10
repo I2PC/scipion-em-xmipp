@@ -74,12 +74,12 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         form.addParam(
             "classId",
             IntParam,
-            default=1,
+            default=-1,
             # expertLevel=LEVEL_ADVANCED,
             label="Class ID",
-            help="Class to select for average estimation. ",
-            # "Zero or any negative value means the estimation "
-            # "will be applied to all classes",
+            help="Class to select for average estimation. "
+            "Zero or any negative value means the estimation "
+            "will be applied to all classes",
         )
         form.addParam(
             "correctCtf",
@@ -166,6 +166,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         For each requested class, reads the preprocessed particles, runs
         the robust estimation method and writes:
         - a metadata file that contains an extra field with each image's score
+        - a .mrcs file with the corrected averages calculated by the estimation method
+        - a .mrcs file with the original, uncorrected averages
         """
         env = self.getCondaEnv()
 
@@ -209,19 +211,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             tmp_original_avg_path = self._getTmpPath(f"original_avg_{classId}.mrc")
 
             # Run the GMM average estimation script for the current class
-            # "--out-corrected-avg %s --out-original-avg %s "
-            # --out-weights %s --out-distances %s
             script_args = (
-                "--input-xmd %s --out-star %s --base-xmd %s --out-corrected-avg %s --out-original-avg %s --rotate-first"
+                "--input-xmd %s --out-star %s --base-xmd %s --out-corrected-avg %s "
+                "--out-original-avg %s --rotate-first"
                 % (
                     str(class_metadata_path),
                     str(output_star_path),
                     str(particles_path),
                     str(tmp_corrected_avg_path),
                     str(tmp_original_avg_path),
-                    # str(self._getTmpPath(f"gmm_weights_{classId}.npy")),
-                    # str(self._getTmpPath(f"original_distances_{classId}.npy")),
-                    # str(output_original_avg_path),
                 )
             )
             self.runJob(
@@ -297,11 +295,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         readSetOfParticles(self._getExtraPath("outputParticles.xmd"), outputParticles)
         outputParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
 
-        # Define protocol outputs: the new set of classes and the joined set of particles
-
-        # self._defineOutputs(outputClasses_raw=rawClasses)
-        # self._defineSourceRelation(self.inputClasses, rawClasses)
-
+        # Define protocol outputs: the new sets of classes and the joined set of particles
         self._defineOutputs(outputParticles=outputParticles)
         self._defineSourceRelation(self.inputClasses, outputParticles)
 
