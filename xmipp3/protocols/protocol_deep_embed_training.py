@@ -24,6 +24,8 @@
 # *
 # **************************************************************************
 
+from pathlib import Path
+
 import emtable
 import pwem
 from pyworkflow import VERSION_3_0
@@ -32,7 +34,8 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils import Message
 from pyworkflow.utils.path import createLink
-from pwem.protocols import ProtAnalysis2D
+from pwem.protocols import ProtAnalysis2D, ProtFlexBase
+from pwem.objects import Volume, ParticleFlex, String
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles, readSetOfClasses2D
 import os
 import xmipp3
@@ -40,6 +43,7 @@ from pyworkflow import BETA, UPDATED, NEW, PROD
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow import Config
 
+import numpy as np
 
 def getJaxXmippEnvActivation():
     """ Remove the scipion home and activate the conda environment. """
@@ -56,7 +60,7 @@ def getJaxXmippActivationCommand():
         getJaxXmippEnvActivation()
     )
 
-class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
+class XmippProtDeepEmbedTraining(ProtAnalysis2D, ProtFlexBase, xmipp3.XmippProtocol):
     """Train a rotational and shift invariant embedding for images"""
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_jax'
@@ -192,11 +196,10 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
     def predict(self):
         gpuId = self.setGpu(oneGPU=True)
         fnModel = self._getExtraPath("model.h5")
-        args = "-i %s --gpu %s --imodel %s -o %s --batchSize %d --imgSize %d " \
-               "--icentroids %s" % \
+        args = "-i %s --gpu %s --imodel %s -o %s --oscores %s --batchSize %d --imgSize %d --embeddingDim %d " \
+            % \
                (self.fnImgs, gpuId, fnModel, self._getTmpPath(
-                   'particles.xmd'), self.batchSize, self.imageSize,
-                self._getExtraPath("centroids.npy"))
+                   'particles.xmd'), self._getExtraPath("embeddings.npy"), self.batchSize, self.imageSize, self.embeddingDim)
         
         self.runJob(
             f"{getJaxXmippActivationCommand()} && XLA_PYTHON_CLIENT_MEM_FRACTION=.95 xmipp_deep_embed_predict",
@@ -221,23 +224,31 @@ class XmippProtDeepEmbedTraining(ProtAnalysis2D, xmipp3.XmippProtocol):
         with open(fnOut, 'w') as outfile:
             outfile.write(content)
 
-        outputSet = self._createSetOfParticles()
-        readSetOfParticles(fnOut, outputSet)
+        FLEX_PARTILCE_PROGNAME = "XMIPP_DEEP_EMBED"
+
+        outputSet = self._createSetOfParticlesFlex(progName=FLEX_PARTILCE_PROGNAME)
         outputSet.copyInfo(self.inputParticles.get())
         outputSet.setAlignment2D()
 
-        outputClasses = self._createSetOfClasses2D(outputSet)
+        outputSet.getFlexInfo().modelPath = String("/dev/null")
 
-        mdIter = emtable.Table.iterRows('particles@' + fnOut)
-        outputClasses.classifyItems(
-            updateItemCallback=None,
-            updateClassCallback=None,
-            itemDataIterator=iter(mdIter),  # relion style
-            iterParams={},
-            doClone=False,  # So the creation time is maintained
-            raiseOnNextFailure=False
-        )
+        current_dir = Path(__file__).resolve().parent
+        severfuncPath = current_dir / "viewers" / "annotate_space" / "server.py"
+        assert os.path.exists(severfuncPath), f"Server function path does not exist: {severfuncPath}"
 
-        self._defineOutputs(outputParticles=outputClasses)
-        self._store(outputClasses)
-        self._defineSourceRelation(self.inputParticles.get(), outputClasses)
+        outputSet.getFlexInfo().setAttr("serverfunc_path", String(severfuncPath))
+        self._store(outputSet)
+        embeddings = np.load(self._getExtraPath("embeddings.npy"))
+
+        print(f"Embeddings shape: {embeddings.shape}, Number of particles: {len(self.inputParticles.get())}")
+        assert embeddings.shape[0] == len(self.inputParticles.get()), "Number of embeddings does not match number of particles"
+
+        for emb, particle in zip(embeddings, self.inputParticles.get().iterItems()):
+            outParticle = ParticleFlex(progName=FLEX_PARTILCE_PROGNAME)
+            outParticle.copyInfo(particle)
+            outParticle.setZFlex(emb)
+
+            outputSet.append(outParticle)
+
+        self._defineOutputs(outputParticles=outputSet)
+        self._defineSourceRelation(self.inputParticles.get(), outputSet)
