@@ -8,5 +8,5 @@ class HeterogeneityProgramInterface:
         return None
 
     def decode_state_from_latent(self, latent: np.array) -> None:
-        return np.zeros([64, 64, 64])
+        return np.random.uniform([64, 64, 64])
     

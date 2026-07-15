@@ -134,4 +134,4 @@ from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
 from .protocol_compute_likelihood import XmippProtComputeLikelihood
 from .protocol_deep_embed_training import XmippProtDeepEmbedTraining
-
+from .protocol_cluster_flexparticles import XmippProtClusterFlexParticles
