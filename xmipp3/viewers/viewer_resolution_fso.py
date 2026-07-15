@@ -247,15 +247,40 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         That this is not the normal representation of the FSC
         """
         md = xmippLib.MetaData(fnmd)
+
         xplotter = XmippPlotter(figure=None)
         xplotter.plot_title_fontsize = 11
 
-        a = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
-        xplotter.plotMdFile(md, mdLabelX, mdLabelY, 'g')
+        a = xplotter.createSubPlot(
+            title, xTitle, yTitle, 1, 1
+        )
 
-        a.xaxis.set_major_formatter(FuncFormatter(self._formatFreq))
+        xplotter.plotMdFile(
+            md, 
+            mdLabelX, 
+            mdLabelY, 
+            'g'
+        )
+
+        a.xaxis.set_major_formatter(
+            FuncFormatter(self._formatFreq)
+        )
+        
         xx, yy = self._prepareDataForPlot(md, mdLabelX, mdLabelY)
-        a.hlines(0.143, xx[0], xx[-1], colors='k', linestyles='dashed')
+
+        cutoffs = [0.143, 0.5]
+        resolutions = [self.protocol.fsc0143.get(), self.protocol.fsc05.get()]
+
+        for cutoff, resolution in zip(cutoffs, resolutions):
+            a.hlines(cutoff,
+                     xx[0], 
+                     xx[-1], 
+                     colors='k', 
+                     linestyles='dashed',
+                     label=f'FSC = {cutoff} ({resolution:.4f}A)'
+                     )
+
+        a.legend(loc='best')
         a.grid(True)
 
         return plt.show()
