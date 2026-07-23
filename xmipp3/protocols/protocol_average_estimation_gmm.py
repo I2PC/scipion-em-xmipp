@@ -41,6 +41,7 @@ from pwem.constants import ALIGN_2D
 from pwem.objects import SetOfParticles, SetOfImages
 
 from pyworkflow import VERSION_3_0
+from pyworkflow.object import Float
 from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam
 from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.constants import BETA
@@ -95,11 +96,11 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             default=True,
             # expertLevel=LEVEL_ADVANCED,
             label="Use GPU?",
-            help="If you set to *Yes*, the estimation process will try to use the GPU " \
+            help="If you set to *Yes*, the estimation process will try to use the GPU "
             "for hardware acceleration. This might speed up the process if CUDA is available.",
         )
 
-        form.addParallelSection(threads=1, mpi=4)
+        form.addParallelSection(threads=0, mpi=4)
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -306,9 +307,26 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         readSetOfParticles(self._getExtraPath("outputParticles.xmd"), outputParticles)
         outputParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
 
+        finalParticles = self._createSetOfParticles()
+        finalParticles.copyInfo(outputParticles)
+
+        for cl in outputClasses.iterItems():
+            classId = cl.getObjId()
+            blockName = f"class{classId:06d}_images"
+            classParticlesMd = md.MetaData(
+                blockName + "@" + self._getExtraPath("outputClasses.xmd")
+            )
+            for particle, row in zip(cl.iterItems(), md.iterRows(classParticlesMd)):
+                weight = row.getValue("wRobust")
+                weightGmm = row.getValue("wRobustGmm")
+                particle.setClassId(classId)
+                particle._xmippRobustWeight = Float(weight)
+                particle._xmippRobustWeightGmm = Float(weightGmm)
+                finalParticles.append(particle)
+
         # Define protocol outputs: the new sets of classes and the joined set of particles
-        self._defineOutputs(outputParticles=outputParticles)
-        self._defineSourceRelation(self.inputClasses, outputParticles)
+        self._defineOutputs(outputParticles=finalParticles)
+        self._defineSourceRelation(self.inputClasses, finalParticles)
 
         self._defineOutputs(outputClasses_corrected=outputClasses)
         self._defineSourceRelation(self.inputClasses, outputClasses)
