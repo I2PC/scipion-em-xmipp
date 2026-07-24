@@ -140,20 +140,11 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.imgsFnXmd = self._getTmpPath('images.xmd')
         self.imgsFn = self._getTmpPath('images.mrcs')
         self.outputVolBase = self._getExtraPath('volume')
-        # self.refsFn = self._getTmpPath('references.mrcs')
-        # self.refsFnXmd = self._getTmpPath('references.xmd')
         self.sampling = self.inputParticles.get().getSamplingRate()
         self.size = self.inputParticles.get().getDimensions()[0]
         self.iterations = 1
         self.classes = self.classes.get()
         symmetry = self.symmetryGroup.get()
-        
-        
-        # special_iters = {
-        #     0:  (20.0, 20.0),
-        #     9:  (16.0, 16.0),
-        #     14: (self.resolution.get(), self.filter.get())
-        # }
         
  
         if self.particleRadius.get() == -1:
@@ -163,15 +154,6 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
 
         
         self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn)
-        # self._insertFunctionStep("pcaTraining", self.imgsFn, self.resolution.get())
-        # for cl in range (self.classes):
-        #     refVol = self._getTmpPath('randomVol_class%s.mrc'%cl)+ ':mrc'
-        #     if self.inputVolumes.get() is None:
-        #         self._insertFunctionStep('initRandomVol', self.imgsFnXmd, self.imgsFn, self._getTmpPath('random_class%s.xmd'%(cl)), refVol, symmetry)
-        #     else:
-        #         img=ImageHandler()
-        #         vol=self.inputVolumes.get()
-        #         img.convert(vol, refVol)
         
         
         for iter in range(self.iterations):     
@@ -220,18 +202,11 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
                 
             inputXmd = self.imgsFnXmd       
             outMrc = self.outputVolBase  
-            # self._insertFunctionStep("globalAlign", inputXmd, outMrc, angle, shift, maxShift, applyShift, saveClass, radius, symmetry)   
             self._insertFunctionStep("globalAlign", inputXmd, outMrc, applyShift, saveClass, radius, symmetry) 
-            
-            # for cl in range(self.classes):
-            #
-            #     if saveClass or iter < 5:
-            #         self._insertFunctionStep("reconstructVolume", outXmd[cl], outVol[cl], iter, filter_res, symmetry)
-            #     else:
-            #         self._insertFunctionStep("reconstructVolume", select[cl], outVol[cl], iter, filter_res, symmetry)
+        
                     
 
-        # self._insertFunctionStep("createOutput", iter)
+        self._insertFunctionStep("createOutput")
     
 
     #--------------------------- STEPS functions ---------------------------------------------------        
@@ -248,42 +223,7 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         # self._positivity(outputConvert)
         # blur
         # self._applyBlurring(outputConvert)
-                
-   
-    def createGallery(self, angle, refVol, refIm, symmetry):
-        #--perturb 0.01
-        args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
-                (refVol, symmetry, angle, refIm+'.mrcs')
-        self.runJob("xmipp_angular_project_library", args, numberOfMpi=1)
-        moveFile(refIm+'.doc', refIm+'.xmd')
         
-        
-    def initRandomVol(self, inputXMD, inputMRC, outputXMD, outputVOL, symmetry):
-        args = ' -s %s  -o %s --random_angles' %(inputXMD, outputXMD)
-        # args = ' -s %s -i %s -o %s --initial_angles' %(inputXMD, inputMRC, outputXMD)
-        
-        env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = ''
-        self.runJob("xmipp_alignPCA_preprocess", args, numberOfMpi=1, env=env)
-        
-        program = 'xmipp_cuda_reconstruct_fourier'    
-        args = '-i %s -o %s --sym %s  --max_resolution %s  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
-        (outputXMD, outputVOL, symmetry, 0.5, self.sampling, self.numberOfMpi.get()) 
-        self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
-        
-    
-    def pcaTraining(self, inputIm, resolutionTrain):
-        if self.training.get() == -1:
-            numTrain = self.inputParticles.get().getSize()
-        else:
-            numTrain = min(self.inputParticles.get().getSize(), self.training.get())
-            
-        args = ' -i %s -t %s -s %s -hr %s -lr 530 -p %s -o %s/train_pca  --batchPCA'% \
-                (inputIm, numTrain, self.sampling, resolutionTrain, self.coef.get(), self._getExtraPath())
-
-        env = self.getCondaEnv()
-        env['LD_LIBRARY_PATH'] = ''
-        self.runJob("xmipp_alignPCA_train", args, numberOfMpi=1, env=env)
         
         
     def globalAlign(self, inputXmd, output, applyShift, saveClass, rad, symmetry):
@@ -341,38 +281,20 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         self._applyCicularMask(output, iter)      
     
 
-    def createOutput(self, iter):      
-        #output particle
+    def createOutput(self):      
+        # 1. Crear el conjunto de volúmenes
+        volumesSet = self._createSetOfVolumes()
+        volumesSet.setSamplingRate(self.inputParticles.get().getSamplingRate())
+    
+        for i in range(self.classes):
+            vol = Volume()
+            vol.setLocation(i, self._getExtraPath('volume_iter20_class%d.mrc' % i))
+            vol.setObjComment("Initial Volume %d" % (i ))
+            volumesSet.append(vol)
+    
+        self._defineOutputs(outputVolumes=volumesSet)
+        self._defineSourceRelation(self.inputParticles, volumesSet)
         
-        #modify column name to insert original mrcs name
-        args = ' -i %s --operate  rename_column "image image1" '%self._getExtraPath('align_iter%s.xmd'%(iter+1))   
-        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
-        args = ' -i %s --set join %s itemId ' %(self._getExtraPath('align_iter%s.xmd'%(iter+1)), self.imgsOrigXmd)   
-        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
-        
-        imgInitial = self.inputParticles.get()
-        imgSet = self._getExtraPath('align_iter%s.xmd'%(iter+1))
-        outSet = self._createSetOfParticles()    
-        outSet.copyInfo(imgInitial)         
-        EXTRA_LABELS = [
-            #emlib.MDL_COST
-        ]
-         # Fill
-        readSetOfParticles(
-            imgSet,
-            outSet,
-            extraLabels=EXTRA_LABELS
-        )
-        outSet.setSamplingRate(self.inputParticles.get().getSamplingRate())       
-        self._defineOutputs(outputParticles=outSet)
-        self._defineSourceRelation(self.inputParticles, outSet)
-        
-        if self.createVolume or self.mode == self.REFINE:
-            volume=Volume()
-            volume.setFileName(self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)))
-            volume.setSamplingRate(self.inputParticles.get().getSamplingRate())
-            self._defineOutputs(outputVolume=volume)
-            self._defineTransformRelation(self.inputParticles.get(), volume)
         
     
     #--------------------------- INFO functions --------------------------------------------
