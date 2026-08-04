@@ -147,11 +147,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         """
         Reads the selected particles, CTF-corrects them if requested, and saves the
         preprocessed images to a temporary file.
-
-        Returns
-        -------
-        str
-            Path to the temporary file with the preprocessed particles
         """
         outputPath = str(Path(outputPath))
 
@@ -177,7 +172,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputPath = str(Path(outputPath))
 
         args = f"-i {particlesMetadataPath} -o {outputPath} --apply_transform"
-        self.runJob("xmipp_transform_geometry", args)
+        self.runJob("xmipp_transform_geometry", args, numberOfMpi=1)
 
     def averageEstimationStep(self):
         """
@@ -225,9 +220,9 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             )
 
             args = f'-i {preprocessedMetadataPath} --operate drop_column "anglePsi"'
-            self.runJob("xmipp_metadata_utilities", args)
+            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
             args = f'-i {preprocessedMetadataPath} --operate rename_column "angleRot anglePsi"'
-            self.runJob("xmipp_metadata_utilities", args)
+            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
 
             alignedPath = self._getTmpPath(f"aligned_particles_{classId}.mrcs")
             self._applyAlignment(preprocessedMetadataPath, alignedPath)
