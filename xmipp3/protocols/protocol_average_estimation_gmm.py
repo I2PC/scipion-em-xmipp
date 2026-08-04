@@ -172,11 +172,11 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
 
     def _applyAlignment(
-        self, particlesPath: Union[str, Path], outputPath: Union[str, Path]
+        self, particlesMetadataPath: Union[str, Path], outputPath: Union[str, Path]
     ):
         outputPath = str(Path(outputPath))
 
-        args = f"-i {particlesPath} -o {outputPath} --apply_transform"
+        args = f"-i {particlesMetadataPath} -o {outputPath} --apply_transform"
         self.runJob("xmipp_transform_geometry", args)
 
     def averageEstimationStep(self):
@@ -220,11 +220,12 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 f"preprocessed_particles_{classId}.mrc"
             )
             self._preprocessParticles(particles_path, preprocessed_particles_path)
-            aligned_path = self._getTmpPath(f"aligned_particles_{classId}.mrc")
+            preprocessedMetadataPath = Path(preprocessed_particles_path).with_suffix(".xmd")
+            alignedPath = self._getTmpPath(f"aligned_particles_{classId}.mrcs")
             self._applyAlignment(
-                preprocessed_particles_path, aligned_path
+                preprocessedMetadataPath, alignedPath
             )
-            class_metadata_path = Path(aligned_path).with_suffix(".xmd")
+            class_metadata_path = Path(alignedPath).with_suffix(".xmd")
 
             # Prepare output path for the star file with weights
             output_star_name = f"class_particles_{classId}.star"
