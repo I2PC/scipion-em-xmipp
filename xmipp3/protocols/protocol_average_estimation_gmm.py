@@ -220,11 +220,17 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 f"preprocessed_particles_{classId}.mrc"
             )
             self._preprocessParticles(particles_path, preprocessed_particles_path)
-            preprocessedMetadataPath = Path(preprocessed_particles_path).with_suffix(".xmd")
-            alignedPath = self._getTmpPath(f"aligned_particles_{classId}.mrcs")
-            self._applyAlignment(
-                preprocessedMetadataPath, alignedPath
+            preprocessedMetadataPath = Path(preprocessed_particles_path).with_suffix(
+                ".xmd"
             )
+
+            args = f'-i {preprocessedMetadataPath} --operate drop_column "anglePsi"'
+            self.runJob("xmipp_metadata_utilities", args)
+            args = f'-i {preprocessedMetadataPath} --operate rename_column "angleRot anglePsi"'
+            self.runJob("xmipp_metadata_utilities", args)
+
+            alignedPath = self._getTmpPath(f"aligned_particles_{classId}.mrcs")
+            self._applyAlignment(preprocessedMetadataPath, alignedPath)
             class_metadata_path = Path(alignedPath).with_suffix(".xmd")
 
             # Prepare output path for the star file with weights
