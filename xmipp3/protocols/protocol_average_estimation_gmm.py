@@ -142,8 +142,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     # --------------------------- UTILS functions -----------------------------
     def _preprocessParticles(
-        self, particlesPath: Union[str, Path], output_path: Union[str, Path]
-    ) -> str:
+        self, particlesPath: Union[str, Path], outputPath: Union[str, Path]
+    ):
         """
         Reads the selected particles, CTF-corrects them if requested, and saves the
         preprocessed images to a temporary file.
@@ -153,12 +153,12 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         str
             Path to the temporary file with the preprocessed particles
         """
-        output_path = str(Path(output_path))
+        outputPath = str(Path(outputPath))
 
         if self.correctCtf.get():
             args = " -i  %s -o %s --sampling_rate %s " % (
                 particlesPath,
-                output_path,
+                outputPath,
                 self.sampling_rate,
             )
             self.runJob(
@@ -167,9 +167,17 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         else:
             args = " -i  %s -o %s --save_metadata_stack " % (
                 particlesPath,
-                output_path,
+                outputPath,
             )
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
+
+    def _applyAlignment(
+        self, particlesPath: Union[str, Path], outputPath: Union[str, Path]
+    ):
+        outputPath = str(Path(outputPath))
+
+        args = f"-i {particlesPath} -o {outputPath} --apply_transform"
+        self.runJob("xmipp_transform_geometry", args)
 
     def averageEstimationStep(self):
         """
@@ -207,12 +215,16 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             particles_path = self._getTmpPath(particles_name)
             particles_md.write(particles_path)
 
-            # Preprocess the particles (CTF correction if requested) and save to a temporary file
+            # Preprocess the particles (CTF correction if requested, and alignment) and save to a temporary file
             preprocessed_particles_path = self._getTmpPath(
                 f"preprocessed_particles_{classId}.mrc"
             )
             self._preprocessParticles(particles_path, preprocessed_particles_path)
-            class_metadata_path = Path(preprocessed_particles_path).with_suffix(".xmd")
+            aligned_path = self._getTmpPath(f"aligned_particles_{classId}.mrc")
+            self._applyAlignment(
+                preprocessed_particles_path, aligned_path
+            )
+            class_metadata_path = Path(aligned_path).with_suffix(".xmd")
 
             # Prepare output path for the star file with weights
             output_star_name = f"class_particles_{classId}.star"
