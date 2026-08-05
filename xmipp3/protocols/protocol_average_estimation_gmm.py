@@ -236,6 +236,59 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         return alignedClassMdPath, classParticlesMdPath
 
+    def _runAverageEstimation(
+        self,
+        classId: int,
+        inputMdPath: Union[str, Path],
+        baseMdPath: Union[str, Path],
+        device: str,
+        env,
+    ) -> Tuple[str, str, str]:
+        """
+        Run the GMM estimator for one class.
+
+        Parameters
+        ----------
+        classId : int
+            ID identifying the class of images to be processed. Only used to identify
+            generated files.
+        inputMdPath : str or Path
+            Metadata referencing the aligned (and CTF corrected) image stack
+        baseMdPath : str or Path
+            Original class metadata. The robust estimation weights will be added
+            to a copy of this file (returned as ``outputStarPath`` in a .star format).
+        device : str
+            Compute device for PyTorch
+        env
+            Conda environment. Compatible with ``self.getCondaEnv()``
+
+        Returns
+        -------
+        outputStarPath : str
+            Metadata containing the particle weights.
+        correctedAveragePath : str
+            Robust class average with GMM weights.
+        originalAveragePath : str
+            Original, unweighted class average.
+        """
+        # Prepare output paths for the star file with weights and averages
+        outputStarPath = self._getTmpPath(f"class_particles_{classId}.star")
+        correctedAveragePath = self._getTmpPath(f"corrected_avg_{classId}.mrc")
+        originalAveragePath = self._getTmpPath(f"original_avg_{classId}.mrc")
+
+        # Run the GMM average estimation script for the current class
+        script_args = (
+            f"--input-xmd {str(inputMdPath)} "
+            f"--out-star {outputStarPath} "
+            f"--base-xmd {str(baseMdPath)} "
+            f"--out-corrected-avg {correctedAveragePath} "
+            f"--out-original-avg {originalAveragePath} "
+            f"--device {device}"
+        )
+        self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
+
+        return outputStarPath, correctedAveragePath, originalAveragePath
+
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
         """Selects the requested class and saves its metadata file."""
@@ -276,6 +329,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         - a .mrcs file with the original, uncorrected averages
         """
         env = self.getCondaEnv()
+        device = "cuda" if self.useGpu.get() else "cpu"
 
         new_metadata_path = self._getExtraPath("outputClasses.xmd")
         original_metadata_path = self._getExtraPath("rawClasses.xmd")
@@ -294,41 +348,31 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             old_class_rows[row.getValue(md.MDL_REF)] = row.clone()
 
         for index, (classId, className) in enumerate(self.class_names.items(), start=1):
-            alignedClassMetadataPath, particles_path = self._preprocessClass(
+            alignedClassMetadataPath, baseMdPath = self._preprocessClass(
                 classId=classId, className=className
             )
 
-            # Prepare output path for the star file with weights
-            output_star_name = f"class_particles_{classId}.star"
-            output_star_path = self._getTmpPath(output_star_name)
-            tmp_corrected_avg_path = self._getTmpPath(f"corrected_avg_{classId}.mrc")
-            tmp_original_avg_path = self._getTmpPath(f"original_avg_{classId}.mrc")
-
-            # Run the GMM average estimation script for the current class
-            device = "cuda" if self.useGpu.get() else "cpu"
-            script_args = (
-                f"--input-xmd {alignedClassMetadataPath} "
-                f"--out-star {output_star_path} "
-                f"--base-xmd {particles_path} "
-                f"--out-corrected-avg {tmp_corrected_avg_path} "
-                f"--out-original-avg {tmp_original_avg_path} "
-                f"--device {device}"
-            )
-            self.runJob(
-                "xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1
+            resultStarPath, correctedAveragePath, originalAveragePath = (
+                self._runAverageEstimation(
+                    classId=classId,
+                    inputMdPath=alignedClassMetadataPath,
+                    baseMdPath=baseMdPath,
+                    device=device,
+                    env=env,
+                )
             )
 
-            class_metadata = md.MetaData(output_star_path)
+            class_metadata = md.MetaData(resultStarPath)
             class_metadata.write(className + "@" + new_metadata_path, MD_APPEND)
             class_metadata.write(className + "@" + original_metadata_path, MD_APPEND)
 
             # Add the corrected and original averages to the list of averages to be stacked
             row_corrected_avg = md.Row()
-            row_corrected_avg.setValue(md.MDL_IMAGE, f"1@{tmp_corrected_avg_path}")
+            row_corrected_avg.setValue(md.MDL_IMAGE, f"1@{correctedAveragePath}")
             row_corrected_avg.addToMd(mdCorrectedAveragesToStack)
 
             row_original_avg = md.Row()
-            row_original_avg.setValue(md.MDL_IMAGE, f"1@{tmp_original_avg_path}")
+            row_original_avg.setValue(md.MDL_IMAGE, f"1@{originalAveragePath}")
             row_original_avg.addToMd(mdOriginalAveragesToStack)
 
             # Update the image field of the old class row with the new average and add it to the new metadata block
