@@ -336,19 +336,14 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         readSetOfClasses2D(rawClasses, self._getExtraPath("rawClasses.xmd"))
 
         # Join the particles from all classes into a single output set of particles
-        outputParticles = self._createSetOfParticles()
-        particlesMd = md.utils.joinBlocks(
-            self._getExtraPath("outputClasses.xmd"), "class0"
-        )
-        particlesMd.write(self._getExtraPath("outputParticles.xmd"))
-        readSetOfParticles(self._getExtraPath("outputParticles.xmd"), outputParticles)
-        outputParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
-
         finalParticles = self._createSetOfParticles()
-        finalParticles.copyInfo(outputParticles)
+        finalParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
 
+        # Iterate over every class
         for cl in outputClasses.iterItems():
             classId = cl.getObjId()
+
+            # Extract class block and iterate over its rows (particles)
             blockName = f"class{classId:06d}_images"
             classParticlesMd = md.MetaData(
                 blockName + "@" + self._getExtraPath("outputClasses.xmd")
@@ -357,13 +352,16 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 weight = row.getValue("wRobust")
                 weightGmm = row.getValue("wRobustGmm")
                 particle.setClassId(classId)
+
+                # Add the robust weights as particle attributes
                 particle._xmippRobustWeight = Float(weight)
                 particle._xmippRobustWeightGmm = Float(weightGmm)
+
                 finalParticles.append(particle)
 
         # Define protocol outputs: the new sets of classes and the joined set of particles
-        self._defineOutputs(outputParticles=outputParticles)
-        self._defineSourceRelation(self.inputClasses, outputParticles)
+        self._defineOutputs(outputParticles=finalParticles)
+        self._defineSourceRelation(self.inputClasses, finalParticles)
 
         self._defineOutputs(outputClasses_corrected=outputClasses)
         self._defineSourceRelation(self.inputClasses, outputClasses)
