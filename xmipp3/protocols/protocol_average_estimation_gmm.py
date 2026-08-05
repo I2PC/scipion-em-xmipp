@@ -187,7 +187,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 )
             self.class_names = {classId: "class%06d_images" % classId}
         else:
-            self.class_names = {i: "class%06d_images" % i for i in class_ids}
+            self.class_names = {i: "class%06d_images" % i for i in sorted(class_ids)}
 
         self.sampling_rate = self.inputClasses.get().getSamplingRate()
 
