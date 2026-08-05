@@ -30,7 +30,7 @@ import os
 from datetime import datetime
 import time
 from pathlib import Path
-from typing import Union
+from typing import Tuple, Union
 
 import numpy as np
 
@@ -110,7 +110,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         self._insertFunctionStep("createOutputStep")
 
     # --------------------------- UTILS functions -----------------------------
-    def _preprocessParticles(
+    def _prepareParticleStack(
         self,
         inputParticlesPath: Union[str, Path],
         outputParticlesPath: Union[str, Path],
@@ -159,6 +159,82 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--apply_transform"
         )
         self.runJob("xmipp_transform_geometry", args, numberOfMpi=1)
+
+    def _convertAlignmentConvention(
+        self,
+        metadataPath: Union[str, Path],
+    ) -> None:
+        """
+        Adapt class alignment angles to xmipp_transform_geometry conventions.
+
+        ``writeSetOfClasses2D`` stores the in-plane angle in ``angleRot`` for
+        these inputs, whereas ``xmipp_transform_geometry`` expects it in
+        ``anglePsi`` when applying a 2D transform.
+        """
+        metadataPath = str(Path(metadataPath))
+
+        self.runJob(
+            "xmipp_metadata_utilities",
+            f'-i {metadataPath} --operate drop_column "anglePsi"',
+            numberOfMpi=1,
+        )
+        self.runJob(
+            "xmipp_metadata_utilities",
+            f'-i {metadataPath} --operate rename_column "angleRot anglePsi"',
+            numberOfMpi=1,
+        )
+
+    def _preprocessClass(self, classId: int, className: str) -> Tuple[str, str]:
+        """
+        Prepare the inputs required by the GMM average estimator.
+
+        Parameters
+        ----------
+        classId : int
+            ID of the class of images to be processed. Used only for identifying
+            the generated files.
+        className : str
+            Name of the metadata block where the class information is contained
+            within the input metadata file.
+
+        Returns
+        -------
+        alignedClassMdPath : str
+            Metadata referencing the CTF-corrected (if CTF correction was requested)
+            and aligned particle stack.
+        classParticlesMdPath : str
+            Original class metadata used to preserve particle information.
+        """
+        # Read metadata block corresponding to the requested class
+        classMdBlockName = className + "@" + self.inputMdName
+        classParticlesMd = md.MetaData(classMdBlockName)
+
+        # Save the selected block to a temporary file
+        classParticlesMdPath = self._getTmpPath(f"selected_particles_{classId}.xmd")
+        classParticlesMd.write(classParticlesMdPath)
+
+        # Preprocess the particles (CTF correction if requested, and alignment) and save to a temporary file
+        preparedStackPath = self._getTmpPath(f"preprocessed_particles_{classId}.mrcs")
+        preparedStackMdPath = Path(preparedStackPath).with_suffix(".xmd")
+        self._prepareParticleStack(
+            inputParticlesPath=classParticlesMdPath,
+            outputParticlesPath=preparedStackPath,
+            outputMetadataPath=preparedStackMdPath,
+        )
+
+        # Rename angle columns to deal with different alignment conventions
+        self._convertAlignmentConvention(preparedStackMdPath)
+
+        # Apply alignment to the stack
+        alignedPath = self._getTmpPath(f"aligned_particles_{classId}.mrcs")
+        alignedClassMdPath = Path(alignedPath).with_suffix(".xmd")
+        self._applyAlignment(
+            inputMetadataPath=preparedStackMdPath,
+            outputParticlesPath=alignedPath,
+            outputMetadataPath=alignedClassMdPath,
+        )
+
+        return alignedClassMdPath, classParticlesMdPath
 
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
@@ -218,41 +294,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             old_class_rows[row.getValue(md.MDL_REF)] = row.clone()
 
         for index, (classId, className) in enumerate(self.class_names.items(), start=1):
-            # Read metadata block corresponding to the requested class
-            particles_metadata_name = className + "@" + self.inputMdName
-            particles_md = md.MetaData(particles_metadata_name)
-
-            # Save the selected block to a temporary file
-            particles_name = f"selected_particles_{classId}.xmd"
-            particles_path = self._getTmpPath(particles_name)
-            particles_md.write(particles_path)
-
-            # Preprocess the particles (CTF correction if requested, and alignment) and save to a temporary file
-            preprocessed_particles_path = self._getTmpPath(
-                f"preprocessed_particles_{classId}.mrcs"
-            )
-            preprocessedMetadataPath = Path(preprocessed_particles_path).with_suffix(
-                ".xmd"
-            )
-            self._preprocessParticles(
-                inputParticlesPath=particles_path,
-                outputParticlesPath=preprocessed_particles_path,
-                outputMetadataPath=preprocessedMetadataPath,
-            )
-
-            # Rename angle columns to deal with different alignment conventions
-            args = f'-i {preprocessedMetadataPath} --operate drop_column "anglePsi"'
-            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
-            args = f'-i {preprocessedMetadataPath} --operate rename_column "angleRot anglePsi"'
-            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
-
-            # Apply alignment to images
-            alignedPath = self._getTmpPath(f"aligned_particles_{classId}.mrcs")
-            alignedClassMetadataPath = Path(alignedPath).with_suffix(".xmd")
-            self._applyAlignment(
-                inputMetadataPath=preprocessedMetadataPath,
-                outputParticlesPath=alignedPath,
-                outputMetadataPath=alignedClassMetadataPath,
+            alignedClassMetadataPath, particles_path = self._preprocessClass(
+                classId=classId, className=className
             )
 
             # Prepare output path for the star file with weights
