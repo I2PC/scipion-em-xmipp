@@ -109,8 +109,27 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputMetadataPath: Union[str, Path],
     ):
         """
-        Reads the selected particles, CTF-corrects them if requested, and saves the
-        preprocessed images to a temporary file.
+        Materialize a particle stack for subsequent class preprocessing.
+
+        The input metadata identifies the particles belonging to one class. If CTF
+        correction is enabled, the images are corrected with
+        ``xmipp_ctf_correct_wiener2d``. Otherwise, they are copied to a standalone
+        stack with ``xmipp_image_convert``. In both cases, an accompanying metadata
+        file referencing the newly generated stack is written.
+
+        Parameters
+        ----------
+        inputParticlesPath : str or pathlib.Path
+            Metadata file containing the particles to process.
+        outputParticlesPath : str or pathlib.Path
+            Path of the output particle stack.
+        outputMetadataPath : str or pathlib.Path
+            Path of the metadata file referencing the output stack.
+
+        Notes
+        -----
+        This method does not apply the class alignment. Alignment is handled
+        separately by ``_applyAlignment``.
         """
         inputParticlesPath = str(Path(inputParticlesPath))
         outputParticlesPath = str(Path(outputParticlesPath))
@@ -140,6 +159,22 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputParticlesPath: Union[str, Path],
         outputMetadataPath: Union[str, Path],
     ):
+        """
+        Apply the 2D transforms stored in a particle metadata file.
+
+        The transformed images are written to a new stack using
+        ``xmipp_transform_geometry --apply_transform``. A corresponding metadata
+        file referencing the aligned stack is also generated.
+
+        Parameters
+        ----------
+        inputMetadataPath : str or pathlib.Path
+            Metadata containing the images and their 2D alignment parameters.
+        outputParticlesPath : str or pathlib.Path
+            Path of the aligned particle stack.
+        outputMetadataPath : str or pathlib.Path
+            Path of the metadata file referencing the aligned images.
+        """
         inputMetadataPath = str(Path(inputMetadataPath))
         outputParticlesPath = str(Path(outputParticlesPath))
         outputMetadataPath = str(Path(outputMetadataPath))
@@ -162,6 +197,17 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         ``writeSetOfClasses2D`` stores the in-plane angle in ``angleRot`` for
         these inputs, whereas ``xmipp_transform_geometry`` expects it in
         ``anglePsi`` when applying a 2D transform.
+
+        Parameters
+        ----------
+        metadataPath : str or pathlib.Path
+            Metadata file whose angle columns will be modified in place.
+            
+        Notes
+        -----
+        This conversion is specific to the current Scipion/Xmipp metadata
+        conventions and should be revisited if either side changes how 2D
+        alignments are represented.
         """
         metadataPath = str(Path(metadataPath))
 
@@ -178,24 +224,37 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     def _preprocessClass(self, classId: int, className: str) -> Tuple[str, str]:
         """
-        Prepare the inputs required by the GMM average estimator.
+        Prepare the input files required to estimate one class average.
+
+        The particle block corresponding to the requested class is extracted from
+        the global input metadata and written to a temporary metadata file. Its
+        images are then materialized in a standalone stack, optionally corrected
+        for the CTF, converted to the alignment convention expected by Xmipp, and
+        geometrically transformed to produce an aligned stack.
 
         Parameters
         ----------
         classId : int
-            ID of the class of images to be processed. Used only for identifying
-            the generated files.
+            Identifier of the class being processed. It is used to generate unique
+            temporary file names.
         className : str
-            Name of the metadata block where the class information is contained
-            within the input metadata file.
+            Name of the metadata block containing the class particles in the input
+            metadata file.
 
         Returns
         -------
-        alignedClassMdPath : str
-            Metadata referencing the CTF-corrected (if CTF correction was requested)
-            and aligned particle stack.
+        alignedClassMdPath : pathlib.Path
+            Metadata file referencing the aligned particle stack used as input by
+            the GMM average-estimation program.
         classParticlesMdPath : str
-            Original class metadata used to preserve particle information.
+            Metadata file containing the original particle information for the
+            selected class. The estimation program uses it as the base metadata to
+            which the calculated weights are added.
+
+        Notes
+        -----
+        All generated files are temporary protocol files. This method prepares the
+        inputs but does not run the robust average estimator.
         """
         # Read metadata block corresponding to the requested class
         classMdBlockName = className + "@" + self._getInputMdName()
@@ -219,7 +278,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         # Apply alignment to the stack
         alignedPath = self._getTmpPath(f"aligned_particles_{classId}.mrcs")
-        alignedClassMdPath = Path(alignedPath).with_suffix(".xmd")
+        alignedClassMdPath = str(Path(alignedPath).with_suffix(".xmd"))
         self._applyAlignment(
             inputMetadataPath=preparedStackMdPath,
             outputParticlesPath=alignedPath,
@@ -238,31 +297,43 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         timingsPath: Union[str, Path],
     ) -> Tuple[str, str, str]:
         """
-        Run the GMM estimator for one class.
+        Run the GMM-based robust average estimator for one class.
+
+        The external ``xmipp_gmm_average_estimation`` program reads the aligned
+        particle stack referenced by ``inputMdPath``, iteratively estimates robust
+        particle weights, and computes both a weighted and an unweighted class
+        average. The calculated weights are appended to a copy of the metadata
+        supplied through ``baseMdPath``.
 
         Parameters
         ----------
         classId : int
-            ID identifying the class of images to be processed. Only used to identify
-            generated files.
-        inputMdPath : str or Path
-            Metadata referencing the aligned (and CTF corrected) image stack
-        baseMdPath : str or Path
-            Original class metadata. The robust estimation weights will be added
-            to a copy of this file (returned as ``outputStarPath`` in a .star format).
-        device : str
-            Compute device for PyTorch
+            Identifier of the class being processed. It is used only to generate
+            unique output file names.
+        inputMdPath : str or pathlib.Path
+            Metadata referencing the aligned, and optionally CTF-corrected,
+            particle stack used by the estimator.
+        baseMdPath : str or pathlib.Path
+            Original metadata for the selected particles. The output weight columns
+            are added to a copy of this metadata.
+        device : {"cpu", "cuda"}
+            PyTorch device requested for the estimation program.
         env
-            Conda environment. Compatible with ``self.getCondaEnv()``
+            Environment returned by :meth:`getCondaEnv`, used to run the external
+            estimator with its required Python dependencies.
+        timingsPath : str or pathlib.Path
+            Shared JSON file in which timing information from successive estimator
+            calls is accumulated.
 
         Returns
         -------
         outputStarPath : str
-            Metadata containing the particle weights.
+            Metadata file containing the original particle information and the
+            calculated robust-weight columns.
         correctedAveragePath : str
-            Robust class average with GMM weights.
+            Path of the robust GMM-weighted average image.
         originalAveragePath : str
-            Original, unweighted class average.
+            Path of the corresponding unweighted average image.
         """
         # Prepare output paths for the star file with weights and averages
         outputStarPath = self._getTmpPath(f"class_particles_{classId}.star")
@@ -284,11 +355,11 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         return outputStarPath, correctedAveragePath, originalAveragePath
 
     def _addImageToMd(
-        self, imagePath: Union[Path, str], mdPath: Union[Path, str]
+        self, imagePath: Union[Path, str], metadata: md.MetaData
     ) -> None:
         row = md.Row()
         row.setValue(md.MDL_IMAGE, f"1@{imagePath}")
-        row.addToMd(mdPath)
+        row.addToMd(metadata)
 
     def _saveToImageStack(
         self,
@@ -317,7 +388,16 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
-        """Selects the requested class and saves its metadata file."""
+        """
+        Convert the input classes to Xmipp metadata and select classes to process.
+
+        The complete input ``SetOfClasses2D`` is written to a temporary Xmipp
+        metadata file, including the particles assigned to each class. The method
+        then validates the optional user-supplied class identifier and builds the
+        ordered mapping between selected class IDs and their metadata block names.
+
+        The input sampling rate is also stored for use during CTF correction.
+        """
         stepStart = time.perf_counter()
 
         inputMdName = self._getInputMdName()
@@ -355,11 +435,24 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     def averageEstimationStep(self):
         """
-        For each requested class, reads the preprocessed particles, runs
-        the robust estimation method and writes:
-        - a metadata file that contains an extra field with each image's score
-        - a .mrcs file with the corrected averages calculated by the estimation method
-        - a .mrcs file with the original, uncorrected averages
+        Preprocess, estimate and collect the averages for all selected classes.
+
+        For each selected class, this step:
+
+        1. extracts and preprocesses its particles;
+        2. applies their stored 2D alignment;
+        3. runs the external GMM-based average estimator;
+        4. stores the resulting particle weights in the output metadata;
+        5. accumulates the robust and unweighted class representatives.
+
+        After all classes have been processed, the individual average images are
+        combined into two output stacks and the corresponding ``classes`` metadata
+        blocks are written with updated representative-image references.
+
+        Timing information is collected separately for preprocessing, estimator
+        execution, result saving and uncategorized operations. The detailed timing
+        measurements produced by the external estimator are also printed once all
+        class calls have completed.
         """
         timingsPath = Path(self._getEstimationTimingsPath())
 
