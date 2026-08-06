@@ -105,7 +105,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self._insertFunctionStep("convertInputStep")
-        # self._insertFunctionStep("preprocessStep")
         self._insertFunctionStep("averageEstimationStep")
         self._insertFunctionStep("createOutputStep")
 
@@ -206,7 +205,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             Original class metadata used to preserve particle information.
         """
         # Read metadata block corresponding to the requested class
-        classMdBlockName = className + "@" + self.inputMdName
+        classMdBlockName = className + "@" + self._getInputMdName()
         classParticlesMd = md.MetaData(classMdBlockName)
 
         # Save the selected block to a temporary file
@@ -289,19 +288,48 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         return outputStarPath, correctedAveragePath, originalAveragePath
 
+    def _addImageToMd(
+        self, imagePath: Union[Path, str], mdPath: Union[Path, str]
+    ) -> None:
+        row = md.Row()
+        row.setValue(md.MDL_IMAGE, f"1@{imagePath}")
+        row.addToMd(mdPath)
+
+    def _saveToImageStack(
+        self,
+        metadata: md.MetaData,
+        outputPath: Union[str, Path],
+        writeMdName: str = "tmpStackMd.xmd",
+    ) -> None:
+        outputPath = str(Path(outputPath))
+
+        writeMdPath = self._getTmpPath(writeMdName)
+        metadata.write(writeMdPath)
+        self.runJob(
+            "xmipp_image_convert",
+            f"-i {writeMdPath} -o {outputPath}",
+            numberOfMpi=1,
+        )
+
+    def _getInputMdName(self):
+        return self._getExtraPath("inputClasses.xmd")
+
+    def _getOutputClassesMdPath(self):
+        return self._getExtraPath("outputClasses.xmd")
+
+    def _getRawClassesMdPath(self):
+        return self._getExtraPath("rawClasses.xmd")
+
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
         """Selects the requested class and saves its metadata file."""
-        self.inputMdName = self._getExtraPath("inputClasses.xmd")
+        inputMdName = self._getInputMdName()
 
         # Write the input data as a set of 2D classes
-        writeSetOfClasses2D(
-            self.inputClasses.get(), self.inputMdName, writeParticles=True
-        )
-        self.selectedParticlesPaths = []
+        writeSetOfClasses2D(self.inputClasses.get(), inputMdName, writeParticles=True)
 
         # Get all class ids in input classes file
-        classesBlock = md.MetaData("classes@" + self.inputMdName)
+        classesBlock = md.MetaData("classes@" + inputMdName)
         class_ids = set()
         for row in md.iterRows(classesBlock):
             class_ids.add(row.getValue(md.MDL_REF))
@@ -331,10 +359,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         env = self.getCondaEnv()
         device = "cuda" if self.useGpu.get() else "cpu"
 
-        new_metadata_path = self._getExtraPath("outputClasses.xmd")
-        original_metadata_path = self._getExtraPath("rawClasses.xmd")
-        output_corrected_stack_path = self._getExtraPath("corrected_averages.mrcs")
-        output_original_stack_path = self._getExtraPath("original_averages.mrcs")
+        outputClassesMdPath = self._getOutputClassesMdPath()
+        rawClassesMdPath = self._getRawClassesMdPath()
+        correctedAveragesStackPath = self._getExtraPath("correctedAverages.mrcs")
+        originalAveragesStackPath = self._getExtraPath("originalAverages.mrcs")
 
         mdNewClassesBlock = md.MetaData()
         mdOriginalClassesBlock = md.MetaData()
@@ -342,16 +370,18 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         mdOriginalAveragesToStack = md.MetaData()
 
         # Copy old classes block to later update the image field with the new average
-        oldClassesBlock = md.MetaData("classes@" + self.inputMdName)
-        old_class_rows = {}
+        oldClassesBlock = md.MetaData("classes@" + self._getInputMdName())
+        oldClassRows = {}
         for row in md.iterRows(oldClassesBlock):
-            old_class_rows[row.getValue(md.MDL_REF)] = row.clone()
+            oldClassRows[row.getValue(md.MDL_REF)] = row.clone()
 
         for index, (classId, className) in enumerate(self.class_names.items(), start=1):
+            # Preprocessing: save stack, correct ctf and apply alignment
             alignedClassMetadataPath, baseMdPath = self._preprocessClass(
                 classId=classId, className=className
             )
 
+            # Run estimation method
             resultStarPath, correctedAveragePath, originalAveragePath = (
                 self._runAverageEstimation(
                     classId=classId,
@@ -362,65 +392,47 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 )
             )
 
+            # Save the results for this class in the metadata files for the output
             class_metadata = md.MetaData(resultStarPath)
-            class_metadata.write(className + "@" + new_metadata_path, MD_APPEND)
-            class_metadata.write(className + "@" + original_metadata_path, MD_APPEND)
+            class_metadata.write(className + "@" + outputClassesMdPath, MD_APPEND)
+            class_metadata.write(className + "@" + rawClassesMdPath, MD_APPEND)
 
             # Add the corrected and original averages to the list of averages to be stacked
-            row_corrected_avg = md.Row()
-            row_corrected_avg.setValue(md.MDL_IMAGE, f"1@{correctedAveragePath}")
-            row_corrected_avg.addToMd(mdCorrectedAveragesToStack)
+            self._addImageToMd(correctedAveragePath, mdCorrectedAveragesToStack)
+            self._addImageToMd(originalAveragePath, mdOriginalAveragesToStack)
 
-            row_original_avg = md.Row()
-            row_original_avg.setValue(md.MDL_IMAGE, f"1@{originalAveragePath}")
-            row_original_avg.addToMd(mdOriginalAveragesToStack)
-
-            # Update the image field of the old class row with the new average and add it to the new metadata block
-            if classId in old_class_rows:
-                row = old_class_rows[classId].clone()
-                row.setValue(md.MDL_IMAGE, f"{index}@{output_corrected_stack_path}")
+            # Update the image field of the old class row and add it to the new metadata block
+            if classId in oldClassRows:
+                row = oldClassRows[classId].clone()
+                row.setValue(md.MDL_IMAGE, f"{index}@{correctedAveragesStackPath}")
                 row.addToMd(mdNewClassesBlock)
 
-                row2 = old_class_rows[classId].clone()
-                row2.setValue(md.MDL_IMAGE, f"{index}@{output_original_stack_path}")
+                row2 = oldClassRows[classId].clone()
+                row2.setValue(md.MDL_IMAGE, f"{index}@{originalAveragesStackPath}")
                 row2.addToMd(mdOriginalClassesBlock)
 
-        # Write a metadata file with the corrected averages and convert it to a stack
-        tmp_corrected_averages_list_xmd = self._getTmpPath(
-            "corrected_averages_list.xmd"
-        )
-        mdCorrectedAveragesToStack.write(tmp_corrected_averages_list_xmd)
-        self.runJob(
-            "xmipp_image_convert",
-            f"-i {tmp_corrected_averages_list_xmd} -o {output_corrected_stack_path}",
-            numberOfMpi=1,
-        )
-
-        # Write a metadata file with the original averages
-        tmp_original_averages_list_xmd = self._getTmpPath("original_averages_list.xmd")
-        mdOriginalAveragesToStack.write(tmp_original_averages_list_xmd)
-        self.runJob(
-            "xmipp_image_convert",
-            f"-i {tmp_original_averages_list_xmd} -o {output_original_stack_path}",
-            numberOfMpi=1,
-        )
+        # Save corrected and original averages as image stacks
+        self._saveToImageStack(mdCorrectedAveragesToStack, correctedAveragesStackPath)
+        self._saveToImageStack(mdOriginalAveragesToStack, originalAveragesStackPath)
 
         # Add the classes block with the updated image field to the new metadata file
-        mdNewClassesBlock.write("classes@" + new_metadata_path, MD_APPEND)
-        mdOriginalClassesBlock.write("classes@" + original_metadata_path, MD_APPEND)
+        mdNewClassesBlock.write("classes@" + outputClassesMdPath, MD_APPEND)
+        mdOriginalClassesBlock.write("classes@" + rawClassesMdPath, MD_APPEND)
 
     def createOutputStep(self):
         imagesPointer = self.inputClasses.get().getImagesPointer()
 
         # Create output classes based on the new metadata file with weights,
         # with the corrected representatives
+        outputClassesMd = self._getOutputClassesMdPath()
         outputClasses = self._createSetOfClasses2D(imagesPointer, "corrected")
-        readSetOfClasses2D(outputClasses, self._getExtraPath("outputClasses.xmd"))
+        readSetOfClasses2D(outputClasses, outputClassesMd)
 
         # Create raw output classes based on the new metadata file with weights,
         # with the original representatives
+        rawClassesMd = self._getRawClassesMdPath()
         rawClasses = self._createSetOfClasses2D(imagesPointer, "raw")
-        readSetOfClasses2D(rawClasses, self._getExtraPath("rawClasses.xmd"))
+        readSetOfClasses2D(rawClasses, rawClassesMd)
 
         # Join the particles from all classes into a single output set of particles
         finalParticles = self._createSetOfParticles()
@@ -432,9 +444,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
             # Extract class block and iterate over its rows (particles)
             blockName = f"class{classId:06d}_images"
-            classParticlesMd = md.MetaData(
-                blockName + "@" + self._getExtraPath("outputClasses.xmd")
-            )
+            classParticlesMd = md.MetaData(blockName + "@" + outputClassesMd)
             for particle, row in zip(cl.iterItems(), md.iterRows(classParticlesMd)):
                 weight = row.getValue("wRobust")
                 weightGmm = row.getValue("wRobustGmm")
