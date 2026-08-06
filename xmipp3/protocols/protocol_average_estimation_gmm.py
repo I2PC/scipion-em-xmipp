@@ -312,7 +312,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
     def _getInputMdName(self):
-        return self._getExtraPath("inputClasses.xmd")
+        return self._getTmpPath("inputClasses.xmd")
 
     def _getOutputClassesMdPath(self):
         return self._getExtraPath("outputClasses.xmd")
