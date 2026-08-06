@@ -23,8 +23,10 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
+import json
+import time
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple, Union, Dict
 
 
 from pwem.protocols import ProtClassify2D
@@ -233,6 +235,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         baseMdPath: Union[str, Path],
         device: str,
         env,
+        timingsPath: Union[str, Path],
     ) -> Tuple[str, str, str]:
         """
         Run the GMM estimator for one class.
@@ -273,7 +276,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--base-xmd {str(baseMdPath)} "
             f"--out-corrected-avg {correctedAveragePath} "
             f"--out-original-avg {originalAveragePath} "
-            f"--device {device}"
+            f"--device {device} "
+            f"--timings-file {timingsPath}"
         )
         self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
 
@@ -314,6 +318,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
         """Selects the requested class and saves its metadata file."""
+        stepStart = time.perf_counter()
+
         inputMdName = self._getInputMdName()
 
         # Write the input data as a set of 2D classes
@@ -339,6 +345,14 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         self.sampling_rate = self.inputClasses.get().getSamplingRate()
 
+        timings = {
+            "preprocessing": 0.0,
+            "estimation": 0.0,
+            "saving_outputs": 0.0,
+            "other": time.perf_counter() - stepStart,
+        }
+        self._saveTimings(timings)
+
     def averageEstimationStep(self):
         """
         For each requested class, reads the preprocessed particles, runs
@@ -347,6 +361,18 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         - a .mrcs file with the corrected averages calculated by the estimation method
         - a .mrcs file with the original, uncorrected averages
         """
+        timingsPath = Path(self._getEstimationTimingsPath())
+
+        if timingsPath.exists():
+            timingsPath.unlink()
+
+        stepStart = time.perf_counter()
+        timings = self._loadTimings()
+
+        preprocessingTime = 0.0
+        estimationTime = 0.0
+        savingTime = 0.0
+
         env = self.getCondaEnv()
         device = "cuda" if self.useGpu.get() else "cpu"
 
@@ -368,11 +394,17 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         for index, (classId, className) in enumerate(self.class_names.items(), start=1):
             # Preprocessing: save stack, correct ctf and apply alignment
+            start = time.perf_counter()
+
             alignedClassMetadataPath, baseMdPath = self._preprocessClass(
                 classId=classId, className=className
             )
 
+            preprocessingTime += time.perf_counter() - start
+
             # Run estimation method
+            start = time.perf_counter()
+
             resultStarPath, correctedAveragePath, originalAveragePath = (
                 self._runAverageEstimation(
                     classId=classId,
@@ -380,10 +412,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                     baseMdPath=baseMdPath,
                     device=device,
                     env=env,
+                    timingsPath=timingsPath,
                 )
             )
 
+            estimationTime += time.perf_counter() - start
+
             # Save the results for this class in the metadata files for the output
+            start = time.perf_counter()
+
             class_metadata = md.MetaData(resultStarPath)
             class_metadata.write(className + "@" + outputClassesMdPath, MD_APPEND)
             class_metadata.write(className + "@" + rawClassesMdPath, MD_APPEND)
@@ -402,15 +439,42 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 row2.setValue(md.MDL_IMAGE, f"{index}@{originalAveragesStackPath}")
                 row2.addToMd(mdOriginalClassesBlock)
 
+            savingTime += time.perf_counter() - start
+
         # Save corrected and original averages as image stacks
-        self._saveToImageStack(mdCorrectedAveragesToStack, correctedAveragesStackPath)
-        self._saveToImageStack(mdOriginalAveragesToStack, originalAveragesStackPath)
+        start = time.perf_counter()
+
+        self._saveToImageStack(
+            mdCorrectedAveragesToStack,
+            correctedAveragesStackPath,
+            writeMdName="correctedAveragesToStack.xmd",
+        )
+        self._saveToImageStack(
+            mdOriginalAveragesToStack,
+            originalAveragesStackPath,
+            writeMdName="originalAveragesToStack.xmd",
+        )
 
         # Add the classes block with the updated image field to the new metadata file
         mdNewClassesBlock.write("classes@" + outputClassesMdPath, MD_APPEND)
         mdOriginalClassesBlock.write("classes@" + rawClassesMdPath, MD_APPEND)
 
+        savingTime += time.perf_counter() - start
+
+        stepTime = time.perf_counter() - stepStart
+        measuredTime = preprocessingTime + estimationTime + savingTime
+
+        timings["preprocessing"] += preprocessingTime
+        timings["estimation"] += estimationTime
+        timings["saving_outputs"] += savingTime
+        timings["other"] += max(0.0, stepTime - measuredTime)
+
+        self._saveTimings(timings)
+        self._printEstimationTimings()
+
     def createOutputStep(self):
+        stepStart = time.perf_counter()
+
         imagesPointer = self.inputClasses.get().getImagesPointer()
 
         # Create output classes based on the new metadata file with weights,
@@ -456,3 +520,100 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         self._defineOutputs(outputClasses_raw=rawClasses)
         self._defineSourceRelation(self.inputClasses, rawClasses)
+
+        timings = self._loadTimings()
+        timings["saving_outputs"] += time.perf_counter() - stepStart
+        self._saveTimings(timings)
+
+        self._printTimings(timings)
+
+    def _getTimingsPath(self) -> str:
+        """Return the path used to persist protocol timing information."""
+        return self._getExtraPath("timings.json")
+
+    def _loadTimings(self) -> Dict[str, float]:
+        """Load timing information saved by previous protocol steps."""
+        timingsPath = Path(self._getTimingsPath())
+
+        if not timingsPath.exists():
+            return {
+                "preprocessing": 0.0,
+                "estimation": 0.0,
+                "saving_outputs": 0.0,
+                "other": 0.0,
+            }
+
+        with timingsPath.open("r", encoding="utf-8") as file:
+            return json.load(file)
+
+    def _saveTimings(self, timings: Dict[str, float]) -> None:
+        """Persist timing information for subsequent protocol steps."""
+        with open(self._getTimingsPath(), "w", encoding="utf-8") as file:
+            json.dump(timings, file, indent=2)
+
+    def _printTimings(self, timings: Dict[str, float]) -> None:
+        """Print a summary of the measured protocol execution times."""
+        totalTime = sum(timings.values())
+
+        print("\n" + "=" * 60)
+        print("GMM average estimation timing")
+        print("=" * 60)
+
+        for name, elapsed in timings.items():
+            percentage = 100.0 * elapsed / totalTime if totalTime > 0.0 else 0.0
+            label = name.replace("_", " ").capitalize()
+            print(f"{label:<20}: {elapsed:10.3f} s ({percentage:5.1f} %)")
+
+        print("-" * 60)
+        print(f"{'Total':<20}: {totalTime:10.3f} s")
+        print("=" * 60 + "\n")
+
+    def _getEstimationTimingsPath(self) -> str:
+        """Return the path containing accumulated script timings."""
+        return self._getExtraPath("estimationTimings.json")
+
+    def _printEstimationTimings(self) -> None:
+        """Print accumulated timings from all estimation script calls."""
+        timingsPath = Path(self._getEstimationTimingsPath())
+
+        if not timingsPath.exists():
+            print("No estimation timing information was generated.")
+            return
+
+        with timingsPath.open("r", encoding="utf-8") as file:
+            timings = json.load(file)
+
+        totalTime = timings["total"]
+
+        labels = {
+            "imports_and_startup": "Imports and script startup",
+            "argument_parsing": "Argument parsing",
+            "device_setup": "Device setup",
+            "read_images": "Read images",
+            "distance_setup": "Distance setup",
+            "masking": "Mask creation/application",
+            "estimator_setup": "Estimator setup",
+            "estimator_fit": "Estimator fit",
+            "result_conversion": "Result conversion",
+            "write_corrected_average": "Write corrected averages",
+            "write_original_average": "Write original averages",
+            "write_metadata": "Write metadata",
+            "write_optional_arrays": "Write optional arrays",
+            "other": "Other",
+        }
+
+        print("\n" + "=" * 72)
+        print("Accumulated GMM estimation script timings")
+        print("=" * 72)
+        print(f"{'Script calls':<38}: {timings['n_calls']:10d}")
+        print(f"{'Images processed':<38}: {timings['n_images']:10d}")
+        print("-" * 72)
+
+        for key, label in labels.items():
+            elapsed = timings[key]
+            percentage = 100.0 * elapsed / totalTime if totalTime > 0.0 else 0.0
+            print(f"{label:<38}: " f"{elapsed:10.3f} s " f"({percentage:5.1f} %)")
+
+        print("-" * 72)
+        print(f"{'Total':<38}: {totalTime:10.3f} s")
+        print("=" * 72 + "\n")
