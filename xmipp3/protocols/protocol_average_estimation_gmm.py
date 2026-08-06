@@ -23,32 +23,23 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
-import enum
-import sys
-import emtable
-import os
-from datetime import datetime
-import time
 from pathlib import Path
 from typing import Tuple, Union
 
-import numpy as np
 
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 from pwem.emlib import MD_APPEND
-from pwem.constants import ALIGN_2D
-from pwem.objects import SetOfParticles, SetOfClasses2D
+
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
 from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam
-from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
 
-from xmipp3.convert import writeSetOfClasses2D, readSetOfParticles, readSetOfClasses2D
+from xmipp3.convert import writeSetOfClasses2D, readSetOfClasses2D
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
