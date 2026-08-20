@@ -26,7 +26,8 @@
 import json
 import time
 from pathlib import Path
-from typing import Tuple, Union, Dict
+from typing import Tuple, Union, Dict, List
+from dataclasses import dataclass, asdict
 
 
 from pwem.protocols import ProtClassify2D
@@ -41,7 +42,19 @@ from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
 
-from xmipp3.convert import writeSetOfClasses2D, readSetOfClasses2D
+from xmipp3.convert import writeSetOfClasses2D, readSetOfClasses2D, writeSetOfParticles
+
+
+@dataclass
+class ClassConfig:
+    index: int
+    class_id: int
+    class_name: str
+    input_xmd: str
+    base_xmd: str
+    out_star: str
+    out_corrected_avg: str
+    out_original_avg: str
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -243,7 +256,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         Returns
         -------
-        alignedClassMdPath : pathlib.Path
+        alignedClassMdPath : str
             Metadata file referencing the aligned particle stack used as input by
             the GMM average-estimation program.
         classParticlesMdPath : str
@@ -290,14 +303,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _runAverageEstimation(
         self,
         batchConfigPath: Union[str, Path],
-        device: str,
-        env,
         timingsPath: Union[str, Path],
     ) -> None:
         """
         Run the GMM-based robust average estimator for all classes in a single
         external Python process.
         """
+        env = self.getCondaEnv()
+        device = "cuda" if self.useGpu.get() else "cpu"
+
         scriptArgs = (
             f'--batch-config "{batchConfigPath}" '
             f"--device {device} "
@@ -332,13 +346,19 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
     def _getInputMdName(self):
-        return self._getTmpPath("inputClasses.xmd")
+        return self._getExtraPath("inputClasses.xmd")
 
     def _getOutputClassesMdPath(self):
         return self._getExtraPath("outputClasses.xmd")
 
     def _getRawClassesMdPath(self):
         return self._getExtraPath("rawClasses.xmd")
+
+    def _getCorrectedAveragesStackPath(self):
+        return self._getExtraPath("correctedAverages.mrcs")
+
+    def _getOriginalAveragesStackPath(self):
+        return self._getExtraPath("originalAverages.mrcs")
 
     def _getAverageEstimationPaths(
         self,
@@ -350,65 +370,53 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             self._getTmpPath(f"original_avg_{classId}.mrc"),
         )
 
-    def _writeAverageEstimationBatchConfig(self, classConfigs) -> str:
+    def _writeAverageEstimationBatchConfig(self, classConfigDicts: List[Dict]) -> str:
         batchConfigPath = self._getTmpPath("gmm_average_batch.json")
 
         with open(batchConfigPath, "w", encoding="utf-8") as file:
             json.dump(
-                {
-                    "format_version": 1,
-                    "classes": classConfigs,
-                },
+                {"format_version": 1, "classes": classConfigDicts},
                 file,
                 indent=2,
             )
 
         return batchConfigPath
 
-    def _prepareAverageEstimationBatch(self):
+    def _prepareAverageEstimationBatch(self) -> Tuple[str, List[ClassConfig]]:
         """Preprocess all selected classes and prepare the batch description."""
-        batchClasses = []
-        classResults = []
+        classConfigs: List[ClassConfig] = []
 
-        for index, (classId, className) in enumerate(self.class_names.items(), start=1):
+        for index, (classId, className) in enumerate(self.classNames.items(), start=1):
             alignedClassMetadataPath, baseMdPath = self._preprocessClass(
-                classId=classId,
-                className=className,
+                classId=classId, className=className
             )
             resultStarPath, correctedAveragePath, originalAveragePath = (
                 self._getAverageEstimationPaths(classId)
             )
 
-            batchClasses.append(
-                {
-                    "class_id": classId,
-                    "input_xmd": str(alignedClassMetadataPath),
-                    "base_xmd": str(baseMdPath),
-                    "out_star": str(resultStarPath),
-                    "out_corrected_avg": str(correctedAveragePath),
-                    "out_original_avg": str(originalAveragePath),
-                }
+            config = ClassConfig(
+                index=index,
+                class_id=classId,
+                class_name=className,
+                input_xmd=str(alignedClassMetadataPath),
+                base_xmd=str(baseMdPath),
+                out_star=str(resultStarPath),
+                out_corrected_avg=str(correctedAveragePath),
+                out_original_avg=str(originalAveragePath),
             )
-            classResults.append(
-                {
-                    "index": index,
-                    "class_id": classId,
-                    "class_name": className,
-                    "result_star": resultStarPath,
-                    "corrected_average": correctedAveragePath,
-                    "original_average": originalAveragePath,
-                }
-            )
+            classConfigs.append(config)
 
-        batchConfigPath = self._writeAverageEstimationBatchConfig(batchClasses)
-        return batchConfigPath, classResults
+        batchConfigDicts = [asdict(c) for c in classConfigs]
+        batchConfigPath = self._writeAverageEstimationBatchConfig(batchConfigDicts)
 
-    def _collectAverageEstimationResults(self, classResults) -> None:
+        return batchConfigPath, classConfigs
+
+    def _collectAverageEstimationResults(self, classConfigs: List[ClassConfig]) -> None:
         """Write class metadata and combine per-class averages into output stacks."""
         outputClassesMdPath = self._getOutputClassesMdPath()
         rawClassesMdPath = self._getRawClassesMdPath()
-        correctedAveragesStackPath = self._getExtraPath("correctedAverages.mrcs")
-        originalAveragesStackPath = self._getExtraPath("originalAverages.mrcs")
+        correctedAveragesStackPath = self._getCorrectedAveragesStackPath()
+        originalAveragesStackPath = self._getOriginalAveragesStackPath()
 
         mdNewClassesBlock = md.MetaData()
         mdOriginalClassesBlock = md.MetaData()
@@ -421,17 +429,17 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             for row in md.iterRows(oldClassesBlock)
         }
 
-        for result in classResults:
-            classId = result["class_id"]
-            className = result["class_name"]
-            index = result["index"]
+        for result in classConfigs:
+            classId = result.class_id
+            className = result.class_name
+            index = result.index
 
-            classMetadata = md.MetaData(result["result_star"])
+            classMetadata = md.MetaData(result.out_star)
             classMetadata.write(className + "@" + outputClassesMdPath, MD_APPEND)
             classMetadata.write(className + "@" + rawClassesMdPath, MD_APPEND)
 
-            self._addImageToMd(result["corrected_average"], mdCorrectedAveragesToStack)
-            self._addImageToMd(result["original_average"], mdOriginalAveragesToStack)
+            self._addImageToMd(result.out_corrected_avg, mdCorrectedAveragesToStack)
+            self._addImageToMd(result.out_original_avg, mdOriginalAveragesToStack)
 
             if classId in oldClassRows:
                 correctedRow = oldClassRows[classId].clone()
@@ -481,21 +489,21 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         # Get all class ids in input classes file
         classesBlock = md.MetaData("classes@" + inputMdName)
-        class_ids = set()
+        classIdsSet = set()
         for row in md.iterRows(classesBlock):
-            class_ids.add(row.getValue(md.MDL_REF))
+            classIdsSet.add(row.getValue(md.MDL_REF))
 
         # Identify class IDs to work with: all classes if classId input is <= 0,
         # otherwise the user-requested class.
         classId = self.classId.get()
         if classId > 0:
-            if not classId in class_ids:
+            if not classId in classIdsSet:
                 raise ValueError(
                     "Requested class ID is unavailable in the input classes object"
                 )
-            self.class_names = {classId: "class%06d_images" % classId}
+            self.classNames = {classId: "class%06d_images" % classId}
         else:
-            self.class_names = {i: "class%06d_images" % i for i in sorted(class_ids)}
+            self.classNames = {i: "class%06d_images" % i for i in sorted(classIdsSet)}
 
         self.sampling_rate = self.inputClasses.get().getSamplingRate()
 
@@ -515,8 +523,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         stepStart = time.perf_counter()
         timings = self._loadTimings()
-        env = self.getCondaEnv()
-        device = "cuda" if self.useGpu.get() else "cpu"
 
         start = time.perf_counter()
         batchConfigPath, classResults = self._prepareAverageEstimationBatch()
@@ -524,10 +530,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         start = time.perf_counter()
         self._runAverageEstimation(
-            batchConfigPath=batchConfigPath,
-            device=device,
-            env=env,
-            timingsPath=timingsPath,
+            batchConfigPath=batchConfigPath, timingsPath=timingsPath
         )
         estimationTime = time.perf_counter() - start
 
