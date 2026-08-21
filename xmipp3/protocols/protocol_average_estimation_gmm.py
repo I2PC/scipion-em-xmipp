@@ -108,6 +108,21 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         classIds: List[int],
         outputMdPath: Union[str, Path],
     ):
+        """
+        Write particles from selected 2D classes to a single Xmipp metadata file.
+
+        The output metadata contains the particle locations, CTF parameters,
+        2D alignment parameters, and class identifiers.
+
+        Parameters
+        ----------
+        classes2D : SetOfClasses2D
+            Input set containing the particle classes.
+        classIds : list of int
+            Identifiers of the classes to include in the output metadata.
+        outputMdPath : str or pathlib.Path
+            Path where the Xmipp metadata file will be written.
+        """
         particlesMd = md.MetaData()
 
         for cls in classes2D:
@@ -148,7 +163,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         Parameters
         ----------
-        inputParticlesPath : str or pathlib.Path
+        inputMetadataPath : str or pathlib.Path
             Metadata file containing the particles to process.
         outputParticlesPath : str or pathlib.Path
             Path of the output particle stack.
@@ -226,14 +241,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
         """
-        Convert the input classes to Xmipp metadata and select classes to process.
+        Convert the selected input classes to a single Xmipp particle metadata file.
 
-        The complete input ``SetOfClasses2D`` is written to a temporary Xmipp
-        metadata file, including the particles assigned to each class. The method
-        then validates the optional user-supplied class identifier and builds the
-        ordered mapping between selected class IDs and their metadata block names.
-
-        The input sampling rate is also stored for use during CTF correction.
+        The generated metadata contains the image location, CTF parameters,
+        2D alignment parameters, and class identifier for every selected particle.
         """
         inputClasses = self.inputClasses.get()
 
@@ -264,6 +275,12 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
     def preprocessStep(self):
+        """
+        Preprocess all selected particles before average estimation.
+
+        The particles are optionally CTF-corrected, collected into a single
+        image stack, and transformed according to their stored 2D alignments.
+        """
         particlesMdPath = self._getInputParticlesPath()
 
         # Correct CTF (if requested) and extract particle stack
@@ -281,6 +298,13 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
     def averageEstimationStep(self):
+        """
+        Estimate robust and conventional averages for all selected classes.
+
+        The external GMM estimator processes the preprocessed particles grouped
+        by class and writes particle weights together with the resulting class
+        average stacks.
+        """
         env = self.getCondaEnv()
         device = "cuda" if self.useGpu.get() else "cpu"
 
@@ -301,6 +325,13 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
 
     def createOutputStep(self):
+        """
+        Create the particle and class outputs of the protocol.
+
+        Particle robust weights and class assignments are restored from the
+        estimator metadata. Two sets of 2D classes are created using the robust
+        and conventional class averages as representatives.
+        """
         outputParticlesMd = md.MetaData(self._getExtraPath("particles.star"))
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(self.inputClasses.get().getImages())
@@ -357,6 +388,26 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         averagesPath: Union[str, Path],
         suffix: str,
     ) -> SetOfClasses2D:
+        """
+        Create a set of 2D classes using a stack of class averages as representatives.
+
+        Parameters
+        ----------
+        particles : SetOfParticles
+            Particles to classify according to their stored class identifiers.
+        classIndex : dict of int to int
+            Mapping from class identifiers to 1-based image indices in the
+            average stack.
+        averagesPath : str or pathlib.Path
+            Path to the stack containing the class representative images.
+        suffix : str
+            Suffix used to identify the generated Scipion output set.
+
+        Returns
+        -------
+        SetOfClasses2D
+            Set of 2D classes with the requested averages as representatives.
+        """
         outputClasses = self._createSetOfClasses2D(particles, suffix)
 
         samplingRate = particles.getSamplingRate()
