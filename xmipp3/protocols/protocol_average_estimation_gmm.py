@@ -31,7 +31,7 @@ from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 from pwem.emlib import MD_APPEND
 from pwem.constants import ALIGN_2D
-from pwem.objects import SetOfClasses2D
+from pwem.objects import SetOfClasses2D, Particle
 
 
 from pyworkflow import VERSION_3_0
@@ -41,7 +41,13 @@ from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
 
-from xmipp3.convert import writeSetOfClasses2D, readSetOfClasses2D, particleToRow
+from xmipp3.convert import (
+    writeSetOfClasses2D,
+    readSetOfClasses2D,
+    particleToRow,
+    readSetOfParticles,
+    rowToParticle,
+)
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -98,20 +104,51 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self._insertFunctionStep("convertInputStep")
+        self._insertFunctionStep("preprocessStep")
         self._insertFunctionStep("averageEstimationStep")
         self._insertFunctionStep("createOutputStep")
 
+    # --------------------------- UTILS functions -----------------------------
+    def _buildMetadataStack(
+        self,
+        classes2D: SetOfClasses2D,
+        classIds: List[int],
+        outputMdPath: Union[str, Path],
+    ):
+        particlesMd = md.MetaData()
+
+        for cls in classes2D:
+            classId = int(cls.getObjId())
+
+            if classId not in classIds:
+                continue
+
+            for particle in cls:
+                row = md.Row()
+
+                particleToRow(
+                    particle,
+                    row,
+                    alignType=ALIGN_2D,
+                    writeCtf=True,
+                    writeAcquisition=True,
+                )
+
+                row.setValue(md.MDL_REF, classId)
+
+                row.addToMd(particlesMd)
+
+        outputMdPath = str(Path(outputMdPath))
+        particlesMd.write(outputMdPath)
+
     def _prepareParticleStack(
         self,
-        inputParticlesPath: Union[str, Path],
+        inputMetadataPath: Union[str, Path],
         outputParticlesPath: Union[str, Path],
         outputMetadataPath: Union[str, Path],
     ):
         """
-        Materialize a particle stack for subsequent class preprocessing.
-
-        The input metadata identifies the particles belonging to one class. If CTF
-        correction is enabled, the images are corrected with
+        If CTF correction is enabled, the images are corrected with
         ``xmipp_ctf_correct_wiener2d``. Otherwise, they are copied to a standalone
         stack with ``xmipp_image_convert``. In both cases, an accompanying metadata
         file referencing the newly generated stack is written.
@@ -130,19 +167,19 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         This method does not apply the class alignment. Alignment is handled
         separately by ``_applyAlignment``.
         """
-        inputParticlesPath = str(Path(inputParticlesPath))
+        inputMetadataPath = str(Path(inputMetadataPath))
         outputParticlesPath = str(Path(outputParticlesPath))
         outputMetadataPath = str(Path(outputMetadataPath))
 
         args = (
-            f"-i {inputParticlesPath} "
+            f"-i {inputMetadataPath} "
             f"-o {outputParticlesPath} "
             f"--save_metadata_stack {outputMetadataPath} "
             f"--keep_input_columns "
         )
 
         if self.correctCtf.get():
-            args += f"--sampling_rate {self.sampling_rate}"
+            args += f"--sampling_rate {self.inputClasses.get().getSamplingRate()}"
             self.runJob(
                 "xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()
             )
@@ -179,6 +216,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"-i {inputMetadataPath} "
             f"-o {outputParticlesPath} "
             f"--save_metadata_stack {outputMetadataPath} "
+            f"--keep_input_columns "
             f"--apply_transform"
         )
         self.runJob("xmipp_transform_geometry", args, numberOfMpi=1)
@@ -264,7 +302,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         preparedStackPath = self._getTmpPath(f"preprocessed_particles_{classId}.mrcs")
         preparedStackMdPath = Path(preparedStackPath).with_suffix(".xmd")
         self._prepareParticleStack(
-            inputParticlesPath=classParticlesMdPath,
+            inputMetadataPath=classParticlesMdPath,
             outputParticlesPath=preparedStackPath,
             outputMetadataPath=preparedStackMdPath,
         )
@@ -369,6 +407,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getInputMdName(self):
         return self._getTmpPath("inputClasses.xmd")
 
+    def _getInputParticlesPath(self):
+        return self._getExtraPath("inputParticles.xmd")
+
+    def _getPreprocessedParticlesPath(self):
+        return self._getExtraPath("preprocessed.mrcs")
+
+    def _getPreprocessedMetadataPath(self):
+        return self._getExtraPath("preprocessed.xmd")
+
     def _getOutputClassesMdPath(self):
         return self._getExtraPath("outputClasses.xmd")
 
@@ -387,32 +434,145 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         The input sampling rate is also stored for use during CTF correction.
         """
-        inputMdName = self._getInputMdName()
+        inputClasses = self.inputClasses.get()
 
-        # Write the input data as a set of 2D classes
-        writeSetOfClasses2D(self.inputClasses.get(), inputMdName, writeParticles=True)
-
-        # Get all class ids in input classes file
-        classesBlock = md.MetaData("classes@" + inputMdName)
-        class_ids = set()
-        for row in md.iterRows(classesBlock):
-            class_ids.add(row.getValue(md.MDL_REF))
+        # Get all class ids in input classes object
+        classIds = set()
+        for cls in inputClasses:
+            classIds.add(int(cls.getObjId()))
 
         # Identify class IDs to work with: all classes if classId input is <= 0,
         # otherwise the user-requested class.
         classId = self.classId.get()
         if classId > 0:
-            if not classId in class_ids:
+            if not classId in classIds:
                 raise ValueError(
                     "Requested class ID is unavailable in the input classes object"
                 )
-            self.class_names = {classId: "class%06d_images" % classId}
+            self.classIds = [classId]
+            self.classNames = {classId: "class%06d_images" % classId}
         else:
-            self.class_names = {i: "class%06d_images" % i for i in sorted(class_ids)}
+            self.classIds = sorted(classIds)
+            self.classNames = {i: "class%06d_images" % i for i in self.classIds}
 
-        self.sampling_rate = self.inputClasses.get().getSamplingRate()
+        # Build metadata file with all the requested class particles
+        self._buildMetadataStack(
+            classes2D=inputClasses,
+            classIds=self.classIds,
+            outputMdPath=self._getInputParticlesPath(),
+        )
+
+    def preprocessStep(self):
+        particlesMdPath = self._getInputParticlesPath()
+
+        # Correct CTF (if requested) and extract particle stack
+        self._prepareParticleStack(
+            inputMetadataPath=particlesMdPath,
+            outputMetadataPath=self._getTmpPath("corrected.xmd"),
+            outputParticlesPath=self._getTmpPath("corrected.mrcs"),
+        )
+
+        # Apply alignment to all images in the extracted stack
+        self._applyAlignment(
+            inputMetadataPath=self._getTmpPath("corrected.xmd"),
+            outputMetadataPath=self._getPreprocessedMetadataPath(),
+            outputParticlesPath=self._getPreprocessedParticlesPath(),
+        )
 
     def averageEstimationStep(self):
+        env = self.getCondaEnv()
+        device = "cuda" if self.useGpu.get() else "cpu"
+
+        # Prepare output paths for the star file with weights and averages
+        outputStarPath = self._getExtraPath("particles.star")
+        correctedAveragePath = self._getExtraPath("corrected_avgs.mrcs")
+        originalAveragePath = self._getExtraPath("original_avgs.mrcs")
+
+        # Run the GMM average estimation script for all classes
+        script_args = (
+            f"--input-xmd {self._getPreprocessedMetadataPath()} "
+            f"--base-xmd {self._getInputParticlesPath()} "
+            f"--out-star {outputStarPath} "
+            f"--out-corrected-avg {correctedAveragePath} "
+            f"--out-original-avg {originalAveragePath} "
+            f"--device {device} "
+        )
+        self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
+
+    def createOutputStep(self):
+        outputParticlesMd = md.MetaData(self._getExtraPath("particles.star"))
+        outputParticles = self._createSetOfParticles()
+        outputParticles.copyInfo(self.inputClasses.get().getImages())
+
+        for row in md.iterRows(outputParticlesMd):
+            particle = rowToParticle(row, alignType=ALIGN_2D)
+
+            classId = row.getValue(md.MDL_REF)
+            weight = row.getValue("wRobust")
+            weightGmm = row.getValue("wRobustGmm")
+
+            # Add the robust weights and the class ID as particle attributes
+            particle.setClassId(classId)
+            particle._xmippRobustWeight = Float(weight)
+            particle._xmippRobustWeightGmm = Float(weightGmm)
+
+            outputParticles.append(particle)
+
+        # The estimation script writes averages following sorted class IDs.
+        classIndex = {
+            classId: index for index, classId in enumerate(self.classIds, start=1)
+        }
+
+        # Create classes with robust averages as representatives
+        robustClasses = self._createOutputClasses(
+            particles=outputParticles,
+            classIndex=classIndex,
+            averagesPath=self._getExtraPath("corrected_avgs.mrcs"),
+            suffix="_robust",
+        )
+
+        # Create classes with ordinary averages as representatives
+        standardClasses = self._createOutputClasses(
+            particles=outputParticles,
+            classIndex=classIndex,
+            averagesPath=self._getExtraPath("original_avgs.mrcs"),
+            suffix="_standard",
+        )
+
+        # Define protocol outputs
+        self._defineOutputs(outputParticles=outputParticles)
+        self._defineSourceRelation(self.inputClasses, outputParticles)
+
+        self._defineOutputs(outputClasses_robust=robustClasses)
+        self._defineSourceRelation(outputParticles, robustClasses)
+
+        self._defineOutputs(outputClasses_standard=standardClasses)
+        self._defineSourceRelation(outputParticles, standardClasses)
+
+    def _createOutputClasses(
+        self,
+        particles,
+        classIndex: Dict[int, int],
+        averagesPath: Union[str, Path],
+        suffix: str,
+    ) -> SetOfClasses2D:
+        outputClasses = self._createSetOfClasses2D(particles, suffix)
+
+        samplingRate = particles.getSamplingRate()
+        averagesPath = str(Path(averagesPath))
+
+        def updateClass(classItem):
+            classId = classItem.getObjId()
+
+            representative = classItem.getRepresentative()
+            representative.setLocation(classIndex[classId], averagesPath)
+            representative.setSamplingRate(samplingRate)
+
+        outputClasses.classifyItems(updateClassCallback=updateClass)
+
+        return outputClasses
+
+    def averageEstimationStepOld(self):
         """
         Preprocess, estimate and collect the averages for all selected classes.
 
@@ -448,7 +608,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         for row in md.iterRows(oldClassesBlock):
             oldClassRows[row.getValue(md.MDL_REF)] = row.clone()
 
-        for index, (classId, className) in enumerate(self.class_names.items(), start=1):
+        for index, (classId, className) in enumerate(self.classNames.items(), start=1):
             # Preprocessing: save stack, correct ctf and apply alignment
             alignedClassMetadataPath, baseMdPath = self._preprocessClass(
                 classId=classId, className=className
@@ -500,7 +660,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         mdNewClassesBlock.write("classes@" + outputClassesMdPath, MD_APPEND)
         mdOriginalClassesBlock.write("classes@" + rawClassesMdPath, MD_APPEND)
 
-    def createOutputStep(self):
+    def createOutputStepOld(self):
         imagesPointer = self.inputClasses.get().getImagesPointer()
 
         # Create output classes based on the new metadata file with weights,
