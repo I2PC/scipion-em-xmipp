@@ -23,25 +23,32 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
-import json
+import enum
+import sys
+import emtable
+import os
+from datetime import datetime
 import time
 from pathlib import Path
-from typing import Tuple, Union, Dict
+from typing import Tuple, Union
 
+import numpy as np
 
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 from pwem.emlib import MD_APPEND
-
+from pwem.constants import ALIGN_2D
+from pwem.objects import SetOfParticles, SetOfClasses2D
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
 from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam
+from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
 
-from xmipp3.convert import writeSetOfClasses2D, readSetOfClasses2D
+from xmipp3.convert import writeSetOfClasses2D, readSetOfParticles, readSetOfClasses2D
 
 
 class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
@@ -68,7 +75,6 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
             "classId",
             IntParam,
             default=-1,
-            # expertLevel=LEVEL_ADVANCED,
             label="Class ID",
             help="Class to select for average estimation. "
             "Zero or any negative value means the estimation "
@@ -78,7 +84,6 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
             "correctCtf",
             BooleanParam,
             default=True,
-            # expertLevel=LEVEL_ADVANCED,
             label="Correct CTF?",
             help="If you set to *Yes*, the CTF of the experimental particles will be corrected",
         )
@@ -86,7 +91,6 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
             "useGpu",
             BooleanParam,
             default=True,
-            # expertLevel=LEVEL_ADVANCED,
             label="Use GPU?",
             help="If you set to *Yes*, the estimation process will try to use the GPU "
             "for hardware acceleration. This might speed up the process if CUDA is available.",
@@ -108,27 +112,8 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
         outputMetadataPath: Union[str, Path],
     ):
         """
-        Materialize a particle stack for subsequent class preprocessing.
-
-        The input metadata identifies the particles belonging to one class. If CTF
-        correction is enabled, the images are corrected with
-        ``xmipp_ctf_correct_wiener2d``. Otherwise, they are copied to a standalone
-        stack with ``xmipp_image_convert``. In both cases, an accompanying metadata
-        file referencing the newly generated stack is written.
-
-        Parameters
-        ----------
-        inputParticlesPath : str or pathlib.Path
-            Metadata file containing the particles to process.
-        outputParticlesPath : str or pathlib.Path
-            Path of the output particle stack.
-        outputMetadataPath : str or pathlib.Path
-            Path of the metadata file referencing the output stack.
-
-        Notes
-        -----
-        This method does not apply the class alignment. Alignment is handled
-        separately by ``_applyAlignment``.
+        Reads the selected particles, CTF-corrects them if requested, and saves the
+        preprocessed images to a temporary file.
         """
         inputParticlesPath = str(Path(inputParticlesPath))
         outputParticlesPath = str(Path(outputParticlesPath))
@@ -158,22 +143,6 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
         outputParticlesPath: Union[str, Path],
         outputMetadataPath: Union[str, Path],
     ):
-        """
-        Apply the 2D transforms stored in a particle metadata file.
-
-        The transformed images are written to a new stack using
-        ``xmipp_transform_geometry --apply_transform``. A corresponding metadata
-        file referencing the aligned stack is also generated.
-
-        Parameters
-        ----------
-        inputMetadataPath : str or pathlib.Path
-            Metadata containing the images and their 2D alignment parameters.
-        outputParticlesPath : str or pathlib.Path
-            Path of the aligned particle stack.
-        outputMetadataPath : str or pathlib.Path
-            Path of the metadata file referencing the aligned images.
-        """
         inputMetadataPath = str(Path(inputMetadataPath))
         outputParticlesPath = str(Path(outputParticlesPath))
         outputMetadataPath = str(Path(outputMetadataPath))
@@ -196,17 +165,6 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
         ``writeSetOfClasses2D`` stores the in-plane angle in ``angleRot`` for
         these inputs, whereas ``xmipp_transform_geometry`` expects it in
         ``anglePsi`` when applying a 2D transform.
-
-        Parameters
-        ----------
-        metadataPath : str or pathlib.Path
-            Metadata file whose angle columns will be modified in place.
-
-        Notes
-        -----
-        This conversion is specific to the current Scipion/Xmipp metadata
-        conventions and should be revisited if either side changes how 2D
-        alignments are represented.
         """
         metadataPath = str(Path(metadataPath))
 
@@ -223,37 +181,24 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
 
     def _preprocessClass(self, classId: int, className: str) -> Tuple[str, str]:
         """
-        Prepare the input files required to estimate one class average.
-
-        The particle block corresponding to the requested class is extracted from
-        the global input metadata and written to a temporary metadata file. Its
-        images are then materialized in a standalone stack, optionally corrected
-        for the CTF, converted to the alignment convention expected by Xmipp, and
-        geometrically transformed to produce an aligned stack.
+        Prepare the inputs required by the GMM average estimator.
 
         Parameters
         ----------
         classId : int
-            Identifier of the class being processed. It is used to generate unique
-            temporary file names.
+            ID of the class of images to be processed. Used only for identifying
+            the generated files.
         className : str
-            Name of the metadata block containing the class particles in the input
-            metadata file.
+            Name of the metadata block where the class information is contained
+            within the input metadata file.
 
         Returns
         -------
-        alignedClassMdPath : pathlib.Path
-            Metadata file referencing the aligned particle stack used as input by
-            the GMM average-estimation program.
+        alignedClassMdPath : str
+            Metadata referencing the CTF-corrected (if CTF correction was requested)
+            and aligned particle stack.
         classParticlesMdPath : str
-            Metadata file containing the original particle information for the
-            selected class. The estimation program uses it as the base metadata to
-            which the calculated weights are added.
-
-        Notes
-        -----
-        All generated files are temporary protocol files. This method prepares the
-        inputs but does not run the robust average estimator.
+            Original class metadata used to preserve particle information.
         """
         # Read metadata block corresponding to the requested class
         classMdBlockName = className + "@" + self._getInputMdName()
@@ -277,43 +222,44 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
 
         # Apply alignment to the stack
         # alignedPath = self._getTmpPath(f"aligned_particles_{classId}.mrcs")
-        # alignedClassMdPath = str(Path(alignedPath).with_suffix(".xmd"))
+        # alignedClassMdPath = Path(alignedPath).with_suffix(".xmd")
         # self._applyAlignment(
         #     inputMetadataPath=preparedStackMdPath,
         #     outputParticlesPath=alignedPath,
         #     outputMetadataPath=alignedClassMdPath,
         # )
-        alignedClassMdPath=preparedStackMdPath
+        alignedClassMdPath = preparedStackMdPath
         return alignedClassMdPath, classParticlesMdPath
 
     def _runAverageEstimation(
         self,
-        batchConfigPath: Union[str, Path],
-        device: str,
+        classId: int,
+        inputMdPath: Union[str, Path],
+        sampling: float,
         env,
-        timingsPath: Union[str, Path],
-    ) -> None:
-        """
-        Run the GMM-based robust average estimator for all classes in a single
-        external Python process.
-        """
-        scriptArgs = (
-            f'--batch-config "{batchConfigPath}" '
-            f"--device {device} "
-            f'--timings-file "{timingsPath}"'
-        )
-        self.runJob(
-            # "xmipp_gmm_average_estimation",
-            "xmipp_average_estimation",
-            scriptArgs,
-            env=env,
-            numberOfMpi=1,
-        )
+    ):
 
-    def _addImageToMd(self, imagePath: Union[Path, str], metadata: md.MetaData) -> None:
+        # Prepare output paths for the star file with weights and averages
+        # outputStarPath = self._getTmpPath(f"class_particles_{classId}.star")
+        # correctedAveragePath = self._getTmpPath(f"corrected_avg_{classId}.mrc")
+        originalAveragePath = self._getTmpPath(f"original_avg_{classId}.mrc")
+
+        # Run the GMM average estimation script for the current class
+        script_args = (
+            f" {str(inputMdPath)} "
+            f"--out {originalAveragePath} "
+            f" --sampling_rate {sampling} "
+        )
+        self.runJob("xmipp_average_ctf", script_args, env=env, numberOfMpi=1)
+
+        return originalAveragePath
+
+    def _addImageToMd(
+        self, imagePath: Union[Path, str], mdPath: Union[Path, str]
+    ) -> None:
         row = md.Row()
         row.setValue(md.MDL_IMAGE, f"1@{imagePath}")
-        row.addToMd(metadata)
+        row.addToMd(mdPath)
 
     def _saveToImageStack(
         self,
@@ -332,6 +278,7 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
         )
 
     def _getInputMdName(self):
+        return self._getExtraPath("inputClasses.xmd")
         return self._getTmpPath("inputClasses.xmd")
 
     def _getOutputClassesMdPath(self):
@@ -340,131 +287,9 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
     def _getRawClassesMdPath(self):
         return self._getExtraPath("rawClasses.xmd")
 
-    def _getAverageEstimationPaths(
-        self,
-        classId: int,
-    ) -> Tuple[str, str, str]:
-        return (
-            self._getTmpPath(f"class_particles_{classId}.star"),
-            self._getTmpPath(f"corrected_avg_{classId}.mrc"),
-            self._getTmpPath(f"original_avg_{classId}.mrc"),
-        )
-
-    def _writeAverageEstimationBatchConfig(self, classConfigs) -> str:
-        batchConfigPath = self._getTmpPath("gmm_average_batch.json")
-
-        with open(batchConfigPath, "w", encoding="utf-8") as file:
-            json.dump(
-                {
-                    "format_version": 1,
-                    "classes": classConfigs,
-                },
-                file,
-                indent=2,
-            )
-
-        return batchConfigPath
-
-    def _prepareAverageEstimationBatch(self):
-        """Preprocess all selected classes and prepare the batch description."""
-        batchClasses = []
-        classResults = []
-
-        for index, (classId, className) in enumerate(self.class_names.items(), start=1):
-            alignedClassMetadataPath, baseMdPath = self._preprocessClass(
-                classId=classId,
-                className=className,
-            )
-            resultStarPath, correctedAveragePath, originalAveragePath = (
-                self._getAverageEstimationPaths(classId)
-            )
-
-            batchClasses.append(
-                {
-                    "class_id": classId,
-                    "input_xmd": str(alignedClassMetadataPath),
-                    "base_xmd": str(baseMdPath),
-                    "out_star": str(resultStarPath),
-                    "out_corrected_avg": str(correctedAveragePath),
-                    "out_original_avg": str(originalAveragePath),
-                }
-            )
-            classResults.append(
-                {
-                    "index": index,
-                    "class_id": classId,
-                    "class_name": className,
-                    "result_star": resultStarPath,
-                    "corrected_average": correctedAveragePath,
-                    "original_average": originalAveragePath,
-                }
-            )
-
-        batchConfigPath = self._writeAverageEstimationBatchConfig(batchClasses)
-        return batchConfigPath, classResults
-
-    def _collectAverageEstimationResults(self, classResults) -> None:
-        """Write class metadata and combine per-class averages into output stacks."""
-        outputClassesMdPath = self._getOutputClassesMdPath()
-        rawClassesMdPath = self._getRawClassesMdPath()
-        correctedAveragesStackPath = self._getExtraPath("correctedAverages.mrcs")
-        originalAveragesStackPath = self._getExtraPath("originalAverages.mrcs")
-
-        mdNewClassesBlock = md.MetaData()
-        mdOriginalClassesBlock = md.MetaData()
-        mdCorrectedAveragesToStack = md.MetaData()
-        mdOriginalAveragesToStack = md.MetaData()
-
-        oldClassesBlock = md.MetaData("classes@" + self._getInputMdName())
-        oldClassRows = {
-            row.getValue(md.MDL_REF): row.clone()
-            for row in md.iterRows(oldClassesBlock)
-        }
-
-        for result in classResults:
-            classId = result["class_id"]
-            className = result["class_name"]
-            index = result["index"]
-
-            classMetadata = md.MetaData(result["result_star"])
-            classMetadata.write(className + "@" + outputClassesMdPath, MD_APPEND)
-            classMetadata.write(className + "@" + rawClassesMdPath, MD_APPEND)
-
-            self._addImageToMd(result["corrected_average"], mdCorrectedAveragesToStack)
-            self._addImageToMd(result["original_average"], mdOriginalAveragesToStack)
-
-            if classId in oldClassRows:
-                correctedRow = oldClassRows[classId].clone()
-                correctedRow.setValue(
-                    md.MDL_IMAGE, f"{index}@{correctedAveragesStackPath}"
-                )
-                correctedRow.addToMd(mdNewClassesBlock)
-
-                originalRow = oldClassRows[classId].clone()
-                originalRow.setValue(
-                    md.MDL_IMAGE, f"{index}@{originalAveragesStackPath}"
-                )
-                originalRow.addToMd(mdOriginalClassesBlock)
-
-        self._saveToImageStack(
-            mdCorrectedAveragesToStack,
-            correctedAveragesStackPath,
-            writeMdName="correctedAveragesToStack.xmd",
-        )
-        self._saveToImageStack(
-            mdOriginalAveragesToStack,
-            originalAveragesStackPath,
-            writeMdName="originalAveragesToStack.xmd",
-        )
-
-        mdNewClassesBlock.write("classes@" + outputClassesMdPath, MD_APPEND)
-        mdOriginalClassesBlock.write("classes@" + rawClassesMdPath, MD_APPEND)
-
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
-
-        stepStart = time.perf_counter()
-
+        """Selects the requested class and saves its metadata file."""
         inputMdName = self._getInputMdName()
 
         # Write the input data as a set of 2D classes
@@ -490,61 +315,84 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
 
         self.sampling_rate = self.inputClasses.get().getSamplingRate()
 
-        timings = {
-            "preprocessing": 0.0,
-            "estimation": 0.0,
-            "saving_outputs": 0.0,
-            "other": time.perf_counter() - stepStart,
-        }
-        self._saveTimings(timings)
-
     def averageEstimationStep(self):
-        """Preprocess classes, run one batch estimation, and save its results."""
-        timingsPath = Path(self._getEstimationTimingsPath())
-        if timingsPath.exists():
-            timingsPath.unlink()
-
-        stepStart = time.perf_counter()
-        timings = self._loadTimings()
+        """
+        For each requested class, reads the preprocessed particles, runs
+        the robust estimation method and writes:
+        - a metadata file that contains an extra field with each image's score
+        - a .mrcs file with the corrected averages calculated by the estimation method
+        - a .mrcs file with the original, uncorrected averages
+        """
         env = self.getCondaEnv()
         device = "cuda" if self.useGpu.get() else "cpu"
 
-        start = time.perf_counter()
-        batchConfigPath, classResults = self._prepareAverageEstimationBatch()
-        preprocessingTime = time.perf_counter() - start
+        outputClassesMdPath = self._getOutputClassesMdPath()
+        rawClassesMdPath = self._getRawClassesMdPath()
+        correctedAveragesStackPath = self._getExtraPath("correctedAverages.mrcs")
+        originalAveragesStackPath = self._getExtraPath("originalAverages.mrcs")
 
-        start = time.perf_counter()
-        self._runAverageEstimation(
-            batchConfigPath=batchConfigPath,
-            device=device,
-            env=env,
-            timingsPath=timingsPath,
-        )
-        estimationTime = time.perf_counter() - start
+        mdNewClassesBlock = md.MetaData()
+        mdOriginalClassesBlock = md.MetaData()
+        mdCorrectedAveragesToStack = md.MetaData()
+        mdOriginalAveragesToStack = md.MetaData()
 
-        start = time.perf_counter()
-        self._collectAverageEstimationResults(classResults)
-        savingResultsTime = time.perf_counter() - start
+        # Copy old classes block to later update the image field with the new average
+        oldClassesBlock = md.MetaData("classes@" + self._getInputMdName())
+        oldClassRows = {}
+        for row in md.iterRows(oldClassesBlock):
+            oldClassRows[row.getValue(md.MDL_REF)] = row.clone()
 
-        measuredTime = preprocessingTime + estimationTime + savingResultsTime
-        timings["preprocessing"] += preprocessingTime
-        timings["estimation"] += estimationTime
-        timings["saving_outputs"] += savingResultsTime
-        timings["other"] += max(0.0, time.perf_counter() - stepStart - measuredTime)
+        for index, (classId, className) in enumerate(self.class_names.items(), start=1):
+            # Preprocessing: save stack, correct ctf and apply alignment
+            alignedClassMetadataPath, baseMdPath = self._preprocessClass(
+                classId=classId, className=className
+            )
 
-        self._saveTimings(timings)
-        self._printEstimationTimings()
+            # Run estimation method
+            # resultStarPath, correctedAveragePath, originalAveragePath = (
+            originalAveragePath =  self._runAverageEstimation(
+                    classId=classId,
+                    inputMdPath=alignedClassMetadataPath,
+                    sampling=self.inputClasses.get().getSamplingRate(),
+                    env=env,
+                )
+            #)
+
+            # Save the results for this class in the metadata files for the output
+            # class_metadata = md.MetaData(resultStarPath)
+            # class_metadata.write(className + "@" + outputClassesMdPath, MD_APPEND)
+            # class_metadata.write(className + "@" + rawClassesMdPath, MD_APPEND)
+
+            # Add the corrected and original averages to the list of averages to be stacked
+            # self._addImageToMd(correctedAveragePath, mdCorrectedAveragesToStack)
+            self._addImageToMd(originalAveragePath, mdOriginalAveragesToStack)
+
+            # Update the image field of the old class row and add it to the new metadata block
+            if classId in oldClassRows:
+                # row = oldClassRows[classId].clone()
+                # row.setValue(md.MDL_IMAGE, f"{index}@{correctedAveragesStackPath}")
+                # row.addToMd(mdNewClassesBlock)
+
+                row2 = oldClassRows[classId].clone()
+                row2.setValue(md.MDL_IMAGE, f"{index}@{originalAveragesStackPath}")
+                row2.addToMd(mdOriginalClassesBlock)
+
+        # Save corrected and original averages as image stacks
+        # self._saveToImageStack(mdCorrectedAveragesToStack, correctedAveragesStackPath)
+        self._saveToImageStack(mdOriginalAveragesToStack, originalAveragesStackPath)
+
+        # Add the classes block with the updated image field to the new metadata file
+        # mdNewClassesBlock.write("classes@" + outputClassesMdPath, MD_APPEND)
+        mdOriginalClassesBlock.write("classes@" + rawClassesMdPath, MD_APPEND)
 
     def createOutputStep(self):
-        stepStart = time.perf_counter()
-
         imagesPointer = self.inputClasses.get().getImagesPointer()
 
         # Create output classes based on the new metadata file with weights,
         # with the corrected representatives
-        outputClassesMd = self._getOutputClassesMdPath()
-        outputClasses = self._createSetOfClasses2D(imagesPointer, "corrected")
-        readSetOfClasses2D(outputClasses, outputClassesMd)
+        # outputClassesMd = self._getOutputClassesMdPath()
+        # outputClasses = self._createSetOfClasses2D(imagesPointer, "corrected")
+        # readSetOfClasses2D(outputClasses, outputClassesMd)
 
         # Create raw output classes based on the new metadata file with weights,
         # with the original representatives
@@ -553,130 +401,35 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
         readSetOfClasses2D(rawClasses, rawClassesMd)
 
         # Join the particles from all classes into a single output set of particles
-        finalParticles = self._createSetOfParticles()
-        finalParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
-
-        # Iterate over every class
-        for cl in outputClasses.iterItems():
-            classId = cl.getObjId()
-
-            # Extract class block and iterate over its rows (particles)
-            blockName = f"class{classId:06d}_images"
-            classParticlesMd = md.MetaData(blockName + "@" + outputClassesMd)
-            for particle, row in zip(cl.iterItems(), md.iterRows(classParticlesMd)):
-                weight = row.getValue("wRobust")
-                weightGmm = row.getValue("wRobustGmm")
-                particle.setClassId(classId)
-
-                # Add the robust weights as particle attributes
-                particle._xmippRobustWeight = Float(weight)
-                particle._xmippRobustWeightGmm = Float(weightGmm)
-
-                finalParticles.append(particle)
+        # finalParticles = self._createSetOfParticles()
+        # finalParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
+        #
+        # # Iterate over every class
+        # for cl in outputClasses.iterItems():
+        #     classId = cl.getObjId()
+        #
+        #     # Extract class block and iterate over its rows (particles)
+        #     blockName = f"class{classId:06d}_images"
+        #     classParticlesMd = md.MetaData(blockName + "@" + outputClassesMd)
+        #     for particle, row in zip(cl.iterItems(), md.iterRows(classParticlesMd)):
+        #         weight = row.getValue("wRobust")
+        #         weightGmm = row.getValue("wRobustGmm")
+        #         particle.setClassId(classId)
+        #
+        #         # Add the robust weights as particle attributes
+        #         particle._xmippRobustWeight = Float(weight)
+        #         particle._xmippRobustWeightGmm = Float(weightGmm)
+        #
+        #         finalParticles.append(particle)
 
         # Define protocol outputs: the new sets of classes and the joined set of particles
-        self._defineOutputs(outputParticles=finalParticles)
-        self._defineSourceRelation(self.inputClasses, finalParticles)
-
-        self._defineOutputs(outputClasses_corrected=outputClasses)
-        self._defineSourceRelation(self.inputClasses, outputClasses)
+        # self._defineOutputs(outputParticles=finalParticles)
+        # self._defineSourceRelation(self.inputClasses, finalParticles)
+        #
+        # self._defineOutputs(outputClasses_corrected=outputClasses)
+        # self._defineSourceRelation(self.inputClasses, outputClasses)
 
         self._defineOutputs(outputClasses_raw=rawClasses)
         self._defineSourceRelation(self.inputClasses, rawClasses)
-
-        timings = self._loadTimings()
-        timings["saving_outputs"] += time.perf_counter() - stepStart
-        self._saveTimings(timings)
-
-        self._printTimings(timings)
-
-    def _getTimingsPath(self) -> str:
-        """Return the path used to persist protocol timing information."""
-        return self._getExtraPath("timings.json")
-
-    def _loadTimings(self) -> Dict[str, float]:
-        """Load timing information saved by previous protocol steps."""
-        timingsPath = Path(self._getTimingsPath())
-
-        if not timingsPath.exists():
-            return {
-                "preprocessing": 0.0,
-                "estimation": 0.0,
-                "saving_outputs": 0.0,
-                "other": 0.0,
-            }
-
-        with timingsPath.open("r", encoding="utf-8") as file:
-            return json.load(file)
-
-    def _saveTimings(self, timings: Dict[str, float]) -> None:
-        """Persist timing information for subsequent protocol steps."""
-        with open(self._getTimingsPath(), "w", encoding="utf-8") as file:
-            json.dump(timings, file, indent=2)
-
-    def _printTimings(self, timings: Dict[str, float]) -> None:
-        """Print a summary of the measured protocol execution times."""
-        totalTime = sum(timings.values())
-
-        print("\n" + "=" * 60)
-        print("GMM average estimation timing")
-        print("=" * 60)
-
-        for name, elapsed in timings.items():
-            percentage = 100.0 * elapsed / totalTime if totalTime > 0.0 else 0.0
-            label = name.replace("_", " ").capitalize()
-            print(f"{label:<20}: {elapsed:10.3f} s ({percentage:5.1f} %)")
-
-        print("-" * 60)
-        print(f"{'Total':<20}: {totalTime:10.3f} s")
-        print("=" * 60 + "\n")
-
-    def _getEstimationTimingsPath(self) -> str:
-        """Return the path containing accumulated script timings."""
-        return self._getExtraPath("estimationTimings.json")
-
-    def _printEstimationTimings(self) -> None:
-        """Print accumulated timings from all estimation script calls."""
-        timingsPath = Path(self._getEstimationTimingsPath())
-
-        if not timingsPath.exists():
-            print("No estimation timing information was generated.")
-            return
-
-        with timingsPath.open("r", encoding="utf-8") as file:
-            timings = json.load(file)
-
-        totalTime = timings["total"]
-
-        labels = {
-            "imports_and_startup": "Imports and script startup",
-            "argument_parsing": "Argument parsing",
-            "device_setup": "Device setup",
-            "read_images": "Read images",
-            "distance_setup": "Distance setup",
-            "masking": "Mask creation/application",
-            "estimator_setup": "Estimator setup",
-            "estimator_fit": "Estimator fit",
-            "result_conversion": "Result conversion",
-            "write_corrected_average": "Write corrected averages",
-            "write_original_average": "Write original averages",
-            "write_metadata": "Write metadata",
-            "write_optional_arrays": "Write optional arrays",
-            "other": "Other",
-        }
-
-        print("\n" + "=" * 72)
-        print("Accumulated GMM estimation script timings")
-        print("=" * 72)
-        print(f"{'Script calls':<38}: {timings['n_calls']:10d}")
-        print(f"{'Images processed':<38}: {timings['n_images']:10d}")
-        print("-" * 72)
-
-        for key, label in labels.items():
-            elapsed = timings[key]
-            percentage = 100.0 * elapsed / totalTime if totalTime > 0.0 else 0.0
-            print(f"{label:<38}: " f"{elapsed:10.3f} s " f"({percentage:5.1f} %)")
-
-        print("-" * 72)
-        print(f"{'Total':<38}: {totalTime:10.3f} s")
-        print("=" * 72 + "\n")
+    
+    
