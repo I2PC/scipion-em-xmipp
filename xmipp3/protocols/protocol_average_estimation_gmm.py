@@ -26,12 +26,14 @@
 import json
 import time
 from pathlib import Path
-from typing import Tuple, Union, Dict
+from typing import Tuple, Union, Dict, List
 
 
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 from pwem.emlib import MD_APPEND
+from pwem.constants import ALIGN_2D
+from pwem.objects import SetOfClasses2D
 
 
 from pyworkflow import VERSION_3_0
@@ -41,7 +43,7 @@ from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
 
-from xmipp3.convert import writeSetOfClasses2D, readSetOfClasses2D
+from xmipp3.convert import writeSetOfClasses2D, readSetOfClasses2D, particleToRow
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -101,7 +103,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         self._insertFunctionStep("averageEstimationStep")
         self._insertFunctionStep("createOutputStep")
 
-    # --------------------------- UTILS functions -----------------------------
     def _prepareParticleStack(
         self,
         inputParticlesPath: Union[str, Path],
@@ -135,22 +136,19 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputParticlesPath = str(Path(outputParticlesPath))
         outputMetadataPath = str(Path(outputMetadataPath))
 
+        args = (
+            f"-i {inputParticlesPath} "
+            f"-o {outputParticlesPath} "
+            f"--save_metadata_stack {outputMetadataPath} "
+            f"--keep_input_columns "
+        )
+
         if self.correctCtf.get():
-            args = (
-                f"-i {inputParticlesPath} "
-                f"-o {outputParticlesPath} "
-                f"--save_metadata_stack {outputMetadataPath} "
-                f"--sampling_rate {self.sampling_rate}"
-            )
+            args += f"--sampling_rate {self.sampling_rate}"
             self.runJob(
                 "xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()
             )
         else:
-            args = (
-                f"-i  {inputParticlesPath} "
-                f"-o {outputParticlesPath} "
-                f"--save_metadata_stack {outputMetadataPath}"
-            )
             self.runJob("xmipp_image_convert", args, numberOfMpi=1)
 
     def _applyAlignment(
@@ -202,7 +200,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         ----------
         metadataPath : str or pathlib.Path
             Metadata file whose angle columns will be modified in place.
-            
+
         Notes
         -----
         This conversion is specific to the current Scipion/Xmipp metadata
@@ -354,9 +352,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         return outputStarPath, correctedAveragePath, originalAveragePath
 
-    def _addImageToMd(
-        self, imagePath: Union[Path, str], metadata: md.MetaData
-    ) -> None:
+    def _addImageToMd(self, imagePath: Union[Path, str], metadata: md.MetaData) -> None:
         row = md.Row()
         row.setValue(md.MDL_IMAGE, f"1@{imagePath}")
         row.addToMd(metadata)
