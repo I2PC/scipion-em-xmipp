@@ -359,9 +359,10 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
             #)
 
             # Save the results for this class in the metadata files for the output
-            # class_metadata = md.MetaData(resultStarPath)
+            resultStarPath = self._getTmpPath(f"selected_particles_{classId}.xmd")
+            class_metadata = md.MetaData(resultStarPath)
             # class_metadata.write(className + "@" + outputClassesMdPath, MD_APPEND)
-            # class_metadata.write(className + "@" + rawClassesMdPath, MD_APPEND)
+            class_metadata.write(className + "@" + rawClassesMdPath, MD_APPEND)
 
             # Add the corrected and original averages to the list of averages to be stacked
             # self._addImageToMd(correctedAveragePath, mdCorrectedAveragesToStack)
@@ -401,26 +402,28 @@ class XmippProtAverageCtf(ProtClassify2D, XmippProtocol):
         readSetOfClasses2D(rawClasses, rawClassesMd)
 
         # Join the particles from all classes into a single output set of particles
-        # finalParticles = self._createSetOfParticles()
-        # finalParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
-        #
-        # # Iterate over every class
+        finalParticles = self._createSetOfParticles()
+        finalParticles.setSamplingRate(self.inputClasses.get().getSamplingRate())
+        
+        # Iterate over every class
         # for cl in outputClasses.iterItems():
-        #     classId = cl.getObjId()
-        #
-        #     # Extract class block and iterate over its rows (particles)
-        #     blockName = f"class{classId:06d}_images"
-        #     classParticlesMd = md.MetaData(blockName + "@" + outputClassesMd)
-        #     for particle, row in zip(cl.iterItems(), md.iterRows(classParticlesMd)):
-        #         weight = row.getValue("wRobust")
-        #         weightGmm = row.getValue("wRobustGmm")
-        #         particle.setClassId(classId)
-        #
-        #         # Add the robust weights as particle attributes
-        #         particle._xmippRobustWeight = Float(weight)
-        #         particle._xmippRobustWeightGmm = Float(weightGmm)
-        #
-        #         finalParticles.append(particle)
+        for cl in rawClasses.iterItems():
+            classId = cl.getObjId()
+        
+            # Extract class block and iterate over its rows (particles)
+            blockName = f"class{classId:06d}_images"
+            # classParticlesMd = md.MetaData(blockName + "@" + outputClassesMd)
+            classParticlesMd = md.MetaData(blockName + "@" + rawClassesMd)
+            for particle, row in zip(cl.iterItems(), md.iterRows(classParticlesMd)):
+                # weight = row.getValue("wRobust")
+                # weightGmm = row.getValue("wRobustGmm")
+                particle.setClassId(classId)
+        
+                # Add the robust weights as particle attributes
+                # particle._xmippRobustWeight = Float(weight)
+                # particle._xmippRobustWeightGmm = Float(weightGmm)
+        
+                finalParticles.append(particle)
 
         # Define protocol outputs: the new sets of classes and the joined set of particles
         # self._defineOutputs(outputParticles=finalParticles)
