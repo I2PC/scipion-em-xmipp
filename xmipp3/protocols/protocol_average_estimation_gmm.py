@@ -40,7 +40,7 @@ from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
 
-from xmipp3.convert import particleToRow, rowToParticle
+from xmipp3.convert import particleToRow
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -318,7 +318,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         originalAveragePath = self._getExtraPath("original_avgs.mrcs")
 
         # Run the GMM average estimation script for all classes
-        script_args = (
+        scriptArgs = (
             f"--input-xmd {self._getPreprocessedMetadataPath()} "
             f"--base-xmd {self._getInputParticlesPath()} "
             f"--out-star {outputStarPath} "
@@ -326,7 +326,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--out-original-avg {originalAveragePath} "
             f"--device {device} "
         )
-        self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
+        self.runJob("xmipp_gmm_average_estimation", scriptArgs, env=env, numberOfMpi=1)
 
     def createOutputStep(self):
         """
