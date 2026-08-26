@@ -134,3 +134,4 @@ from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
 from .protocol_compute_likelihood import XmippProtComputeLikelihood
 from .protocol_average_estimation_gmm import XmippProtAverageEstimationGmm
+from .protocol_cone_averaging import XmippProtConeAveraging
