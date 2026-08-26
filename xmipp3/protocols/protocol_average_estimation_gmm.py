@@ -102,6 +102,22 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         self._insertFunctionStep("createOutputStep")
 
     # --------------------------- UTILS functions -----------------------------
+    def _getSelectedClassIds(self) -> List[int]:
+        """Return the class identifiers selected for processing."""
+        available_ids = sorted(int(cls.getObjId()) for cls in self.inputClasses.get())
+
+        requested_id = self.classId.get()
+
+        if requested_id <= 0:
+            return available_ids
+
+        if requested_id not in available_ids:
+            raise ValueError(
+                "Requested class ID is unavailable " "in the input classes object."
+            )
+
+        return [requested_id]
+
     def _buildMetadataStack(
         self,
         classes2D: SetOfClasses2D,
@@ -252,29 +268,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         """
         inputClasses = self.inputClasses.get()
 
-        # Get all class ids in input classes object
-        classIds = set()
-        for cls in inputClasses:
-            classIds.add(int(cls.getObjId()))
-
-        # Identify class IDs to work with: all classes if classId input is <= 0,
-        # otherwise the user-requested class.
-        classId = self.classId.get()
-        if classId > 0:
-            if not classId in classIds:
-                raise ValueError(
-                    "Requested class ID is unavailable in the input classes object"
-                )
-            self.classIds = [classId]
-            self.classNames = {classId: "class%06d_images" % classId}
-        else:
-            self.classIds = sorted(classIds)
-            self.classNames = {i: "class%06d_images" % i for i in self.classIds}
-
         # Build metadata file with all the requested class particles
         self._buildMetadataStack(
             classes2D=inputClasses,
-            classIds=self.classIds,
+            classIds=self._getSelectedClassIds(),
             outputMdPath=self._getInputParticlesPath(),
         )
 
@@ -337,27 +334,49 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         and conventional class averages as representatives.
         """
         outputParticlesMd = md.MetaData(self._getExtraPath("particles.star"))
-        outputParticles = self._createSetOfParticles()
-        outputParticles.copyInfo(self.inputClasses.get().getImages())
 
+        weightsById = {}
         for row in md.iterRows(outputParticlesMd):
-            particle = rowToParticle(row, alignType=ALIGN_2D)
+            itemId = row.getValue(md.MDL_ITEM_ID)
 
-            classId = row.getValue(md.MDL_REF)
-            weight = row.getValue("wRobust")
-            weightGmm = row.getValue("wRobustGmm")
+            if itemId in weightsById:
+                raise RuntimeError(
+                    f"Duplicated itemId={itemId} in GMM output metadata."
+                )
 
-            # Add the robust weights and the class ID as particle attributes
-            particle.setClassId(classId)
-            particle._xmippRobustWeight = Float(weight)
-            particle._xmippRobustWeightGmm = Float(weightGmm)
+            weightsById[itemId] = (
+                row.getValue("wRobust"),
+                row.getValue("wRobustGmm"),
+            )
 
-            outputParticles.append(particle)
+        outputParticles = self._createSetOfParticles()
+        inputClasses = self.inputClasses.get()
+        outputParticles.copyInfo(inputClasses.getImages())
+
+        for cl in inputClasses:
+            classId = cl.getObjId()
+
+            for particle in cl:
+                itemId = particle.getObjId()
+
+                try:
+                    weight, weightGmm = weightsById[itemId]
+                except KeyError as exc:
+                    raise RuntimeError(
+                        f"No GMM weights found for particle " f"with itemId={itemId}."
+                    ) from exc
+
+                outputParticle = particle.clone()
+                outputParticle.setClassId(classId)
+
+                outputParticle._xmippRobustWeight = Float(weight)
+                outputParticle._xmippRobustWeightGmm = Float(weightGmm)
+
+                outputParticles.append(outputParticle)
 
         # The estimation script writes averages following sorted class IDs.
-        classIndex = {
-            classId: index for index, classId in enumerate(self.classIds, start=1)
-        }
+        classIds = self._getSelectedClassIds()
+        classIndex = {classId: index for index, classId in enumerate(classIds, start=1)}
 
         # Create classes with robust averages as representatives
         robustClasses = self._createOutputClasses(
