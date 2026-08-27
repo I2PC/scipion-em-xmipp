@@ -35,18 +35,31 @@ from pwem.objects import SetOfClasses2D
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
-from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam
+from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam, EnumParam
 from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
 
 from xmipp3.convert import particleToRow
 
+ESTIMATORS = {0: "gmm", 1: "irls"}
+
+ESTIMATOR_WEIGHT_COLUMNS = {
+    "gmm": ["wRobust", "wRobustGmm"],
+    "irls": ["wRobust"],
+}
+
+WEIGHT_COLUMN_TO_ATTRIBUTE = {
+    "wRobust": "_xmippRobustWeight",
+    "wRobustGmm": "_xmippRobustWeightGmm",
+}
+
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     """
-    Improves class averages by estimating a robust average using a Gaussian Mixture
-    Model (GMM) on the distances of the particles to the average.
+    Improves class averages by using robust estimation. Different estimation 
+    techniques can be chosen, including a Gaussian Mixture Model (GMM) on
+    the distances of each particle to a given reference (the class average).
     """
 
     _label = "estimation_gmm"
@@ -90,6 +103,20 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             label="Use GPU?",
             help="If you set to *Yes*, the estimation process will try to use the GPU "
             "for hardware acceleration. This might speed up the process if CUDA is available.",
+        )
+        form.addParam(
+            "estimatorType",
+            EnumParam,
+            default=0,
+            choices=[ESTIMATORS[i] for i in range(len(ESTIMATORS))],
+            help=(
+                "Type of robust estimator to use to compute the new class averages. "
+                "As a rule of thumb, the 'gmm' estimator should be more aggressive in "
+                "rejecting possibly misaligned or corrupted particles. This means "
+                "its performance can be better for more contaminated datasets, and "
+                "slightly worse in very clean datasets."
+            ),
+            label="Estimator type",
         )
 
         form.addParallelSection(threads=0, mpi=4)
@@ -258,6 +285,12 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getPreprocessedMetadataPath(self):
         return self._getExtraPath("preprocessed.xmd")
 
+    def _getEstimatorType(self):
+        return ESTIMATORS[self.estimatorType.get()]
+
+    def _getEstimatorWeightColumns(self):
+        return ESTIMATOR_WEIGHT_COLUMNS[self._getEstimatorType()]
+
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
         """
@@ -302,7 +335,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         """
         Estimate robust and conventional averages for all selected classes.
 
-        The external GMM estimator processes the preprocessed particles grouped
+        The external robust estimator processes the preprocessed particles grouped
         by class and writes particle weights together with the resulting class
         average stacks.
         """
@@ -322,6 +355,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--out-corrected-avg {correctedAveragePath} "
             f"--out-original-avg {originalAveragePath} "
             f"--device {device} "
+            f"--estimator-type {self._getEstimatorType()} "
         )
         self.runJob("xmipp_gmm_average_estimation", scriptArgs, env=env, numberOfMpi=1)
 
@@ -335,19 +369,18 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         """
         outputParticlesMd = md.MetaData(self._getExtraPath("particles.star"))
 
-        weightsById = {}
+        weightColumns = self._getEstimatorWeightColumns()
+
+        weightsById: Dict[int, Dict[str, float]] = {}
         for row in md.iterRows(outputParticlesMd):
             itemId = row.getValue(md.MDL_ITEM_ID)
 
             if itemId in weightsById:
                 raise RuntimeError(
-                    f"Duplicated itemId={itemId} in GMM output metadata."
+                    f"Duplicated itemId={itemId} in robust averaging output metadata."
                 )
 
-            weightsById[itemId] = (
-                row.getValue("wRobust"),
-                row.getValue("wRobustGmm"),
-            )
+            weightsById[itemId] = {col: row.getValue(col) for col in weightColumns}
 
         outputParticles = self._createSetOfParticles()
         inputClasses = self.inputClasses.get()
@@ -360,17 +393,19 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 itemId = particle.getObjId()
 
                 try:
-                    weight, weightGmm = weightsById[itemId]
+                    weightsDict = weightsById[itemId]
                 except KeyError as exc:
                     raise RuntimeError(
-                        f"No GMM weights found for particle " f"with itemId={itemId}."
+                        f"Weights were not found for particle with itemId={itemId}."
                     ) from exc
 
                 outputParticle = particle.clone()
                 outputParticle.setClassId(classId)
 
-                outputParticle._xmippRobustWeight = Float(weight)
-                outputParticle._xmippRobustWeightGmm = Float(weightGmm)
+                for col in weightColumns:
+                    outputParticle.__setattr__(
+                        WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsDict[col])
+                    )
 
                 outputParticles.append(outputParticle)
 
