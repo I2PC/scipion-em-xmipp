@@ -38,7 +38,7 @@ from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import IntParam, StringParam, PointerParam, EnumParam, BooleanParam, FloatParam
-from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED
+from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED, MODE_RESUME
 from pyworkflow.constants import BETA
 
 from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
@@ -418,7 +418,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.newDeps = []
         newParticlesSet = self._loadEmptyParticleSet()
 
-        if self.isContinued() and False:
+        if getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME:
             self.info('Continue protocol')
             self._updateVarsToContinue()
 
@@ -774,7 +774,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
         self.lastCreationTimeProcessed = self.lastCreationTime
         # Convert the string to a datetime object
-        self.lastCheck = datetime.strptime(self.lastCreationTime, '%Y-%m-%d %H:%M:%S')
+        self.lastCheck = datetime.fromisoformat(str(self.lastCreationTime)) if self.lastCreationTime else datetime.now()
 
     def _validate(self):
         """ Check if the installation of this protocol is correct.

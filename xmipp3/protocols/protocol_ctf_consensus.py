@@ -584,15 +584,16 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         def updateRelationsAndClose(cSet, mSet, first, label=''):
 
-            if os.path.exists(self._getPath('ctfs'+label+'.sqlite')):
+            if cSet is not None and mSet is not None:
 
-                micsAttrName = OUTPUT_MICS+label
+                micsAttrName = OUTPUT_MICS + label
                 self._updateOutputSet(micsAttrName, mSet, streamMode)
+
                 # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Boolean,...)
                 # that happens somewhere while scheduling.
                 cSet.setMicrographs(Pointer(self, extended=micsAttrName))
 
-                self._updateOutputSet(OUTPUT_CTF+label, cSet, streamMode)
+                self._updateOutputSet(OUTPUT_CTF + label, cSet, streamMode)
 
                 if first:
                     self._defineTransformRelation(self.inputCTF.get().getMicrographs(), mSet)
