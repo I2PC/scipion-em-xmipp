@@ -42,11 +42,12 @@ from xmipp3.base import XmippProtocol
 
 from xmipp3.convert import particleToRow
 
-ESTIMATORS = {0: "gmm", 1: "irls"}
+ESTIMATORS = {0: "gmm", 1: "irls", 2: "fourier_irls"}
 
 ESTIMATOR_WEIGHT_COLUMNS = {
     "gmm": ["wRobust", "wRobustGmm"],
     "irls": ["wRobust"],
+    "fourier_irls": ["wRobust"],
 }
 
 WEIGHT_COLUMN_TO_ATTRIBUTE = {
@@ -317,7 +318,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         """
         particlesMdPath = self._getInputParticlesPath()
 
-        # Correct CTF (if requested) and extract particle stack
+        # Correct CTF (if requested), align particles and extract particle stack
         self._prepareParticleStack(
             inputMetadataPath=particlesMdPath,
             outputMetadataPath=self._getTmpPath("corrected.xmd"),
