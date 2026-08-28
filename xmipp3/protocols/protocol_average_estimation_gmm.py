@@ -274,7 +274,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--keep_input_columns "
             f"--apply_transform"
         )
-        self.runJob("xmipp_transform_geometry", args, numberOfMpi=1)
+        self.runJob("xmipp_transform_geometry", args, numberOfMpi=self.numberOfMpi.get())
 
     def _getInputParticlesPath(self):
         return self._getExtraPath("inputParticles.xmd")
