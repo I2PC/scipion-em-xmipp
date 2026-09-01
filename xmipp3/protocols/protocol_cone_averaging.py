@@ -115,6 +115,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             label="Estimator type",
         )
 
+        form.addParallelSection(threads=0, mpi=4)
+
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self._insertFunctionStep("convertInputStep")
@@ -199,7 +201,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             self.runJob(
                 "xmipp_ctf_correct_wiener2d",
                 ctf_args,
-                numberOfMpi=1,
+                numberOfMpi=self.numberOfMpi.get(),
             )
             geometry_input = self._getCtfCorrectedMdPath()
 
@@ -211,7 +213,11 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--apply_transform "
         )
 
-        self.runJob("xmipp_transform_geometry", geometry_args, numberOfMpi=1)
+        self.runJob(
+            "xmipp_transform_geometry",
+            geometry_args,
+            numberOfMpi=self.numberOfMpi.get(),
+        )
 
     def coneAveragingStep(self):
         env = self.getCondaEnv()
