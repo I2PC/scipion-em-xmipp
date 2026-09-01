@@ -100,7 +100,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             "estimatorType",
             EnumParam,
             default=0,
-            choices=ESTIMATORS,
+            # ESTIMATORS is dict[int, str], this ensures the list keeps correct order
+            choices=[ESTIMATORS[i] for i in range(len(ESTIMATORS))],
             help=(
                 "Type of robust estimator to use to compute the new class averages. "
                 "As a rule of thumb, the 'gmm' estimator should be more aggressive in "
@@ -229,7 +230,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--out-star '{self._getAveragingOutputStarPath()}' "
             f"--device {device} "
             f"--group-by-column '{self._getGroupByColumn()}' "
-            f"--estimator_type '{self._getEstimatorType()}' "
+            f"--estimator-type '{self._getEstimatorType()}' "
         )
         self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
 
