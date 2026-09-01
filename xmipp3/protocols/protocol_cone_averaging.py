@@ -30,11 +30,13 @@ import pwem.emlib.metadata as md
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam
+from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam, EnumParam
 from pyworkflow.constants import BETA
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import writeSetOfParticles, rowToParticle
+
+from .protocol_average_estimation_gmm import ESTIMATORS
 
 
 class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
@@ -94,6 +96,24 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             default=1024,
             expertLevel=LEVEL_ADVANCED,
         )
+        form.addParam(
+            "estimatorType",
+            EnumParam,
+            default=0,
+            choices=ESTIMATORS,
+            help=(
+                "Type of robust estimator to use to compute the new class averages. "
+                "As a rule of thumb, the 'gmm' estimator should be more aggressive in "
+                "rejecting possibly misaligned or corrupted particles. This means "
+                "its performance can be better for more contaminated datasets, and "
+                "slightly worse in very clean datasets."
+                "'irls' and 'fourier_irls' should both be relatively fast and less "
+                "aggresive in particle rejection. 'admm' combines both 'irls' and "
+                "'fourier_irls', and it can improve their results at the cost of "
+                "more computation time."
+            ),
+            label="Estimator type",
+        )
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -127,6 +147,9 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
     def _getCtfCorrectedMdPath(self):
         return self._getExtraPath("ctfCorrectedParticles.xmd")
+
+    def _getEstimatorType(self):
+        return ESTIMATORS[self.estimatorType.get()]
 
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
@@ -200,6 +223,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--out-star '{self._getAveragingOutputStarPath()}' "
             f"--device {device} "
             f"--group-by-column '{self._getGroupByColumn()}' "
+            f"--estimator_type '{self._getEstimatorType()}' "
         )
         self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
 
