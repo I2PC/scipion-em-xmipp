@@ -42,12 +42,13 @@ from xmipp3.base import XmippProtocol
 
 from xmipp3.convert import particleToRow
 
-ESTIMATORS = {0: "gmm", 1: "irls", 2: "fourier_irls"}
+ESTIMATORS = {0: "gmm", 1: "irls", 2: "fourier_irls", 3: "admm"}
 
 ESTIMATOR_WEIGHT_COLUMNS = {
     "gmm": ["wRobust", "wRobustGmm"],
     "irls": ["wRobust"],
     "fourier_irls": ["wRobust"],
+    "admm": ["wRobust"]
 }
 
 WEIGHT_COLUMN_TO_ATTRIBUTE = {
@@ -116,6 +117,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 "rejecting possibly misaligned or corrupted particles. This means "
                 "its performance can be better for more contaminated datasets, and "
                 "slightly worse in very clean datasets."
+                "'irls' and 'fourier_irls' should both be relatively fast and less "
+                "aggresive in particle rejection. 'admm' combines both 'irls' and "
+                "'fourier_irls', and it can improve their results at the cost of "
+                "more computation time."
             ),
             label="Estimator type",
         )
