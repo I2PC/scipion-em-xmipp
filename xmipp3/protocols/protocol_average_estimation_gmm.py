@@ -358,8 +358,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--input-xmd {self._getPreprocessedMetadataPath()} "
             f"--base-xmd {self._getInputParticlesPath()} "
             f"--out-star {outputStarPath} "
-            f"--out-corrected-avg {correctedAveragePath} "
-            f"--out-original-avg {originalAveragePath} "
+            f"--out-corrected-avgs {correctedAveragePath} "
+            f"--out-original-avgs {originalAveragePath} "
             f"--device {device} "
             f"--estimator-type {self._getEstimatorType()} "
         )
