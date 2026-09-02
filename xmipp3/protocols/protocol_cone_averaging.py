@@ -140,7 +140,13 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         return self._getExtraPath("particlesWithWeights.star")
 
     def _getParticleStackPath(self):
-        return self._getExtraPath("preparedParticles.mrcs")
+        return self._getTmpPath("preparedParticles.mrcs")
+
+    def _getCorrectedConeAveragesPath(self):
+        return self._getExtraPath("correctedConeAverages.mrcs")
+
+    def _getRawConeAveragesPath(self):
+        return self._getExtraPath("rawConeAverages.mrcs")
 
     def _getParticleMdPath(self):
         return self._getExtraPath("preparedParticles.xmd")
@@ -231,6 +237,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--device {device} "
             f"--group-by-column '{self._getGroupByColumn()}' "
             f"--estimator-type '{self._getEstimatorType()}' "
+            f"--out-corrected-avgs '{self._getCorrectedConeAveragesPath()}' "
+            f"--out-original-avgs '{self._getRawConeAveragesPath()}' "
         )
         self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
 
