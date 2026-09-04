@@ -152,7 +152,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         return self._getExtraPath("preparedParticles.xmd")
 
     def _getCtfCorrectedStackPath(self):
-        return self._getExtraPath("ctfCorrectedParticles.mrcs")
+        return self._getTmpPath("ctfCorrectedParticles.mrcs")
 
     def _getCtfCorrectedMdPath(self):
         return self._getExtraPath("ctfCorrectedParticles.xmd")
