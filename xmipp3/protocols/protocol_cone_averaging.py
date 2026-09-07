@@ -24,8 +24,12 @@
 # *
 # ******************************************************************************
 
+from pathlib import Path
+from typing import Dict, Union
+
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
+from pwem.objects import SetOfClasses2D
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
@@ -246,6 +250,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         outputMd = md.MetaData(self._getAveragingOutputStarPath())
 
         weights_by_id = {}
+        group_by_id = {}
+        nonEmptyGroups = set()
         for row in md.iterRows(outputMd):
             itemId = row.getValue(md.MDL_ITEM_ID)
 
@@ -258,6 +264,10 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 row.getValue("wRobust"),
                 row.getValue("wRobustGmm"),
             )
+
+            group = int(row.getValue(self._getGroupByColumn()))
+            group_by_id[itemId] = group
+            nonEmptyGroups.add(group)
 
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(self.inputParticles.get())
@@ -277,8 +287,75 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
             outputParticle._xmippRobustWeight = Float(weight)
             outputParticle._xmippRobustWeightGmm = Float(weightGmm)
+            outputParticle.setClassId(group_by_id[itemId])
 
             outputParticles.append(outputParticle)
 
+        classValues = sorted(nonEmptyGroups)
+        classIndex = {value: classValues.index(value) + 1 for value in classValues}
+
+        standardClasses = self._createOutputClasses(
+            particles=outputParticles,
+            classIndex=classIndex,
+            averagesPath=self._getRawConeAveragesPath(),
+            suffix="_standard",
+        )
+
+        robustClasses = self._createOutputClasses(
+            particles=outputParticles,
+            classIndex=classIndex,
+            averagesPath=self._getCorrectedConeAveragesPath(),
+            suffix="_robust",
+        )
+
         self._defineOutputs(outputParticles=outputParticles)
         self._defineSourceRelation(self.inputParticles, outputParticles)
+
+        self._defineOutputs(outputClasses_robust=robustClasses)
+        self._defineSourceRelation(outputParticles, robustClasses)
+
+        self._defineOutputs(outputClasses_standard=standardClasses)
+        self._defineSourceRelation(outputParticles, standardClasses)
+
+    def _createOutputClasses(
+        self,
+        particles,
+        classIndex: Dict[int, int],
+        averagesPath: Union[str, Path],
+        suffix: str,
+    ) -> SetOfClasses2D:
+        """
+        Create a set of 2D classes using a stack of class averages as representatives.
+
+        Parameters
+        ----------
+        particles : SetOfParticles
+            Particles to classify according to their stored class identifiers.
+        classIndex : dict of int to int
+            Mapping from class identifiers to 1-based image indices in the
+            average stack.
+        averagesPath : str or pathlib.Path
+            Path to the stack containing the class representative images.
+        suffix : str
+            Suffix used to identify the generated Scipion output set.
+
+        Returns
+        -------
+        SetOfClasses2D
+            Set of 2D classes with the requested averages as representatives.
+        """
+        outputClasses = self._createSetOfClasses2D(particles, suffix)
+
+        samplingRate = particles.getSamplingRate()
+        averagesPath = str(Path(averagesPath))
+
+        def updateClass(classItem):
+            classId = classItem.getObjId()
+
+            representative = classItem.getRepresentative()
+            representative.setLocation(classIndex[classId], averagesPath)
+            representative.setSamplingRate(samplingRate)
+
+        outputClasses.classifyItems(updateClassCallback=updateClass)
+
+        return outputClasses
