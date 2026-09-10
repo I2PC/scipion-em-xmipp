@@ -34,11 +34,17 @@ from pwem.objects import SetOfClasses2D
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam, EnumParam
+from pyworkflow.protocol.params import (
+    PointerParam,
+    IntParam,
+    BooleanParam,
+    EnumParam,
+    StringParam,
+)
 from pyworkflow.constants import BETA
 
 from xmipp3.base import XmippProtocol
-from xmipp3.convert import writeSetOfParticles, rowToParticle
+from xmipp3.convert import writeSetOfParticles
 
 from .protocol_average_estimation_gmm import ESTIMATORS
 
@@ -75,6 +81,16 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             label="Use GPU?",
             help="If you set to *Yes*, the estimation process will try to use the GPU "
             "for hardware acceleration. This might speed up the process if CUDA is available.",
+        )
+        form.addParam(
+            "symmetryGroup",
+            StringParam,
+            default="c1",
+            label="Symmetry group",
+            help=(
+                "Symmetry group of the volume. Only 'cn' with n >= 1, "
+                "and 'dn' with n >= 2 are currently supported."
+            ),
         )
         form.addParam(
             "numberOfGroups",
@@ -180,6 +196,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--out-group-column '{self._getGroupByColumn()}' "
             f"--n-groups {self.numberOfGroups.get()} "
             f"--grouping-batch-size {self.groupingBatchSize.get()} "
+            f"--symmetry-group {self.symmetryGroup.get()} "
         )
 
         self.runJob("xmipp_cone_grouping", args, env=env, numberOfMpi=1)
