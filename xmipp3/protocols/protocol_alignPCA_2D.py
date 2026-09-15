@@ -327,9 +327,9 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
             self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.classificationMPIs.get())
             
-        else:
-            args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
-            self.runJob("xmipp_image_convert", args)
+        # else:
+        #     args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
+        #     self.runJob("xmipp_image_convert", args)
 
         # For classification update
         if self.mode.get() == self.UPDATE_CLASSES and not self.firstTimeDone:
