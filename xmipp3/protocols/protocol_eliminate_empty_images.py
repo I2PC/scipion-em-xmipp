@@ -343,7 +343,11 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
             self._scheduledSize = self.lenPartsSet
 
         checkStep = self._insertNewPartsSteps()
-        self._insertFunctionStep('createOutputStep', prerequisites=checkStep, wait=True)
+        self._scheduledSize = self.lenPartsSet
+
+        self._insertFunctionStep('createOutputStep',
+                                 prerequisites=checkStep,
+                                 wait=True)
 
     def _insertNewPartsSteps(self):
         deps = []
@@ -444,17 +448,6 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         if self.useDenoising:
             args += " --useDenoising -d %f" % self.denoising.get()
         self.runJob("xmipp_image_eliminate_empty_particles", args)
-
-    def _getResumeOutputNames(self):
-        return ('outputParticles',
-                'eliminatedParticles')
-
-    def specialBehavoir(self, partsSet):
-        """ Just setting the self.check """
-        for p in partsSet.iterItems(orderBy='creation', direction='DESC'):
-            self.check = p.getObjCreation()
-            break
-        partsSet.close()
 
     def _getFirstJoinStep(self):
         for s in self._steps:
@@ -599,6 +592,9 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         self.addAdvancedParams(form)
 
     # --------------------------- INSERT steps functions ----------------------
+    def _getResumeOutputNames(self):
+        return ('outputParticles', 'eliminatedParticles')
+
     def specialBehavoir(self, partsSet):
         """ Just setting the self.check """
         for p in partsSet.iterItems(orderBy='creation', direction='DESC'):
@@ -701,6 +697,10 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                           "setOfClasses to analyse or disable the _use class "
                           "population_ option.")
         return errors
+
+    def _getResumeOutputNames(self):
+        return ('outputAverages',
+                'eliminatedAverages')
 
     def specialBehavoir(self, partSet):
         idsToCheck = []
