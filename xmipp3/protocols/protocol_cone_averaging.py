@@ -126,7 +126,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 "As a result, the final number of groups might be smaller "
                 "than initially requested."
             ),
-            label="Deduplicate references?"
+            label="Deduplicate references?",
         )
         form.addParam(
             "numberOfGroups",
@@ -150,6 +150,20 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 "by viewing direction."
             ),
             default=1024,
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "checkDegenerateGmm",
+            BooleanParam,
+            default=True,
+            help=(
+                "If using a GMM-type estimator, this option makes sure the GMM model "
+                "is checked for degeneracy after the last iteration in each class. "
+                "The model is considered degenerate if the two GMM components are too "
+                "close together, or if the component associated with good particles "
+                "has too little weight."
+            ),
+            label="Check GMM degeneracy?",
             expertLevel=LEVEL_ADVANCED,
         )
 
@@ -281,6 +295,12 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--out-corrected-avgs '{self._getCorrectedConeAveragesPath()}' "
             f"--out-original-avgs '{self._getRawConeAveragesPath()}' "
         )
+
+        if self.checkDegenerateGmm.get():
+            script_args += "--check-degenerate-gmm "
+        else:
+            script_args += "--no-check-degenerate-gmm "
+
         self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
 
     def createOutputStep(self):
