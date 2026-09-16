@@ -35,6 +35,7 @@ from pwem.objects import SetOfClasses2D
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
+from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam, EnumParam
 from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
@@ -81,20 +82,9 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             help="Set of classes to be read",
         )
         form.addParam(
-            "classId",
-            IntParam,
-            default=-1,
-            # expertLevel=LEVEL_ADVANCED,
-            label="Class ID",
-            help="Class to select for average estimation. "
-            "Zero or any negative value means the estimation "
-            "will be applied to all classes",
-        )
-        form.addParam(
             "correctCtf",
             BooleanParam,
             default=True,
-            # expertLevel=LEVEL_ADVANCED,
             label="Correct CTF?",
             help="If you set to *Yes*, the CTF of the experimental particles will be corrected",
         )
@@ -102,7 +92,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             "useGpu",
             BooleanParam,
             default=True,
-            # expertLevel=LEVEL_ADVANCED,
             label="Use GPU?",
             help="If you set to *Yes*, the estimation process will try to use the GPU "
             "for hardware acceleration. This might speed up the process if CUDA is available.",
@@ -124,6 +113,30 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 "more computation time."
             ),
             label="Estimator type",
+        )
+        form.addParam(
+            "classId",
+            IntParam,
+            default=-1,
+            label="Class ID",
+            help="Class to select for average estimation. "
+            "Zero or any negative value means the estimation "
+            "will be applied to all classes",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "checkDegenerateGmm",
+            BooleanParam,
+            default=True,
+            help=(
+                "If using a GMM-type estimator, this option makes sure the GMM model "
+                "is checked for degeneracy after the last iteration in each class. "
+                "The model is considered degenerate if the two GMM components are too "
+                "close together, or if the component associated with good particles "
+                "has too little weight."
+            ),
+            label="Check GMM degeneracy?",
+            expertLevel=LEVEL_ADVANCED,
         )
 
         form.addParallelSection(threads=0, mpi=4)
@@ -366,6 +379,12 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--device {device} "
             f"--estimator-type {self._getEstimatorType()} "
         )
+
+        if self.checkDegenerateGmm.get():
+            scriptArgs += "--check-degenerate-gmm "
+        else:
+            scriptArgs += "--no-check-degenerate-gmm "
+
         self.runJob("xmipp_gmm_average_estimation", scriptArgs, env=env, numberOfMpi=1)
 
     def createOutputStep(self):
