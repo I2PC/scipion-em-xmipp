@@ -368,7 +368,11 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         return inputSize, streamClosed
 
     def _getResumeOutputNames(self):
-        return ('outputAverages', 'eliminatedAverages')
+        return ()
+
+    def specialBehavoir(self, inSet):
+        """ To be implemented by child. Must set self.check and inSet.close() """
+        pass
 
     def _getCreationCheckpoint(self, inputSet, processedCount):
         if processedCount <= 0:
