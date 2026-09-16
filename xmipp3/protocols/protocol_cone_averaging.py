@@ -93,6 +93,42 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             ),
         )
         form.addParam(
+            "estimatorType",
+            EnumParam,
+            default=0,
+            # ESTIMATORS is dict[int, str], this ensures the list keeps correct order
+            choices=[ESTIMATORS[i] for i in range(len(ESTIMATORS))],
+            help=(
+                "Type of robust estimator to use to compute the new class averages. "
+                "As a rule of thumb, the 'gmm' estimator should be more aggressive in "
+                "rejecting possibly misaligned or corrupted particles. This means "
+                "its performance can be better for more contaminated datasets, and "
+                "slightly worse in very clean datasets."
+                "'irls' and 'fourier_irls' should both be relatively fast and less "
+                "aggresive in particle rejection. 'admm' combines both 'irls' and "
+                "'fourier_irls', and it can improve their results at the cost of "
+                "more computation time."
+            ),
+            label="Estimator type",
+        )
+        form.addParam(
+            "deduplicateReferences",
+            BooleanParam,
+            default=True,
+            help=(
+                "For volumes that have a non-trivial symmetry, the generated set of "
+                "reference viewing directions that are used to group the particles "
+                "may contain redundant directions. "
+                # because "
+                # "the symmetry makes directions that are apparently different be "
+                # "equivalent. "
+                "If you set this to 'yes', these redundancies will be eliminated. "
+                "As a result, the final number of groups might be smaller "
+                "than initially requested."
+            ),
+            label="Deduplicate references?"
+        )
+        form.addParam(
             "numberOfGroups",
             IntParam,
             label="Number of groups",
@@ -115,25 +151,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             ),
             default=1024,
             expertLevel=LEVEL_ADVANCED,
-        )
-        form.addParam(
-            "estimatorType",
-            EnumParam,
-            default=0,
-            # ESTIMATORS is dict[int, str], this ensures the list keeps correct order
-            choices=[ESTIMATORS[i] for i in range(len(ESTIMATORS))],
-            help=(
-                "Type of robust estimator to use to compute the new class averages. "
-                "As a rule of thumb, the 'gmm' estimator should be more aggressive in "
-                "rejecting possibly misaligned or corrupted particles. This means "
-                "its performance can be better for more contaminated datasets, and "
-                "slightly worse in very clean datasets."
-                "'irls' and 'fourier_irls' should both be relatively fast and less "
-                "aggresive in particle rejection. 'admm' combines both 'irls' and "
-                "'fourier_irls', and it can improve their results at the cost of "
-                "more computation time."
-            ),
-            label="Estimator type",
         )
 
         form.addParallelSection(threads=0, mpi=4)
@@ -198,6 +215,9 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--grouping-batch-size {self.groupingBatchSize.get()} "
             f"--symmetry-group {self.symmetryGroup.get()} "
         )
+
+        if self.deduplicateReferences.get():
+            args += "--deduplicate-references "
 
         self.runJob("xmipp_cone_grouping", args, env=env, numberOfMpi=1)
 
