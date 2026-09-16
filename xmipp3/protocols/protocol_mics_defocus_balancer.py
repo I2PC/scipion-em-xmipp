@@ -24,8 +24,6 @@
 # *
 # **************************************************************************
 
-import os
-from datetime import datetime
 import numpy as np
 import random
 from collections import defaultdict
@@ -34,12 +32,10 @@ from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
 from pyworkflow.object import Pointer
 import pyworkflow.protocol.params as params
-import pyworkflow.utils as pwutils
 
 from pwem.protocols import ProtCTFMicrographs
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME
 from pyworkflow import UPDATED, NEW
-
 
 OUTPUT_CTF =  "outputCTF"
 OUTPUT_MICS = "outputMicrographs"
@@ -338,41 +334,33 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # Check if there are new ctf to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(self.ctfFn))
-        self.debug('Last check: %s, modification: %s'
-                    % (pwutils.prettyTime(self.lastCheck),
-                        pwutils.prettyTime(mTime)))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.insertedIds:  # If this is empty it is dut to a static "continue" action or it is the first round
-            return None
-
+        # Check if there are new CTFs to process from the input set
         ctfsSet = self._loadInputCtfSet(self.ctfFn)
         ctfSetIds = ctfsSet.getIdSet()
         newIds = [idCTF for idCTF in ctfSetIds if idCTF not in self.insertedIds]
 
-        self.lastCheck = datetime.now()
         isStreamClosed = ctfsSet.isStreamClosed()
-
         ctfsSet.close()
 
         outputStep = self._getFirstJoinStep()
 
-        if self.isContinued() and not self.insertedIds:  # For "Continue" action and the first round
+        if getattr(self, '_originalRunMode', self.runMode.get()) == MODE_RESUME and not self.insertedIds:
             doneIds, _ = self._getAllDoneIds()
             if doneIds:
                 self.finished = True
                 self.info('The sampling images are already created.')
                 return
 
-        if (newIds and len(newIds) >= self.minImages.get()) or isStreamClosed:
+        if newIds and (len(newIds) >= self.minImages.get() or isStreamClosed):
             fDeps = self._insertNewCtfsSteps(newIds)
 
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
             self.updateSteps()
+
+        elif isStreamClosed and not self.insertedIds:
+            self.finished = True
+            self.info('Input stream is closed and no CTFs are available for sampling.')
 
     def _loadInputCtfSet(self, ctfFn):
         self.debug("Loading input db: %s" % ctfFn)
@@ -389,13 +377,15 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
             defocusU = ctf.getDefocusU()
             ctfDefocus[ctfId] = defocusU
 
+        inputCtfSet.close()
+
         self.sampled_images = balanced_sampling(image_dict=ctfDefocus, N=self.numImages.get(), bins=10)
         self.info('The number of CTFs selected for defocus balanced sampling is the following: %d'
-                  %len(self.sampled_images))
+                  % len(self.sampled_images))
 
         stats = compute_statistics(list(ctfDefocus.values()))
         message = ("The defocus statistics are the following: range %d   min %d   max %d   mean %d   std %.1f"
-                   %(stats["range"], stats["min"], stats["max"],stats["mean"], stats["std"]))
+                   % (stats["range"], stats["min"], stats["max"], stats["mean"], stats["std"]))
         self.summaryVar.set(message)
 
     def _checkNewOutput(self):
