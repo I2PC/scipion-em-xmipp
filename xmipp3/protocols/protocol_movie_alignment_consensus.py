@@ -26,7 +26,6 @@
 # **************************************************************************
 
 import os
-from datetime import datetime
 from pyworkflow.gui.plotter import Plotter
 import numpy as np
 from math import ceil
@@ -40,7 +39,7 @@ import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL, Protocol
 import pyworkflow.utils as pwutils
 from pwem.protocols import ProtAlignMovies
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME
 from xmipp3.convert import getScipionObj
 from pwem.constants import ALIGN_NONE
 from pyworkflow import BETA, UPDATED, NEW, PROD
@@ -378,6 +377,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         self.movieFn1 = self.inputMovies1.get().getFileName()
         self.movieFn2 = self.inputMovies2.get().getFileName()
         self.micsFn = self._getMicsPath()
+        if self.micsFn is None:
+            raise RuntimeError('Could not resolve the micrographs produced by the reference movie alignment.')
+
         self.stats = {}
         self.isStreamClosed = self.inputMovies1.get().isStreamClosed() and \
                               self.inputMovies2.get().isStreamClosed()
@@ -388,6 +390,48 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         self.allMovies2 = {movie.getObjId(): movie.clone() for movie
                            in self._loadInputMovieSet(self.movieFn2).iterItems()}
         pwutils.makePath(self._getExtraPath('DONE'))
+
+        if self.runMode.get() == MODE_RESUME:
+            self._restoreStreamingState()
+
+    def _restoreStreamingState(self):
+        doneAccepted = set(self._readCertainDoneList(ACCEPTED))
+        doneDiscarded = set(self._readCertainDoneList(DISCARDED))
+
+        self.processedDict = sorted(doneAccepted | doneDiscarded)
+
+        self._filterSelectionFile(self._getMovieSelecFileAccepted(), doneAccepted)
+        self._filterSelectionFile(self._getMovieSelecFileDiscarded(), doneDiscarded)
+
+    def _filterSelectionFile(self, fn, doneIds):
+        if not os.path.exists(fn):
+            return
+
+        doneIds = set(doneIds)
+        keptLines = []
+        seen = set()
+
+        with open(fn) as f:
+            for line in f:
+                parts = line.strip().split()
+                if not parts:
+                    continue
+
+                try:
+                    movieId = int(parts[0])
+                except ValueError:
+                    continue
+
+                if movieId in doneIds and movieId not in seen:
+                    keptLines.append(line if line.endswith('\n') else line + '\n')
+                    seen.add(movieId)
+
+        with open(fn, 'w') as f:
+            f.writelines(keptLines)
+
+    def _isMovieOutputDone(self, movieId):
+        return movieId in self._readCertainDoneList(ACCEPTED) or \
+               movieId in self._readCertainDoneList(DISCARDED)
 
     def _getFirstJoinStepName(self):
         # This function will be used for streaming, to check which is
@@ -407,19 +451,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # Check if there are new movies to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = max(datetime.fromtimestamp(os.path.getmtime(self.movieFn1)),
-                    datetime.fromtimestamp(os.path.getmtime(self.movieFn2)))
-
-        self.debug('Last check: %s, modification: %s'
-                   % (pwutils.prettyTime(self.lastCheck),
-                      pwutils.prettyTime(mTime)))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.processedDict: # If this is empty it is due to a static "continue" action or it is the first round
-            return None
-
+        # Always reload both input Sets. In ScipionWeb the SQLite files are
+        # compatibility snapshots whose refresh is triggered when the Set is loaded.
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
         movieSet2 = self._loadInputMovieSet(self.movieFn2)
 
@@ -432,24 +465,21 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         newIds2 = [idMovie for idMovie in movieDict2.keys() if idMovie not in self.processedDict]
         self.allMovies2.update(movieDict2)
 
-        self.lastCheck = datetime.now()
         self.isStreamClosed = movieSet1.isStreamClosed() and \
                               movieSet2.isStreamClosed()
 
         movieSet1.close()
         movieSet2.close()
 
+        fDeps = self._insertNewMovieSteps(newIds1, newIds2, self.insertedDict)
+        if not fDeps:
+            return
+
         outputStep = self._getFirstJoinStep()
+        if outputStep is not None:
+            outputStep.addPrerequisites(*fDeps)
 
-        if len(set(self.allMovies1)) > len(set(self.processedDict)) and \
-           len(set(self.allMovies2)) > len(set(self.processedDict)):
-
-            fDeps = self._insertNewMovieSteps(newIds1, newIds2, self.insertedDict)
-
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-
-            self.updateSteps()
+        self.updateSteps()
 
     def _insertNewMovieSteps(self, movies1Dict, movies2Dict, insDict):
         deps = []
@@ -470,8 +500,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         movie2 = self.allMovies2.get(movieId)
         doneFn = self._getMovieDone(movieId)
 
-        if self.isContinued() and self._isMovieDone(movieId):
-            self.info("Skipping movie with ID: %s, seems to be done" % movieId)
+        if getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME and \
+           self._isMovieOutputDone(movieId):
+            self.info("Skipping movie with ID: %s, output already persisted" % movieId)
             return
 
         # Clean old finished files
@@ -593,8 +624,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         newDoneDiscarded = [movieId for movieId in movieListIdDiscarded
                             if movieId not in doneListDiscarded]
 
-        firstTimeAccepted = len(doneListAccepted) == 0
-        firstTimeDiscarded = len(doneListDiscarded) == 0
+        firstTimeAccepted = not hasattr(self, 'outputMovies')
+        firstTimeDiscarded = not hasattr(self, 'outputMoviesDiscarded')
 
         allDone = len(doneListAccepted) + len(doneListDiscarded) +\
                   len(newDoneAccepted) + len(newDoneDiscarded)
@@ -630,23 +661,35 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             return
 
         def updateRelationsAndClose(movieSet, micSet, first, label=''):
-            if os.path.exists(self._getPath('movies'+label+'.sqlite')):
-                micsAttrName = 'outputMicrographs'+label
-                self._updateOutputSet(micsAttrName, micSet, streamMode)
-                self._updateOutputSet('outputMovies'+label, movieSet, streamMode)
+            if movieSet is None or micSet is None:
+                return False
 
-                if first:
-                    # We consider that Movies are 'transformed' into the Micrographs
-                    # This will allow to extend the micrograph associated to a set of
-                    # movies to another set of micrographs generated from a
-                    # different movie alignment
-                    self._defineTransformRelation(self.inputMovies1, micSet)
+            micsAttrName = 'outputMicrographs'+label
+            self._updateOutputSet(micsAttrName, micSet, streamMode)
+            self._updateOutputSet('outputMovies'+label, movieSet, streamMode)
 
-                micSet.close()
-                movieSet.close()
+            if first:
+                # We consider that Movies are 'transformed' into the Micrographs
+                # This will allow to extend the micrograph associated to a set of
+                # movies to another set of micrographs generated from a
+                # different movie alignment
+                self._defineTransformRelation(self.inputMovies1, micSet)
 
-        updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
-        updateRelationsAndClose(movieSetDiscarded, micSetDiscarded, firstTimeDiscarded, DISCARDED)
+            micSet.close()
+            movieSet.close()
+            return True
+
+        acceptedUpdated = updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
+        discardedUpdated = updateRelationsAndClose(movieSetDiscarded, micSetDiscarded,
+                                                    firstTimeDiscarded, DISCARDED)
+
+        if acceptedUpdated:
+            for movieId in newDoneAccepted:
+                self._writeCertainDoneList(movieId, ACCEPTED)
+
+        if discardedUpdated:
+            for movieId in newDoneDiscarded:
+                self._writeCertainDoneList(movieId, DISCARDED)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -657,6 +700,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         if newDone:
             inputMovieSet = self._loadInputMovieSet(self.movieFn1)
             inputMicSet = self._loadInputMicrographSet(self.micsFn)
+            movieIds = set(movieSet.getIdSet())
+            micIds = set(micSet.getIdSet())
 
             for movieId in newDone:
                 movie = inputMovieSet[movieId].clone()
@@ -672,16 +717,19 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                 alignment = MovieAlignment(xshifts=shiftX_1, yshifts=shiftY_1)
                 movie.setAlignment(alignment)
 
-                self._writeCertainDoneList(movieId, label)
-
                 if self.trajectoryPlot.get():
                     firstFrame, _, _ = self.inputMovies1.get().getFramesRange()
                     self._createAndSaveTrajectoriesPlot(movieId, firstFrame, self.samplingRate)
                     mic.plotCart = Image()
                     mic.plotCart.setFileName(self._getTrajectoriesPlot(movieId))
 
-                movieSet.append(movie)
-                micSet.append(mic)
+                if movieId not in movieIds:
+                    movieSet.append(movie)
+                    movieIds.add(movieId)
+
+                if movieId not in micIds:
+                    micSet.append(mic)
+                    micIds.add(movieId)
 
             inputMovieSet.close()
             inputMicSet.close()
@@ -796,19 +844,35 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             for part in partList:
                 f.write('%d\n' % part.getObjId())
 
-    def _getMicsPath(self):
-        prot1 = self.inputMovies1.getObjValue()  # pointer to previous protocol
+    def _getReferenceAlignmentProtocol(self):
+        prot1 = self.inputMovies1.getObjValue()
+        if isinstance(prot1, Protocol):
+            return prot1
 
-        if hasattr(prot1, 'outputMicrographs'):
-            path1 = prot1.outputMicrographs.getFileName()
-            if os.path.getsize(path1) > 0:
-                return path1
-        elif hasattr(prot1, 'outputMicrographsDoseWeighted'):
-            path2 = prot1.outputMicrographsDoseWeighted.getFileName()
-            if os.path.getsize(path2) > 0:
-                return path2
-        else:
+        movieSet = self.inputMovies1.get()
+        parentId = movieSet.getObjParentId() if movieSet is not None else None
+        project = self.getProject()
+
+        if parentId is None or project is None:
             return None
+
+        try:
+            return project.getProtocol(parentId)
+        except Exception as error:
+            self.debug("Could not resolve reference movie alignment protocol: %s" % error)
+            return None
+
+    def _getMicsPath(self):
+        prot1 = self._getReferenceAlignmentProtocol()
+        if prot1 is None:
+            return None
+
+        for outputName in ('outputMicrographs', 'outputMicrographsDoseWeighted'):
+            micSet = getattr(prot1, outputName, None)
+            if micSet is not None:
+                return micSet.getFileName()
+
+        return None
 
     def _readCertainDoneList(self, label):
         """ Read from a text file the id's of the items
@@ -919,11 +983,22 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             fn = self._getMovieSelecFileAccepted()
         else:
             fn = self._getMovieSelecFileDiscarded()
+
         moviesList = []
-        # Check what items have been previously done
+        seen = set()
+
         if os.path.exists(fn):
             with open(fn) as f:
-                moviesList += [int(line.strip().split()[0]) for line in f]
+                for line in f:
+                    parts = line.strip().split()
+                    if not parts:
+                        continue
+
+                    movieId = int(parts[0])
+                    if movieId not in seen:
+                        moviesList.append(movieId)
+                        seen.add(movieId)
+
         return moviesList
 
     def _getEnable(self, movieId):
