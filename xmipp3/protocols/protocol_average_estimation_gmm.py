@@ -42,13 +42,14 @@ from xmipp3.base import XmippProtocol
 
 from xmipp3.convert import particleToRow
 
-ESTIMATORS = {0: "gmm", 1: "irls", 2: "fourier_irls", 3: "admm"}
+ESTIMATORS = {0: "gmm", 1: "irls", 2: "fourier_irls", 3: "admm", 4: "fourier_masked"}
 
 ESTIMATOR_WEIGHT_COLUMNS = {
     "gmm": ["wRobust", "wRobustGmm"],
     "irls": ["wRobust"],
     "fourier_irls": ["wRobust"],
-    "admm": ["wRobust"]
+    "admm": ["wRobust"],
+    "fourier_masked": ["wRobust"],
 }
 
 WEIGHT_COLUMN_TO_ATTRIBUTE = {
@@ -59,7 +60,7 @@ WEIGHT_COLUMN_TO_ATTRIBUTE = {
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     """
-    Improves class averages by using robust estimation. Different estimation 
+    Improves class averages by using robust estimation. Different estimation
     techniques can be chosen, including a Gaussian Mixture Model (GMM) on
     the distances of each particle to a given reference (the class average).
     """
@@ -280,7 +281,9 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--keep_input_columns "
             f"--apply_transform"
         )
-        self.runJob("xmipp_transform_geometry", args, numberOfMpi=self.numberOfMpi.get())
+        self.runJob(
+            "xmipp_transform_geometry", args, numberOfMpi=self.numberOfMpi.get()
+        )
 
     def _getInputParticlesPath(self):
         return self._getExtraPath("inputParticles.xmd")
