@@ -290,6 +290,14 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                       default=100, label='Minimum number of images to make sampling',
                       help='Minimum number of images to make the defocus balanced sampling.')
 
+    def _validate(self):
+        errors = []
+        if self.numImages.get() <= 0:
+            errors.append('Sample size must be greater than zero.')
+        if self.minImages.get() <= 0:
+            errors.append('Minimum number of images must be greater than zero.')
+        return errors
+
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
         self.initializeParams()
@@ -350,6 +358,9 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                 self.finished = True
                 self.info('The sampling images are already created.')
                 return
+
+        if self.insertedIds:
+            return
 
         if newIds and (len(newIds) >= self.minImages.get() or isStreamClosed):
             fDeps = self._insertNewCtfsSteps(newIds)
@@ -485,41 +496,62 @@ def balanced_sampling(image_dict, N, bins=10):
     - sampled_images (list): List of sampled image IDs.
     """
 
+    if not image_dict or N <= 0:
+        return []
 
-    # Step 1: Get all defocus values and determine the bin edges
+    target = min(N, len(image_dict))
+    bins = max(1, bins)
     defocus_values = list(image_dict.values())
+
+    if min(defocus_values) == max(defocus_values):
+        return random.sample(list(image_dict.keys()), target)
+
     bin_edges = np.linspace(min(defocus_values), max(defocus_values), bins + 1)
 
-    # Step 2: Organize image IDs by bins
     binned_images = defaultdict(list)
     for image_id, defocus in image_dict.items():
-        # Find the bin index for the current defocus value
         bin_index = np.digitize(defocus, bin_edges) - 1
-        # Avoid indexing beyond the available bins
-        bin_index = min(bin_index, bins - 1)
+        bin_index = max(0, min(bin_index, bins - 1))
         binned_images[bin_index].append(image_id)
 
-    # Step 3: Calculate how many images to sample per bin
-    images_per_bin = max(1, N // bins)
-    sampled_images = []
+    non_empty_bins = sorted(
+        bin_index for bin_index, images in binned_images.items() if images
+    )
 
-    for bin_index in range(bins):
-        images_in_bin = binned_images[bin_index]
-
-        if len(images_in_bin) > images_per_bin:
-            # Randomly sample from the bin if there are more images than needed
-            sampled_images.extend(random.sample(images_in_bin, images_per_bin))
+    if target <= len(non_empty_bins):
+        if target == 1:
+            selected_positions = [len(non_empty_bins) // 2]
         else:
-            # If fewer images than needed, take all images in this bin
-            sampled_images.extend(images_in_bin)
+            selected_positions = [
+                round(i * (len(non_empty_bins) - 1) / (target - 1))
+                for i in range(target)
+            ]
 
-    # If we have fewer than N images, randomly sample additional images to reach N
-    if len(sampled_images) < N:
-        remaining_images = list(set(image_dict.keys()) - set(sampled_images))
-        sampled_images.extend(random.sample(remaining_images, N - len(sampled_images)))
+        return [
+            random.choice(binned_images[non_empty_bins[position]])
+            for position in selected_positions
+        ]
 
-    # Limit to N images in case there are extra
-    return sampled_images[:N]
+    available_by_bin = {}
+    for bin_index in non_empty_bins:
+        available = list(binned_images[bin_index])
+        random.shuffle(available)
+        available_by_bin[bin_index] = available
+
+    sampled_images = []
+    while len(sampled_images) < target:
+        added = False
+        for bin_index in non_empty_bins:
+            available = available_by_bin[bin_index]
+            if available:
+                sampled_images.append(available.pop())
+                added = True
+                if len(sampled_images) == target:
+                    break
+        if not added:
+            break
+
+    return sampled_images
 
 
 def compute_statistics(values):
@@ -533,17 +565,19 @@ def compute_statistics(values):
     - dict: A dictionary containing the statistics: min, max, mean, median, std, variance, and range.
     """
 
-    # Convert to a NumPy array for efficient computation
     values = np.array(values)
+    if values.size == 0:
+        raise ValueError('Cannot compute statistics for an empty collection.')
 
-    # Compute statistics
+    ddof = 1 if values.size > 1 else 0
+
     stats = {
         "min": np.min(values),
         "max": np.max(values),
         "mean": np.mean(values),
         "median": np.median(values),
-        "std": np.std(values, ddof=1),  # Sample standard deviation
-        "variance": np.var(values, ddof=1),  # Sample variance
+        "std": np.std(values, ddof=ddof),
+        "variance": np.var(values, ddof=ddof),
         "range": np.max(values) - np.min(values),
     }
 
