@@ -34,7 +34,6 @@ import time
 import numpy as np
 
 from pwem.protocols import ProtClassify2D
-from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import IntParam, StringParam, PointerParam, EnumParam, BooleanParam, FloatParam
@@ -625,6 +624,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         partSet.loadAllProperties()
         copyPartSet = self._createSetOfParticles()
         copyPartSet.copyInfo(partSet)
+        partSet.close()
 
         return copyPartSet
 
@@ -643,26 +643,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.imgsFn = updateFileName(self.imgsFn, self.classificationRound)
         self.info('Starts classification round: %d' % self.classificationRound)
         self.classificationRound += 1
-
-    def _newParticlesToProcess(self):
-        particlesFile = self.inputFn
-        now = datetime.now()
-
-        lastCheck = getattr(self, "lastCheck", now)
-        self.lastCheck = lastCheck
-
-        mTime = datetime.fromtimestamp(os.path.getmtime(particlesFile))
-        self.debug("Last check: %s, modification: %s"
-                   % (lastCheck, prettyTime(mTime)))
-
-        fileUnchanged = lastCheck > mTime
-        alreadyProcessedSomething = bool(getattr(self, "lastCreationTime", None))
-        isLastRound = bool(getattr(self, "lastRound", False))
-
-        hasNewParticles = not (fileUnchanged and alreadyProcessedSomething and not isLastRound)
-
-        self.lastCheck = now
-        return hasNewParticles
 
     def _fillClassesFromLevel(self, clsSet, update=False):
         """ Create the SetOfClasses2D from a given iteration. """
