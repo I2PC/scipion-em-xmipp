@@ -43,7 +43,14 @@ from xmipp3.base import XmippProtocol
 
 from xmipp3.convert import particleToRow
 
-ESTIMATORS = {0: "gmm", 1: "irls", 2: "fourier_irls", 3: "admm", 4: "fourier_masked"}
+ESTIMATORS = {
+    0: "gmm",
+    1: "irls",
+    2: "fourier_irls",
+    3: "admm",
+    4: "fourier_masked",
+    5: "gmm_on_fourier_masked",
+}
 
 ESTIMATOR_WEIGHT_COLUMNS = {
     "gmm": ["wRobust", "wRobustStd", "wRobustGmm"],
@@ -51,6 +58,7 @@ ESTIMATOR_WEIGHT_COLUMNS = {
     "fourier_irls": ["wRobust", "wRobustStd"],
     "admm": ["wRobust", "wRobustStd"],
     "fourier_masked": ["wRobust", "wRobustStd"],
+    "gmm_on_fourier_masked": ["wRobust", "wRobustStd", "wRobustGmm"],
 }
 
 WEIGHT_COLUMN_TO_ATTRIBUTE = {
