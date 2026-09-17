@@ -754,6 +754,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         if self._hasStreamingCheckpoint():
             self.lastCreationTime = self._getLastDone()
             self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
+            if self.mode.get() == self.UPDATE_CLASSES:
+                self.firstTimeDone = True
         else:
             self.lastCreationTime = ''
             self.classificationRound = 1

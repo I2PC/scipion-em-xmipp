@@ -66,6 +66,19 @@ class TestXmippClassifyPcaResume(BaseTest):
         self.assertEqual("", prot.lastCreationTime)
         self.assertEqual(1, prot.classificationRound)
 
+    def testResumeUpdateClassesPreservesUpdatedReferences(self):
+        prot = self._newPcaProtocol()
+
+        prot.mode.set(prot.UPDATE_CLASSES)
+        prot.firstTimeDone = False
+        prot._hasStreamingCheckpoint = lambda: True
+        prot._getLastDone = lambda: "2026-09-16 10:11:12.123456"
+        prot._getLastClassificationRound = lambda: 4
+
+        prot._updateVarsToContinue()
+
+        self.assertTrue(prot.firstTimeDone, "Continue in UPDATE_CLASSES mode must preserve the classes produced by previous rounds.")
+
     def testStepsGeneratorRestoresStateOnRealResume(self):
         prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESUME, True)
 
