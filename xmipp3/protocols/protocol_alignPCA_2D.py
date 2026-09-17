@@ -417,7 +417,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.newDeps = []
         newParticlesSet = self._loadEmptyParticleSet()
 
-        if getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME:
+        isResume = getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME
+        if isResume and self._hasStreamingCheckpoint():
             self.info('Continue protocol')
             self._updateVarsToContinue()
 
@@ -736,6 +737,11 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         with open(self._getExtraPath(LAST_DONE_FILE), 'w') as file:
             file.write('%s' % creationTime)
 
+    def _hasStreamingCheckpoint(self):
+        lastDoneFn = self._getExtraPath(LAST_DONE_FILE)
+        classificationFn = self._getExtraPath(CLASSIFICATION_FILE)
+        return os.path.exists(lastDoneFn) and os.path.getsize(lastDoneFn) > 0 and os.path.exists(classificationFn) and os.path.getsize(classificationFn) > 0
+
     def _getLastDone(self):
         # Open the file in read mode and read the number
         with open(self._getExtraPath(LAST_DONE_FILE), "r") as file:
@@ -745,7 +751,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
     def _updateVarsToContinue(self):
         """ Method to if needed and the protocol is set to continue then it will see in which state it was stopped """
 
-        if self._isClassificationDone():
+        if self._hasStreamingCheckpoint():
             self.lastCreationTime = self._getLastDone()
             self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
         else:

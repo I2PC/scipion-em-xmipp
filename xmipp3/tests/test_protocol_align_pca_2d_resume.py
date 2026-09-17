@@ -23,7 +23,7 @@ class TestXmippClassifyPcaResume(BaseTest):
     def _newPcaProtocol(self):
         return self.newProtocol(XmippProtClassifyPcaStreaming)
 
-    def _prepareGeneratorProtocol(self, originalRunMode):
+    def _prepareGeneratorProtocol(self, originalRunMode, hasCheckpoint):
         prot = self._newPcaProtocol()
 
         # Reproduce Protocol._runSteps(): Scipion changes runMode to RESUME
@@ -35,6 +35,7 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot.finish = True
         prot._initialStep = lambda: None
         prot._loadEmptyParticleSet = lambda: object()
+        prot._hasStreamingCheckpoint = lambda: hasCheckpoint
 
         resumeCalls = []
         prot._updateVarsToContinue = lambda: resumeCalls.append(True)
@@ -44,16 +45,13 @@ class TestXmippClassifyPcaResume(BaseTest):
     def testResumeRestoresClassificationCheckpoint(self):
         prot = self._newPcaProtocol()
 
-        prot._isClassificationDone = lambda: True
+        prot._hasStreamingCheckpoint = lambda: True
         prot._getLastDone = lambda: "2026-09-16 10:11:12.123456"
         prot._getLastClassificationRound = lambda: 4
 
         prot._updateVarsToContinue()
 
-        self.assertEqual(
-            "2026-09-16 10:11:12.123456",
-            prot.lastCreationTime
-        )
+        self.assertEqual("2026-09-16 10:11:12.123456", prot.lastCreationTime)
         self.assertEqual(5, prot.classificationRound)
 
     def testResumeWithoutCheckpointStartsFromInitialState(self):
@@ -61,7 +59,7 @@ class TestXmippClassifyPcaResume(BaseTest):
 
         prot.lastCreationTime = "stale-value"
         prot.classificationRound = 99
-        prot._isClassificationDone = lambda: False
+        prot._hasStreamingCheckpoint = lambda: False
 
         prot._updateVarsToContinue()
 
@@ -69,15 +67,22 @@ class TestXmippClassifyPcaResume(BaseTest):
         self.assertEqual(1, prot.classificationRound)
 
     def testStepsGeneratorRestoresStateOnRealResume(self):
-        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESUME)
+        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESUME, True)
 
         prot.stepsGeneratorStep()
 
-        self.assertEqual(
-            1,
-            len(resumeCalls),
-            "Continue must restore the previous PCA2D streaming state."
-        )
+        self.assertEqual(1, len(resumeCalls), "Continue with a checkpoint must restore the previous PCA2D streaming state.")
+
+    def testStepsGeneratorDoesNotRestoreFreshDefaultResume(self):
+        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESUME, False)
+
+        prot.stepsGeneratorStep()
+
+        self.assertEqual(0, len(resumeCalls), "A fresh protocol uses MODE_RESUME by default but must not restore nonexistent streaming state.")
 
     def testStepsGeneratorDoesNotRestoreStateOnRestart(self):
-        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESTART)
+        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESTART, True)
+
+        prot.stepsGeneratorStep()
+
+        self.assertEqual(0, len(resumeCalls), "Restart must not restore the previous PCA2D streaming state.")
