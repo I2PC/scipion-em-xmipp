@@ -366,11 +366,11 @@ class XmippProtMovieResize(ProtProcessMovies):
         if not processedMovies and not self.finished:
             return
 
+        imageSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
         outputIds = set(imageSet.getIdSet()) if imageSet.getSize() else set()
         doneIds = set(self._readDoneList())
         newDone = [m for m in processedMovies if int(m.getObjId()) not in outputIds]
         pendingDone = [m for m in processedMovies if int(m.getObjId()) not in doneIds]
-        imageSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
         if not newDone and not pendingDone and not self.finished:
             imageSet.close()
             return
