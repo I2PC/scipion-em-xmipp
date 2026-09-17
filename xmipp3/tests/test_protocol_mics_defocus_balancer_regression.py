@@ -63,6 +63,9 @@ class _FakeItemSet:
     def getIdSet(self):
         return set(self._items)
 
+    def getSize(self):
+        return len(self._items)
+
     def append(self, item):
         self._items[item.getObjId()] = item
 
@@ -237,6 +240,28 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
 
         self.assertEqual({1, 2}, ctfOutput.getIdSet())
         self.assertEqual({101, 102}, micOutput.getIdSet())
+        self.assertTrue(inputSet.closed)
+
+    def testFillOutputDoesNotQueryIdsFromFreshOutputSets(self):
+        prot = self._newProtocol()
+        mic1 = _FakeItem(101)
+        ctf1 = _FakeItem(1, mic1)
+        inputSet = _FakeItemSet([ctf1])
+        prot._loadInputCtfSet = lambda _: inputSet
+
+        class _FreshItemSet(_FakeItemSet):
+            def getIdSet(self):
+                if not self._items:
+                    raise AssertionError('Fresh output Set must not query IDs before its first append.')
+                return super().getIdSet()
+
+        ctfOutput = _FreshItemSet()
+        micOutput = _FreshItemSet()
+
+        prot.fillOutput(ctfOutput, micOutput, [1])
+
+        self.assertEqual({1}, ctfOutput.getIdSet())
+        self.assertEqual({101}, micOutput.getIdSet())
         self.assertTrue(inputSet.closed)
 
     def testResumeCanRecoverCtfIdsFromMicrographOnlyOutput(self):

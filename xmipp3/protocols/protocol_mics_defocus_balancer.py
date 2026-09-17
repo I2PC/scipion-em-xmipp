@@ -462,8 +462,8 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def fillOutput(self, ctfSet, micSet, newDone):
         inputCtfSet = self._loadInputCtfSet(self.ctfFn)
-        ctfIds = set(ctfSet.getIdSet())
-        micIds = set(micSet.getIdSet())
+        ctfIds = set(ctfSet.getIdSet()) if ctfSet.getSize() else set()
+        micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
 
         for ctfId in newDone:
             ctf = inputCtfSet[ctfId].clone()
