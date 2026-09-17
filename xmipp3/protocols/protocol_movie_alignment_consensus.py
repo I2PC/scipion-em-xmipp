@@ -714,8 +714,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         if newDone:
             inputMovieSet = self._loadInputMovieSet(self.movieFn1)
             inputMicSet = self._loadInputMicrographSet(self.micsFn)
-            movieIds = set(movieSet.getIdSet())
-            micIds = set(micSet.getIdSet())
+            movieIds = set(movieSet.getIdSet()) if movieSet.getSize() else set()
+            micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
 
             for movieId in newDone:
                 movie = inputMovieSet[movieId].clone()

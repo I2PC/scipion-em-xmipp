@@ -63,6 +63,9 @@ class _FakeOutputSet:
     def getIdSet(self):
         return set(self.ids)
 
+    def getSize(self):
+        return len(self.ids)
+
     def append(self, item):
         self.ids.add(item.getObjId())
         self.appended.append(item.getObjId())
@@ -382,6 +385,31 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
             prot.fillOutput(movieOutput, micOutput, [1], ACCEPTED)
 
         self.assertEqual([], movieOutput.appended)
+        self.assertEqual([1], micOutput.appended)
+
+    def testFillOutputDoesNotQueryIdsFromFreshOutputSets(self):
+        prot = self._newProtocol()
+        prot.movieFn1 = 'movies.sqlite'
+        prot.micsFn = 'micrographs.sqlite'
+        prot.stats = {1: {'shift_corr': 1.0, 'rmse_error': 0.0, 'max_error': 0.0}}
+
+        inputMovies = _FakeIndexedSet({1: _FakeAlignedMovie(1)})
+        inputMics = _FakeIndexedSet({1: _FakeMicrograph(1)})
+        prot._loadInputMovieSet = lambda fn: inputMovies
+        prot._loadInputMicrographSet = lambda fn: inputMics
+        prot._getEnable = lambda movieId: True
+
+        class _FreshOutputSet(_FakeOutputSet):
+            def getIdSet(self):
+                raise AssertionError('Fresh output Set must not query IDs before its first append.')
+
+        movieOutput = _FreshOutputSet()
+        micOutput = _FreshOutputSet()
+
+        with patch('xmipp3.protocols.protocol_movie_alignment_consensus.setAttribute', lambda *args, **kwargs: None):
+            prot.fillOutput(movieOutput, micOutput, [1], ACCEPTED)
+
+        self.assertEqual([1], movieOutput.appended)
         self.assertEqual([1], micOutput.appended)
 
     def testSelectionReaderDeduplicatesMovieIds(self):
