@@ -83,6 +83,9 @@ class _Harness:
     def _getOutputMicIds(self):
         return deep_screen.XmippProtDeepMicrographScreen._getOutputMicIds(self)
 
+    def _updateOutputCoordSet(self, micList, streamMode):
+        return deep_screen.XmippProtDeepMicrographScreen._updateOutputCoordSet(self, micList, streamMode)
+
     def _getExtraPath(self, name):
         return '/tmp/' + name
 
