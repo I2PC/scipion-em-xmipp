@@ -33,6 +33,43 @@ class _FakeCtfSet:
         self.closed = True
 
 
+class _FakeItem:
+    def __init__(self, itemId, micrograph=None):
+        self._itemId = itemId
+        self._micrograph = micrograph
+
+    def clone(self):
+        micrograph = self._micrograph.clone() if self._micrograph is not None else None
+        return _FakeItem(self._itemId, micrograph)
+
+    def getObjId(self):
+        return self._itemId
+
+    def getMicrograph(self):
+        return self._micrograph
+
+
+class _FakeItemSet:
+    def __init__(self, items=None):
+        self._items = {item.getObjId(): item for item in (items or [])}
+        self.closed = False
+
+    def __getitem__(self, itemId):
+        return self._items[itemId]
+
+    def __iter__(self):
+        return iter(self._items.values())
+
+    def getIdSet(self):
+        return set(self._items)
+
+    def append(self, item):
+        self._items[item.getObjId()] = item
+
+    def close(self):
+        self.closed = True
+
+
 class TestXmippMicDefocusSamplerRegression(BaseTest):
     """Regression tests for defocus-sampler streaming and sampling logic."""
 
@@ -154,7 +191,8 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
 
         prot._checkNewInput()
 
-        self.assertTrue(prot.finished)
+        self.assertFalse(prot.finished)
+        self.assertEqual([1, 2], prot.sampled_images)
         self.assertEqual([], scheduled)
         self.assertEqual([], updates)
 
@@ -172,3 +210,45 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
 
         self.assertEqual([[1, 2, 3]], [sorted(ids) for ids in scheduled])
         self.assertEqual(1, len(updates))
+
+    def testResumeUsesPersistedSampleWithoutReadingInputAgain(self):
+        prot = self._newProtocol()
+        prot._originalRunMode = MODE_RESUME
+        prot.sampledIds.set([2, 3])
+        prot.sampled_images = list(prot.sampledIds)
+        prot._loadInputCtfSet = lambda _: self.fail('Input should not be reopened when sampled ids are persisted.')
+
+        prot._checkNewInput()
+
+        self.assertEqual([2, 3], prot.sampled_images)
+
+    def testFillOutputDoesNotDuplicateItemsOnResume(self):
+        prot = self._newProtocol()
+        mic1 = _FakeItem(101)
+        mic2 = _FakeItem(102)
+        ctf1 = _FakeItem(1, mic1)
+        ctf2 = _FakeItem(2, mic2)
+        inputSet = _FakeItemSet([ctf1, ctf2])
+        ctfOutput = _FakeItemSet([ctf1.clone()])
+        micOutput = _FakeItemSet([mic1.clone()])
+        prot._loadInputCtfSet = lambda _: inputSet
+
+        prot.fillOutput(ctfOutput, micOutput, [1, 2])
+
+        self.assertEqual({1, 2}, ctfOutput.getIdSet())
+        self.assertEqual({101, 102}, micOutput.getIdSet())
+        self.assertTrue(inputSet.closed)
+
+    def testResumeCanRecoverCtfIdsFromMicrographOnlyOutput(self):
+        prot = self._newProtocol()
+        mic1 = _FakeItem(101)
+        mic2 = _FakeItem(102)
+        inputSet = _FakeItemSet([_FakeItem(1, mic1), _FakeItem(2, mic2)])
+        prot.outputMicrographs = _FakeItemSet([mic2.clone()])
+        prot._loadInputCtfSet = lambda _: inputSet
+
+        doneIds, sizeOutput = prot._getAllDoneIds()
+
+        self.assertEqual([2], doneIds)
+        self.assertEqual(1, sizeOutput)
+        self.assertTrue(inputSet.closed)

@@ -24,17 +24,18 @@
 # *
 # **************************************************************************
 
+import os
 import numpy as np
 import random
 from collections import defaultdict
 
 from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
-from pyworkflow.object import Pointer
+from pyworkflow.object import Pointer, CsvList
 import pyworkflow.protocol.params as params
 
 from pwem.protocols import ProtCTFMicrographs
-from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME
+from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME, MODE_RESTART
 from pyworkflow import UPDATED, NEW
 
 OUTPUT_CTF =  "outputCTF"
@@ -275,6 +276,7 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
+        self.sampledIds = CsvList(pType=int)
 
 
     def _defineParams(self, form):
@@ -309,10 +311,13 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def initializeParams(self):
         self.finished = False
-        # Important to have both:
-        self.insertedIds = []   # Contains images that have been inserted in a Step (checkNewInput).
-        self.sampled_images = [] # Ids to be sample
-        # Contains images that have been processed in a Step (checkNewOutput).
+        self.insertedIds = []
+
+        if self.runMode.get() == MODE_RESTART and self.sampledIds:
+            self.sampledIds.clear()
+            self._store()
+
+        self.sampled_images = list(self.sampledIds)
         self.ctfFn = self.inputCTF.get().getFileName()
 
     def _getFirstJoinStepName(self):
@@ -342,6 +347,19 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         self._checkNewOutput()
 
     def _checkNewInput(self):
+        if self.sampled_images:
+            return
+
+        isResume = getattr(self, '_originalRunMode', self.runMode.get()) == MODE_RESUME
+        if isResume and not self.insertedIds:
+            doneIds, _ = self._getAllDoneIds()
+            if doneIds:
+                self.sampled_images = doneIds
+                self.sampledIds.set(doneIds)
+                self._store()
+                self.info('Restoring the previously selected CTFs.')
+                return
+
         # Check if there are new CTFs to process from the input set
         ctfsSet = self._loadInputCtfSet(self.ctfFn)
         ctfSetIds = ctfsSet.getIdSet()
@@ -351,13 +369,6 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         ctfsSet.close()
 
         outputStep = self._getFirstJoinStep()
-
-        if getattr(self, '_originalRunMode', self.runMode.get()) == MODE_RESUME and not self.insertedIds:
-            doneIds, _ = self._getAllDoneIds()
-            if doneIds:
-                self.finished = True
-                self.info('The sampling images are already created.')
-                return
 
         if self.insertedIds:
             return
@@ -398,6 +409,9 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         message = ("The defocus statistics are the following: range %d   min %d   max %d   mean %d   std %.1f"
                    % (stats["range"], stats["min"], stats["max"], stats["mean"], stats["std"]))
         self.summaryVar.set(message)
+        self.sampledIds.set(self.sampled_images)
+        # Persist the selected ids before output creation so Resume can reuse exactly the same sample.
+        self._store()
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
@@ -414,19 +428,28 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                 outputStep.setStatus(STATUS_NEW)
 
     def createOutputs(self, newDone):
-        cSet = self._loadOutputSet(SetOfCTF, 'ctfs.sqlite')
-        mSet = self._loadOutputSet(SetOfMicrographs,
-                                   'micrographs.sqlite')
+        cSet = self._loadOutputSet(SetOfCTF, 'ctfs.sqlite', OUTPUT_CTF)
+        mSet = self._loadOutputSet(SetOfMicrographs, 'micrographs.sqlite', OUTPUT_MICS)
         self.fillOutput(cSet, mSet, newDone)
 
         return cSet, mSet
 
-    def _loadOutputSet(self, SetClass, baseName):
+    def _loadOutputSet(self, SetClass, baseName, outputName):
         """
-        Create the output set.
+        Create or reopen an output set for append.
         """
+        if hasattr(self, outputName):
+            outputSet = getattr(self, outputName)
+            outputSet.enableAppend()
+            return outputSet
+
         setFile = self._getPath(baseName)
-        outputSet = SetClass(filename=setFile)
+        if os.path.exists(setFile):
+            outputSet = SetClass(filename=setFile)
+            outputSet.loadAllProperties()
+            outputSet.enableAppend()
+        else:
+            outputSet = SetClass(filename=setFile)
 
         micSet = self.inputCTF.get().getMicrographs()
 
@@ -439,22 +462,36 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def fillOutput(self, ctfSet, micSet, newDone):
         inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+        ctfIds = set(ctfSet.getIdSet())
+        micIds = set(micSet.getIdSet())
 
         for ctfId in newDone:
             ctf = inputCtfSet[ctfId].clone()
             mic = ctf.getMicrograph().clone()
-            ctfSet.append(ctf)
-            micSet.append(mic)
+
+            if ctf.getObjId() not in ctfIds:
+                ctfSet.append(ctf)
+                ctfIds.add(ctf.getObjId())
+
+            if mic.getObjId() not in micIds:
+                micSet.append(mic)
+                micIds.add(mic.getObjId())
 
         inputCtfSet.close()
 
     def updateRelations(self, cSet, mSet):
         micsAttrName = OUTPUT_MICS
         self._updateOutputSet(micsAttrName, mSet)
-        # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Booelan,...)
+        # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Boolean,...)
         # that happens somewhere while scheduling.
         cSet.setMicrographs(Pointer(self, extended=micsAttrName))
         self._updateOutputSet(OUTPUT_CTF, cSet)
+
+        # Rebuild relations atomically from the protocol point of view. This makes
+        # repeating updateRelations on Resume safe after a partial output publication.
+        if self.mapper is not None:
+            self.mapper.deleteRelations(self)
+
         self._defineTransformRelation(self.inputCTF.get().getMicrographs(), mSet)
         self._defineTransformRelation(self.inputCTF, cSet)
         self._defineCtfRelation(mSet, cSet)
@@ -467,6 +504,20 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
             sizeOutput = self.outputCTF.getSize()
             doneIds.extend(list(self.outputCTF.getIdSet()))
 
+        elif hasattr(self, OUTPUT_MICS):
+            micIds = set(self.outputMicrographs.getIdSet())
+            if micIds:
+                inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+                try:
+                    for ctf in inputCtfSet:
+                        mic = ctf.getMicrograph()
+                        if mic is not None and mic.getObjId() in micIds:
+                            doneIds.append(ctf.getObjId())
+                finally:
+                    inputCtfSet.close()
+
+                sizeOutput = len(doneIds)
+
         return doneIds, sizeOutput
 
     def _summary(self):
@@ -474,10 +525,8 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         if not hasattr(self, OUTPUT_MICS):
             summary.append("Output set not ready yet.")
         else:
-            populationSize = self.minImages.get()
             outputSize = self.outputMicrographs.getSize()
-            summary.append("From %d micrographs extract a balanced defocus sample of: %d micrographs"
-                           % (populationSize, outputSize))
+            summary.append("Balanced defocus sample: %d micrographs" % outputSize)
             summary.append(self.summaryVar.get())
 
         return summary
