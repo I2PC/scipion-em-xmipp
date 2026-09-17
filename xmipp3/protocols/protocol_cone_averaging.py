@@ -25,7 +25,7 @@
 # ******************************************************************************
 
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Union, Set
 
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
@@ -46,7 +46,11 @@ from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import writeSetOfParticles
 
-from .protocol_average_estimation_gmm import ESTIMATORS
+from .protocol_average_estimation_gmm import (
+    ESTIMATORS,
+    ESTIMATOR_WEIGHT_COLUMNS,
+    WEIGHT_COLUMN_TO_ATTRIBUTE,
+)
 
 
 class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
@@ -211,6 +215,9 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
     def _getEstimatorType(self):
         return ESTIMATORS[self.estimatorType.get()]
 
+    def _getEstimatorWeightColumns(self):
+        return ESTIMATOR_WEIGHT_COLUMNS[self._getEstimatorType()]
+
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
         writeSetOfParticles(
@@ -221,7 +228,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
     def groupIntoConesStep(self):
         env = self.getCondaEnv()
 
-        args = (
+        groupingArgs = (
             f"--input-xmd {self._getInputMdPath()} "
             f"--out-star {self._getGroupingOutputStarPath()} "
             f"--out-group-column '{self._getGroupByColumn()}' "
@@ -231,9 +238,9 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         )
 
         if self.deduplicateReferences.get():
-            args += "--deduplicate-references "
+            groupingArgs += "--deduplicate-references "
 
-        self.runJob("xmipp_cone_grouping", args, env=env, numberOfMpi=1)
+        self.runJob("xmipp_cone_grouping", groupingArgs, env=env, numberOfMpi=1)
 
     def prepareParticlesStep(self):
         """
@@ -245,30 +252,30 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         transform is then applied physically to the images, so the GMM does not
         need to read any alignment parameters.
         """
-        geometry_input = self._getGroupingOutputStarPath()
+        geometryInput = self._getGroupingOutputStarPath()
 
         if self.correctCtf.get():
-            sampling_rate = self.inputParticles.get().getSamplingRate()
-            ctf_args = (
-                f"-i '{geometry_input}' "
+            samplingRate = self.inputParticles.get().getSamplingRate()
+            ctfArgs = (
+                f"-i '{geometryInput}' "
                 f"-o '{self._getCtfCorrectedStackPath()}' "
                 f"--save_metadata_stack '{self._getCtfCorrectedMdPath()}' "
                 f"--keep_input_columns "
-                f"--sampling_rate {sampling_rate} "
+                f"--sampling_rate {samplingRate} "
             )
 
             if self.inputParticles.get().isPhaseFlipped():
-                ctf_args += "--phase_flipped "
+                ctfArgs += "--phase_flipped "
 
             self.runJob(
                 "xmipp_ctf_correct_wiener2d",
-                ctf_args,
+                ctfArgs,
                 numberOfMpi=self.numberOfMpi.get(),
             )
-            geometry_input = self._getCtfCorrectedMdPath()
+            geometryInput = self._getCtfCorrectedMdPath()
 
-        geometry_args = (
-            f"-i '{geometry_input}' "
+        geometryArgs = (
+            f"-i '{geometryInput}' "
             f"-o '{self._getParticleStackPath()}' "
             f"--save_metadata_stack '{self._getParticleMdPath()}' "
             f"--keep_input_columns "
@@ -277,7 +284,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
         self.runJob(
             "xmipp_transform_geometry",
-            geometry_args,
+            geometryArgs,
             numberOfMpi=self.numberOfMpi.get(),
         )
 
@@ -285,7 +292,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         env = self.getCondaEnv()
         device = "cuda" if self.useGpu.get() else "cpu"
 
-        script_args = (
+        estimationArgs = (
             f"--input-xmd '{self._getParticleMdPath()}' "
             f"--base-xmd '{self._getInputMdPath()}' "
             f"--out-star '{self._getAveragingOutputStarPath()}' "
@@ -297,33 +304,34 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         )
 
         if self.checkDegenerateGmm.get():
-            script_args += "--check-degenerate-gmm "
+            estimationArgs += "--check-degenerate-gmm "
         else:
-            script_args += "--no-check-degenerate-gmm "
+            estimationArgs += "--no-check-degenerate-gmm "
 
-        self.runJob("xmipp_gmm_average_estimation", script_args, env=env, numberOfMpi=1)
+        self.runJob(
+            "xmipp_gmm_average_estimation", estimationArgs, env=env, numberOfMpi=1
+        )
 
     def createOutputStep(self):
         outputMd = md.MetaData(self._getAveragingOutputStarPath())
 
-        weights_by_id = {}
-        group_by_id = {}
-        nonEmptyGroups = set()
+        weightColumns = self._getEstimatorWeightColumns()
+
+        weightsById: Dict[int, Dict[str, float]] = {}
+        groupById: Dict[int, int] = {}
+        nonEmptyGroups: Set[int] = set()
         for row in md.iterRows(outputMd):
             itemId = row.getValue(md.MDL_ITEM_ID)
 
-            if itemId in weights_by_id:
+            if itemId in weightsById:
                 raise RuntimeError(
                     f"Duplicated itemId={itemId} in GMM output metadata."
                 )
 
-            weights_by_id[itemId] = (
-                row.getValue("wRobust"),
-                row.getValue("wRobustGmm"),
-            )
+            weightsById[itemId] = {col: row.getValue(col) for col in weightColumns}
 
             group = int(row.getValue(self._getGroupByColumn()))
-            group_by_id[itemId] = group
+            groupById[itemId] = group
             nonEmptyGroups.add(group)
 
         outputParticles = self._createSetOfParticles()
@@ -334,7 +342,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             itemId = particle.getObjId()
 
             try:
-                weight, weightGmm = weights_by_id[itemId]
+                weightsDict = weightsById[itemId]
             except KeyError as exc:
                 raise RuntimeError(
                     f"No GMM weights found for particle " f"with itemId={itemId}."
@@ -342,9 +350,12 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
             outputParticle = particle.clone()
 
-            outputParticle._xmippRobustWeight = Float(weight)
-            outputParticle._xmippRobustWeightGmm = Float(weightGmm)
-            outputParticle.setClassId(group_by_id[itemId])
+            for col in weightColumns:
+                outputParticle.__setattr__(
+                    WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsDict[col])
+                )
+
+            outputParticle.setClassId(groupById[itemId])
 
             outputParticles.append(outputParticle)
 
