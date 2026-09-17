@@ -10,6 +10,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 from pwem.objects import SetOfMovies
 from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
 from pyworkflow.tests import BaseTest, setupTestProject
@@ -224,6 +225,31 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         cleanPath.assert_called_once()
 
+    def testNanCorrelationIsClassifiedAsDiscarded(self):
+        prot = self._newProtocol()
+        prot._originalRunMode = MODE_RESTART
+        prot.minRangeShift.set(0)
+        prot.minConsCorrelation.set(0.75)
+        prot.allMovies1 = {1: _FakeAlignedMovie(1)}
+        prot.allMovies2 = {1: _FakeAlignedMovie(1)}
+        prot.stats = {}
+
+        acceptedFn = self.proj.getTmpPath('movie-consensus-nan-accepted.txt')
+        discardedFn = self.proj.getTmpPath('movie-consensus-nan-discarded.txt')
+        doneFn = self.proj.getTmpPath('movie-consensus-nan-done.txt')
+
+        prot._getMovieSelecFileAccepted = lambda: acceptedFn
+        prot._getMovieSelecFileDiscarded = lambda: discardedFn
+        prot._getMovieDone = lambda movieId: doneFn
+        prot._store = lambda *args, **kwargs: None
+
+        nanCorrelation = np.array([[1.0, np.nan], [np.nan, 1.0]])
+        with patch('xmipp3.protocols.protocol_movie_alignment_consensus.np.corrcoef', return_value=nanCorrelation):
+            prot.alignmentCorrelationMovieStep(1)
+
+        self.assertEqual([], prot._readtMovieId(True))
+        self.assertEqual([1], prot._readtMovieId(False))
+
     def testDirectMovieSetPointerResolvesParentMicrographs(self):
         prot = self._newProtocol()
 
@@ -288,6 +314,40 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         self.assertEqual(2, len(updateIndexes))
         self.assertGreater(checkpointIndex, max(updateIndexes))
+
+    def testExistingOutputRebuildsRelationBeforeCheckpoint(self):
+        prot = self._newProtocol()
+        prot.allMovies1 = {1: object()}
+        prot.allMovies2 = {1: object()}
+        prot.isStreamClosed = True
+        prot.samplingRate = 1.0
+        prot.acquisition = _FakeAcquisition()
+        prot.outputMovies = _FakeOutputSet(ids=[1])
+        prot.outputMicrographs = _FakeOutputSet(ids=[1])
+
+        prot._readCertainDoneList = lambda label: []
+        prot._readtMovieId = lambda accepted: [1] if accepted else []
+        prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet(ids=[1])
+        prot.fillOutput = lambda *args, **kwargs: None
+        prot._getFirstJoinStep = lambda: None
+
+        events = []
+        prot.mapper = SimpleNamespace(
+            deleteRelations=lambda protocol: events.append(('delete-relations', None)),
+            commit=lambda: events.append(('commit-relations', None)),
+        )
+        prot._updateOutputSet = lambda name, outputSet, streamMode: events.append(('update', name))
+        prot._defineTransformRelation = lambda *args: events.append(('relation', None))
+        prot._writeCertainDoneList = lambda movieId, label: events.append(('checkpoint', label, movieId))
+
+        prot._checkNewOutput()
+
+        relationIndex = next(index for index, event in enumerate(events) if event[0] == 'relation')
+        checkpointIndex = next(index for index, event in enumerate(events) if event[0] == 'checkpoint')
+
+        self.assertLess(relationIndex, checkpointIndex)
+        self.assertIn(('delete-relations', None), events)
+        self.assertIn(('commit-relations', None), events)
 
     def testFillOutputIsIdempotentAfterPartialPersistence(self):
         prot = self._newProtocol()

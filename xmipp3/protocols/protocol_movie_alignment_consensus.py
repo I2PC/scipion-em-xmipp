@@ -591,12 +591,15 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             self.info('Root Mean Squared Error %f' % rmse_cart)
             self.info('General Corr min(corrX, corrY) %f' % corr_cart)
 
-            if corr_cart >= self.minConsCorrelation.get():
+            threshold = self.minConsCorrelation.get()
+            accepted = threshold == -1 or (np.isfinite(corr_cart) and corr_cart >= threshold)
+
+            if accepted:
                 self.info('Movie with id %d has a correlated alignment shift trajectory' % movieId)
                 fn = self._getMovieSelecFileAccepted()
                 with open(fn, 'a') as f:
                     f.write('%d T\n' % movieId)
-            elif corr_cart < self.minConsCorrelation.get():
+            else:
                 self.info('Movie with id %d has discrepancy in the alignment with correlation %f' % (movieId, corr_cart))
                 fn = self._getMovieSelecFileDiscarded()
                 with open(fn, 'a') as f:
@@ -623,9 +626,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                            if movieId not in doneListAccepted]
         newDoneDiscarded = [movieId for movieId in movieListIdDiscarded
                             if movieId not in doneListDiscarded]
-
-        firstTimeAccepted = not hasattr(self, 'outputMovies')
-        firstTimeDiscarded = not hasattr(self, 'outputMoviesDiscarded')
 
         allDone = len(doneListAccepted) + len(doneListDiscarded) +\
                   len(newDoneAccepted) + len(newDoneDiscarded)
@@ -660,7 +660,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         # so we exit from the function here
             return
 
-        def updateRelationsAndClose(movieSet, micSet, first, label=''):
+        def updateOutputsAndClose(movieSet, micSet, label=''):
             if movieSet is None or micSet is None:
                 return False
 
@@ -668,20 +668,15 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             self._updateOutputSet(micsAttrName, micSet, streamMode)
             self._updateOutputSet('outputMovies'+label, movieSet, streamMode)
 
-            if first:
-                # We consider that Movies are 'transformed' into the Micrographs
-                # This will allow to extend the micrograph associated to a set of
-                # movies to another set of micrographs generated from a
-                # different movie alignment
-                self._defineTransformRelation(self.inputMovies1, micSet)
-
             micSet.close()
             movieSet.close()
             return True
 
-        acceptedUpdated = updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
-        discardedUpdated = updateRelationsAndClose(movieSetDiscarded, micSetDiscarded,
-                                                    firstTimeDiscarded, DISCARDED)
+        acceptedUpdated = updateOutputsAndClose(movieSet, micSet)
+        discardedUpdated = updateOutputsAndClose(movieSetDiscarded, micSetDiscarded, DISCARDED)
+
+        if acceptedUpdated or discardedUpdated:
+            self._refreshOutputRelations()
 
         if acceptedUpdated:
             for movieId in newDoneAccepted:
@@ -695,6 +690,25 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(STATUS_NEW)
+
+    def _refreshOutputRelations(self):
+        relationOutputs = [getattr(self, name, None) for name in ('outputMicrographs', 'outputMicrographsDiscarded')]
+        relationOutputs = [output for output in relationOutputs if output is not None]
+
+        if not relationOutputs:
+            return
+
+        if self.mapper is not None:
+            self.mapper.deleteRelations(self)
+
+        # Movies are considered transformed into the corresponding micrographs.
+        # Rebuilding all relations makes Resume safe if a previous run stopped
+        # after persisting an output but before its relation was created.
+        for micSet in relationOutputs:
+            self._defineTransformRelation(self.inputMovies1, micSet)
+
+        if self.mapper is not None:
+            self.mapper.commit()
 
     def fillOutput(self, movieSet, micSet, newDone, label):
         if newDone:
