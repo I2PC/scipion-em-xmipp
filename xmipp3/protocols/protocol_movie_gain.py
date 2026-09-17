@@ -438,7 +438,12 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
                                                   prerequisites=self.convertCIStep)
             # adding normStep as dependency for all other steps
             self.convertCIStep.append(normStepId)
-        self.estimatedIds, self.estimatedResIds = [], []
+
+        if not hasattr(self, 'estimatedIds'):
+            self.estimatedIds = []
+        if not hasattr(self, 'estimatedResIds'):
+            self.estimatedResIds = []
+
         # For each movie insert the step to process it
         for movie in inputMovies:
             if movie.getObjId() not in insertedDict:
@@ -569,37 +574,34 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
         return outputSet
 
     def _checkNewInput(self):
-        ProtProcessMovies._checkNewInput(self)
+        self._loadInputList()
+        newMovies = any(m.getObjId() not in self.insertedDict for m in self.listOfMovies)
+        outputStep = self._getFirstJoinStep()
+
+        if newMovies:
+            fDeps = self._insertNewMoviesSteps(self.insertedDict, self.listOfMovies)
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+            self.updateSteps()
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
 
-        # Load previously done items (from text file)
-        doneList = self._readDoneList()
-        # Check for newly done items
-        newDone = [m.clone() for m in self.listOfMovies
-                   if int(m.getObjId()) not in doneList and
-                   self._isMovieDone(m)]
+        doneIds = set(self._readDoneList())
+        newDone = [m.clone() for m in self.listOfMovies if int(m.getObjId()) not in doneIds and self._isMovieDone(m)]
 
-        allDone = len(doneList) + len(newDone)
+        allDone = len(doneIds) + len(newDone)
         # We have finished when there is not more input movies
         # (stream closed) and the number of processed movies is
         # equal to the number of inputs
-        self.finished = self.streamClosed and \
-                        allDone == len(self.listOfMovies)
-        streamMode = Set.STREAM_CLOSED if self.finished \
-            else Set.STREAM_OPEN
+        self.finished = self.streamClosed and allDone == len(self.listOfMovies)
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-        if newDone:
-            self._writeDoneList(newDone)
-        elif not self.finished:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
+        if not newDone and not self.finished:
             return
 
-        if any([self.doGainProcess(i.getObjId()) for i in newDone]):
+        if any(self.doGainProcess(i.getObjId()) for i in newDone):
             # update outputGains if any residualGain is processed in newDone
             if self.estimateGain.get():
                 estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
@@ -621,17 +623,30 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
                 self._updateOutputSet(OUTPUT_RESIDUAL_GAINS, resGainsSet, streamMode)
 
         moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite', fixGain=True)
+        movieIds = self._getOutputIds(moviesSet)
         for movie in newDone:
-            moviesSet.append(movie)
+            if movie.getObjId() not in movieIds:
+                moviesSet.append(movie)
+                movieIds.add(movie.getObjId())
         self._updateOutputSet(OUTPUT_MOVIES, moviesSet, streamMode)
+
+        if newDone:
+            self._writeDoneList(newDone)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
 
+    @staticmethod
+    def _getOutputIds(outputSet):
+        return set(outputSet.getIdSet()) if outputSet.getSize() else set()
+
     def updateGainsOutput(self, movie, imgSet, imageFile):
         movieId = movie.getObjId()
+        if movieId in self._getOutputIds(imgSet):
+            return imgSet
+
         imgOut = Image()
         imgOut.setObjId(movieId)
         imgOut.setSamplingRate(movie.getSamplingRate())
