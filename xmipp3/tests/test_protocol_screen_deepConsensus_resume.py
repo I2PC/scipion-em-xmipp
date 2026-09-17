@@ -79,6 +79,7 @@ class TestXmippDeepConsensusResume(BaseTest):
 
     def testLoadTrainedParamsAddsResumeKeys(self):
         prot = self._newProtocol()
+        os.makedirs(prot._getExtraPath(), exist_ok=True)
         prot.saveTrainedParams({'trainedMicFns': [], 'predictedMicFns': [], 'posParticlesTrained': 0, 'trainingPass': 0, 'predictionPasses': [], 'doneExtraTesting': False, 'firstTraining': True, 'keepTraining': True})
         params = prot.loadTrainedParams()
         self.assertEqual([], params['pendingPredictedMicFns'])
