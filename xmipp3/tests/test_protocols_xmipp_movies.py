@@ -1269,6 +1269,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, percentage_threshold=10)
         prot.meanDoseList = [1.0] * 50
+        prot.meanDoseById = {movieId: 1.0 for movieId in range(1, 51)}
         prot.medianDifferences = [0.0] * 50
         prot.medianDifferenceIds = list(range(1, 51))
         prot.mu = 1.0
@@ -1276,11 +1277,24 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot.getDosePlot = lambda: 'dose.png'
         prot.getDoseDiffPlot = lambda: 'diff.png'
 
-        with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysis'):
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysis') as dosePlot:
             with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysisDiff') as diffPlot:
                 prot._updateDosePlots(50, 0.9, 1.1)
 
+        dosePlot.assert_called_once_with('dose.png', prot.meanDoseList, 1.0, 0.9, 1.1, list(range(1, 51)))
         diffPlot.assert_called_once_with('diff.png', prot.medianDifferences, 10, prot.medianDifferenceIds)
+
+    def testDosePlotUsesActualMovieIds(self):
+        import tempfile
+        from unittest.mock import patch
+        from xmipp3.protocols.protocol_movie_dose_analysis import plotDoseAnalysis
+
+        movieIds = [1, 4, 9]
+        with tempfile.TemporaryDirectory() as tmpDir:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plt.scatter') as scatter:
+                plotDoseAnalysis(os.path.join(tmpDir, 'dose.png'), [1.0, 1.1, 0.9], 1.0, 0.95, 1.05, movieIds)
+
+        self.assertEqual(list(scatter.call_args.args[0]), movieIds)
 
     def testDoseDiffPlotUsesActualMovieIds(self):
         import tempfile

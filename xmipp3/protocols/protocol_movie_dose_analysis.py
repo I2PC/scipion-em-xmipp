@@ -767,9 +767,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             return
 
         tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
+        tmpMeanDoseIds = sorted(self.meanDoseById)
         tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
         tmpMedianDifferenceIds = list(self.medianDifferenceIds)
-        plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper)
+        plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper, tmpMeanDoseIds)
         plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences, self.percentage_threshold.get(), tmpMedianDifferenceIds)
         self._lastPlotCount = doneCount
 
@@ -856,8 +857,8 @@ def computeStats(mean_frames):
              }
     return stats
 
-def plotDoseAnalysis(filename, doseValues, medianGlobal, lower, upper):
-    x = np.arange(start=1, stop=len(doseValues)+1, step=1)
+def plotDoseAnalysis(filename, doseValues, medianGlobal, lower, upper, movieIds=None):
+    x = movieIds if movieIds is not None else np.arange(start=1, stop=len(doseValues)+1, step=1)
     plt.figure()
     plt.scatter(x, doseValues,s=10)
     plt.axhline(y=upper, color='r', linestyle='-.', label='Upper limit dose')
