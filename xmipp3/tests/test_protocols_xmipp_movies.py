@@ -955,3 +955,118 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(accepted.ids, [2])
         self.assertEqual(discarded.ids, [1])
 
+    def testFailedDoseMovieIsPersistedAsDiscarded(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class InputSet:
+            def getItem(self, field, movieId):
+                return Movie(movieId)
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.mu = 1.0
+        prot.stats = {1: {'mean': 1.0, 'std': 0.0, 'min': 1.0, 'max': 1.0}}
+        prot.meanDoseList = [1.0]
+        prot.insertedIds = [1, 2]
+        prot.processedIds = [1, 2]
+        prot.medianDifferences = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.movsFn = 'movies.sqlite'
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._hasEnoughDoseSamples = lambda: False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 2
+        prot._loadInputSet = lambda _: InputSet()
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute') as setAttr:
+            prot._checkNewOutput()
+
+        self.assertEqual(accepted.ids, [1])
+        self.assertEqual(discarded.ids, [2])
+        self.assertTrue(any(call.args[0].getObjId() == 2 and call.args[1] == '_DOSE_ANALYSIS_FAILED' and call.args[2] is True for call in setAttr.call_args_list))
+
+    def testAllFailedDoseMoviesFinishClosedStream(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class InputSet:
+            def getItem(self, field, movieId):
+                return Movie(movieId)
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.stats = {}
+        prot.meanDoseById = {}
+        prot.meanDoseList = []
+        prot.insertedIds = [1, 2]
+        prot.processedIds = [1, 2]
+        prot.framesRange = (1, 1, 1)
+        prot.movsFn = 'movies.sqlite'
+        prot.isStreamClosed = True
+        prot._doneIds = set()
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 2
+        prot._loadInputSet = lambda _: InputSet()
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._getFirstJoinStep = lambda: None
+        prot._store = lambda: None
+
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+        self.assertFalse(hasattr(prot, 'mu'))
+        self.assertEqual(discarded.ids, [1, 2])
+        self.assertEqual(prot._doneIds, {1, 2})
+

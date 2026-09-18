@@ -588,6 +588,11 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         return len(set(doneIds).union(self.processedIds)) == self._getInputSize()
 
     def _checkNewOutput(self):
+        doneListIds, _, _, _ = self._getAllDoneIds()
+        newDone = self._getNewDoneIds(doneListIds)
+        allDone = len(doneListIds) + len(newDone)
+        maxMicSize = self._getInputSize()
+
         if self._hasEnoughDoseSamples() and not hasattr(self, 'mu'):
             medianDoseExperimental = np.median(self.meanDoseList)
             if hasattr(self, 'dosePerFrame'):
@@ -605,12 +610,11 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             else:
                 self.mu = medianDoseExperimental
 
+        if not hasattr(self, 'mu') and self.isStreamClosed and allDone == maxMicSize and not self.meanDoseList:
+            self.finished = True
+            self._publishFailedMovies(newDone, Set.STREAM_CLOSED)
+
         if hasattr(self, 'mu'):
-            # load if first time in order to make dataSets relations
-            doneListIds, _, _, _ = self._getAllDoneIds()
-            newDone = self._getNewDoneIds(doneListIds)
-            allDone = len(doneListIds) + len(newDone)
-            maxMicSize = self._getInputSize()
             # We have finished when there is not more input movies
             # (stream closed) and the number of processed movies is
             # equal to the number of inputs
@@ -668,8 +672,12 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                     else:
                         self.info('discarded')
                         discardedMovies.append(newMovie)
+                else:
+                    setAttribute(newMovie, '_DOSE_ANALYSIS_FAILED', True)
+                    self.info('Movie with id %d could not be analyzed and was discarded' % movieId)
+                    discardedMovies.append(newMovie)
 
-                    if len(self.medianDifferences) % self.window.get() == 0:
+                if movieId in self.stats and len(self.medianDifferences) % self.window.get() == 0:
                         if self.usingExperimental:
                             # Update the median global
                             self.mu = np.median(self.meanDoseList)
@@ -712,6 +720,24 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self._store()
 
 # ------------------------- UTILS functions --------------------------------
+    def _publishFailedMovies(self, movieIds, streamMode):
+        if not movieIds:
+            return
+
+        inputMovieSet = self._loadInputSet(self.movsFn)
+        failedMovies = []
+        for movieId in movieIds:
+            movie = inputMovieSet.getItem("id", movieId).clone()
+            movie.setFramesRange(self.framesRange)
+            setAttribute(movie, '_DOSE_ANALYSIS_FAILED', True)
+            failedMovies.append(movie)
+
+        moviesSetDiscarded = self._loadOutputSet(SetOfMovies, 'movies_discarded.sqlite')
+        for movie in failedMovies:
+            moviesSetDiscarded.append(movie)
+        self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
+        self._registerDoneIds((movie.getObjId() for movie in failedMovies), accepted=False)
+
     def _updateDosePlots(self, doneCount, lower, upper):
         if doneCount <= self._lastPlotCount:
             return
