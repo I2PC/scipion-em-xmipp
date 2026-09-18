@@ -673,6 +673,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                         if self.usingExperimental:
                             # Update the median global
                             self.mu = np.median(self.meanDoseList)
+                            lower, upper = self.getLimitIntervals()
                             self.info('Updating median global to %f' %self.mu)
 
                         windowList = self.medianDoseTemporal[-self.window.get():]
