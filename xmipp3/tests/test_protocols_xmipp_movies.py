@@ -761,3 +761,18 @@ class TestMovieDoseAnalysisState(BaseTest):
 
             prot._checkNewInput()
             self.assertEqual(len(loadCalls), 2)
+
+    def testParallelCompletionKeepsAcquisitionOrder(self):
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.insertedIds = [1, 2, 3, 4]
+        prot.processedIds = [3, 4]
+        prot.meanDoseById = {3: 1.3, 4: 1.4}
+
+        self.assertEqual(prot._getNewDoneIds([]), [])
+
+        prot.processedIds.extend([1, 2])
+        prot.meanDoseById.update({1: 1.1, 2: 1.2})
+        prot._syncMeanDoseList()
+
+        self.assertEqual(prot._getNewDoneIds([]), [1, 2, 3, 4])
+        self.assertEqual(prot.meanDoseList, [1.1, 1.2, 1.3, 1.4])

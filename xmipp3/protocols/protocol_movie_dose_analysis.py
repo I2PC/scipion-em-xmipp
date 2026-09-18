@@ -337,6 +337,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self.stepsExecutionMode = cons.STEPS_PARALLEL
         self.finished = False
         self.stats = {}
+        self.meanDoseById = {}
         self.meanDoseList = []
         self.medianDoseTemporal = []
         self.medianDifferences = []
@@ -410,6 +411,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                     restored.append((movie.getObjId(), mean, diff))
 
         restored.sort(key=lambda item: item[0])
+        self.meanDoseById = {movieId: mean for movieId, mean, _ in restored}
         self.meanDoseList = [mean for _, mean, _ in restored]
         self.medianDoseTemporal = list(self.meanDoseList)
         self.medianDifferences = [diff for _, _, diff in restored if diff is not None]
@@ -491,6 +493,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             stats = self.estimatePoissonCount(movie)
             if stats:
                 self.stats[movieId] = stats
+                self.meanDoseById[movieId] = stats['mean']
                 self.info("movie_%d_poisson_count: mean=%f stdev=%f [min=%f,max=%f]\n" %
                          (movieId, stats['mean'], stats['std'], stats['min'], stats['max']))
             self.processedIds.append(movieId)
@@ -507,7 +510,6 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                 mean_frames.append(mean_dose_per_angstrom2)
 
             stats = computeStats(np.asarray(mean_frames))
-            self.meanDoseList.append(stats['mean'])
         except Exception as e:
             self.error(e)
             self.info('Skipping movie with ID: %d' %movie.getObjId())
@@ -534,7 +536,27 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
         return outputSet
 
+    def _syncMeanDoseList(self):
+        doseById = dict(self.meanDoseById)
+        self.meanDoseList = [doseById[movieId] for movieId in sorted(doseById)]
+
+    def _getNewDoneIds(self, doneListIds):
+        insertedIds = sorted(set(self.insertedIds))
+        processedIds = set(self.processedIds)
+        doneIds = set(doneListIds)
+        newDone = []
+
+        for movieId in insertedIds:
+            if movieId in doneIds:
+                continue
+            if movieId not in processedIds:
+                break
+            newDone.append(movieId)
+
+        return newDone
+
     def _hasEnoughDoseSamples(self):
+        self._syncMeanDoseList()
         if len(self.meanDoseList) >= self.n_samples.get():
             return True
         if not self.isStreamClosed or not self.meanDoseList:
@@ -565,8 +587,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         if hasattr(self, 'mu'):
             # load if first time in order to make dataSets relations
             doneListIds, _, _, _ = self._getAllDoneIds()
-            processedIds = self.processedIds
-            newDone = [micId for micId in processedIds if micId not in doneListIds]
+            newDone = self._getNewDoneIds(doneListIds)
             allDone = len(doneListIds) + len(newDone)
             maxMicSize = self._loadInputSet(self.movsFn).getSize()
             # We have finished when there is not more input movies
