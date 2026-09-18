@@ -386,6 +386,14 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--device {device} "
         )
 
+        estimatorType = self._getEstimatorType()
+        if estimatorType == "fourier_masked":
+            scriptArgs += "--estimator-type fourier_irls "
+            scriptArgs += "--weight-approach per-image "
+            scriptArgs += "--lowpass-mask "
+        else:
+            scriptArgs += f"--estimator-type {estimatorType}"
+
         if self.gmmReweighting.get():
             scriptArgs += "--gmm "
             scriptArgs += "--estimator-max-iter 1 "
@@ -396,14 +404,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             scriptArgs += "--gmm-check-degenerate "
         else:
             scriptArgs += "--no-gmm-check-degenerate "
-
-        estimatorType = self._getEstimatorType()
-        if estimatorType == "fourier_masked":
-            scriptArgs += "fourier_irls "
-            scriptArgs += "--weight-approach per-image "
-            scriptArgs += "--lowpass-mask "
-        else:
-            scriptArgs += f"{estimatorType} "
 
         self.runJob("xmipp_gmm_average_estimation", scriptArgs, env=env, numberOfMpi=1)
 
