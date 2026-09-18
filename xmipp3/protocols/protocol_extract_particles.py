@@ -458,6 +458,13 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return []
 
     def _getExtractArgs(self):
+        """ Should be implemented in sub-classes to define the argument
+        list that should be passed to the picking step function.
+        """
+        return [self.doInvert.get(),
+                self._getNormalizeArgs(),
+                self.doBorders.get()]
+
     def _checkNewInput(self):
         newMics = self._loadInputList()
         outputStep = self._getFirstJoinStep()
@@ -506,13 +513,6 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(STATUS_NEW)
-
-        """ Should be implemented in sub-classes to define the argument
-        list that should be passed to the picking step function.
-        """
-        return [self.doInvert.get(),
-                self._getNormalizeArgs(),
-                self.doBorders.get()]
     
     #--------------------------- STEPS functions -------------------------------
     def _extractMicrograph(self, mic, doInvert, normalizeArgs, doBorders):
