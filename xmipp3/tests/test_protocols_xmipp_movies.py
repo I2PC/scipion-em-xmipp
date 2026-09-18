@@ -765,9 +765,13 @@ class TestMovieDoseAnalysisState(BaseTest):
             def getSize(self):
                 return 3
 
+            def close(self):
+                pass
+
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=5)
-        prot.meanDoseList = [1.0, 1.1, 0.9]
+        prot.insertedIds = [1, 2, 3]
         prot.processedIds = [1, 2]
+        prot.meanDoseById = {1: 1.0, 2: 1.1}
         prot.isStreamClosed = True
         prot.movsFn = 'movies.sqlite'
         prot._getAllDoneIds = lambda: ([], 0, [], [])
@@ -776,6 +780,7 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertFalse(prot._hasEnoughDoseSamples())
 
         prot.processedIds.append(3)
+        prot.meanDoseById[3] = 0.9
 
         self.assertTrue(prot._hasEnoughDoseSamples())
 
@@ -1043,6 +1048,9 @@ class TestMovieDoseAnalysisState(BaseTest):
             def getItem(self, field, movieId):
                 return Movie(movieId)
 
+            def close(self):
+                pass
+
         class OutputSet:
             def __init__(self):
                 self.ids = []
@@ -1213,6 +1221,9 @@ class TestMovieDoseAnalysisState(BaseTest):
             def getItem(self, field, movieId):
                 return Movie(movieId)
 
+            def close(self):
+                pass
+
         class OutputSet:
             def __init__(self):
                 self.ids = []
@@ -1271,6 +1282,9 @@ class TestMovieDoseAnalysisState(BaseTest):
         class InputSet:
             def getItem(self, field, movieId):
                 return Movie(movieId)
+
+            def close(self):
+                pass
 
         class OutputSet:
             def __init__(self):
