@@ -44,27 +44,20 @@ from xmipp3.base import XmippProtocol
 from xmipp3.convert import particleToRow
 
 ESTIMATORS = {
-    0: "gmm",
-    1: "irls",
-    2: "fourier_irls",
+    0: "irls",
+    1: "fourier_irls",
+    2: "fourier_masked",
     3: "admm",
-    4: "fourier_masked",
-    5: "gmm_on_fourier_masked",
 }
 
-ESTIMATOR_WEIGHT_COLUMNS = {
-    "gmm": ["wRobust", "wRobustStd", "wRobustGmm"],
-    "irls": ["wRobust", "wRobustStd"],
-    "fourier_irls": ["wRobust", "wRobustStd"],
-    "admm": ["wRobust", "wRobustStd"],
-    "fourier_masked": ["wRobust", "wRobustStd"],
-    "gmm_on_fourier_masked": ["wRobust", "wRobustStd", "wRobustGmm"],
-}
+ROBUST_WEIGHT_COL = "wRobust"
+STD_ROBUST_WEIGHT_COL = "wRobustStd"
+GMM_WEIGHT_COL = "wRobustGmm"
 
 WEIGHT_COLUMN_TO_ATTRIBUTE = {
-    "wRobust": "_xmippRobustWeight",
-    "wRobustStd": "_xmippRobustWeightStandardized",
-    "wRobustGmm": "_xmippRobustWeightGmm",
+    ROBUST_WEIGHT_COL: "_xmippRobustWeight",
+    STD_ROBUST_WEIGHT_COL: "_xmippRobustWeightStandardized",
+    GMM_WEIGHT_COL: "_xmippRobustWeightGmm",
 }
 
 
@@ -110,18 +103,20 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             EnumParam,
             default=0,
             choices=[ESTIMATORS[i] for i in range(len(ESTIMATORS))],
-            help=(
-                "Type of robust estimator to use to compute the new class averages. "
-                "As a rule of thumb, the 'gmm' estimator should be more aggressive in "
-                "rejecting possibly misaligned or corrupted particles. This means "
-                "its performance can be better for more contaminated datasets, and "
-                "slightly worse in very clean datasets."
-                "'irls' and 'fourier_irls' should both be relatively fast and less "
-                "aggresive in particle rejection. 'admm' combines both 'irls' and "
-                "'fourier_irls', and it can improve their results at the cost of "
-                "more computation time."
-            ),
+            help=("Type of robust estimator to use to compute the new class averages."),
             label="Estimator type",
+        )
+        form.addParam(
+            "gmmReweighting",
+            BooleanParam,
+            default=True,
+            help=(
+                "Apply GMM reweighting to the results of the estimator."
+                "GMM reweighting makes the estimator more aggressive in "
+                "rejecting possibly misaligned or corrupted particles. This means "
+                "it can slightly improve performance on more contaminated datasets."
+            ),
+            label="GMM Reweighting",
         )
         form.addParam(
             "classId",
@@ -320,7 +315,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         return ESTIMATORS[self.estimatorType.get()]
 
     def _getEstimatorWeightColumns(self):
-        return ESTIMATOR_WEIGHT_COLUMNS[self._getEstimatorType()]
+        base_weight_columns = [ROBUST_WEIGHT_COL, STD_ROBUST_WEIGHT_COL]
+        if self.gmmReweighting.get():
+            return base_weight_columns + [GMM_WEIGHT_COL]
+        return base_weight_columns
 
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
@@ -386,13 +384,25 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--out-corrected-avgs {correctedAveragePath} "
             f"--out-original-avgs {originalAveragePath} "
             f"--device {device} "
-            f"--estimator-type {self._getEstimatorType()} "
         )
 
-        if self.checkDegenerateGmm.get():
-            scriptArgs += "--check-degenerate-gmm "
+        if self.gmmReweighting.get():
+            scriptArgs += "--gmm "
         else:
-            scriptArgs += "--no-check-degenerate-gmm "
+            scriptArgs += "--no-gmm"
+
+        if self.checkDegenerateGmm.get():
+            scriptArgs += "--gmm-check-degenerate "
+        else:
+            scriptArgs += "--no-gmm-check-degenerate "
+
+        estimatorType = self._getEstimatorType()
+        if estimatorType == "fourier_masked":
+            scriptArgs += "fourier_irls "
+            scriptArgs += "--weight-approach per-image "
+            scriptArgs += "--lowpass-mask "
+        else:
+            scriptArgs += f"{estimatorType} "
 
         self.runJob("xmipp_gmm_average_estimation", scriptArgs, env=env, numberOfMpi=1)
 
