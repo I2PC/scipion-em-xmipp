@@ -777,6 +777,21 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(prot._getNewDoneIds([]), [1, 2, 3, 4])
         self.assertEqual(prot.meanDoseList, [1.1, 1.2, 1.3, 1.4])
 
+    def testOutOfOrderCompletionDoesNotTriggerInitialDoseSampling(self):
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=2)
+        prot.insertedIds = [1, 2, 3, 4]
+        prot.processedIds = [3, 4]
+        prot.meanDoseById = {3: 1.3, 4: 1.4}
+        prot.isStreamClosed = False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+
+        self.assertFalse(prot._hasEnoughDoseSamples())
+
+        prot.processedIds.extend([1, 2])
+        prot.meanDoseById.update({1: 1.1, 2: 1.2})
+
+        self.assertTrue(prot._hasEnoughDoseSamples())
+
     def testDoneIdsAreCached(self):
         class OutputSet:
             def __init__(self, ids):

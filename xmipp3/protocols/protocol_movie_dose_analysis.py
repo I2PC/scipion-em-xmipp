@@ -596,12 +596,14 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
     def _hasEnoughDoseSamples(self):
         self._syncMeanDoseList()
-        if len(self.meanDoseList) >= self.n_samples.get():
+        doneIds, _, _, _ = self._getAllDoneIds()
+        readyIds = set(doneIds).union(self._getNewDoneIds(doneIds))
+        readyDoseCount = sum(movieId in self.meanDoseById for movieId in readyIds)
+        if readyDoseCount >= self.n_samples.get():
             return True
         if not self.isStreamClosed or not self.meanDoseList:
             return False
 
-        doneIds, _, _, _ = self._getAllDoneIds()
         return len(set(doneIds).union(self.processedIds)) == self._getInputSize()
 
     def _checkNewOutput(self):
