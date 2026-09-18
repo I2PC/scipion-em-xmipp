@@ -32,9 +32,8 @@ from os.path import exists
 
 import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.object import Integer
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
-                                           STATUS_FINISHED)
+from pyworkflow.object import Integer, Set
+from pyworkflow.protocol.constants import STEPS_PARALLEL, LEVEL_ADVANCED, STATUS_FINISHED, STATUS_NEW
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
 from pwem.objects import Particle
@@ -459,6 +458,55 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return []
 
     def _getExtractArgs(self):
+    def _checkNewInput(self):
+        newMics = self._loadInputList()
+        outputStep = self._getFirstJoinStep()
+
+        if newMics:
+            fDeps = self._insertNewMicsSteps(newMics.values())
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+            self.updateSteps()
+
+    def _getOutputMicIds(self):
+        outputParts = getattr(self, 'outputParticles', None)
+        if outputParts is None or outputParts.getSize() == 0:
+            return set()
+        return {int(micId) for micId in outputParts.getUniqueValues('_micId')}
+
+    def _checkNewOutput(self):
+        if getattr(self, 'finished', False):
+            return
+
+        doneIds = set(self._readDoneList())
+        processedMics = [mic for mic in self.micDict.values() if self._isMicDone(mic)]
+        inputLen = len(self.micDict)
+        streamClosed = self._isStreamClosed()
+        allMicsProcessed = self._areAllMicsProcessed()
+        self.finished = streamClosed and len(processedMics) == inputLen and allMicsProcessed
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        outputMicIds = self._getOutputMicIds()
+        newOutput = [mic for mic in processedMics if mic.getObjId() not in outputMicIds]
+        pendingDone = [mic for mic in processedMics if mic.getObjId() not in doneIds]
+
+        if newOutput:
+            self._updateOutputPartSet(newOutput, streamMode)
+        elif self.finished:
+            self._updateOutputPartSet([], Set.STREAM_CLOSED)
+        elif not pendingDone:
+            if len(processedMics) == inputLen:
+                self._streamingSleepOnWait()
+            return
+
+        if pendingDone:
+            self._writeDoneList(pendingDone)
+
+        if self.finished:
+            outputStep = self._getFirstJoinStep()
+            if outputStep and outputStep.isWaiting():
+                outputStep.setStatus(STATUS_NEW)
+
         """ Should be implemented in sub-classes to define the argument
         list that should be passed to the picking step function.
         """

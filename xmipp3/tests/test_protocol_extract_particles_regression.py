@@ -1,0 +1,146 @@
+# **************************************************************************
+# *
+# * Regression tests for extract particles streaming/resume recovery.
+# *
+# **************************************************************************
+
+import unittest
+
+from pyworkflow.object import Set
+
+from xmipp3.protocols import protocol_extract_particles as extract_particles
+
+
+class _Mic:
+    def __init__(self, objId):
+        self.objId = objId
+
+    def getObjId(self):
+        return self.objId
+
+    def getMicName(self):
+        return 'mic_%03d' % self.objId
+
+
+class _OutputParts:
+    def __init__(self, micIds=None):
+        self.micIds = set(micIds or [])
+
+    def getSize(self):
+        return len(self.micIds)
+
+    def getUniqueValues(self, attr):
+        return list(self.micIds)
+
+
+class _OutputStep:
+    def __init__(self):
+        self.prerequisites = []
+        self.status = None
+
+    def addPrerequisites(self, *deps):
+        self.prerequisites.extend(deps)
+
+    def isWaiting(self):
+        return True
+
+    def setStatus(self, status):
+        self.status = status
+
+
+class _InputHarness:
+    def __init__(self):
+        self.outputStep = _OutputStep()
+        self.updated = 0
+
+    def _loadInputList(self):
+        return {'mic_002': _Mic(2)}
+
+    def _getFirstJoinStep(self):
+        return self.outputStep
+
+    def _insertNewMicsSteps(self, mics):
+        return [mic.getObjId() + 100 for mic in mics]
+
+    def updateSteps(self):
+        self.updated += 1
+
+
+class _OutputHarness:
+    def __init__(self, micIds, processedIds, doneIds, outputIds, streamClosed=False, allMicsProcessed=True):
+        self.events = []
+        self.micDict = {mic.getMicName(): mic for mic in [_Mic(objId) for objId in micIds]}
+        self.processedIds = set(processedIds)
+        self.doneIds = set(doneIds)
+        self.outputParticles = _OutputParts(outputIds) if outputIds is not None else None
+        self.streamClosed = streamClosed
+        self.allMicsProcessed = allMicsProcessed
+        self.finished = False
+        self.outputStep = _OutputStep()
+
+    def _isMicDone(self, mic):
+        return mic.getObjId() in self.processedIds
+
+    def _readDoneList(self):
+        return list(self.doneIds)
+
+    def _isStreamClosed(self):
+        return self.streamClosed
+
+    def _areAllMicsProcessed(self):
+        return self.allMicsProcessed
+
+    def _getOutputMicIds(self):
+        return extract_particles.XmippProtExtractParticles._getOutputMicIds(self)
+
+    def _updateOutputPartSet(self, mics, streamMode):
+        ids = [mic.getObjId() for mic in mics]
+        self.events.append(('output', ids, streamMode))
+        if self.outputParticles is None:
+            self.outputParticles = _OutputParts()
+        self.outputParticles.micIds.update(ids)
+
+    def _writeDoneList(self, mics):
+        ids = [mic.getObjId() for mic in mics]
+        self.doneIds.update(ids)
+        self.events.append(('checkpoint', ids))
+
+    def _getFirstJoinStep(self):
+        return self.outputStep
+
+    def _streamingSleepOnWait(self):
+        self.events.append(('sleep',))
+
+
+class TestXmippExtractParticlesRegression(unittest.TestCase):
+    def testCheckNewInputAlwaysReloadsFreshSnapshot(self):
+        protocol = _InputHarness()
+        extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
+        self.assertEqual([102], protocol.outputStep.prerequisites)
+        self.assertEqual(1, protocol.updated)
+
+    def testOutputIsPersistedBeforeCheckpoint(self):
+        protocol = _OutputHarness([1, 2], [1, 2], [1], [1])
+        extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
+        self.assertEqual([('output', [2], Set.STREAM_OPEN), ('checkpoint', [2])], protocol.events)
+
+    def testReplayRepairsCheckpointWithoutDuplicateOutput(self):
+        protocol = _OutputHarness([1], [1], [], [1])
+        extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
+        self.assertEqual([('checkpoint', [1])], protocol.events)
+
+    def testFinishedReplayClosesExistingOutput(self):
+        protocol = _OutputHarness([1], [1], [1], [1], streamClosed=True)
+        extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
+        self.assertTrue(protocol.finished)
+        self.assertEqual([('output', [], Set.STREAM_CLOSED)], protocol.events)
+
+    def testFinishedRequiresAllPickedMicrographs(self):
+        protocol = _OutputHarness([1], [1], [1], [1], streamClosed=True, allMicsProcessed=False)
+        extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
+        self.assertFalse(protocol.finished)
+        self.assertEqual([('sleep',)], protocol.events)
+
+
+if __name__ == '__main__':
+    unittest.main()
