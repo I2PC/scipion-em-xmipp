@@ -24,7 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from pwem.objects import SetOfMicrographs
+from pwem.objects import SetOfMicrographs, SetOfCTF, Micrograph, CTFModel
 from pwem.protocols import (ProtImportMicrographs, ProtCreateStreamData,
                             ProtImportCoordinates, ProtImportCTF)
 from pyworkflow.object import Pointer
@@ -290,6 +290,69 @@ class TestXmippCTFEstimation(TestXmippBase):
         self.assertAlmostEquals(ctfModel.getDefocusAngle(), 60.0, delta=20)
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
+
+    def testInitialCtfStreamingInputFiltering(self):
+        micSetFn = self.proj.getTmpPath('ctf_streaming_mics.sqlite')
+        ctfSetFn = self.proj.getTmpPath('ctf_streaming_ctfs.sqlite')
+        micSet = SetOfMicrographs(filename=micSetFn)
+        for micId in (1, 2, 3):
+            mic = Micrograph()
+            mic.setObjId(micId)
+            mic.setFileName(self.proj.getTmpPath('mic_%03d.mrc' % micId))
+            mic.setMicName('mic_%03d' % micId)
+            micSet.append(mic)
+        micSet.setStreamState(micSet.STREAM_OPEN)
+        micSet.write()
+        micSet.close()
+
+        ctfSet = SetOfCTF(filename=ctfSetFn)
+        for ctfId in (1, 3):
+            ctf = CTFModel()
+            ctf.setObjId(ctfId)
+            ctfSet.append(ctf)
+        ctfSet.setStreamState(ctfSet.STREAM_OPEN)
+        ctfSet.write()
+        ctfSet.close()
+
+        protCTF = self.newProtocol(XmippProtCTFMicrographs, doInitialCTF=True)
+        protCTF.ctfRelations.set(ctfSet)
+        protCTF.micDict = {}
+
+        newMics, streamClosed = protCTF._loadSet(micSet, SetOfMicrographs, lambda mic: mic.getMicName())
+        self.assertFalse(streamClosed)
+        self.assertEqual(list(newMics.keys()), ['mic_001', 'mic_003'])
+
+        protCTF.micDict.update(newMics)
+        newMics, streamClosed = protCTF._loadSet(micSet, SetOfMicrographs, lambda mic: mic.getMicName())
+        self.assertFalse(streamClosed)
+        self.assertEqual(len(newMics), 0)
+
+    def testResumeRecoversPersistedCtfBeforeDoneList(self):
+        mic = self.protImport.outputMicrographs.getFirstItem().clone()
+        outputFn = self.proj.getTmpPath('ctf_resume_output.sqlite')
+        outputCtf = SetOfCTF(filename=outputFn)
+        ctf = CTFModel()
+        ctf.setMicrograph(mic)
+        outputCtf.append(ctf)
+        outputCtf.write()
+        outputCtf.close()
+
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        protCTF.micDict = {mic.getMicName(): mic}
+        protCTF.streamClosed = False
+        protCTF.outputCTF = SetOfCTF(filename=outputFn)
+        updatedIds = []
+        writtenIds = []
+        protCTF._readDoneList = lambda: []
+        protCTF._isMicDone = lambda mic: True
+        protCTF._updateOutputCTFSet = lambda mics, streamMode: updatedIds.extend(mic.getObjId() for mic in mics) or list(mics)
+        protCTF._writeDoneList = lambda mics: writtenIds.extend(mic.getObjId() for mic in mics)
+        protCTF._streamingSleepOnWait = lambda: None
+
+        protCTF._checkNewOutput()
+
+        self.assertEqual(updatedIds, [])
+        self.assertEqual(writtenIds, [mic.getObjId()])
 
 
 class TestXmippAutomaticPicking(TestXmippBase):
