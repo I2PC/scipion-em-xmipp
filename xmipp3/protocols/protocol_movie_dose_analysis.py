@@ -342,6 +342,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self.meanDoseList = []
         self.medianDoseTemporal = []
         self.medianDifferences = []
+        self.medianDifferenceIds = []
         self.meanGlobal = 0
         self.usingExperimental = False
         self._doneIds = None
@@ -438,6 +439,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self.meanDoseList = [mean for _, mean, _, _, _ in restored]
         self.medianDoseTemporal = list(self.meanDoseList)
         self.medianDifferences = [diff for _, _, diff, _, _ in restored if diff is not None]
+        self.medianDifferenceIds = [movieId for movieId, _, diff, _, _ in restored if diff is not None]
 
         if restored:
             _, _, _, globalMedian, usingExperimental = restored[-1]
@@ -678,6 +680,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                     setAttribute(newMovie, '_MAX_DOSE_PER_FRAME', maxDose)
 
                     self.medianDifferences.append(diff_median)
+                    self.medianDifferenceIds.append(movieId)
                     self.medianDoseTemporal.append(mean)
                     self.info('Movie with id %d has a mean dose per frame of %f and a diff of %f percent'
                               %(movieId, mean, diff_median))
@@ -765,8 +768,9 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
         tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
         tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
+        tmpMedianDifferenceIds = list(self.medianDifferenceIds)
         plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper)
-        plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences, self.percentage_threshold.get())
+        plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences, self.percentage_threshold.get(), tmpMedianDifferenceIds)
         self._lastPlotCount = doneCount
 
     def _loadDoneIdsCache(self):
@@ -867,9 +871,9 @@ def plotDoseAnalysis(filename, doseValues, medianGlobal, lower, upper):
     plt.savefig(filename)
     plt.close()
 
-def plotDoseAnalysisDiff(filename, medianDifferences, percentageThreshold=5):
+def plotDoseAnalysisDiff(filename, medianDifferences, percentageThreshold=5, movieIds=None):
     medianDiff = np.median(medianDifferences)
-    x = np.arange(start=1+1, stop=len(medianDifferences)+2, step=1)
+    x = movieIds if movieIds is not None else np.arange(start=1, stop=len(medianDifferences)+1, step=1)
     plt.figure()
     plt.scatter(x, medianDifferences, s=10)
     plt.axhline(y=percentageThreshold, color='r', linestyle='-.', label='Upper limit dose')

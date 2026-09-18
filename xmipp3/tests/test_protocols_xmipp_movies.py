@@ -1194,6 +1194,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertEqual(prot.mu, 1.25)
         self.assertTrue(prot.usingExperimental)
+        self.assertEqual(prot.medianDifferenceIds, [1, 2, 3])
 
     def testDoseRuntimeStateIsPersistedAfterMedianUpdate(self):
         from unittest.mock import patch
@@ -1269,6 +1270,7 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, percentage_threshold=10)
         prot.meanDoseList = [1.0] * 50
         prot.medianDifferences = [0.0] * 50
+        prot.medianDifferenceIds = list(range(1, 51))
         prot.mu = 1.0
         prot.finished = False
         prot.getDosePlot = lambda: 'dose.png'
@@ -1278,7 +1280,19 @@ class TestMovieDoseAnalysisState(BaseTest):
             with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysisDiff') as diffPlot:
                 prot._updateDosePlots(50, 0.9, 1.1)
 
-        diffPlot.assert_called_once_with('diff.png', prot.medianDifferences, 10)
+        diffPlot.assert_called_once_with('diff.png', prot.medianDifferences, 10, prot.medianDifferenceIds)
+
+    def testDoseDiffPlotUsesActualMovieIds(self):
+        import tempfile
+        from unittest.mock import patch
+        from xmipp3.protocols.protocol_movie_dose_analysis import plotDoseAnalysisDiff
+
+        movieIds = [1, 4, 9]
+        with tempfile.TemporaryDirectory() as tmpDir:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plt.scatter') as scatter:
+                plotDoseAnalysisDiff(os.path.join(tmpDir, 'diff.png'), [0.0, 2.0, -3.0], 5.0, movieIds)
+
+        self.assertEqual(list(scatter.call_args.args[0]), movieIds)
 
     def testDoseAnalysisSamplesActualMiddleFrame(self):
         from unittest.mock import MagicMock, patch
