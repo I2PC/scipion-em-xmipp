@@ -1251,3 +1251,32 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertTrue(any(call.args[1] == '_GLOBAL_DOSE_PER_ANGSTROM2' and call.args[2] == 2.0 for call in setAttr.call_args_list))
         self.assertTrue(any(call.args[1] == '_USING_EXPERIMENTAL_DOSE' and call.args[2] is True for call in setAttr.call_args_list))
 
+    def testDoseDiffPlotUsesConfiguredThreshold(self):
+        import tempfile
+        from unittest.mock import patch
+        from xmipp3.protocols.protocol_movie_dose_analysis import plotDoseAnalysisDiff
+
+        with tempfile.TemporaryDirectory() as tmpDir:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plt.axhline') as axhline:
+                plotDoseAnalysisDiff(os.path.join(tmpDir, 'diff.png'), [-1.0, 0.0, 1.0], 10.0)
+
+        lineValues = [call.kwargs['y'] for call in axhline.call_args_list]
+        self.assertEqual(lineValues, [10.0, 0.0, -10.0])
+
+    def testDosePlotUpdatePassesConfiguredThreshold(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, percentage_threshold=10)
+        prot.meanDoseList = [1.0] * 50
+        prot.medianDifferences = [0.0] * 50
+        prot.mu = 1.0
+        prot.finished = False
+        prot.getDosePlot = lambda: 'dose.png'
+        prot.getDoseDiffPlot = lambda: 'diff.png'
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysis'):
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysisDiff') as diffPlot:
+                prot._updateDosePlots(50, 0.9, 1.1)
+
+        diffPlot.assert_called_once_with('diff.png', prot.medianDifferences, 10)
+

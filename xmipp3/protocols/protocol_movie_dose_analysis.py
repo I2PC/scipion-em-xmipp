@@ -766,7 +766,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
         tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
         plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper)
-        plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences)
+        plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences, self.percentage_threshold.get())
         self._lastPlotCount = doneCount
 
     def _loadDoneIdsCache(self):
@@ -867,14 +867,14 @@ def plotDoseAnalysis(filename, doseValues, medianGlobal, lower, upper):
     plt.savefig(filename)
     plt.close()
 
-def plotDoseAnalysisDiff(filename, medianDifferences):
+def plotDoseAnalysisDiff(filename, medianDifferences, percentageThreshold=5):
     medianDiff = np.median(medianDifferences)
     x = np.arange(start=1+1, stop=len(medianDifferences)+2, step=1)
     plt.figure()
     plt.scatter(x, medianDifferences, s=10)
-    plt.axhline(y=5, color='r', linestyle='-.', label='Upper limit dose')
+    plt.axhline(y=percentageThreshold, color='r', linestyle='-.', label='Upper limit dose')
     plt.axhline(y=medianDiff, color='g', linestyle='-',  label='Median dose difference')
-    plt.axhline(y=-5, color='r', linestyle='-.', label='Upper limit dose')
+    plt.axhline(y=-percentageThreshold, color='r', linestyle='-.', label='Lower limit dose')
     plt.xlabel("Movies ID")
     plt.ylabel("Dose differences (%)")
     plt.title('Dose differences with respect to the global median vs time')
