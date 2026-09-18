@@ -388,6 +388,28 @@ class TestXmippCTFEstimation(TestXmippBase):
         protCTF._checkNewInput()
         self.assertEqual(len(loadCalls), 4)
 
+    def testCtfDoneIdsAreCachedBetweenChecks(self):
+        mics = {}
+        for micId in (1, 2, 3):
+            mic = Micrograph()
+            mic.setObjId(micId)
+            mic.setMicName('mic_%03d' % micId)
+            mics[mic.getMicName()] = mic
+
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        protCTF.micDict = mics
+        protCTF.streamClosed = False
+        readCalls = []
+        checkedIds = []
+        protCTF._readDoneList = lambda: (readCalls.append(True) or [1, 2])
+        protCTF._isMicDone = lambda mic: (checkedIds.append(mic.getObjId()) or False)
+
+        protCTF._checkNewOutput()
+        protCTF._checkNewOutput()
+
+        self.assertEqual(len(readCalls), 1)
+        self.assertEqual(checkedIds, [3, 3])
+
 class TestXmippAutomaticPicking(TestXmippBase):
     """This class check if the protocol to pick the micrographs automatically in Xmipp works properly."""
     @classmethod
