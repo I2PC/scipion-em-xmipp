@@ -425,17 +425,26 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                 outputIds.add(movieId)
                 mean = movie.getAttributeValue('_MEAN_DOSE_PER_ANGSTROM2')
                 diff = movie.getAttributeValue('_DIFF_TO_DOSE_PER_ANGSTROM2')
+                globalMedian = movie.getAttributeValue('_GLOBAL_DOSE_PER_ANGSTROM2')
+                usingExperimental = movie.getAttributeValue('_USING_EXPERIMENTAL_DOSE')
                 if mean is not None:
-                    restored.append((movieId, mean, diff))
+                    restored.append((movieId, mean, diff, globalMedian, usingExperimental))
 
         self._acceptedIds = acceptedIds
         self._discardedIds = discardedIds
         self._doneIds = acceptedIds.union(discardedIds)
         restored.sort(key=lambda item: item[0])
-        self.meanDoseById = {movieId: mean for movieId, mean, _ in restored}
-        self.meanDoseList = [mean for _, mean, _ in restored]
+        self.meanDoseById = {movieId: mean for movieId, mean, _, _, _ in restored}
+        self.meanDoseList = [mean for _, mean, _, _, _ in restored]
         self.medianDoseTemporal = list(self.meanDoseList)
-        self.medianDifferences = [diff for _, _, diff in restored if diff is not None]
+        self.medianDifferences = [diff for _, _, diff, _, _ in restored if diff is not None]
+
+        if restored:
+            _, _, _, globalMedian, usingExperimental = restored[-1]
+            if globalMedian is not None:
+                self.mu = globalMedian
+            if usingExperimental is not None:
+                self.usingExperimental = bool(usingExperimental)
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -702,6 +711,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                                 f.write('Percentage of wrong dose in a window surpass the threshold: {}% > {}% \n'
                                         .format(percentage, self.percentage_window.get()))
                                 f.close()
+
+                if movieId in self.stats:
+                    setAttribute(newMovie, '_GLOBAL_DOSE_PER_ANGSTROM2', self.mu)
+                    setAttribute(newMovie, '_USING_EXPERIMENTAL_DOSE', self.usingExperimental)
 
             if len(acceptedMovies)>0:
                 moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
