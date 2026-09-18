@@ -704,3 +704,22 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(prot.meanDoseList, [1.1, 1.2, 1.3])
         self.assertEqual(prot.medianDoseTemporal, [1.1, 1.2, 1.3])
         self.assertEqual(prot.medianDifferences, [1.0, 2.0, 3.0])
+
+    def testClosedStreamUsesAvailableDoseSamples(self):
+        class InputSet:
+            def getSize(self):
+                return 3
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=5)
+        prot.meanDoseList = [1.0, 1.1, 0.9]
+        prot.processedIds = [1, 2]
+        prot.isStreamClosed = True
+        prot.movsFn = 'movies.sqlite'
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._loadInputSet = lambda _: InputSet()
+
+        self.assertFalse(prot._hasEnoughDoseSamples())
+
+        prot.processedIds.append(3)
+
+        self.assertTrue(prot._hasEnoughDoseSamples())

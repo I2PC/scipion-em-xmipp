@@ -532,8 +532,18 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
         return outputSet
 
+    def _hasEnoughDoseSamples(self):
+        if len(self.meanDoseList) >= self.n_samples.get():
+            return True
+        if not self.isStreamClosed or not self.meanDoseList:
+            return False
+
+        doneIds, _, _, _ = self._getAllDoneIds()
+        inputSize = self._loadInputSet(self.movsFn).getSize()
+        return len(set(doneIds).union(self.processedIds)) == inputSize
+
     def _checkNewOutput(self):
-        if len(self.meanDoseList) >= self.n_samples.get() and not hasattr(self, 'mu'):
+        if self._hasEnoughDoseSamples() and not hasattr(self, 'mu'):
             medianDoseExperimental = np.median(self.meanDoseList)
             if hasattr(self, 'dosePerFrame'):
                 refDose = self.dosePerFrame
