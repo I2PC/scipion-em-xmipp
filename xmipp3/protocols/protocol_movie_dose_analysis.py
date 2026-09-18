@@ -332,18 +332,18 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         OUTPUT_MOVIES_DISCARDED: SetOfMovies
     }
 
-    finished = False
-    stats = {}
-    meanDoseList = []
-    medianDoseTemporal = []
-    medianDifferences = []
-    meanGlobal = 0
-    usingExperimental = False
     PARALLEL_BATCH_SIZE = 8
 
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
         self.stepsExecutionMode = cons.STEPS_PARALLEL
+        self.finished = False
+        self.stats = {}
+        self.meanDoseList = []
+        self.medianDoseTemporal = []
+        self.medianDifferences = []
+        self.meanGlobal = 0
+        self.usingExperimental = False
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):

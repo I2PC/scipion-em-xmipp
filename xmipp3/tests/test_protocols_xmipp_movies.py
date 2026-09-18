@@ -659,3 +659,24 @@ class TestMovieAlignmentConsensus(BaseTest):
 
         sizeDiscarded = protConsensus2.outputMoviesDiscarded.getSize()
         self.assertEqual(sizeDiscarded, 2, 'Number of discarded movies must be 0 and its %d' % sizeDiscarded)
+
+
+class TestMovieDoseAnalysisState(BaseTest):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testRuntimeStateIsNotSharedBetweenInstances(self):
+        prot1 = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot2 = self.newProtocol(XmippProtMovieDoseAnalysis)
+
+        prot1.stats[1] = {'mean': 1.0}
+        prot1.meanDoseList.append(1.0)
+        prot1.medianDoseTemporal.append(1.0)
+        prot1.medianDifferences.append(0.0)
+
+        self.assertEqual(prot2.stats, {})
+        self.assertEqual(prot2.meanDoseList, [])
+        self.assertEqual(prot2.medianDoseTemporal, [])
+        self.assertEqual(prot2.medianDifferences, [])
