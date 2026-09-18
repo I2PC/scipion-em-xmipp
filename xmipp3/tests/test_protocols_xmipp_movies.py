@@ -705,6 +705,61 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(prot.medianDoseTemporal, [1.1, 1.2, 1.3])
         self.assertEqual(prot.medianDifferences, [1.0, 2.0, 3.0])
 
+    def testContinuePreservesPartialDoseWindow(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId, mean=None, diff=None, globalMedian=None, usingExperimental=None):
+                self.movieId = movieId
+                self.mean = mean
+                self.diff = diff
+                self.globalMedian = globalMedian
+                self.usingExperimental = usingExperimental
+
+            def getObjId(self):
+                return self.movieId
+
+            def getAttributeValue(self, name, defaultValue=None):
+                values = {
+                    '_MEAN_DOSE_PER_ANGSTROM2': self.mean,
+                    '_DIFF_TO_DOSE_PER_ANGSTROM2': self.diff,
+                    '_GLOBAL_DOSE_PER_ANGSTROM2': self.globalMedian,
+                    '_USING_EXPERIMENTAL_DOSE': self.usingExperimental
+                }
+                return values.get(name, defaultValue)
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class OutputSet(list):
+            def getIdSet(self):
+                return {movie.getObjId() for movie in self}
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=3, percentage_window=101)
+        prot.outputMovies = OutputSet([Movie(1, 1.0, 0.0, 1.0, True)])
+        prot.outputMoviesDiscarded = OutputSet([Movie(2, 3.0, 200.0, 1.0, True)])
+        prot._restoreRuntimeStateFromOutputs()
+
+        prot.stats = {3: {'mean': 5.0, 'std': 0.0, 'min': 5.0, 'max': 5.0}}
+        prot.meanDoseById[3] = 5.0
+        prot.insertedIds = [1, 2, 3]
+        prot.processedIds = [3]
+        prot.framesRange = (1, 1, 1)
+        prot.isStreamClosed = False
+        prot._getInputSize = lambda: 3
+        prot._loadMoviesByIds = lambda movieIds: {movieId: Movie(movieId) for movieId in movieIds}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+        prot._loadOutputSet = lambda setClass, baseName: prot.outputMovies if baseName == 'movies.sqlite' else prot.outputMoviesDiscarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertEqual(prot.medianDoseTemporal, [1.0, 3.0, 5.0])
+        self.assertEqual(prot.medianDifferenceIds, [1, 2, 3])
+        self.assertEqual(prot.mu, 3.0)
+
     def testClosedStreamUsesAvailableDoseSamples(self):
         class InputSet:
             def getSize(self):
