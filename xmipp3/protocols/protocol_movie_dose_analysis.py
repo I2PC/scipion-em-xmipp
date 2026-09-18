@@ -706,7 +706,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                 if movieId in self.stats and len(self.medianDifferences) % self.window.get() == 0:
                         if self.usingExperimental:
                             # Update the median global
-                            self.mu = np.median(self.meanDoseList)
+                            self.mu = np.median(self.medianDoseTemporal)
                             lower, upper = self.getLimitIntervals()
                             self.info('Updating median global to %f' %self.mu)
 
