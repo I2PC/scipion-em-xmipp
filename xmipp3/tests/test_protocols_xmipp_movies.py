@@ -853,3 +853,41 @@ class TestMovieDoseAnalysisState(BaseTest):
             plotDoseAnalysisDiff(os.path.join(tmpDir, 'diff.png'), [0.0, 1.0, -1.0])
 
         self.assertEqual(plt.get_fignums(), [])
+
+    def testDosePlotsAreThrottled(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.meanDoseList = [1.0] * 108
+        prot.medianDifferences = [0.0] * 108
+        prot.mu = 1.0
+        prot.finished = False
+        prot.getDosePlot = lambda: 'dose.png'
+        prot.getDoseDiffPlot = lambda: 'diff.png'
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysis') as dosePlot:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysisDiff') as diffPlot:
+                prot._updateDosePlots(8, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 0)
+                self.assertEqual(diffPlot.call_count, 0)
+
+                prot._updateDosePlots(50, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 1)
+                self.assertEqual(diffPlot.call_count, 1)
+
+                prot._updateDosePlots(80, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 1)
+                self.assertEqual(diffPlot.call_count, 1)
+
+                prot._updateDosePlots(100, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 2)
+                self.assertEqual(diffPlot.call_count, 2)
+
+                prot.finished = True
+                prot._updateDosePlots(108, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 3)
+                self.assertEqual(diffPlot.call_count, 3)
+
+                prot._updateDosePlots(108, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 3)
+                self.assertEqual(diffPlot.call_count, 3)

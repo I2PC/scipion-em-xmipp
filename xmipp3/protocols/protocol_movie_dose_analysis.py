@@ -331,6 +331,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     }
 
     PARALLEL_BATCH_SIZE = 8
+    PLOT_UPDATE_INTERVAL = 50
 
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
@@ -347,6 +348,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self._acceptedIds = None
         self._discardedIds = None
         self._inputSize = None
+        self._lastPlotCount = 0
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -393,6 +395,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self._acceptedIds = None
         self._discardedIds = None
         self._inputSize = None
+        self._lastPlotCount = 0
         # Contains images that have been processed in a Step (checkNewOutput).
         self.isStreamClosed = self.inputMovies.get().isStreamClosed()
         self.framesRange = self.inputMovies.get().getFramesRange()
@@ -698,10 +701,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                 self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
                 self._registerDoneIds((movie.getObjId() for movie in discardedMovies), accepted=False)
 
-            tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
-            tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
-            plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper)
-            plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences)
+            self._updateDosePlots(len(self._doneIds), lower, upper)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -711,6 +711,18 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self._store()
 
 # ------------------------- UTILS functions --------------------------------
+    def _updateDosePlots(self, doneCount, lower, upper):
+        if doneCount <= self._lastPlotCount:
+            return
+        if not self.finished and doneCount - self._lastPlotCount < self.PLOT_UPDATE_INTERVAL:
+            return
+
+        tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
+        tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
+        plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper)
+        plotDoseAnalysisDiff(self.getDoseDiffPlot(), tmpMedianDifferences)
+        self._lastPlotCount = doneCount
+
     def _loadDoneIdsCache(self):
         acceptedIds = set(self.outputMovies.getIdSet()) if hasattr(self, OUTPUT_MOVIES) else set()
         discardedIds = set(self.outputMoviesDiscarded.getIdSet()) if hasattr(self, OUTPUT_MOVIES_DISCARDED) else set()
