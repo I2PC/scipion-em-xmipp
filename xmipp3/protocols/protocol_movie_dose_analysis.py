@@ -396,6 +396,26 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         else:
             self.usingExperimental = True
 
+        if self.isContinued():
+            self._restoreRuntimeStateFromOutputs()
+
+    def _restoreRuntimeStateFromOutputs(self):
+        restored = []
+        for outputName in (OUTPUT_MOVIES, OUTPUT_MOVIES_DISCARDED):
+            outputSet = getattr(self, outputName, None)
+            if outputSet is None:
+                continue
+            for movie in outputSet:
+                mean = movie.getAttributeValue('_MEAN_DOSE_PER_ANGSTROM2')
+                diff = movie.getAttributeValue('_DIFF_TO_DOSE_PER_ANGSTROM2')
+                if mean is not None:
+                    restored.append((movie.getObjId(), mean, diff))
+
+        restored.sort(key=lambda item: item[0])
+        self.meanDoseList = [mean for _, mean, _ in restored]
+        self.medianDoseTemporal = list(self.meanDoseList)
+        self.medianDifferences = [diff for _, _, diff in restored if diff is not None]
+
     def createOutputStep(self):
         self._closeOutputSet()
 

@@ -680,3 +680,27 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(prot2.meanDoseList, [])
         self.assertEqual(prot2.medianDoseTemporal, [])
         self.assertEqual(prot2.medianDifferences, [])
+
+    def testRuntimeStateIsRestoredFromOutputs(self):
+        class OutputMovie:
+            def __init__(self, movieId, mean, diff):
+                self.movieId = movieId
+                self.mean = mean
+                self.diff = diff
+
+            def getObjId(self):
+                return self.movieId
+
+            def getAttributeValue(self, name, defaultValue=None):
+                values = {'_MEAN_DOSE_PER_ANGSTROM2': self.mean, '_DIFF_TO_DOSE_PER_ANGSTROM2': self.diff}
+                return values.get(name, defaultValue)
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.outputMovies = [OutputMovie(3, 1.3, 3.0), OutputMovie(1, 1.1, 1.0)]
+        prot.outputMoviesDiscarded = [OutputMovie(2, 1.2, 2.0)]
+
+        prot._restoreRuntimeStateFromOutputs()
+
+        self.assertEqual(prot.meanDoseList, [1.1, 1.2, 1.3])
+        self.assertEqual(prot.medianDoseTemporal, [1.1, 1.2, 1.3])
+        self.assertEqual(prot.medianDifferences, [1.0, 2.0, 3.0])
