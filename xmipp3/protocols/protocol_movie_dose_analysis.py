@@ -476,7 +476,8 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         movSet = self._loadInputSet(self.movsFn)
         movSetIds = movSet.getIdSet()
         self._inputSize = len(movSetIds)
-        newIds = [idMov for idMov in movSetIds if idMov not in self.insertedIds]
+        insertedIds = set(self.insertedIds)
+        newIds = [idMov for idMov in movSetIds if idMov not in insertedIds]
 
         self.isStreamClosed = movSet.isStreamClosed()
         movSet.close()

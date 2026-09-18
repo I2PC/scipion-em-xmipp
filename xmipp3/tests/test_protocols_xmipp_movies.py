@@ -1128,3 +1128,40 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(inputSet.closeCalls, 1)
         self.assertEqual([movies[movieId].getObjId() for movieId in [3, 1, 2]], [3, 1, 2])
 
+    def testNewInputDoesNotUseLinearInsertedIdLookups(self):
+        class CountingList(list):
+            def __init__(self, values):
+                super().__init__(values)
+                self.containsCalls = 0
+
+            def __contains__(self, value):
+                self.containsCalls += 1
+                return super().__contains__(value)
+
+        class InputSet:
+            def getIdSet(self):
+                return {1, 2, 3, 4}
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                pass
+
+        insertedIds = CountingList([1, 2, 3])
+        scheduled = []
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.movsFn = 'movies.sqlite'
+        prot.insertedIds = insertedIds
+        prot._getInputSetSignature = lambda _: ('signature', None)
+        prot._loadInputSet = lambda _: InputSet()
+        prot._getFirstJoinStep = lambda: None
+        prot._insertNewMoviesSteps = lambda newIds: scheduled.append(list(newIds)) or []
+        prot.updateSteps = lambda: None
+        prot.isContinued = lambda: False
+
+        prot._checkNewInput()
+
+        self.assertEqual(scheduled, [[4]])
+        self.assertEqual(insertedIds.containsCalls, 0)
+
