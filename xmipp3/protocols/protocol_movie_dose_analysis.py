@@ -441,14 +441,19 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self._closeOutputSet()
 
     def _loadInputSet(self, movsFn):
-        """ Load the input set of movies and create a list. """
+        """ Load and return an open input movie set. The caller must close it. """
         self.debug("Loading input db: %s" % movsFn)
         movSet = SetOfMovies(filename=movsFn)
         movSet.loadAllProperties()
         self.isStreamClosed = movSet.isStreamClosed()
-        movSet.close()
-        self.debug("Closed db.")
         return movSet
+
+    def _loadMoviesByIds(self, movieIds):
+        inputMovies = self._loadInputSet(self.movsFn)
+        try:
+            return {movieId: inputMovies.getItem("id", movieId).clone() for movieId in movieIds}
+        finally:
+            inputMovies.close()
 
     @staticmethod
     def _getInputSetSignature(fileName):
@@ -508,9 +513,9 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         return deps
 
     def _processMovies(self, movieIds):
-        inputMovies = self._loadInputSet(self.movsFn)
+        inputMovies = self._loadMoviesByIds(movieIds)
         for movieId in movieIds:
-            movie = inputMovies.getItem("id", movieId).clone()
+            movie = inputMovies[movieId]
             movieId = movie.getObjId()
             stats = self.estimatePoissonCount(movie)
             if stats:
@@ -642,10 +647,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             acceptedMovies = []
             discardedMovies = []
 
-            inputMovieSet = self._loadInputSet(self.movsFn)
+            inputMovies = self._loadMoviesByIds(newDone)
 
             for movieId in newDone:
-                newMovie = inputMovieSet.getItem("id", movieId).clone()
+                newMovie = inputMovies[movieId]
                 newMovie.setFramesRange(self.framesRange)
                 movieId = newMovie.getObjId()
                 if movieId in self.stats:
@@ -724,10 +729,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         if not movieIds:
             return
 
-        inputMovieSet = self._loadInputSet(self.movsFn)
+        inputMovies = self._loadMoviesByIds(movieIds)
         failedMovies = []
         for movieId in movieIds:
-            movie = inputMovieSet.getItem("id", movieId).clone()
+            movie = inputMovies[movieId]
             movie.setFramesRange(self.framesRange)
             setAttribute(movie, '_DOSE_ANALYSIS_FAILED', True)
             failedMovies.append(movie)
@@ -776,7 +781,11 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
     def _getInputSize(self):
         if self._inputSize is None:
-            self._inputSize = self._loadInputSet(self.movsFn).getSize()
+            inputSet = self._loadInputSet(self.movsFn)
+            try:
+                self._inputSize = inputSet.getSize()
+            finally:
+                inputSet.close()
         return self._inputSize
 
     def getLimitIntervals(self):

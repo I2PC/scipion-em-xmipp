@@ -1070,3 +1070,61 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(discarded.ids, [1, 2])
         self.assertEqual(prot._doneIds, {1, 2})
 
+    def testLoadInputSetReturnsOpenSet(self):
+        from unittest.mock import patch
+
+        class InputSet:
+            def __init__(self, filename=None):
+                self.closed = False
+
+            def loadAllProperties(self):
+                pass
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                self.closed = True
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.SetOfMovies', InputSet):
+            inputSet = prot._loadInputSet('movies.sqlite')
+
+        self.assertFalse(inputSet.closed)
+        inputSet.close()
+
+    def testLoadMoviesByIdsClosesInputSetOnce(self):
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+        class InputSet:
+            def __init__(self):
+                self.closeCalls = 0
+                self.getCalls = []
+
+            def getItem(self, field, movieId):
+                self.getCalls.append(movieId)
+                return Movie(movieId)
+
+            def close(self):
+                self.closeCalls += 1
+
+        inputSet = InputSet()
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.movsFn = 'movies.sqlite'
+        prot._loadInputSet = lambda _: inputSet
+
+        movies = prot._loadMoviesByIds([3, 1, 2])
+
+        self.assertEqual(inputSet.getCalls, [3, 1, 2])
+        self.assertEqual(inputSet.closeCalls, 1)
+        self.assertEqual([movies[movieId].getObjId() for movieId in [3, 1, 2]], [3, 1, 2])
+
