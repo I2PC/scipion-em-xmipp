@@ -970,6 +970,60 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(accepted.ids, [2])
         self.assertEqual(discarded.ids, [1])
 
+    def testWindowBoundaryDoseIsNotCountedAsFaulty(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=1, percentage_threshold=10, percentage_window=0)
+        prot.mu = 100.0
+        prot.usingExperimental = False
+        prot.meanDoseList = [110.0]
+        prot.stats = {1: {'mean': 110.0, 'std': 0.0, 'min': 110.0, 'max': 110.0}}
+        prot.insertedIds = [1]
+        prot.processedIds = [1]
+        prot.medianDifferences = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._hasEnoughDoseSamples = lambda: False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 1
+        prot._loadMoviesByIds = lambda movieIds: {1: Movie(1)}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+        prot._getExtraPath = lambda *args: 'WARNING.TXT'
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            with patch('builtins.open') as openFile:
+                prot._checkNewOutput()
+
+        self.assertEqual(accepted.ids, [1])
+        self.assertEqual(discarded.ids, [])
+        openFile.assert_not_called()
+
     def testFailedDoseMovieIsPersistedAsDiscarded(self):
         from unittest.mock import patch
 

@@ -706,7 +706,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
                         windowList = self.medianDoseTemporal[-self.window.get():]
                         percentage = (1 - (len([dose for dose in windowList
-                                          if lower < dose < upper]) / len(windowList)))*100
+                                          if lower <= dose <= upper]) / len(windowList)))*100
                         self.info('The faulty percentage of this window is %f' %percentage)
 
                         if percentage > self.percentage_window.get():
