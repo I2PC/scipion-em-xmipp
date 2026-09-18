@@ -191,6 +191,9 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
     def _getGroupingOutputStarPath(self):
         return self._getExtraPath("groupedParticles.star")
 
+    def _getGroupingReferenceMetadataPath(self):
+        return self._getExtraPath("coneReferences.star")
+
     def _getAveragingOutputStarPath(self):
         return self._getExtraPath("particlesWithWeights.star")
 
@@ -235,6 +238,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--n-groups {self.numberOfGroups.get()} "
             f"--grouping-batch-size {self.groupingBatchSize.get()} "
             f"--symmetry-group {self.symmetryGroup.get()} "
+            f"--out-reference-md {self._getGroupingReferenceMetadataPath()} "
         )
 
         if self.deduplicateReferences.get():
