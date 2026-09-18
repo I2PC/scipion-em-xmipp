@@ -28,6 +28,7 @@
 # *
 # **************************************************************************
 
+import os
 from os.path import exists
 
 import pwem.emlib.metadata as md
@@ -465,8 +466,30 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 self._getNormalizeArgs(),
                 self.doBorders.get()]
 
+    def _getInputSignature(self):
+        inputFiles = [self.inputCoordinates.get().getFileName(), self.getInputMicrographs().getFileName()]
+        if self._useCTF():
+            inputFiles.append(self.ctfRelations.get().getFileName())
+
+        signature = []
+        for fileName in dict.fromkeys(inputFiles):
+            for suffix in ('', '-wal'):
+                path = fileName + suffix
+                if exists(path):
+                    try:
+                        stat = os.stat(path)
+                        signature.append((path, stat.st_mtime_ns, stat.st_size))
+                    except OSError:
+                        pass
+        return tuple(signature)
+
     def _checkNewInput(self):
+        inputSignature = self._getInputSignature()
+        if getattr(self, '_inputSignature', None) == inputSignature:
+            return
+
         newMics = self._loadInputList()
+        self._inputSignature = self._getInputSignature()
         outputStep = self._getFirstJoinStep()
 
         if newMics:
@@ -476,21 +499,22 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             self.updateSteps()
 
     def _getOutputMicIds(self):
-        outputParts = getattr(self, 'outputParticles', None)
-        if outputParts is None or outputParts.getSize() == 0:
-            return set()
-        return {int(micId) for micId in outputParts.getUniqueValues('_micId')}
+        if not hasattr(self, '_outputMicIds'):
+            outputParts = getattr(self, 'outputParticles', None)
+            self._outputMicIds = set() if outputParts is None or outputParts.getSize() == 0 else {int(micId) for micId in outputParts.getUniqueValues('_micId')}
+        return self._outputMicIds
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
 
         doneIds = set(self._readDoneList())
-        processedMics = [mic for mic in self.micDict.values() if self._isMicDone(mic)]
+        processedMics = [mic for mic in self.micDict.values() if mic.getObjId() in doneIds or self._isMicDone(mic)]
         inputLen = len(self.micDict)
         streamClosed = self._isStreamClosed()
-        allMicsProcessed = self._areAllMicsProcessed()
-        self.finished = streamClosed and len(processedMics) == inputLen and allMicsProcessed
+        allKnownProcessed = len(processedMics) == inputLen
+        allMicsProcessed = self._areAllMicsProcessed() if streamClosed and allKnownProcessed else False
+        self.finished = streamClosed and allKnownProcessed and allMicsProcessed
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         outputMicIds = self._getOutputMicIds()
@@ -499,10 +523,11 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
         if newOutput:
             self._updateOutputPartSet(newOutput, streamMode)
+            outputMicIds.update(mic.getObjId() for mic in newOutput)
         elif self.finished:
             self._updateOutputPartSet([], Set.STREAM_CLOSED)
         elif not pendingDone:
-            if len(processedMics) == inputLen:
+            if allKnownProcessed:
                 self._streamingSleepOnWait()
             return
 
@@ -861,6 +886,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         and update the outputParts set with new items.
         """
         p = Particle()
+        boxScale = self.getBoxScale()
         for mic in micList:
             # We need to make this dict because there is no ID in the .xmd file
             coordDict = {}
@@ -879,7 +905,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                     coord = coordDict.get(pos, None)
                     if coord is not None and coord.getObjId() not in added:
                         # scale the coordinates according to particles dimension.
-                        coord.scale(self.getBoxScale())
+                        coord.scale(boxScale)
                         p.copyObjId(coord)
                         p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
                         p.setCoordinate(coord)

@@ -25,11 +25,13 @@ class _Mic:
 class _OutputParts:
     def __init__(self, micIds=None):
         self.micIds = set(micIds or [])
+        self.uniqueCalls = 0
 
     def getSize(self):
         return len(self.micIds)
 
     def getUniqueValues(self, attr):
+        self.uniqueCalls += 1
         return list(self.micIds)
 
 
@@ -52,8 +54,14 @@ class _InputHarness:
     def __init__(self):
         self.outputStep = _OutputStep()
         self.updated = 0
+        self.loadCalls = 0
+        self.signature = ('initial',)
+
+    def _getInputSignature(self):
+        return self.signature
 
     def _loadInputList(self):
+        self.loadCalls += 1
         return {'mic_002': _Mic(2)}
 
     def _getFirstJoinStep(self):
@@ -75,6 +83,7 @@ class _OutputHarness:
         self.outputParticles = _OutputParts(outputIds) if outputIds is not None else None
         self.streamClosed = streamClosed
         self.allMicsProcessed = allMicsProcessed
+        self.allMicsProcessedCalls = 0
         self.finished = False
         self.outputStep = _OutputStep()
 
@@ -88,6 +97,7 @@ class _OutputHarness:
         return self.streamClosed
 
     def _areAllMicsProcessed(self):
+        self.allMicsProcessedCalls += 1
         return self.allMicsProcessed
 
     def _getOutputMicIds(self):
@@ -113,11 +123,28 @@ class _OutputHarness:
 
 
 class TestXmippExtractParticlesRegression(unittest.TestCase):
-    def testCheckNewInputAlwaysReloadsFreshSnapshot(self):
+    def testCheckNewInputSkipsUnchangedSnapshot(self):
         protocol = _InputHarness()
         extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
-        self.assertEqual([102], protocol.outputStep.prerequisites)
+        extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
+        self.assertEqual(1, protocol.loadCalls)
         self.assertEqual(1, protocol.updated)
+
+        protocol.signature = ('changed',)
+        extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
+        self.assertEqual(2, protocol.loadCalls)
+        self.assertEqual(2, protocol.updated)
+
+    def testOutputMicIdsAreLoadedOnce(self):
+        protocol = _OutputHarness([1], [1], [1], [1])
+        self.assertEqual({1}, extract_particles.XmippProtExtractParticles._getOutputMicIds(protocol))
+        self.assertEqual({1}, extract_particles.XmippProtExtractParticles._getOutputMicIds(protocol))
+        self.assertEqual(1, protocol.outputParticles.uniqueCalls)
+
+    def testOpenStreamDoesNotScanAllPickedMicrographs(self):
+        protocol = _OutputHarness([1], [1], [1], [1], streamClosed=False)
+        extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
+        self.assertEqual(0, protocol.allMicsProcessedCalls)
 
     def testOutputIsPersistedBeforeCheckpoint(self):
         protocol = _OutputHarness([1, 2], [1, 2], [1], [1])
