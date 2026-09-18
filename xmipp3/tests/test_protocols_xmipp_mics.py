@@ -355,6 +355,39 @@ class TestXmippCTFEstimation(TestXmippBase):
         self.assertEqual(writtenIds, [mic.getObjId()])
 
 
+
+    def testCtfInputSetSignatureDetectsWalChanges(self):
+        sqliteFn = self.proj.getTmpPath('ctf_input_signature.sqlite')
+        walFn = sqliteFn + '-wal'
+        with open(sqliteFn, 'wb') as f:
+            f.write(b'db')
+
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        inputSet = type('InputSet', (), {'getFileName': lambda self: sqliteFn})()
+        loadCalls = []
+        protCTF.getInputMicrographs = lambda: inputSet
+        protCTF._loadInputList = lambda: (loadCalls.append(True) or ({}, False))
+        protCTF._getFirstJoinStep = lambda: None
+
+        protCTF._checkNewInput()
+        protCTF._checkNewInput()
+        self.assertEqual(len(loadCalls), 1)
+
+        with open(walFn, 'wb') as f:
+            f.write(b'wal')
+        protCTF._checkNewInput()
+        self.assertEqual(len(loadCalls), 2)
+
+        with open(walFn, 'ab') as f:
+            f.write(b'-updated')
+        protCTF._checkNewInput()
+        self.assertEqual(len(loadCalls), 3)
+
+        with open(sqliteFn, 'ab') as f:
+            f.write(b'-updated')
+        protCTF._checkNewInput()
+        self.assertEqual(len(loadCalls), 4)
+
 class TestXmippAutomaticPicking(TestXmippBase):
     """This class check if the protocol to pick the micrographs automatically in Xmipp works properly."""
     @classmethod
