@@ -28,16 +28,16 @@
 # *
 # **************************************************************************
 
+import os
 from os.path import exists
 
 import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.object import Integer
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
-                                           STATUS_FINISHED)
+from pyworkflow.object import Integer, Set, String
+from pyworkflow.protocol.constants import STEPS_PARALLEL, LEVEL_ADVANCED, STATUS_FINISHED, STATUS_NEW
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
-from pwem.objects import Particle
+from pwem.objects import Particle, SetOfCoordinates
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
@@ -46,6 +46,7 @@ from xmipp3.constants import OTHER
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 FACTOR_BOXSIZE = 1.5
+BULK_COORD_LOAD_MIN_MICS = 100
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Extracts particle images from micrographs based on provided coordinates.
@@ -465,6 +466,120 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return [self.doInvert.get(),
                 self._getNormalizeArgs(),
                 self.doBorders.get()]
+
+    def _getInputSignature(self):
+        inputFiles = [self.inputCoordinates.get().getFileName(), self.getInputMicrographs().getFileName()]
+        if self._useCTF():
+            inputFiles.append(self.ctfRelations.get().getFileName())
+
+        signature = []
+        for fileName in dict.fromkeys(inputFiles):
+            for suffix in ('', '-wal'):
+                path = fileName + suffix
+                if exists(path):
+                    try:
+                        stat = os.stat(path)
+                        signature.append((path, stat.st_mtime_ns, stat.st_size))
+                    except OSError:
+                        pass
+        return tuple(signature)
+
+    def _checkNewInput(self):
+        inputSignature = self._getInputSignature()
+        if getattr(self, '_inputSignature', None) == inputSignature:
+            return
+
+        newMics = self._loadInputList()
+        self._inputSignature = self._getInputSignature()
+        outputStep = self._getFirstJoinStep()
+
+        if newMics:
+            fDeps = self._insertNewMicsSteps(newMics.values())
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+            self.updateSteps()
+
+    def _getOutputMicIds(self):
+        if not hasattr(self, '_outputMicIds'):
+            outputParts = getattr(self, 'outputParticles', None)
+            self._outputMicIds = set() if outputParts is None or outputParts.getSize() == 0 else {int(micId) for micId in outputParts.getUniqueValues('_micId')}
+        return self._outputMicIds
+
+    def _shouldBulkLoadCoords(self, micDict):
+        micCount = len(micDict)
+        totalMicCount = self.getCoords().getMicrographs().getSize()
+        return micCount >= BULK_COORD_LOAD_MIN_MICS and totalMicCount > 0 and micCount * 2 >= totalMicCount
+
+    def _loadCoordsForMics(self, coordSet, micDict):
+        micList = {}
+
+        if self._shouldBulkLoadCoords(micDict):
+            micById = {mic.getObjId(): (micKey, mic) for micKey, mic in micDict.items()}
+            coordsByMic = {}
+            for coord in coordSet.iterItems():
+                micId = coord.getMicId()
+                if micId in micById:
+                    coordsByMic.setdefault(micId, []).append(coord.clone())
+
+            for micId, coordList in coordsByMic.items():
+                micKey, mic = micById[micId]
+                self.coordDict[micId] = coordList
+                micList[micKey] = mic
+        else:
+            for micKey, mic in micDict.items():
+                micId = mic.getObjId()
+                coordList = [coord.clone() for coord in coordSet.iterItems(where='_micId=%s' % micId)]
+                if coordList:
+                    self.coordDict[micId] = coordList
+                    micList[micKey] = mic
+
+        return micList
+
+    def _loadInputCoords(self, micDict):
+        coordSet = SetOfCoordinates(filename=self.getCoords().getFileName())
+        coordSet._xmippMd = String()
+        coordSet.loadAllProperties()
+        try:
+            micList = self._loadCoordsForMics(coordSet, micDict)
+            self.coordsClosed = coordSet.isStreamClosed()
+        finally:
+            coordSet.close()
+        return micList
+
+    def _checkNewOutput(self):
+        if getattr(self, 'finished', False):
+            return
+
+        doneIds = set(self._readDoneList())
+        processedMics = [mic for mic in self.micDict.values() if mic.getObjId() in doneIds or self._isMicDone(mic)]
+        inputLen = len(self.micDict)
+        streamClosed = self._isStreamClosed()
+        allKnownProcessed = len(processedMics) == inputLen
+        allMicsProcessed = self._areAllMicsProcessed() if streamClosed and allKnownProcessed else False
+        self.finished = streamClosed and allKnownProcessed and allMicsProcessed
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        outputMicIds = self._getOutputMicIds()
+        newOutput = [mic for mic in processedMics if mic.getObjId() not in outputMicIds]
+        pendingDone = [mic for mic in processedMics if mic.getObjId() not in doneIds]
+
+        if newOutput:
+            self._updateOutputPartSet(newOutput, streamMode)
+            outputMicIds.update(mic.getObjId() for mic in newOutput)
+        elif self.finished:
+            self._updateOutputPartSet([], Set.STREAM_CLOSED)
+        elif not pendingDone:
+            if allKnownProcessed:
+                self._streamingSleepOnWait()
+            return
+
+        if pendingDone:
+            self._writeDoneList(pendingDone)
+
+        if self.finished:
+            outputStep = self._getFirstJoinStep()
+            if outputStep and outputStep.isWaiting():
+                outputStep.setStatus(STATUS_NEW)
     
     #--------------------------- STEPS functions -------------------------------
     def _extractMicrograph(self, mic, doInvert, normalizeArgs, doBorders):
@@ -813,6 +928,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         and update the outputParts set with new items.
         """
         p = Particle()
+        boxScale = self.getBoxScale()
         for mic in micList:
             # We need to make this dict because there is no ID in the .xmd file
             coordDict = {}
@@ -831,7 +947,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                     coord = coordDict.get(pos, None)
                     if coord is not None and coord.getObjId() not in added:
                         # scale the coordinates according to particles dimension.
-                        coord.scale(self.getBoxScale())
+                        coord.scale(boxScale)
                         p.copyObjId(coord)
                         p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
                         p.setCoordinate(coord)

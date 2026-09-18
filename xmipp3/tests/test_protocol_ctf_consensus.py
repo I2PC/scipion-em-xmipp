@@ -21,7 +21,11 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # ***************************************************************************
 
+import os
 import time
+from datetime import datetime
+
+from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
 
 from pyworkflow.tests import BaseTest, DataSet
 import pyworkflow.tests as tests
@@ -52,6 +56,64 @@ class TestXmippCTFConsensusBase(BaseTest):
         ctf.setPsdFile(psdFile)
 
         return ctf
+
+    def _createCtfSet(self, name, ctfIds):
+        fnCtfSet = self.proj.getTmpPath(name)
+        ctfSet = SetOfCTF(filename=fnCtfSet)
+
+        for ctfId in ctfIds:
+            ctf = CTFModel()
+            ctf.setObjId(ctfId)
+            ctfSet.append(ctf)
+
+        ctfSet.write()
+        ctfSet.close()
+
+        return fnCtfSet
+
+    def _appendCtf(self, fnCtfSet, ctfId):
+        ctfSet = SetOfCTF(filename=fnCtfSet)
+        ctfSet.loadAllProperties()
+        ctfSet.enableAppend()
+
+        ctf = CTFModel()
+        ctf.setObjId(ctfId)
+        ctfSet.append(ctf)
+
+        ctfSet.write()
+        ctfSet.close()
+
+    def _prepareStreamingCheck(self, fnCtfSet, insertedIds=None,
+                               originalRunMode=MODE_RESTART, doneIds=None):
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.ctfFn1 = fnCtfSet
+        prot.insertedIds = list(insertedIds or [])
+        prot.isStreamClosed = False
+        prot._originalRunMode = originalRunMode
+
+        # Scipion changes runMode to MODE_RESUME before executing the steps.
+        prot.runMode.set(MODE_RESUME)
+
+        scheduledIds = []
+
+        def insertNewCtfsSteps(newIds):
+            scheduledIds.extend(newIds)
+            prot.insertedIds.extend(newIds)
+            return []
+
+        prot._insertNewCtfsSteps = insertNewCtfsSteps
+        prot._getFirstJoinStep = lambda: None
+        prot.updateSteps = lambda: None
+
+        if doneIds is not None:
+            prot._getAllDoneIds = lambda: (
+                list(doneIds),
+                len(doneIds),
+                list(doneIds),
+                []
+            )
+
+        return prot, scheduledIds
 
     def checkOutputSize(self, ctfConsensusProt):
         inSize = ctfConsensusProt.inputCTF.get().getSize()
@@ -232,3 +294,82 @@ class TestXmippCTFConsensusBase(BaseTest):
                   resol > kwargsCons1["resolution"])
             self.assertFalse(ok, "A CTF without the correct parameters"
                                  " is included in the output set")
+
+    def testStreamingInputDoesNotDependOnSqliteMtime(self):
+        fnCtfSet = self._createCtfSet(
+            "ctf_streaming_mtime.sqlite",
+            [1]
+        )
+
+        originalMtime = os.path.getmtime(fnCtfSet)
+
+        prot, scheduledIds = self._prepareStreamingCheck(
+            fnCtfSet,
+            insertedIds=[1]
+        )
+
+        # Reproduce the old mtime optimisation:
+        # lastCheck is newer than the SQLite mtime.
+        prot.lastCheck = datetime.fromtimestamp(originalMtime + 60)
+
+        # New data arrives.
+        self._appendCtf(fnCtfSet, 2)
+
+        # Simulate a compatibility SQLite whose main-file mtime does not change.
+        os.utime(fnCtfSet, (originalMtime, originalMtime))
+
+        prot._checkNewInput()
+
+        self.assertEqual(
+            [2],
+            sorted(scheduledIds),
+            "A new CTF must be detected even if the SQLite mtime does not change."
+        )
+
+    def testResumeSkipsAlreadyProcessedCtfs(self):
+        fnCtfSet = self._createCtfSet(
+            "ctf_resume.sqlite",
+            [1, 2, 3]
+        )
+
+        prot, scheduledIds = self._prepareStreamingCheck(
+            fnCtfSet,
+            insertedIds=[],
+            originalRunMode=MODE_RESUME,
+            doneIds=[1]
+        )
+
+        prot._checkNewInput()
+
+        self.assertEqual(
+            [2, 3],
+            sorted(scheduledIds),
+            "Continue must only schedule CTFs not already present in the outputs."
+        )
+
+        self.assertEqual(
+            [1, 2, 3],
+            sorted(prot.insertedIds),
+            "Processed and newly scheduled CTFs must be tracked after Continue."
+        )
+
+    def testRestartDoesNotReusePreviousDoneCtfs(self):
+        fnCtfSet = self._createCtfSet(
+            "ctf_restart.sqlite",
+            [1, 2, 3]
+        )
+
+        prot, scheduledIds = self._prepareStreamingCheck(
+            fnCtfSet,
+            insertedIds=[],
+            originalRunMode=MODE_RESTART,
+            doneIds=[1]
+        )
+
+        prot._checkNewInput()
+
+        self.assertEqual(
+            [1, 2, 3],
+            sorted(scheduledIds),
+            "Restart must schedule all input CTFs instead of restoring previous outputs."
+        )

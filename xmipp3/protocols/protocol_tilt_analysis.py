@@ -462,24 +462,13 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         return None
 
     def _checkNewInput(self):
-        # Check if there are new micrographs to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(self.micsFn))
-        self.debug('Last check: %s, modification: %s'
-                   % (pwutils.prettyTime(self.lastCheck),
-                      pwutils.prettyTime(mTime)))
-        # If the input micrographs.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.insertedIds: # If this is empty it is dut to a static "continue" action or it is the first round
-            return None
-
-        # Open input micrographs.sqlite and close it as soon as possible
+        # Always inspect the input set. Streaming databases may receive new rows
+        # without changing the main SQLite file mtime.
         micSet = self._loadInputSet(self.micsFn)
         micSetIds = micSet.getIdSet()
         newIds = [idMic for idMic in micSetIds if idMic not in self.insertedIds]
 
         self.isStreamClosed = micSet.isStreamClosed()
-        self.lastCheck = datetime.now()
         micSet.close()
 
         outputStep = self._getFirstJoinStep()
@@ -540,14 +529,12 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         if len(micsAccepted) > 0:
             micSet = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
-            for mic in micsAccepted:
-                micSet.append(mic)
+            self._appendNewMicrographs(micSet, micsAccepted)
             self._updateOutputSet('outputMicrographs', micSet, streamMode)
 
         if len(micsDiscarded) > 0:
             micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
-            for mic in micsDiscarded:
-                micSet_discarded.append(mic)
+            self._appendNewMicrographs(micSet_discarded, micsDiscarded)
             self._updateOutputSet('discardedMicrographs', micSet_discarded, streamMode)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
@@ -556,6 +543,15 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 outputStep.setStatus(cons.STATUS_NEW)
 
         self._store()
+
+    def _appendNewMicrographs(self, micSet, micrographs):
+        """Append only micrographs that are not already persisted."""
+        micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
+        for mic in micrographs:
+            micId = mic.getObjId()
+            if micId not in micIds:
+                micSet.append(mic)
+                micIds.add(micId)
 
     def _insertNewMicrographSteps(self, newIds):
         """ Insert steps to process new micrographs (from streaming)

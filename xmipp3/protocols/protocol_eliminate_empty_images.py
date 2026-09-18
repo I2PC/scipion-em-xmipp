@@ -26,7 +26,6 @@
 # *****************************************************************************
 
 import os, sys
-from datetime import datetime
 
 import pwem.emlib.metadata as md
 import pyworkflow.protocol.constants as cons
@@ -323,19 +322,32 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
-        self.lenPartsSet = 0  # inputSize after checkNewInput
-        self.outputSize = 0  # outputSize after checkNewOutput
-        self.check = None  # last creationTime of the processed images
-        self.stepCount = 0  # to label the input.xmd
-        self.fnInputMd = self._getExtraPath("input%d.xmd")  # to feed the bin
-        self.fnOutMdTmp = self._getExtraPath("outTemp.xmd")  # partial out
-        self.fnElimMdTmp = self._getExtraPath("elimTemp.xmd")  # partial out2
-        self.fnOutputMd = self._getExtraPath("output.xmd")  # final out
-        self.fnElimMd = self._getExtraPath("eliminated.xmd")  # final out2
+        self.lenPartsSet = 0
+        self.outputSize = 0
+        self.check = None
+        self.stepCount = 0
+        self.streamClosed = False
+        self.finished = False
+        self._scheduledSize = 0
+
+        self.fnInputMd = self._getExtraPath("input%d.xmd")
+        self.fnOutMdTmp = self._getExtraPath("outTemp.xmd")
+        self.fnElimMdTmp = self._getExtraPath("elimTemp.xmd")
+        self.fnOutputMd = self._getExtraPath("output.xmd")
+        self.fnElimMd = self._getExtraPath("eliminated.xmd")
+
+        if self.runMode.get() == cons.MODE_RESUME:
+            self._restoreStreamingState()
+        else:
+            self.lenPartsSet, self.streamClosed = self._getCurrentInputState()
+            self._scheduledSize = self.lenPartsSet
 
         checkStep = self._insertNewPartsSteps()
+        self._scheduledSize = self.lenPartsSet
+
         self._insertFunctionStep('createOutputStep',
-                                 prerequisites=checkStep, wait=True)
+                                 prerequisites=checkStep,
+                                 wait=True)
 
     def _insertNewPartsSteps(self):
         deps = []
@@ -346,10 +358,81 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         deps.append(stepId)
         return deps
 
+    def _getCurrentInputState(self):
+        inputSet = self.getInput()
+        inputSet.loadAllProperties()
+        inputSize = len(inputSet)
+        streamClosed = inputSet.isStreamClosed()
+        inputSet.close()
+
+        return inputSize, streamClosed
+
+    def _getResumeOutputNames(self):
+        return ()
+
+    def specialBehavoir(self, inSet):
+        """ To be implemented by child. Must set self.check and inSet.close() """
+        pass
+
+    def _getCreationCheckpoint(self, inputSet, processedCount):
+        if processedCount <= 0:
+            return None
+
+        if isinstance(inputSet, SetOfImages):
+            for index, item in enumerate(
+                    inputSet.iterItems(orderBy='creation', direction='ASC'),
+                    start=1):
+                if index == processedCount:
+                    return item.getObjCreation()
+        else:
+            creationTimes = [
+                item.getRepresentative().getObjCreation()
+                for item in inputSet
+            ]
+            creationTimes = sorted(
+                creationTime
+                for creationTime in creationTimes
+                if creationTime is not None
+            )
+
+            if processedCount <= len(creationTimes):
+                return creationTimes[processedCount - 1]
+
+        return None
+
+    def _restoreStreamingState(self):
+        self.outputSize = 0
+
+        for outputName in self._getResumeOutputNames():
+            outputSet = getattr(self, outputName, None)
+
+            if outputSet is not None:
+                outputSet.loadAllProperties()
+                self.outputSize += len(outputSet)
+                outputSet.close()
+
+        inputSet = self.getInput()
+        inputSet.loadAllProperties()
+
+        self.lenPartsSet = len(inputSet)
+        self.streamClosed = inputSet.isStreamClosed()
+        self.check = self._getCreationCheckpoint(inputSet, self.outputSize)
+
+        inputSet.close()
+
+        self._scheduledSize = self.outputSize
+
+        self.info(
+            "Restored streaming state: %d processed of %d input images"
+            % (self.outputSize, self.lenPartsSet)
+        )
+
     def eliminationStep(self, stepId):
         """ Common code for particles and classes/averages """
         fnInputMd = self.fnInputMd % stepId
         partsSet = self.prepareImages()
+
+        self._scheduledSize = max(getattr(self, '_scheduledSize', 0), len(partsSet))
 
         if self.check == None:  # if no previous, get all
             writeSetOfParticles(partsSet, fnInputMd,
@@ -369,11 +452,6 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         if self.useDenoising:
             args += " --useDenoising -d %f" % self.denoising.get()
         self.runJob("xmipp_image_eliminate_empty_particles", args)
-
-    def specialBehavoir(self, inSet):
-        """ To be implemented by child. Must set self.check and inSet.close()
-        """
-        pass
 
     def _getFirstJoinStep(self):
         for s in self._steps:
@@ -398,24 +476,22 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # Check if there are new particles to process from the input set
-        partsFile = self.getInput().getFileName()
-        self.lastmTime = getattr(self, 'lastmTime', None)
-        mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastmTime == mTime:
-            return
+        currentSize, streamClosed = self._getCurrentInputState()
 
-        self.lastmTime = mTime
+        self.lenPartsSet = currentSize
+        self.streamClosed = streamClosed
+
+        if currentSize <= getattr(self, '_scheduledSize', 0):
+            return
 
         outputStep = self._getFirstJoinStep()
 
-        self.prepareImages()
-
         fDeps = self._insertNewPartsSteps()
+        self._scheduledSize = currentSize
+
         if outputStep is not None:
             outputStep.addPrerequisites(*fDeps)
+
         self.updateSteps()
 
     def prepareImages(self):
@@ -430,7 +506,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         if getattr(self, 'finished', False):
             return
 
-        self.finished = self.inputImages.isStreamClosed() and self.outputSize == self.lenPartsSet
+        self.finished = self.streamClosed and self.outputSize == self.lenPartsSet
 
         self.createOutputs()
 
@@ -520,6 +596,9 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         self.addAdvancedParams(form)
 
     # --------------------------- INSERT steps functions ----------------------
+    def _getResumeOutputNames(self):
+        return ('outputParticles', 'eliminatedParticles')
+
     def specialBehavoir(self, partsSet):
         """ Just setting the self.check """
         for p in partsSet.iterItems(orderBy='creation', direction='DESC'):
@@ -623,6 +702,10 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                           "population_ option.")
         return errors
 
+    def _getResumeOutputNames(self):
+        return ('outputAverages',
+                'eliminatedAverages')
+
     def specialBehavoir(self, partSet):
         idsToCheck = []
         for p in partSet.iterItems(orderBy='creation', direction='ASC'):
@@ -633,8 +716,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         self.rejectByPopulation(idsToCheck)
 
     def createOutputs(self):
-        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
-            else (Set.STREAM_CLOSED if self.streamClosed else Set.STREAM_OPEN)
+        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) else Set.STREAM_OPEN
 
         def updateOutputs(mdFn, suffix):
             lastToClose = getattr(self, 'finished', False) and \
@@ -687,7 +769,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             firstRep = inSet.getFirstItem()
             getImage = lambda item: item.clone()
             self.classesDict = None
-        else:  # SetOfClasses
+        else:
             firstRep = inSet.getFirstItem().getFirstItem()
             getImage = lambda item: item.getRepresentative().clone()
             self.classesDict = {cls.getObjId(): cls.getSize() for cls in inSet}
@@ -700,6 +782,9 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
         for item in inSet:
             self.inputImages.append(getImage(item))
+
+        inSet.close()
+
         self.lenPartsSet = len(self.inputImages)
 
         self.inputImages.write()

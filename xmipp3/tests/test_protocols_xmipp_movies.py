@@ -659,3 +659,931 @@ class TestMovieAlignmentConsensus(BaseTest):
 
         sizeDiscarded = protConsensus2.outputMoviesDiscarded.getSize()
         self.assertEqual(sizeDiscarded, 2, 'Number of discarded movies must be 0 and its %d' % sizeDiscarded)
+
+
+class TestMovieDoseAnalysisState(BaseTest):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testRuntimeStateIsNotSharedBetweenInstances(self):
+        prot1 = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot2 = self.newProtocol(XmippProtMovieDoseAnalysis)
+
+        prot1.stats[1] = {'mean': 1.0}
+        prot1.meanDoseList.append(1.0)
+        prot1.medianDoseTemporal.append(1.0)
+        prot1.medianDifferences.append(0.0)
+
+        self.assertEqual(prot2.stats, {})
+        self.assertEqual(prot2.meanDoseList, [])
+        self.assertEqual(prot2.medianDoseTemporal, [])
+        self.assertEqual(prot2.medianDifferences, [])
+
+    def testRuntimeStateIsRestoredFromOutputs(self):
+        class OutputMovie:
+            def __init__(self, movieId, mean, diff):
+                self.movieId = movieId
+                self.mean = mean
+                self.diff = diff
+
+            def getObjId(self):
+                return self.movieId
+
+            def getAttributeValue(self, name, defaultValue=None):
+                values = {'_MEAN_DOSE_PER_ANGSTROM2': self.mean, '_DIFF_TO_DOSE_PER_ANGSTROM2': self.diff}
+                return values.get(name, defaultValue)
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.outputMovies = [OutputMovie(3, 1.3, 3.0), OutputMovie(1, 1.1, 1.0)]
+        prot.outputMoviesDiscarded = [OutputMovie(2, 1.2, 2.0)]
+
+        prot._restoreRuntimeStateFromOutputs()
+
+        self.assertEqual(prot.meanDoseList, [1.1, 1.2, 1.3])
+        self.assertEqual(prot.medianDoseTemporal, [1.1, 1.2, 1.3])
+        self.assertEqual(prot.medianDifferences, [1.0, 2.0, 3.0])
+
+    def testContinuePreservesPartialDoseWindow(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId, mean=None, diff=None, globalMedian=None, usingExperimental=None):
+                self.movieId = movieId
+                self.mean = mean
+                self.diff = diff
+                self.globalMedian = globalMedian
+                self.usingExperimental = usingExperimental
+
+            def getObjId(self):
+                return self.movieId
+
+            def getAttributeValue(self, name, defaultValue=None):
+                values = {
+                    '_MEAN_DOSE_PER_ANGSTROM2': self.mean,
+                    '_DIFF_TO_DOSE_PER_ANGSTROM2': self.diff,
+                    '_GLOBAL_DOSE_PER_ANGSTROM2': self.globalMedian,
+                    '_USING_EXPERIMENTAL_DOSE': self.usingExperimental
+                }
+                return values.get(name, defaultValue)
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class OutputSet(list):
+            def getIdSet(self):
+                return {movie.getObjId() for movie in self}
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=3, percentage_window=101)
+        prot.outputMovies = OutputSet([Movie(1, 1.0, 0.0, 1.0, True)])
+        prot.outputMoviesDiscarded = OutputSet([Movie(2, 3.0, 200.0, 1.0, True)])
+        prot._restoreRuntimeStateFromOutputs()
+
+        prot.stats = {3: {'mean': 5.0, 'std': 0.0, 'min': 5.0, 'max': 5.0}}
+        prot.meanDoseById[3] = 5.0
+        prot.insertedIds = [1, 2, 3]
+        prot.processedIds = [3]
+        prot.framesRange = (1, 1, 1)
+        prot.isStreamClosed = False
+        prot._getInputSize = lambda: 3
+        prot._loadMoviesByIds = lambda movieIds: {movieId: Movie(movieId) for movieId in movieIds}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+        prot._loadOutputSet = lambda setClass, baseName: prot.outputMovies if baseName == 'movies.sqlite' else prot.outputMoviesDiscarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertEqual(prot.medianDoseTemporal, [1.0, 3.0, 5.0])
+        self.assertEqual(prot.medianDifferenceIds, [1, 2, 3])
+        self.assertEqual(prot.mu, 3.0)
+
+    def testClosedStreamUsesAvailableDoseSamples(self):
+        class InputSet:
+            def getSize(self):
+                return 3
+
+            def close(self):
+                pass
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=5)
+        prot.insertedIds = [1, 2, 3]
+        prot.processedIds = [1, 2]
+        prot.meanDoseById = {1: 1.0, 2: 1.1}
+        prot.isStreamClosed = True
+        prot.movsFn = 'movies.sqlite'
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._loadInputSet = lambda _: InputSet()
+
+        self.assertFalse(prot._hasEnoughDoseSamples())
+
+        prot.processedIds.append(3)
+        prot.meanDoseById[3] = 0.9
+
+        self.assertTrue(prot._hasEnoughDoseSamples())
+
+    def testInputWalChangeTriggersNewInputCheck(self):
+        import tempfile
+
+        class InputSet:
+            def getIdSet(self):
+                return {1}
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                pass
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        loadCalls = []
+        prot.insertedIds = []
+        prot._getFirstJoinStep = lambda: None
+        prot._insertNewMoviesSteps = lambda newIds: []
+        prot.updateSteps = lambda: None
+        prot.isContinued = lambda: False
+
+        with tempfile.TemporaryDirectory() as tmpDir:
+            prot.movsFn = os.path.join(tmpDir, 'movies.sqlite')
+            with open(prot.movsFn, 'wb') as fh:
+                fh.write(b'sqlite')
+
+            prot._loadInputSet = lambda _: loadCalls.append(1) or InputSet()
+            prot._checkNewInput()
+            prot.insertedIds = [1]
+            prot._checkNewInput()
+            self.assertEqual(len(loadCalls), 1)
+
+            with open(prot.movsFn + '-wal', 'wb') as fh:
+                fh.write(b'wal')
+
+            prot._checkNewInput()
+            self.assertEqual(len(loadCalls), 2)
+
+    def testParallelCompletionKeepsAcquisitionOrder(self):
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.insertedIds = [1, 2, 3, 4]
+        prot.processedIds = [3, 4]
+        prot.meanDoseById = {3: 1.3, 4: 1.4}
+
+        self.assertEqual(prot._getNewDoneIds([]), [])
+
+        prot.processedIds.extend([1, 2])
+        prot.meanDoseById.update({1: 1.1, 2: 1.2})
+        prot._syncMeanDoseList()
+
+        self.assertEqual(prot._getNewDoneIds([]), [1, 2, 3, 4])
+        self.assertEqual(prot.meanDoseList, [1.1, 1.2, 1.3, 1.4])
+
+    def testOutOfOrderCompletionDoesNotTriggerInitialDoseSampling(self):
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=2)
+        prot.insertedIds = [1, 2, 3, 4]
+        prot.processedIds = [3, 4]
+        prot.meanDoseById = {3: 1.3, 4: 1.4}
+        prot.isStreamClosed = False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+
+        self.assertFalse(prot._hasEnoughDoseSamples())
+
+        prot.processedIds.extend([1, 2])
+        prot.meanDoseById.update({1: 1.1, 2: 1.2})
+
+        self.assertTrue(prot._hasEnoughDoseSamples())
+
+    def testInitialMedianUsesOnlyConfiguredOrderedSamples(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=2)
+        prot.usingExperimental = True
+        prot.meanDoseById = {1: 1.0, 2: 1.0, 3: 100.0, 4: 100.0}
+        prot.stats = {movieId: {'mean': mean, 'std': 0.0, 'min': mean, 'max': mean} for movieId, mean in prot.meanDoseById.items()}
+        prot.insertedIds = [1, 2, 3, 4]
+        prot.processedIds = [3, 4, 1, 2]
+        prot.medianDifferences = []
+        prot.medianDifferenceIds = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 4
+        prot._loadMoviesByIds = lambda movieIds: {movieId: Movie(movieId) for movieId in movieIds}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertEqual(prot.mu, 1.0)
+        self.assertEqual(accepted.ids, [1, 2])
+        self.assertEqual(discarded.ids, [3, 4])
+
+    def testDoneIdsAreCached(self):
+        class OutputSet:
+            def __init__(self, ids):
+                self.ids = set(ids)
+                self.scans = 0
+
+            def getIdSet(self):
+                self.scans += 1
+                return set(self.ids)
+
+            def getSize(self):
+                return len(self.ids)
+
+        accepted = OutputSet([1, 3])
+        discarded = OutputSet([2])
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.outputMovies = accepted
+        prot.outputMoviesDiscarded = discarded
+
+        doneIds, sizeOutput, acceptedIds, discardedIds = prot._getAllDoneIds()
+        prot._getAllDoneIds()
+
+        self.assertEqual(set(doneIds), {1, 2, 3})
+        self.assertEqual(sizeOutput, 3)
+        self.assertEqual(set(acceptedIds), {1, 3})
+        self.assertEqual(set(discardedIds), {2})
+        self.assertEqual(accepted.scans, 1)
+        self.assertEqual(discarded.scans, 1)
+
+        prot._registerDoneIds([4], accepted=True)
+        doneIds, sizeOutput, acceptedIds, _ = prot._getAllDoneIds()
+
+        self.assertEqual(set(doneIds), {1, 2, 3, 4})
+        self.assertEqual(sizeOutput, 4)
+        self.assertEqual(set(acceptedIds), {1, 3, 4})
+        self.assertEqual(accepted.scans, 1)
+        self.assertEqual(discarded.scans, 1)
+
+    def testInputSizeIsCachedFromInputScan(self):
+        class InputSet:
+            def getIdSet(self):
+                return {1, 2, 3}
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                pass
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.movsFn = 'movies.sqlite'
+        prot.insertedIds = []
+        prot._getInputSetSignature = lambda _: ('signature', None)
+        prot._loadInputSet = lambda _: InputSet()
+        prot._getFirstJoinStep = lambda: None
+        prot._insertNewMoviesSteps = lambda newIds: []
+        prot.updateSteps = lambda: None
+        prot.isContinued = lambda: False
+
+        prot._checkNewInput()
+        prot._loadInputSet = lambda _: self.fail('Input set should not be reopened for its size')
+
+        self.assertEqual(prot._getInputSize(), 3)
+
+    def testDoseAnalysisValidatesPositiveSampleAndWindowSizes(self):
+        invalid = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=0, window=0)
+        errors = invalid._validate()
+
+        self.assertIn('Samples to estimate the median dose must be greater than zero.', errors)
+        self.assertIn('Window step must be greater than zero.', errors)
+
+        valid = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=1, window=1)
+        self.assertEqual(valid._validate(), [])
+
+    def testDosePlotsDoNotLeakFigures(self):
+        import tempfile
+        import matplotlib.pyplot as plt
+        from xmipp3.protocols.protocol_movie_dose_analysis import plotDoseAnalysis, plotDoseAnalysisDiff
+
+        plt.close('all')
+
+        with tempfile.TemporaryDirectory() as tmpDir:
+            plotDoseAnalysis(os.path.join(tmpDir, 'dose.png'), [1.0, 1.1, 0.9], 1.0, 0.95, 1.05)
+            plotDoseAnalysisDiff(os.path.join(tmpDir, 'diff.png'), [0.0, 1.0, -1.0])
+
+        self.assertEqual(plt.get_fignums(), [])
+
+    def testDosePlotsAreThrottled(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.meanDoseList = [1.0] * 108
+        prot.medianDifferences = [0.0] * 108
+        prot.mu = 1.0
+        prot.finished = False
+        prot.getDosePlot = lambda: 'dose.png'
+        prot.getDoseDiffPlot = lambda: 'diff.png'
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysis') as dosePlot:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysisDiff') as diffPlot:
+                prot._updateDosePlots(8, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 0)
+                self.assertEqual(diffPlot.call_count, 0)
+
+                prot._updateDosePlots(50, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 1)
+                self.assertEqual(diffPlot.call_count, 1)
+
+                prot._updateDosePlots(80, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 1)
+                self.assertEqual(diffPlot.call_count, 1)
+
+                prot._updateDosePlots(100, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 2)
+                self.assertEqual(diffPlot.call_count, 2)
+
+                prot.finished = True
+                prot._updateDosePlots(108, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 3)
+                self.assertEqual(diffPlot.call_count, 3)
+
+                prot._updateDosePlots(108, 0.95, 1.05)
+                self.assertEqual(dosePlot.call_count, 3)
+                self.assertEqual(diffPlot.call_count, 3)
+
+    def testUpdatedMedianRefreshesAcceptanceLimitsWithinBatch(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class InputSet:
+            def getItem(self, field, movieId):
+                return Movie(movieId)
+
+            def close(self):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=1, percentage_window=101)
+        prot.mu = 1.0
+        prot.usingExperimental = True
+        prot.meanDoseList = [2.0, 2.0]
+        prot.stats = {
+            1: {'mean': 2.0, 'std': 0.0, 'min': 2.0, 'max': 2.0},
+            2: {'mean': 2.0, 'std': 0.0, 'min': 2.0, 'max': 2.0}
+        }
+        prot.insertedIds = [1, 2]
+        prot.processedIds = [1, 2]
+        prot.medianDifferences = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.movsFn = 'movies.sqlite'
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._hasEnoughDoseSamples = lambda: False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 2
+        prot._loadInputSet = lambda _: InputSet()
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertEqual(prot.mu, 2.0)
+        self.assertEqual(accepted.ids, [2])
+        self.assertEqual(discarded.ids, [1])
+
+    def testWindowMedianIgnoresFutureOutOfOrderMovies(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=2, percentage_window=101)
+        prot.mu = 1.0
+        prot.usingExperimental = True
+        prot.meanDoseById = {1: 1.0, 2: 1.0, 4: 100.0, 5: 100.0}
+        prot.meanDoseList = []
+        prot.stats = {movieId: {'mean': mean, 'std': 0.0, 'min': mean, 'max': mean} for movieId, mean in prot.meanDoseById.items()}
+        prot.insertedIds = [1, 2, 3, 4, 5]
+        prot.processedIds = [4, 5, 1, 2]
+        prot.medianDifferences = []
+        prot.medianDifferenceIds = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 5
+        prot._loadMoviesByIds = lambda movieIds: {movieId: Movie(movieId) for movieId in movieIds}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertEqual(prot.mu, 1.0)
+        self.assertEqual(accepted.ids, [1, 2])
+        self.assertEqual(discarded.ids, [])
+
+    def testWindowBoundaryDoseIsNotCountedAsFaulty(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=1, percentage_threshold=10, percentage_window=0)
+        prot.mu = 100.0
+        prot.usingExperimental = False
+        prot.meanDoseList = [110.0]
+        prot.stats = {1: {'mean': 110.0, 'std': 0.0, 'min': 110.0, 'max': 110.0}}
+        prot.insertedIds = [1]
+        prot.processedIds = [1]
+        prot.medianDifferences = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._hasEnoughDoseSamples = lambda: False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 1
+        prot._loadMoviesByIds = lambda movieIds: {1: Movie(1)}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+        prot._getExtraPath = lambda *args: 'WARNING.TXT'
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            with patch('builtins.open') as openFile:
+                prot._checkNewOutput()
+
+        self.assertEqual(accepted.ids, [1])
+        self.assertEqual(discarded.ids, [])
+        openFile.assert_not_called()
+
+    def testFailedDoseMovieIsPersistedAsDiscarded(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class InputSet:
+            def getItem(self, field, movieId):
+                return Movie(movieId)
+
+            def close(self):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.mu = 1.0
+        prot.stats = {1: {'mean': 1.0, 'std': 0.0, 'min': 1.0, 'max': 1.0}}
+        prot.meanDoseList = [1.0]
+        prot.insertedIds = [1, 2]
+        prot.processedIds = [1, 2]
+        prot.medianDifferences = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.movsFn = 'movies.sqlite'
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._hasEnoughDoseSamples = lambda: False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 2
+        prot._loadInputSet = lambda _: InputSet()
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute') as setAttr:
+            prot._checkNewOutput()
+
+        self.assertEqual(accepted.ids, [1])
+        self.assertEqual(discarded.ids, [2])
+        self.assertTrue(any(call.args[0].getObjId() == 2 and call.args[1] == '_DOSE_ANALYSIS_FAILED' and call.args[2] is True for call in setAttr.call_args_list))
+
+    def testAllFailedDoseMoviesFinishClosedStream(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class InputSet:
+            def getItem(self, field, movieId):
+                return Movie(movieId)
+
+            def close(self):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.stats = {}
+        prot.meanDoseById = {}
+        prot.meanDoseList = []
+        prot.insertedIds = [1, 2]
+        prot.processedIds = [1, 2]
+        prot.framesRange = (1, 1, 1)
+        prot.movsFn = 'movies.sqlite'
+        prot.isStreamClosed = True
+        prot._doneIds = set()
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 2
+        prot._loadInputSet = lambda _: InputSet()
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._getFirstJoinStep = lambda: None
+        prot._store = lambda: None
+
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+        self.assertFalse(hasattr(prot, 'mu'))
+        self.assertEqual(discarded.ids, [1, 2])
+        self.assertEqual(prot._doneIds, {1, 2})
+
+    def testLoadInputSetReturnsOpenSet(self):
+        from unittest.mock import patch
+
+        class InputSet:
+            def __init__(self, filename=None):
+                self.closed = False
+
+            def loadAllProperties(self):
+                pass
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                self.closed = True
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.SetOfMovies', InputSet):
+            inputSet = prot._loadInputSet('movies.sqlite')
+
+        self.assertFalse(inputSet.closed)
+        inputSet.close()
+
+    def testLoadMoviesByIdsClosesInputSetOnce(self):
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+        class InputSet:
+            def __init__(self):
+                self.closeCalls = 0
+                self.getCalls = []
+
+            def getItem(self, field, movieId):
+                self.getCalls.append(movieId)
+                return Movie(movieId)
+
+            def close(self):
+                self.closeCalls += 1
+
+        inputSet = InputSet()
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.movsFn = 'movies.sqlite'
+        prot._loadInputSet = lambda _: inputSet
+
+        movies = prot._loadMoviesByIds([3, 1, 2])
+
+        self.assertEqual(inputSet.getCalls, [3, 1, 2])
+        self.assertEqual(inputSet.closeCalls, 1)
+        self.assertEqual([movies[movieId].getObjId() for movieId in [3, 1, 2]], [3, 1, 2])
+
+    def testNewInputDoesNotUseLinearInsertedIdLookups(self):
+        class CountingList(list):
+            def __init__(self, values):
+                super().__init__(values)
+                self.containsCalls = 0
+
+            def __contains__(self, value):
+                self.containsCalls += 1
+                return super().__contains__(value)
+
+        class InputSet:
+            def getIdSet(self):
+                return {1, 2, 3, 4}
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                pass
+
+        insertedIds = CountingList([1, 2, 3])
+        scheduled = []
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.movsFn = 'movies.sqlite'
+        prot.insertedIds = insertedIds
+        prot._getInputSetSignature = lambda _: ('signature', None)
+        prot._loadInputSet = lambda _: InputSet()
+        prot._getFirstJoinStep = lambda: None
+        prot._insertNewMoviesSteps = lambda newIds: scheduled.append(list(newIds)) or []
+        prot.updateSteps = lambda: None
+        prot.isContinued = lambda: False
+
+        prot._checkNewInput()
+
+        self.assertEqual(scheduled, [[4]])
+        self.assertEqual(insertedIds.containsCalls, 0)
+
+    def testRuntimeDoseDecisionIsRestoredFromOutputs(self):
+        class OutputMovie:
+            def __init__(self, movieId, mean, diff, globalMedian, usingExperimental):
+                self.movieId = movieId
+                self.mean = mean
+                self.diff = diff
+                self.globalMedian = globalMedian
+                self.usingExperimental = usingExperimental
+
+            def getObjId(self):
+                return self.movieId
+
+            def getAttributeValue(self, name, defaultValue=None):
+                values = {
+                    '_MEAN_DOSE_PER_ANGSTROM2': self.mean,
+                    '_DIFF_TO_DOSE_PER_ANGSTROM2': self.diff,
+                    '_GLOBAL_DOSE_PER_ANGSTROM2': self.globalMedian,
+                    '_USING_EXPERIMENTAL_DOSE': self.usingExperimental
+                }
+                return values.get(name, defaultValue)
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.outputMovies = [OutputMovie(1, 1.1, 1.0, 1.08, True), OutputMovie(3, 1.3, 2.0, 1.25, True)]
+        prot.outputMoviesDiscarded = [OutputMovie(2, 1.2, 3.0, 1.15, True)]
+
+        prot._restoreRuntimeStateFromOutputs()
+
+        self.assertEqual(prot.mu, 1.25)
+        self.assertTrue(prot.usingExperimental)
+        self.assertEqual(prot.medianDifferenceIds, [1, 2, 3])
+
+    def testDoseRuntimeStateIsPersistedAfterMedianUpdate(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=1, percentage_window=101)
+        prot.mu = 1.0
+        prot.usingExperimental = True
+        prot.meanDoseList = [2.0]
+        prot.stats = {1: {'mean': 2.0, 'std': 0.0, 'min': 2.0, 'max': 2.0}}
+        prot.insertedIds = [1]
+        prot.processedIds = [1]
+        prot.medianDifferences = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.movsFn = 'movies.sqlite'
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._hasEnoughDoseSamples = lambda: False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 1
+        prot._loadMoviesByIds = lambda movieIds: {1: Movie(1)}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute') as setAttr:
+            prot._checkNewOutput()
+
+        self.assertEqual(prot.mu, 2.0)
+        self.assertTrue(any(call.args[1] == '_GLOBAL_DOSE_PER_ANGSTROM2' and call.args[2] == 2.0 for call in setAttr.call_args_list))
+        self.assertTrue(any(call.args[1] == '_USING_EXPERIMENTAL_DOSE' and call.args[2] is True for call in setAttr.call_args_list))
+
+    def testDoseDiffPlotUsesConfiguredThreshold(self):
+        import tempfile
+        from unittest.mock import patch
+        from xmipp3.protocols.protocol_movie_dose_analysis import plotDoseAnalysisDiff
+
+        with tempfile.TemporaryDirectory() as tmpDir:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plt.axhline') as axhline:
+                plotDoseAnalysisDiff(os.path.join(tmpDir, 'diff.png'), [-1.0, 0.0, 1.0], 10.0)
+
+        lineValues = [call.kwargs['y'] for call in axhline.call_args_list]
+        self.assertEqual(lineValues, [10.0, 0.0, -10.0])
+
+    def testDosePlotUpdatePassesConfiguredThreshold(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, percentage_threshold=10)
+        prot.meanDoseList = [1.0] * 50
+        prot.meanDoseById = {movieId: 1.0 for movieId in range(1, 51)}
+        prot.medianDifferences = [0.0] * 50
+        prot.medianDifferenceIds = list(range(1, 51))
+        prot.mu = 1.0
+        prot.finished = False
+        prot.getDosePlot = lambda: 'dose.png'
+        prot.getDoseDiffPlot = lambda: 'diff.png'
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysis') as dosePlot:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysisDiff') as diffPlot:
+                prot._updateDosePlots(50, 0.9, 1.1)
+
+        dosePlot.assert_called_once_with('dose.png', prot.meanDoseList, 1.0, 0.9, 1.1, list(range(1, 51)))
+        diffPlot.assert_called_once_with('diff.png', prot.medianDifferences, 10, prot.medianDifferenceIds)
+
+    def testDosePlotUsesActualMovieIds(self):
+        import tempfile
+        from unittest.mock import patch
+        from xmipp3.protocols.protocol_movie_dose_analysis import plotDoseAnalysis
+
+        movieIds = [1, 4, 9]
+        with tempfile.TemporaryDirectory() as tmpDir:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plt.scatter') as scatter:
+                plotDoseAnalysis(os.path.join(tmpDir, 'dose.png'), [1.0, 1.1, 0.9], 1.0, 0.95, 1.05, movieIds)
+
+        self.assertEqual(list(scatter.call_args.args[0]), movieIds)
+
+    def testDoseDiffPlotUsesActualMovieIds(self):
+        import tempfile
+        from unittest.mock import patch
+        from xmipp3.protocols.protocol_movie_dose_analysis import plotDoseAnalysisDiff
+
+        movieIds = [1, 4, 9]
+        with tempfile.TemporaryDirectory() as tmpDir:
+            with patch('xmipp3.protocols.protocol_movie_dose_analysis.plt.scatter') as scatter:
+                plotDoseAnalysisDiff(os.path.join(tmpDir, 'diff.png'), [0.0, 2.0, -3.0], 5.0, movieIds)
+
+        self.assertEqual(list(scatter.call_args.args[0]), movieIds)
+
+    def testDoseAnalysisSamplesActualMiddleFrame(self):
+        from unittest.mock import MagicMock, patch
+
+        class Movie:
+            def getNumberOfFrames(self):
+                return 5
+
+            def getFileName(self):
+                return 'movie.mrcs'
+
+            def getObjId(self):
+                return 1
+
+        image = MagicMock()
+        image.getData.return_value = np.ones((2, 2))
+        imageHandler = MagicMock()
+        imageHandler.read.return_value = image
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.samplingRate = 1.0
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.ImageHandler', return_value=imageHandler):
+            stats = prot.estimatePoissonCount(Movie())
+
+        self.assertIsNotNone(stats)
+        self.assertEqual([call.args[0] for call in imageHandler.read.call_args_list], ['1@movie.mrcs', '3@movie.mrcs', '5@movie.mrcs'])
+

@@ -474,58 +474,51 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
+    def _checkNewInput(self):
+        newMics = self._loadInputList()
+        outputStep = self._getFirstJoinStep()
+
+        if newMics:
+            fDeps = self._insertNewMicsSteps(newMics.values())
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+            self.updateSteps()
+
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
 
-        # Load previously done items (from text file)
-        doneList = self._readDoneList()
-        # Check for newly done items
-        newDone = [m for m in self.micDict.values()
-                   if m.getObjId() not in doneList and self._isMicDone(m)]
-
-        # Update the file with the newly done mics
-        # or exit from the function if no new done mics
+        doneIds = set(self._readDoneList())
+        processedMics = [m for m in self.micDict.values() if self._isMicDone(m)]
         inputLen = len(self.micDict)
-        self.debug('_checkNewOutput: ')
-        self.debug('   input: %s, doneList: %s, newDone: %s'
-                   % (inputLen, len(doneList), len(newDone)))
-
-        firstTime = len(doneList) == 0
-        allDone = len(doneList) + len(newDone)
-        # We have finished when there is not more input mics (stream closed)
-        # and the number of processed mics is equal to the number of inputs
         streamClosed = self._isStreamClosed()
-        self.finished = streamClosed and allDone == inputLen
-        self.debug(' is finished? %s ' % self.finished)
-        self.debug(' is stream closed? %s ' % streamClosed)
+        allMicsProcessed = self._areAllMicsProcessed()
+        self.finished = streamClosed and len(processedMics) == inputLen and allMicsProcessed
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-        if newDone:
-            self._updateOutputCoordSet(newDone, streamMode)
-            self._writeDoneList(newDone)
-        elif not self.finished:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
+        outputMicIds = self._getOutputMicIds()
+        newOutput = [m for m in processedMics if m.getObjId() not in outputMicIds]
+        pendingDone = [m for m in processedMics if m.getObjId() not in doneIds]
 
-            # Maybe it would be good idea to take a snap to avoid
-            # so much IO if this protocol does not have much to do now
-            if allDone == len(self.micDict):
+        self.debug('_checkNewOutput: input=%s, processed=%s, output=%s, checkpoint=%s'
+                   % (inputLen, len(processedMics), len(outputMicIds), len(doneIds)))
+        self.debug(' is finished? %s ' % self.finished)
+        self.debug(' is stream closed? %s ' % streamClosed)
+        self.debug(' are all mics processed? %s ' % allMicsProcessed)
+
+        if newOutput:
+            self._updateOutputCoordSet(newOutput, streamMode)
+        elif self.finished:
+            self._updateOutputCoordSet([], Set.STREAM_CLOSED)
+        elif not pendingDone:
+            if len(processedMics) == inputLen:
                 self._streamingSleepOnWait()
-
             return
 
-        self.debug('   finished: %s ' % self.finished)
-        self.debug('        self.streamClosed (%s) AND' % streamClosed)
-        self.debug('        allDone (%s) == len(self.listOfMics (%s)'
-                   % (allDone, inputLen))
-        self.debug('   streamMode: %s' % streamMode)
+        if pendingDone:
+            self._writeDoneList(pendingDone)
 
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-
-            # Close the output set
-            self._updateOutputCoordSet([], Set.STREAM_CLOSED)
+        if self.finished:
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(STATUS_NEW)
@@ -536,18 +529,16 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
       else:
         scale=(1./self.getBoxScale())
       return scale
+    def _getOutputMicIds(self):
+        outputCoords = self.getOutput()
+        if outputCoords is None or outputCoords.getSize() == 0:
+            return set()
+        return {int(micId) for micId in outputCoords.getUniqueValues('_micId')}
+
 
     def _updateOutputCoordSet(self, micList, streamMode):
-        # Do no proceed if there is not micrograph ready
-        if not micList:
-            return []
-
         outputDir = self._getExtraPath('outputCoords')
         outputCoords = self.getOutput()
-
-        # If there are not outputCoordinates yet, it means that is the first
-        # time we are updating output coordinates, so we need to first create
-        # the output set
         firstTime = outputCoords is None
 
         if firstTime:
@@ -562,14 +553,16 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             outputCoords.setBoxSize(boxSize)
         else:
             outputCoords.enableAppend()
-        self.info("Reading coordinates from mics: %s" % ','.join([mic.strId() for mic in micList]))
-        readSetOfCoordinates(outputDir, micList, outputCoords, scale= self._getScale())
+
+        if micList:
+            self.info("Reading coordinates from mics: %s" % ','.join([mic.strId() for mic in micList]))
+            readSetOfCoordinates(outputDir, micList, outputCoords, scale=self._getScale())
+
         self.debug(" _updateOutputCoordSet Stream Mode: %s " % streamMode)
         self._updateOutputSet(self.getOutputName(), outputCoords, streamMode)
 
         if firstTime:
-            self._defineSourceRelation(micSetPtr,
-                                       outputCoords)
+            self._defineSourceRelation(micSetPtr, outputCoords)
 
         return micList
 
