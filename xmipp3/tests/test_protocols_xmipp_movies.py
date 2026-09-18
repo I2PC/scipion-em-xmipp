@@ -792,6 +792,57 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertTrue(prot._hasEnoughDoseSamples())
 
+    def testInitialMedianUsesOnlyConfiguredOrderedSamples(self):
+        from unittest.mock import patch
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def getObjId(self):
+                return self.movieId
+
+            def setFramesRange(self, framesRange):
+                pass
+
+        class OutputSet:
+            def __init__(self):
+                self.ids = []
+
+            def append(self, movie):
+                self.ids.append(movie.getObjId())
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=2)
+        prot.usingExperimental = True
+        prot.meanDoseById = {1: 1.0, 2: 1.0, 3: 100.0, 4: 100.0}
+        prot.stats = {movieId: {'mean': mean, 'std': 0.0, 'min': mean, 'max': mean} for movieId, mean in prot.meanDoseById.items()}
+        prot.insertedIds = [1, 2, 3, 4]
+        prot.processedIds = [3, 4, 1, 2]
+        prot.medianDifferences = []
+        prot.medianDifferenceIds = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 4
+        prot._loadMoviesByIds = lambda movieIds: {movieId: Movie(movieId) for movieId in movieIds}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+
+        accepted = OutputSet()
+        discarded = OutputSet()
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertEqual(prot.mu, 1.0)
+        self.assertEqual(accepted.ids, [1, 2])
+        self.assertEqual(discarded.ids, [3, 4])
+
     def testDoneIdsAreCached(self):
         class OutputSet:
             def __init__(self, ids):

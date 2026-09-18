@@ -594,12 +594,17 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
         return newDone
 
+    def _getReadyDoseSamples(self, doneIds, newDone=None):
+        if newDone is None:
+            newDone = self._getNewDoneIds(doneIds)
+        readyIds = set(doneIds).union(newDone)
+        return [self.meanDoseById[movieId] for movieId in sorted(readyIds) if movieId in self.meanDoseById]
+
     def _hasEnoughDoseSamples(self):
         self._syncMeanDoseList()
         doneIds, _, _, _ = self._getAllDoneIds()
-        readyIds = set(doneIds).union(self._getNewDoneIds(doneIds))
-        readyDoseCount = sum(movieId in self.meanDoseById for movieId in readyIds)
-        if readyDoseCount >= self.n_samples.get():
+        readyDoseSamples = self._getReadyDoseSamples(doneIds)
+        if len(readyDoseSamples) >= self.n_samples.get():
             return True
         if not self.isStreamClosed or not self.meanDoseList:
             return False
@@ -613,7 +618,8 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         maxMicSize = self._getInputSize()
 
         if self._hasEnoughDoseSamples() and not hasattr(self, 'mu'):
-            medianDoseExperimental = np.median(self.meanDoseList)
+            readyDoseSamples = self._getReadyDoseSamples(doneListIds, newDone)
+            medianDoseExperimental = np.median(readyDoseSamples[:self.n_samples.get()])
             if hasattr(self, 'dosePerFrame'):
                 refDose = self.dosePerFrame
                 diff = abs((medianDoseExperimental/refDose)-1) * 100
