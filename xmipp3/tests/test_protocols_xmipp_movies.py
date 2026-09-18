@@ -723,3 +723,41 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot.processedIds.append(3)
 
         self.assertTrue(prot._hasEnoughDoseSamples())
+
+    def testInputWalChangeTriggersNewInputCheck(self):
+        import tempfile
+
+        class InputSet:
+            def getIdSet(self):
+                return {1}
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                pass
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        loadCalls = []
+        prot.insertedIds = []
+        prot._getFirstJoinStep = lambda: None
+        prot._insertNewMoviesSteps = lambda newIds: []
+        prot.updateSteps = lambda: None
+        prot.isContinued = lambda: False
+
+        with tempfile.TemporaryDirectory() as tmpDir:
+            prot.movsFn = os.path.join(tmpDir, 'movies.sqlite')
+            with open(prot.movsFn, 'wb') as fh:
+                fh.write(b'sqlite')
+
+            prot._loadInputSet = lambda _: loadCalls.append(1) or InputSet()
+            prot._checkNewInput()
+            prot.insertedIds = [1]
+            prot._checkNewInput()
+            self.assertEqual(len(loadCalls), 1)
+
+            with open(prot.movsFn + '-wal', 'wb') as fh:
+                fh.write(b'wal')
+
+            prot._checkNewInput()
+            self.assertEqual(len(loadCalls), 2)

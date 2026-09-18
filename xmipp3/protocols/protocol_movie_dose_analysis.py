@@ -24,7 +24,6 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -36,7 +35,6 @@ from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVE
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
 from pyworkflow import UPDATED, PROD
-import pyworkflow.utils as pwutils
 
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies
@@ -429,25 +427,29 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self.debug("Closed db.")
         return movSet
 
-    def _checkNewInput(self):
-        # Check if there are new micrographs to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(self.movsFn))
-        self.debug('Last check: %s, modification: %s'
-                   % (pwutils.prettyTime(self.lastCheck),
-                      pwutils.prettyTime(mTime)))
-        # If the input micrographs.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.insertedIds: # If this is empty it is due to a static "continue" action or it is the first round
-            return None
+    @staticmethod
+    def _getInputSetSignature(fileName):
+        def _fileSignature(path):
+            try:
+                fileStat = os.stat(path)
+                return fileStat.st_mtime_ns, fileStat.st_size
+            except FileNotFoundError:
+                return None
 
-        # Open input micrographs.sqlite and close it as soon as possible
+        return _fileSignature(fileName), _fileSignature(fileName + '-wal')
+
+    def _checkNewInput(self):
+        inputSignature = self._getInputSetSignature(self.movsFn)
+        if getattr(self, '_inputSetSignature', None) == inputSignature and self.insertedIds:
+            return None
+        self._inputSetSignature = inputSignature
+
+        # Open input movies.sqlite and close it as soon as possible
         movSet = self._loadInputSet(self.movsFn)
         movSetIds = movSet.getIdSet()
         newIds = [idMov for idMov in movSetIds if idMov not in self.insertedIds]
 
         self.isStreamClosed = movSet.isStreamClosed()
-        self.lastCheck = datetime.now()
         movSet.close()
 
         outputStep = self._getFirstJoinStep()
