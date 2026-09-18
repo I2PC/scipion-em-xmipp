@@ -22,6 +22,61 @@ class _Mic:
         return 'mic_%03d' % self.objId
 
 
+class _Coord:
+    def __init__(self, micId):
+        self.micId = micId
+
+    def getMicId(self):
+        return self.micId
+
+    def clone(self):
+        return _Coord(self.micId)
+
+
+class _CoordSet:
+    def __init__(self, coords):
+        self.coords = coords
+        self.fullScans = 0
+        self.indexedQueries = 0
+
+    def iterItems(self, where=None):
+        if where is None:
+            self.fullScans += 1
+            return iter(self.coords)
+
+        self.indexedQueries += 1
+        micId = int(where.split('=')[1])
+        return (coord for coord in self.coords if coord.getMicId() == micId)
+
+
+class _MicSetInfo:
+    def __init__(self, size):
+        self.size = size
+
+    def getSize(self):
+        return self.size
+
+
+class _CoordsInfo:
+    def __init__(self, micCount):
+        self.mics = _MicSetInfo(micCount)
+
+    def getMicrographs(self):
+        return self.mics
+
+
+class _CoordLoadHarness:
+    def __init__(self, totalMicCount):
+        self.coordDict = {}
+        self.coords = _CoordsInfo(totalMicCount)
+
+    def getCoords(self):
+        return self.coords
+
+    def _shouldBulkLoadCoords(self, micDict):
+        return extract_particles.XmippProtExtractParticles._shouldBulkLoadCoords(self, micDict)
+
+
 class _OutputParts:
     def __init__(self, micIds=None):
         self.micIds = set(micIds or [])
@@ -123,6 +178,26 @@ class _OutputHarness:
 
 
 class TestXmippExtractParticlesRegression(unittest.TestCase):
+    def testBulkCoordinateLoadUsesSingleScan(self):
+        protocol = _CoordLoadHarness(120)
+        micDict = {_Mic(objId).getMicName(): _Mic(objId) for objId in range(1, 101)}
+        coordSet = _CoordSet([_Coord(objId) for objId in range(1, 101)] + [_Coord(999)])
+        result = extract_particles.XmippProtExtractParticles._loadCoordsForMics(protocol, coordSet, micDict)
+        self.assertEqual(100, len(result))
+        self.assertEqual(1, coordSet.fullScans)
+        self.assertEqual(0, coordSet.indexedQueries)
+        self.assertEqual(100, len(protocol.coordDict))
+
+    def testIncrementalCoordinateLoadKeepsIndexedQueries(self):
+        protocol = _CoordLoadHarness(1000)
+        micDict = {_Mic(objId).getMicName(): _Mic(objId) for objId in (10, 20, 30)}
+        coordSet = _CoordSet([_Coord(10), _Coord(20), _Coord(30), _Coord(999)])
+        result = extract_particles.XmippProtExtractParticles._loadCoordsForMics(protocol, coordSet, micDict)
+        self.assertEqual(3, len(result))
+        self.assertEqual(0, coordSet.fullScans)
+        self.assertEqual(3, coordSet.indexedQueries)
+        self.assertEqual(3, len(protocol.coordDict))
+
     def testCheckNewInputSkipsUnchangedSnapshot(self):
         protocol = _InputHarness()
         extract_particles.XmippProtExtractParticles._checkNewInput(protocol)

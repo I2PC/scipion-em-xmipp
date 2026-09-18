@@ -33,11 +33,11 @@ from os.path import exists
 
 import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.object import Integer, Set
+from pyworkflow.object import Integer, Set, String
 from pyworkflow.protocol.constants import STEPS_PARALLEL, LEVEL_ADVANCED, STATUS_FINISHED, STATUS_NEW
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
-from pwem.objects import Particle
+from pwem.objects import Particle, SetOfCoordinates
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
@@ -46,6 +46,7 @@ from xmipp3.constants import OTHER
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 FACTOR_BOXSIZE = 1.5
+BULK_COORD_LOAD_MIN_MICS = 100
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Extracts particle images from micrographs based on provided coordinates.
@@ -503,6 +504,47 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             outputParts = getattr(self, 'outputParticles', None)
             self._outputMicIds = set() if outputParts is None or outputParts.getSize() == 0 else {int(micId) for micId in outputParts.getUniqueValues('_micId')}
         return self._outputMicIds
+
+    def _shouldBulkLoadCoords(self, micDict):
+        micCount = len(micDict)
+        totalMicCount = self.getCoords().getMicrographs().getSize()
+        return micCount >= BULK_COORD_LOAD_MIN_MICS and totalMicCount > 0 and micCount * 2 >= totalMicCount
+
+    def _loadCoordsForMics(self, coordSet, micDict):
+        micList = {}
+
+        if self._shouldBulkLoadCoords(micDict):
+            micById = {mic.getObjId(): (micKey, mic) for micKey, mic in micDict.items()}
+            coordsByMic = {}
+            for coord in coordSet.iterItems():
+                micId = coord.getMicId()
+                if micId in micById:
+                    coordsByMic.setdefault(micId, []).append(coord.clone())
+
+            for micId, coordList in coordsByMic.items():
+                micKey, mic = micById[micId]
+                self.coordDict[micId] = coordList
+                micList[micKey] = mic
+        else:
+            for micKey, mic in micDict.items():
+                micId = mic.getObjId()
+                coordList = [coord.clone() for coord in coordSet.iterItems(where='_micId=%s' % micId)]
+                if coordList:
+                    self.coordDict[micId] = coordList
+                    micList[micKey] = mic
+
+        return micList
+
+    def _loadInputCoords(self, micDict):
+        coordSet = SetOfCoordinates(filename=self.getCoords().getFileName())
+        coordSet._xmippMd = String()
+        coordSet.loadAllProperties()
+        try:
+            micList = self._loadCoordsForMics(coordSet, micDict)
+            self.coordsClosed = coordSet.isStreamClosed()
+        finally:
+            coordSet.close()
+        return micList
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
