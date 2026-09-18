@@ -1280,3 +1280,30 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         diffPlot.assert_called_once_with('diff.png', prot.medianDifferences, 10)
 
+    def testDoseAnalysisSamplesActualMiddleFrame(self):
+        from unittest.mock import MagicMock, patch
+
+        class Movie:
+            def getNumberOfFrames(self):
+                return 5
+
+            def getFileName(self):
+                return 'movie.mrcs'
+
+            def getObjId(self):
+                return 1
+
+        image = MagicMock()
+        image.getData.return_value = np.ones((2, 2))
+        imageHandler = MagicMock()
+        imageHandler.read.return_value = image
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.samplingRate = 1.0
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.ImageHandler', return_value=imageHandler):
+            stats = prot.estimatePoissonCount(Movie())
+
+        self.assertIsNotNone(stats)
+        self.assertEqual([call.args[0] for call in imageHandler.read.call_args_list], ['1@movie.mrcs', '3@movie.mrcs', '5@movie.mrcs'])
+

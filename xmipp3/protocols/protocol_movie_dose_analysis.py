@@ -538,7 +538,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     def estimatePoissonCount(self, movie):
         mean_frames = []
         n = movie.getNumberOfFrames()
-        frames = [1, n/2, n]
+        frames = [1, (n + 1) // 2, n]
         try:
             for frame in frames:
                 frame_image = ImageHandler().read("%d@%s" % (frame, movie.getFileName())).getData()
