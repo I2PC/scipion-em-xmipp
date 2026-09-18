@@ -840,3 +840,16 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot._loadInputSet = lambda _: self.fail('Input set should not be reopened for its size')
 
         self.assertEqual(prot._getInputSize(), 3)
+
+    def testDosePlotsDoNotLeakFigures(self):
+        import tempfile
+        import matplotlib.pyplot as plt
+        from xmipp3.protocols.protocol_movie_dose_analysis import plotDoseAnalysis, plotDoseAnalysisDiff
+
+        plt.close('all')
+
+        with tempfile.TemporaryDirectory() as tmpDir:
+            plotDoseAnalysis(os.path.join(tmpDir, 'dose.png'), [1.0, 1.1, 0.9], 1.0, 0.95, 1.05)
+            plotDoseAnalysisDiff(os.path.join(tmpDir, 'diff.png'), [0.0, 1.0, -1.0])
+
+        self.assertEqual(plt.get_fignums(), [])

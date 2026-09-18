@@ -803,6 +803,7 @@ def plotDoseAnalysis(filename, doseValues, medianGlobal, lower, upper):
     plt.legend()
     plt.grid()
     plt.savefig(filename)
+    plt.close()
 
 def plotDoseAnalysisDiff(filename, medianDifferences):
     medianDiff = np.median(medianDifferences)
@@ -818,3 +819,4 @@ def plotDoseAnalysisDiff(filename, medianDifferences):
     plt.legend()
     plt.grid()
     plt.savefig(filename)
+    plt.close()
