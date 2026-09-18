@@ -907,6 +907,16 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertEqual(prot._getInputSize(), 3)
 
+    def testDoseAnalysisValidatesPositiveSampleAndWindowSizes(self):
+        invalid = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=0, window=0)
+        errors = invalid._validate()
+
+        self.assertIn('Samples to estimate the median dose must be greater than zero.', errors)
+        self.assertIn('Window step must be greater than zero.', errors)
+
+        valid = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=1, window=1)
+        self.assertEqual(valid._validate(), [])
+
     def testDosePlotsDoNotLeakFigures(self):
         import tempfile
         import matplotlib.pyplot as plt

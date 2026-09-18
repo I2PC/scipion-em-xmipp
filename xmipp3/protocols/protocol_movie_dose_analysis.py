@@ -831,6 +831,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         errors = []
+        if self.n_samples.get() <= 0:
+            errors.append('Samples to estimate the median dose must be greater than zero.')
+        if self.window.get() <= 0:
+            errors.append('Window step must be greater than zero.')
         return errors
 
     def _summary(self):
