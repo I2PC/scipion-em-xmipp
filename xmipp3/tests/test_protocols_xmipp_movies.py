@@ -776,3 +776,67 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertEqual(prot._getNewDoneIds([]), [1, 2, 3, 4])
         self.assertEqual(prot.meanDoseList, [1.1, 1.2, 1.3, 1.4])
+
+    def testDoneIdsAreCached(self):
+        class OutputSet:
+            def __init__(self, ids):
+                self.ids = set(ids)
+                self.scans = 0
+
+            def getIdSet(self):
+                self.scans += 1
+                return set(self.ids)
+
+            def getSize(self):
+                return len(self.ids)
+
+        accepted = OutputSet([1, 3])
+        discarded = OutputSet([2])
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.outputMovies = accepted
+        prot.outputMoviesDiscarded = discarded
+
+        doneIds, sizeOutput, acceptedIds, discardedIds = prot._getAllDoneIds()
+        prot._getAllDoneIds()
+
+        self.assertEqual(set(doneIds), {1, 2, 3})
+        self.assertEqual(sizeOutput, 3)
+        self.assertEqual(set(acceptedIds), {1, 3})
+        self.assertEqual(set(discardedIds), {2})
+        self.assertEqual(accepted.scans, 1)
+        self.assertEqual(discarded.scans, 1)
+
+        prot._registerDoneIds([4], accepted=True)
+        doneIds, sizeOutput, acceptedIds, _ = prot._getAllDoneIds()
+
+        self.assertEqual(set(doneIds), {1, 2, 3, 4})
+        self.assertEqual(sizeOutput, 4)
+        self.assertEqual(set(acceptedIds), {1, 3, 4})
+        self.assertEqual(accepted.scans, 1)
+        self.assertEqual(discarded.scans, 1)
+
+    def testInputSizeIsCachedFromInputScan(self):
+        class InputSet:
+            def getIdSet(self):
+                return {1, 2, 3}
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                pass
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.movsFn = 'movies.sqlite'
+        prot.insertedIds = []
+        prot._getInputSetSignature = lambda _: ('signature', None)
+        prot._loadInputSet = lambda _: InputSet()
+        prot._getFirstJoinStep = lambda: None
+        prot._insertNewMoviesSteps = lambda newIds: []
+        prot.updateSteps = lambda: None
+        prot.isContinued = lambda: False
+
+        prot._checkNewInput()
+        prot._loadInputSet = lambda _: self.fail('Input set should not be reopened for its size')
+
+        self.assertEqual(prot._getInputSize(), 3)

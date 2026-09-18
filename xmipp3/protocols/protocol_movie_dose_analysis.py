@@ -343,6 +343,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self.medianDifferences = []
         self.meanGlobal = 0
         self.usingExperimental = False
+        self._doneIds = None
+        self._acceptedIds = None
+        self._discardedIds = None
+        self._inputSize = None
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -385,6 +389,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         # Important to have both:
         self.insertedIds = []  # Contains images that have been inserted in a Step (checkNewInput).
         self.processedIds = []  # Contains images that have been processed in a Step (checkNewOutput).
+        self._doneIds = None
+        self._acceptedIds = None
+        self._discardedIds = None
+        self._inputSize = None
         # Contains images that have been processed in a Step (checkNewOutput).
         self.isStreamClosed = self.inputMovies.get().isStreamClosed()
         self.framesRange = self.inputMovies.get().getFramesRange()
@@ -400,16 +408,26 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
     def _restoreRuntimeStateFromOutputs(self):
         restored = []
+        acceptedIds = set()
+        discardedIds = set()
+
         for outputName in (OUTPUT_MOVIES, OUTPUT_MOVIES_DISCARDED):
             outputSet = getattr(self, outputName, None)
             if outputSet is None:
                 continue
+
+            outputIds = acceptedIds if outputName == OUTPUT_MOVIES else discardedIds
             for movie in outputSet:
+                movieId = movie.getObjId()
+                outputIds.add(movieId)
                 mean = movie.getAttributeValue('_MEAN_DOSE_PER_ANGSTROM2')
                 diff = movie.getAttributeValue('_DIFF_TO_DOSE_PER_ANGSTROM2')
                 if mean is not None:
-                    restored.append((movie.getObjId(), mean, diff))
+                    restored.append((movieId, mean, diff))
 
+        self._acceptedIds = acceptedIds
+        self._discardedIds = discardedIds
+        self._doneIds = acceptedIds.union(discardedIds)
         restored.sort(key=lambda item: item[0])
         self.meanDoseById = {movieId: mean for movieId, mean, _ in restored}
         self.meanDoseList = [mean for _, mean, _ in restored]
@@ -449,6 +467,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         # Open input movies.sqlite and close it as soon as possible
         movSet = self._loadInputSet(self.movsFn)
         movSetIds = movSet.getIdSet()
+        self._inputSize = len(movSetIds)
         newIds = [idMov for idMov in movSetIds if idMov not in self.insertedIds]
 
         self.isStreamClosed = movSet.isStreamClosed()
@@ -563,8 +582,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             return False
 
         doneIds, _, _, _ = self._getAllDoneIds()
-        inputSize = self._loadInputSet(self.movsFn).getSize()
-        return len(set(doneIds).union(self.processedIds)) == inputSize
+        return len(set(doneIds).union(self.processedIds)) == self._getInputSize()
 
     def _checkNewOutput(self):
         if self._hasEnoughDoseSamples() and not hasattr(self, 'mu'):
@@ -589,7 +607,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             doneListIds, _, _, _ = self._getAllDoneIds()
             newDone = self._getNewDoneIds(doneListIds)
             allDone = len(doneListIds) + len(newDone)
-            maxMicSize = self._loadInputSet(self.movsFn).getSize()
+            maxMicSize = self._getInputSize()
             # We have finished when there is not more input movies
             # (stream closed) and the number of processed movies is
             # equal to the number of inputs
@@ -672,11 +690,13 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                 for movie in acceptedMovies:
                     moviesSet.append(movie)
                 self._updateOutputSet(OUTPUT_MOVIES, moviesSet, streamMode)
+                self._registerDoneIds((movie.getObjId() for movie in acceptedMovies), accepted=True)
             if len(discardedMovies)>0:
                 moviesSetDiscarded = self._loadOutputSet(SetOfMovies, 'movies_discarded.sqlite')
                 for movie in discardedMovies:
                     moviesSetDiscarded.append(movie)
                 self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
+                self._registerDoneIds((movie.getObjId() for movie in discardedMovies), accepted=False)
 
             tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
             tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
@@ -691,23 +711,34 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self._store()
 
 # ------------------------- UTILS functions --------------------------------
+    def _loadDoneIdsCache(self):
+        acceptedIds = set(self.outputMovies.getIdSet()) if hasattr(self, OUTPUT_MOVIES) else set()
+        discardedIds = set(self.outputMoviesDiscarded.getIdSet()) if hasattr(self, OUTPUT_MOVIES_DISCARDED) else set()
+        self._acceptedIds = acceptedIds
+        self._discardedIds = discardedIds
+        self._doneIds = acceptedIds.union(discardedIds)
+
     def _getAllDoneIds(self):
-        doneIds = []
-        acceptedIds = []
-        discardedIds = []
-        sizeOutput = 0
+        if self._doneIds is None:
+            self._loadDoneIdsCache()
 
-        if hasattr(self, OUTPUT_MOVIES):
-            sizeOutput += self.outputMovies.getSize()
-            acceptedIds.extend(list(self.outputMovies.getIdSet()))
-            doneIds.extend(acceptedIds)
+        return sorted(self._doneIds), len(self._doneIds), sorted(self._acceptedIds), sorted(self._discardedIds)
 
-        if hasattr(self, OUTPUT_MOVIES_DISCARDED):
-            sizeOutput += self.outputMoviesDiscarded.getSize()
-            discardedIds.extend(list(self.outputMoviesDiscarded.getIdSet()))
-            doneIds.extend(discardedIds)
+    def _registerDoneIds(self, movieIds, accepted):
+        if self._doneIds is None:
+            self._loadDoneIdsCache()
 
-        return doneIds, sizeOutput, acceptedIds, discardedIds
+        movieIds = set(movieIds)
+        if accepted:
+            self._acceptedIds.update(movieIds)
+        else:
+            self._discardedIds.update(movieIds)
+        self._doneIds.update(movieIds)
+
+    def _getInputSize(self):
+        if self._inputSize is None:
+            self._inputSize = self._loadInputSet(self.movsFn).getSize()
+        return self._inputSize
 
     def getLimitIntervals(self):
         """ Funtion to obtain the acceptance interval limits."""
