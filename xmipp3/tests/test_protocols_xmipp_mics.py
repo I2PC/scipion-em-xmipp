@@ -410,6 +410,60 @@ class TestXmippCTFEstimation(TestXmippBase):
         self.assertEqual(len(readCalls), 1)
         self.assertEqual(checkedIds, [3, 3])
 
+    def testCtfCompletedMicsAreNotRescanned(self):
+        class TrackingMic:
+            def __init__(self, micId):
+                self.micId = micId
+                self.idCalls = 0
+
+            def getObjId(self):
+                self.idCalls += 1
+                return self.micId
+
+        mic1 = TrackingMic(1)
+        mic2 = TrackingMic(2)
+        mic3 = TrackingMic(3)
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        protCTF.micDict = {'mic_001': mic1, 'mic_002': mic2, 'mic_003': mic3}
+        protCTF.streamClosed = False
+        protCTF._readDoneList = lambda: [1, 2]
+        protCTF._isMicDone = lambda mic: False
+
+        protCTF._checkNewOutput()
+        completedCalls = (mic1.idCalls, mic2.idCalls)
+        protCTF._checkNewOutput()
+
+        self.assertEqual((mic1.idCalls, mic2.idCalls), completedCalls)
+
+    def testCtfPendingCacheIncludesNewStreamingMics(self):
+        mic1 = Micrograph()
+        mic1.setObjId(1)
+        mic1.setMicName('mic_001')
+        mic2 = Micrograph()
+        mic2.setObjId(2)
+        mic2.setMicName('mic_002')
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        protCTF.micDict = {mic1.getMicName(): mic1}
+        protCTF.streamClosed = False
+        checkedIds = []
+        protCTF._readDoneList = lambda: []
+        protCTF._isMicDone = lambda mic: (checkedIds.append(mic.getObjId()) or False)
+        protCTF._checkNewOutput()
+
+        inputSet = type('InputSet', (), {'getFileName': lambda self: 'unused.sqlite'})()
+        protCTF.getInputMicrographs = lambda: inputSet
+        protCTF._getInputSetSignature = lambda _: ('updated',)
+        protCTF._loadInputList = lambda: ({mic2.getMicName(): mic2}, False)
+        protCTF._insertNewMicsSteps = lambda mics: (protCTF.micDict.update({mic.getMicName(): mic for mic in mics}) or [])
+        protCTF._getFirstJoinStep = lambda: None
+        protCTF.updateSteps = lambda: None
+
+        protCTF._checkNewInput()
+        checkedIds.clear()
+        protCTF._checkNewOutput()
+
+        self.assertEqual(checkedIds, [1, 2])
+
 class TestXmippAutomaticPicking(TestXmippBase):
     """This class check if the protocol to pick the micrographs automatically in Xmipp works properly."""
     @classmethod
