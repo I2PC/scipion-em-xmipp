@@ -388,6 +388,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         if self.gmmReweighting.get():
             scriptArgs += "--gmm "
+            scriptArgs += "--estimator-max-iter 1 "
         else:
             scriptArgs += "--no-gmm"
 
