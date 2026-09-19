@@ -48,7 +48,9 @@ from xmipp3.convert import writeSetOfParticles
 
 from .protocol_average_estimation_gmm import (
     ESTIMATORS,
-    ESTIMATOR_WEIGHT_COLUMNS,
+    ROBUST_WEIGHT_COL,
+    STD_ROBUST_WEIGHT_COL,
+    GMM_WEIGHT_COL,
     WEIGHT_COLUMN_TO_ATTRIBUTE,
 )
 
@@ -102,18 +104,20 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             default=0,
             # ESTIMATORS is dict[int, str], this ensures the list keeps correct order
             choices=[ESTIMATORS[i] for i in range(len(ESTIMATORS))],
-            help=(
-                "Type of robust estimator to use to compute the new class averages. "
-                "As a rule of thumb, the 'gmm' estimator should be more aggressive in "
-                "rejecting possibly misaligned or corrupted particles. This means "
-                "its performance can be better for more contaminated datasets, and "
-                "slightly worse in very clean datasets."
-                "'irls' and 'fourier_irls' should both be relatively fast and less "
-                "aggresive in particle rejection. 'admm' combines both 'irls' and "
-                "'fourier_irls', and it can improve their results at the cost of "
-                "more computation time."
-            ),
+            help=("Type of robust estimator to use to compute the new class averages."),
             label="Estimator type",
+        )
+        form.addParam(
+            "gmmReweighting",
+            BooleanParam,
+            default=True,
+            help=(
+                "Apply GMM reweighting to the results of the estimator."
+                "GMM reweighting makes the estimator more aggressive in "
+                "rejecting possibly misaligned or corrupted particles. This means "
+                "it can slightly improve performance on more contaminated datasets."
+            ),
+            label="GMM Reweighting",
         )
         form.addParam(
             "deduplicateReferences",
@@ -123,9 +127,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 "For volumes that have a non-trivial symmetry, the generated set of "
                 "reference viewing directions that are used to group the particles "
                 "may contain redundant directions. "
-                # because "
-                # "the symmetry makes directions that are apparently different be "
-                # "equivalent. "
                 "If you set this to 'yes', these redundancies will be eliminated. "
                 "As a result, the final number of groups might be smaller "
                 "than initially requested."
@@ -219,7 +220,10 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         return ESTIMATORS[self.estimatorType.get()]
 
     def _getEstimatorWeightColumns(self):
-        return ESTIMATOR_WEIGHT_COLUMNS[self._getEstimatorType()]
+        base_weight_columns = [ROBUST_WEIGHT_COL, STD_ROBUST_WEIGHT_COL]
+        if self.gmmReweighting.get():
+            return base_weight_columns + [GMM_WEIGHT_COL]
+        return base_weight_columns
 
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
@@ -302,15 +306,27 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--out-star '{self._getAveragingOutputStarPath()}' "
             f"--device {device} "
             f"--group-by-column '{self._getGroupByColumn()}' "
-            f"--estimator-type '{self._getEstimatorType()}' "
             f"--out-corrected-avgs '{self._getCorrectedConeAveragesPath()}' "
             f"--out-original-avgs '{self._getRawConeAveragesPath()}' "
         )
 
-        if self.checkDegenerateGmm.get():
-            estimationArgs += "--check-degenerate-gmm "
+        if self.gmmReweighting.get():
+            estimationArgs += "--gmm "
         else:
-            estimationArgs += "--no-check-degenerate-gmm "
+            estimationArgs += "--no-gmm "
+
+        if self.checkDegenerateGmm.get():
+            estimationArgs += "--gmm-check-degenerate "
+        else:
+            estimationArgs += "--no-gmm-check-degenerate "
+
+        estimatorType = self._getEstimatorType()
+        if estimatorType == "fourier_masked":
+            estimationArgs += "fourier_irls "
+            estimationArgs += "--weight-approach per-image "
+            estimationArgs += "--lowpass-mask "
+        else:
+            estimationArgs += f"{estimatorType} "
 
         self.runJob(
             "xmipp_gmm_average_estimation", estimationArgs, env=env, numberOfMpi=1
