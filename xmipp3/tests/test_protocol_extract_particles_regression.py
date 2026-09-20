@@ -198,16 +198,18 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
         self.assertEqual(3, coordSet.indexedQueries)
         self.assertEqual(3, len(protocol.coordDict))
 
-    def testCheckNewInputSkipsUnchangedSnapshot(self):
+    def testCheckNewInputReloadsFreshSnapshotWhenFileSignatureIsUnchanged(self):
         protocol = _InputHarness()
-        extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
-        extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
-        self.assertEqual(1, protocol.loadCalls)
-        self.assertEqual(1, protocol.updated)
 
-        protocol.signature = ('changed',)
         extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
-        self.assertEqual(2, protocol.loadCalls)
+        extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
+
+        self.assertEqual(
+            2,
+            protocol.loadCalls,
+            "Streaming input must be refreshed from the logical Set even "
+            "when the backing file signature does not change.",
+        )
         self.assertEqual(2, protocol.updated)
 
     def testOutputMicIdsAreLoadedOnce(self):

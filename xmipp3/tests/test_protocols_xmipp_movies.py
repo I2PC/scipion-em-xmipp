@@ -784,9 +784,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertTrue(prot._hasEnoughDoseSamples())
 
-    def testInputWalChangeTriggersNewInputCheck(self):
-        import tempfile
-
+    def testStreamingInputReloadsWhenPhysicalSignatureIsUnchanged(self):
         class InputSet:
             def getIdSet(self):
                 return {1}
@@ -800,27 +798,24 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         loadCalls = []
         prot.insertedIds = []
+        prot.movsFn = 'movies.sqlite'
+        prot._getInputSetSignature = lambda _: ('unchanged', None)
         prot._getFirstJoinStep = lambda: None
         prot._insertNewMoviesSteps = lambda newIds: []
         prot.updateSteps = lambda: None
         prot.isContinued = lambda: False
+        prot._loadInputSet = lambda _: loadCalls.append(1) or InputSet()
 
-        with tempfile.TemporaryDirectory() as tmpDir:
-            prot.movsFn = os.path.join(tmpDir, 'movies.sqlite')
-            with open(prot.movsFn, 'wb') as fh:
-                fh.write(b'sqlite')
+        prot._checkNewInput()
+        prot.insertedIds = [1]
+        prot._checkNewInput()
 
-            prot._loadInputSet = lambda _: loadCalls.append(1) or InputSet()
-            prot._checkNewInput()
-            prot.insertedIds = [1]
-            prot._checkNewInput()
-            self.assertEqual(len(loadCalls), 1)
-
-            with open(prot.movsFn + '-wal', 'wb') as fh:
-                fh.write(b'wal')
-
-            prot._checkNewInput()
-            self.assertEqual(len(loadCalls), 2)
+        self.assertEqual(
+            2,
+            len(loadCalls),
+            "Streaming input must be refreshed from the logical Set even "
+            "when the backing file signature does not change.",
+        )
 
     def testParallelCompletionKeepsAcquisitionOrder(self):
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)

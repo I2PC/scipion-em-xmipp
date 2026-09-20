@@ -8,6 +8,7 @@
 # *****************************************************************************
 
 import os
+from types import SimpleNamespace
 
 from pyworkflow.tests import BaseTest, setupTestProject
 
@@ -61,6 +62,161 @@ class TestXmippDeepConsensusResume(BaseTest):
 
     def _newProtocol(self):
         return self.newProtocol(XmippProtScreenDeepConsensus)
+
+    def testStreamingMicrographsUseFreshCoordinateSnapshot(self):
+        class Mic:
+            def __init__(self, micId, fileName):
+                self.micId = micId
+                self.fileName = fileName
+
+            def getFileName(self):
+                return self.fileName
+
+            def clone(self):
+                return Mic(self.micId, self.fileName)
+
+        class MicSet:
+            def __init__(self, mics):
+                self.mics = list(mics)
+
+            def __iter__(self):
+                return iter(self.mics)
+
+        class CoordSet:
+            def __init__(self, filename=None):
+                self.fresh = filename is not None
+
+            def getFileName(self):
+                return 'coordinates.sqlite'
+
+            def loadAllProperties(self):
+                pass
+
+            def getMicrographs(self):
+                if not self.fresh:
+                    raise AssertionError(
+                        'Streaming code must not enumerate micrographs '
+                        'from the stale pointer object.'
+                    )
+                return MicSet([
+                    Mic(1, '/data/mic1.mrc'),
+                    Mic(2, '/data/mic2.mrc'),
+                ])
+
+            def close(self):
+                pass
+
+        prot = self._newProtocol()
+        prot.inputCoordinates = [SimpleNamespace(get=lambda: CoordSet())]
+        prot.waitFreeInputCoords = lambda: None
+        prot.waitFreeInputMics = lambda: None
+        prot.prunePaths = lambda paths: [os.path.basename(path) for path in paths]
+
+        mics = prot.getAllCoordsInputMicrographs(shared=False)
+
+        self.assertEqual({'mic1.mrc', 'mic2.mrc'}, set(mics))
+
+    def testStreamingCoordinateReadUsesFreshSnapshot(self):
+        class Mic:
+            def getFileName(self):
+                return '/data/mic2.mrc'
+
+        class CoordSet:
+            def __init__(self, filename=None):
+                self.fresh = filename is not None
+
+            def getFileName(self):
+                return 'coordinates.sqlite'
+
+            def loadAllProperties(self):
+                pass
+
+            def iterCoordinates(self, mic):
+                if not self.fresh:
+                    raise AssertionError(
+                        'Streaming code must not read coordinates '
+                        'from the stale pointer object.'
+                    )
+                return iter([object()])
+
+            def close(self):
+                pass
+
+        prot = self._newProtocol()
+        prot.inputCoordinates = [SimpleNamespace(get=lambda: CoordSet())]
+        prot.getAllCoordsInputMicrographs = lambda shared: {'mic2.mrc': Mic()}
+        prot.waitFreeInputCoords = lambda: None
+        prot.prunePaths = lambda paths: [os.path.basename(path) for path in paths]
+
+        self.assertEqual(
+            ['mic2.mrc'],
+            prot.getMicrographFnsWithCoordinates(shared=True),
+        )
+
+    def testParentClosureUsesFreshCoordinateSnapshot(self):
+        class CoordSet:
+            def __init__(self, filename=None):
+                self.fresh = filename is not None
+
+            def getFileName(self):
+                return 'coordinates.sqlite'
+
+            def loadAllProperties(self):
+                pass
+
+            def isStreamOpen(self):
+                return not self.fresh
+
+            def close(self):
+                pass
+
+        prot = self._newProtocol()
+        prot.inputCoordinates = [SimpleNamespace(get=lambda: CoordSet())]
+        prot.waitFreeInputCoords = lambda: None
+
+        self.assertTrue(prot.checkIfParentsFinished())
+
+    def testInputMicrographsAreNotFrozenAtFirstSnapshot(self):
+        class MicSet:
+            def __init__(self, size):
+                self.size = size
+
+            def getSize(self):
+                return self.size
+
+        class CoordSet:
+            snapshot = 0
+
+            def __init__(self, filename=None):
+                self.fresh = filename is not None
+
+            def getFileName(self):
+                return 'coordinates.sqlite'
+
+            def loadAllProperties(self):
+                pass
+
+            def getMicrographs(self):
+                CoordSet.snapshot += 1
+                return MicSet(CoordSet.snapshot)
+
+            def close(self):
+                pass
+
+        prot = self._newProtocol()
+        prot.inputCoordinates = [SimpleNamespace(get=lambda: CoordSet())]
+        prot.waitFreeInputCoords = lambda: None
+        prot.waitFreeInputMics = lambda: None
+
+        first = prot._getInputMicrographs()
+        second = prot._getInputMicrographs()
+
+        self.assertEqual(1, first.getSize())
+        self.assertEqual(
+            2,
+            second.getSize(),
+            'Streaming micrographs must be refreshed instead of cached forever.',
+        )
 
     def testStreamingRuntimeStateIsPerProtocol(self):
         prot1 = self._newProtocol()

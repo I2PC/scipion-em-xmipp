@@ -662,8 +662,13 @@ def getReadyMics(coordSet):
     coorSet = SetOfCoordinates(filename=coordSet.getFileName())
     coorSet._xmippMd = String()
     coorSet.loadAllProperties()
-    setClosed = coorSet.isStreamClosed()
-    coorSet.close()
-    currentPickMics = {micAgg["_micId"] for micAgg in
-                       coordSet.aggregate(["MAX"], "_micId", ["_micId"])}
+    try:
+        setClosed = coorSet.isStreamClosed()
+        currentPickMics = {
+            micAgg["_micId"]
+            for micAgg in coorSet.aggregate(["MAX"], "_micId", ["_micId"])
+        }
+    finally:
+        coorSet.close()
+
     return currentPickMics, setClosed

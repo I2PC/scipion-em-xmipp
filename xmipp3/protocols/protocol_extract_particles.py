@@ -485,12 +485,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return tuple(signature)
 
     def _checkNewInput(self):
-        inputSignature = self._getInputSignature()
-        if getattr(self, '_inputSignature', None) == inputSignature:
-            return
-
         newMics = self._loadInputList()
-        self._inputSignature = self._getInputSignature()
         outputStep = self._getFirstJoinStep()
 
         if newMics:

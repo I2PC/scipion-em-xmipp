@@ -478,12 +478,8 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         return _fileSignature(fileName), _fileSignature(fileName + '-wal')
 
     def _checkNewInput(self):
-        inputSignature = self._getInputSetSignature(self.movsFn)
-        if getattr(self, '_inputSetSignature', None) == inputSignature and self.insertedIds:
-            return None
-        self._inputSetSignature = inputSignature
-
-        # Open input movies.sqlite and close it as soon as possible
+        # Always reload the logical Set. With managed PostgreSQL persistence
+        # the compatibility SQLite/WAL files are not a reliable change signal.
         movSet = self._loadInputSet(self.movsFn)
         movSetIds = movSet.getIdSet()
         self._inputSize = len(movSetIds)

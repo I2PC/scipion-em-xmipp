@@ -16,7 +16,11 @@ import numpy as np
 
 from pyworkflow.tests import BaseTest, setupTestProject
 
-from xmipp3.protocols.protocol_particle_pick_consensus import XmippProtConsensusPicking, consensusWorker
+from xmipp3.protocols.protocol_particle_pick_consensus import (
+    XmippProtConsensusPicking,
+    consensusWorker,
+    getReadyMics,
+)
 
 
 class _FakeOutputSet:
@@ -60,6 +64,39 @@ class TestXmippParticlePickConsensusRegression(BaseTest):
         prot.sampligRates = []
         prot.streamClosed = False
         return prot
+
+    def testGetReadyMicsUsesFreshReloadedCoordinateSet(self):
+        class StaleCoordSet:
+            def getFileName(self):
+                return 'coordinates.sqlite'
+
+            def aggregate(self, *args, **kwargs):
+                return [{'_micId': 1}]
+
+        class FreshCoordSet:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def loadAllProperties(self):
+                pass
+
+            def isStreamClosed(self):
+                return True
+
+            def aggregate(self, *args, **kwargs):
+                return [{'_micId': 1}, {'_micId': 2}]
+
+            def close(self):
+                pass
+
+        with patch(
+                'xmipp3.protocols.protocol_particle_pick_consensus.SetOfCoordinates',
+                FreshCoordSet,
+        ):
+            readyMics, streamClosed = getReadyMics(StaleCoordSet())
+
+        self.assertEqual({1, 2}, readyMics)
+        self.assertTrue(streamClosed)
 
     def testReadyMicsRemainEmptyUntilAllPickersAreReady(self):
         prot = self._newProtocol()
