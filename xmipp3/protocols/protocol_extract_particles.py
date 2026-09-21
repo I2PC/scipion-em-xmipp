@@ -779,6 +779,11 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         """ Return True if other micrographs are used for extract. """
         return self.downsampleType == OTHER
 
+    def _isStreamClosed(self):
+        # All required streaming inputs must be closed before flushing the
+        # final partial batch. ctfsClosed is True when CTF is not used.
+        return self.coordsClosed and self.micsClosed and self.ctfsClosed
+
     def _useCTF(self):
         return self.ctfRelations.hasValue()
 

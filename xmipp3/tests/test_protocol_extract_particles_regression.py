@@ -248,3 +248,46 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+class _BatchExtractHarness(extract_particles.XmippProtExtractParticles):
+    def __init__(self):
+        self.coordsClosed = True
+        self.micsClosed = True
+        self.ctfsClosed = False
+        self.initialIds = []
+        self.micDict = {}
+
+    def _getStreamingBatchSize(self):
+        return 3
+
+
+class TestXmippExtractParticlesBatching(unittest.TestCase):
+    def testPartialBatchWaitsForCtfStream(self):
+        protocol = _BatchExtractHarness()
+        protocol.streamClosed = protocol._isStreamClosed()
+
+        insertedBatches = []
+
+        def insertSingle(mic, prerequisites, *args):
+            raise AssertionError(
+                "batchSize=3 must not insert single-micrograph steps"
+            )
+
+        def insertBatch(mics, prerequisites, *args):
+            insertedBatches.append([mic.getMicName() for mic in mics])
+            return 99
+
+        deps = protocol._insertNewMics(
+            [_Mic(1), _Mic(2)],
+            lambda mic: mic.getMicName(),
+            insertSingle,
+            insertBatch,
+        )
+
+        self.assertEqual(
+            [],
+            insertedBatches,
+            "A partial extraction batch must remain pending while the required "
+            "CTF stream is still open.",
+        )
+        self.assertEqual([], deps)
+        self.assertEqual({}, protocol.micDict)

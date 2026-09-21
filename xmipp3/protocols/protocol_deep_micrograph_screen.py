@@ -25,6 +25,7 @@
 # *
 # **************************************************************************
 
+import json
 import os
 
 import pyworkflow.utils as pwutils
@@ -391,6 +392,12 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         return []
 
+    def _isStreamClosed(self):
+        # This protocol depends on both the coordinates stream and the
+        # micrographs stream. Do not flush a final partial batch until both
+        # required inputs are closed.
+        return self.coordsClosed and self.micsClosed
+
     def _insertNewMicsSteps(self, inputMics):
         """ Insert steps to process new mics (from streaming)
         Params:
@@ -567,11 +574,44 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         return micList
 
     #--------------------------- INFO functions --------------------------------
+    def _getPersistedAutomaticBatchSize(self):
+      if not self.isContinued():
+        return None
+
+      persistedBatchSize = None
+      for step in self.loadSteps():
+        funcName = step.funcName
+        if hasattr(funcName, 'get'):
+          funcName = funcName.get()
+
+        if funcName != 'extractMicrographListStepOwn':
+          continue
+
+        argsStr = step.argsStr
+        if hasattr(argsStr, 'get'):
+          argsStr = argsStr.get()
+
+        try:
+          args = json.loads(argsStr)
+        except (TypeError, ValueError):
+          continue
+
+        if args and isinstance(args[0], list) and args[0]:
+          persistedBatchSize = len(args[0])
+
+      return persistedBatchSize
+
     def _getStreamingBatchSize(self):
-      self.firstBatch = True
+      if not hasattr(self, "firstBatch"):
+        self.firstBatch = True
+
       if self.streamingBatchSize.get() == -1:
         if not hasattr(self, "actualBatchSize"):
-          if self.isInStreaming():
+          persistedBatchSize = self._getPersistedAutomaticBatchSize()
+          if persistedBatchSize is not None:
+            self.actualBatchSize = persistedBatchSize
+            batchSize = self.actualBatchSize
+          elif self.isInStreaming():
             self.actualBatchSize = 16
             batchSize = self.actualBatchSize
           else:

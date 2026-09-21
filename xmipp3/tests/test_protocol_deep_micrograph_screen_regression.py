@@ -176,3 +176,153 @@ class TestXmippDeepMicrographScreenRegression(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+class _BatchMic:
+    def __init__(self, objId):
+        self.objId = objId
+
+    def getObjId(self):
+        return self.objId
+
+    def getMicName(self):
+        return "mic_%03d" % self.objId
+
+
+class _BatchClosureHarness(deep_screen.XmippProtDeepMicrographScreen):
+    def __init__(self):
+        self.coordsClosed = True
+        self.micsClosed = False
+        self.ctfsClosed = True
+        self.initialIds = []
+        self.micDict = {}
+
+    def _getStreamingBatchSize(self):
+        return 3
+
+
+class TestXmippDeepMicrographScreenBatching(unittest.TestCase):
+    def testPartialBatchWaitsForOtherMicrographsStream(self):
+        protocol = _BatchClosureHarness()
+        protocol.streamClosed = protocol._isStreamClosed()
+
+        insertedBatches = []
+
+        def insertSingle(mic, prerequisites, *args):
+            raise AssertionError(
+                "batchSize=3 must not insert single-micrograph steps"
+            )
+
+        def insertBatch(mics, prerequisites, *args):
+            insertedBatches.append([mic.getMicName() for mic in mics])
+            return 99
+
+        deps = protocol._insertNewMics(
+            [_BatchMic(1), _BatchMic(2)],
+            lambda mic: mic.getMicName(),
+            insertSingle,
+            insertBatch,
+        )
+
+        self.assertEqual(
+            [],
+            insertedBatches,
+            "A partial batch must remain pending while the alternate "
+            "micrographs stream is still open.",
+        )
+        self.assertEqual([], deps)
+        self.assertEqual({}, protocol.micDict)
+class _IntValue:
+    def __init__(self, value):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+
+class _AutomaticBatchHarness:
+    def __init__(self, pickedMics):
+        self.streamingBatchSize = _IntValue(-1)
+        self.pickedMics = pickedMics
+
+    def isInStreaming(self):
+        return False
+
+    def _getNumPickedMics(self):
+        return self.pickedMics
+
+
+class TestXmippDeepMicrographScreenAutomaticBatching(unittest.TestCase):
+    def testAutomaticStaticBatchGrowsAfterFirstBatch(self):
+        protocol = _AutomaticBatchHarness(pickedMics=20)
+
+        firstBatch = deep_screen.XmippProtDeepMicrographScreen._getStreamingBatchSize(
+            protocol
+        )
+        secondBatch = deep_screen.XmippProtDeepMicrographScreen._getStreamingBatchSize(
+            protocol
+        )
+
+        self.assertEqual(4, firstBatch)
+        self.assertEqual(
+            20,
+            secondBatch,
+            "Automatic static batching should use the initial batch of 4 only "
+            "once, then switch to min(50, number of picked micrographs).",
+        )
+class _StoredValue:
+    def __init__(self, value):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+
+class _PersistedBatchStep:
+    funcName = _StoredValue("extractMicrographListStepOwn")
+    argsStr = _StoredValue(
+        '[["mic_%03d", "mic_%03d", "mic_%03d", "mic_%03d", '
+        '"mic_%03d", "mic_%03d", "mic_%03d", "mic_%03d", '
+        '"mic_%03d", "mic_%03d", "mic_%03d", "mic_%03d", '
+        '"mic_%03d", "mic_%03d", "mic_%03d", "mic_%03d"]]'
+        % tuple(range(1, 17))
+    )
+
+
+class _AutomaticBatchResumeHarness:
+    def __init__(self):
+        self.streamingBatchSize = _IntValue(-1)
+
+    def isInStreaming(self):
+        # Simulate Continue after the input/output streams are no longer open.
+        return False
+
+    def isContinued(self):
+        return True
+
+    def loadSteps(self):
+        return [_PersistedBatchStep()]
+
+    def _getPersistedAutomaticBatchSize(self):
+        return (
+            deep_screen.XmippProtDeepMicrographScreen
+            ._getPersistedAutomaticBatchSize(self)
+        )
+
+    def _getNumPickedMics(self):
+        return 20
+
+
+class TestXmippDeepMicrographScreenAutomaticBatchResume(unittest.TestCase):
+    def testContinueRecoversPreviousAutomaticStreamingBatchSize(self):
+        protocol = _AutomaticBatchResumeHarness()
+
+        batchSize = deep_screen.XmippProtDeepMicrographScreen._getStreamingBatchSize(
+            protocol
+        )
+
+        self.assertEqual(
+            16,
+            batchSize,
+            "Continue must preserve the automatic streaming batch size already "
+            "materialized in persisted batch steps instead of switching to "
+            "the static first batch of 4.",
+        )

@@ -543,9 +543,10 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                         'ctfmodel_quadrant', 'ctf']:
                 pwutils.moveFile(_getFn(key), self._getExtraPath())
 
-        except Exception as ex:
+        except Exception:
             sys.stderr.write("xmipp_ctf_estimate_from_micrograph has " \
                              "failed with micrograph %s" % finalName)
+            raise
 
     def _createOutputStep(self):
         pass
