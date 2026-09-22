@@ -187,16 +187,16 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         return "cone_group"
 
     def _getInputMdPath(self):
-        return self._getExtraPath("inputParticles.xmd")
+        return self._getTmpPath("inputParticles.xmd")
 
     def _getGroupingOutputStarPath(self):
-        return self._getExtraPath("groupedParticles.star")
+        return self._getTmpPath("groupedParticles.star")
 
     def _getGroupingReferenceMetadataPath(self):
         return self._getExtraPath("coneReferences.star")
 
     def _getAveragingOutputStarPath(self):
-        return self._getExtraPath("particlesWithWeights.star")
+        return self._getTmpPath("particlesWithWeights.star")
 
     def _getParticleStackPath(self):
         return self._getTmpPath("preparedParticles.mrcs")
@@ -208,13 +208,13 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         return self._getExtraPath("rawConeAverages.mrcs")
 
     def _getParticleMdPath(self):
-        return self._getExtraPath("preparedParticles.xmd")
+        return self._getTmpPath("preparedParticles.xmd")
 
     def _getCtfCorrectedStackPath(self):
         return self._getTmpPath("ctfCorrectedParticles.mrcs")
 
     def _getCtfCorrectedMdPath(self):
-        return self._getExtraPath("ctfCorrectedParticles.xmd")
+        return self._getTmpPath("ctfCorrectedParticles.xmd")
 
     def _getEstimatorType(self):
         return ESTIMATORS[self.estimatorType.get()]
