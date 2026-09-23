@@ -24,7 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import copy
 from os.path import abspath
 from pyworkflow.tests import *
 
@@ -817,6 +817,171 @@ class TestMovieDoseAnalysisState(BaseTest):
             "when the backing file signature does not change.",
         )
 
+
+    def testStreamingInputUsesLogicalSetStateInsteadOfStorageSnapshot(self):
+        from unittest.mock import patch
+
+        class LogicalInputSet:
+            def __init__(self):
+                self.closeCalls = 0
+                self.loadCalls = 0
+                self.loadPropertiesCalls = 0
+
+            def close(self):
+                self.closeCalls += 1
+
+            def load(self):
+                self.loadCalls += 1
+
+            def loadAllProperties(self):
+                self.loadPropertiesCalls += 1
+
+            def getIdSet(self):
+                return {1, 2}
+
+            def isStreamClosed(self):
+                return False
+
+        class StaleStorageSnapshot:
+            def __init__(self, filename=None):
+                self.filename = filename
+
+            def loadAllProperties(self):
+                pass
+
+            def getIdSet(self):
+                return {1}
+
+            def isStreamClosed(self):
+                return True
+
+            def close(self):
+                pass
+
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        logicalInput = LogicalInputSet()
+        insertedBatches = []
+
+        prot.inputMovies = InputPointer(logicalInput)
+        prot.movsFn = 'movies.sqlite'
+        prot.insertedIds = [1]
+        prot._getFirstJoinStep = lambda: None
+        prot._insertNewMoviesSteps = lambda newIds: insertedBatches.append(list(newIds)) or []
+        prot.updateSteps = lambda: None
+        prot.isContinued = lambda: False
+
+        with patch(
+            'xmipp3.protocols.protocol_movie_dose_analysis.SetOfMovies',
+            StaleStorageSnapshot,
+        ):
+            prot._checkNewInput()
+
+        self.assertEqual(insertedBatches, [[2]])
+        self.assertFalse(prot.isStreamClosed)
+        self.assertGreaterEqual(logicalInput.closeCalls, 1)
+        self.assertEqual(logicalInput.loadCalls, 1)
+        self.assertEqual(logicalInput.loadPropertiesCalls, 1)
+
+
+    def testParallelMovieLoadsSerializeSharedInputSetAccess(self):
+        import threading
+
+        class Movie:
+            def __init__(self, movieId):
+                self.movieId = movieId
+
+            def clone(self):
+                return Movie(self.movieId)
+
+            def getObjId(self):
+                return self.movieId
+
+        class InputSet:
+            def __init__(self):
+                self.owner = None
+                self.guard = threading.Lock()
+                self.firstLoaded = threading.Event()
+                self.releaseFirst = threading.Event()
+
+            def close(self):
+                current = threading.get_ident()
+                with self.guard:
+                    if self.owner is not None and self.owner != current:
+                        raise RuntimeError(
+                            'shared input set accessed concurrently'
+                        )
+                    self.owner = None
+
+            def load(self):
+                current = threading.get_ident()
+                with self.guard:
+                    if self.owner is not None and self.owner != current:
+                        raise RuntimeError(
+                            'shared input set accessed concurrently'
+                        )
+                    self.owner = current
+
+                if not self.firstLoaded.is_set():
+                    self.firstLoaded.set()
+                    self.releaseFirst.wait(timeout=2)
+
+            def loadAllProperties(self):
+                pass
+
+            def isStreamClosed(self):
+                return False
+
+            def getItem(self, field, movieId):
+                return Movie(movieId)
+
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        inputSet = InputSet()
+        prot.inputMovies = InputPointer(inputSet)
+        prot.movsFn = 'movies.sqlite'
+
+        errors = []
+
+        def loadMovie(movieId):
+            try:
+                prot._loadMoviesByIds([movieId])
+            except Exception as error:
+                errors.append(str(error))
+
+        first = threading.Thread(target=loadMovie, args=(1,))
+        second = threading.Thread(target=loadMovie, args=(2,))
+
+        first.start()
+        self.assertTrue(inputSet.firstLoaded.wait(timeout=2))
+
+        second.start()
+        second.join(timeout=1)
+
+        inputSet.releaseFirst.set()
+        first.join(timeout=2)
+        second.join(timeout=2)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(
+            errors,
+            [],
+            'Parallel workers must serialize access to the shared logical input Set.',
+        )
+
     def testParallelCompletionKeepsAcquisitionOrder(self):
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         prot.insertedIds = [1, 2, 3, 4]
@@ -984,6 +1149,51 @@ class TestMovieDoseAnalysisState(BaseTest):
             plotDoseAnalysisDiff(os.path.join(tmpDir, 'diff.png'), [0.0, 1.0, -1.0])
 
         self.assertEqual(plt.get_fignums(), [])
+
+
+    def testDosePlotUsesConsistentSnapshotDuringConcurrentUpdate(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.finished = True
+        prot._lastPlotCount = 0
+        prot.meanDoseList = [1.0]
+        prot.meanDoseById = {1: 1.0}
+        prot.medianDifferences = []
+        prot.medianDifferenceIds = []
+        prot.mu = 1.0
+        prot.getDosePlot = lambda: 'dose.png'
+        prot.getDoseDiffPlot = lambda: 'diff.png'
+
+        originalDeepcopy = copy.deepcopy
+
+        def deepcopyWithConcurrentUpdate(value):
+            if value is prot.meanDoseList:
+                prot.meanDoseById[2] = 2.0
+            return originalDeepcopy(value)
+
+        captured = {}
+
+        def captureDosePlot(filename, doseValues, medianGlobal, lower, upper, movieIds=None):
+            captured['values'] = list(doseValues)
+            captured['ids'] = list(movieIds)
+
+        with patch(
+            'xmipp3.protocols.protocol_movie_dose_analysis.copy.deepcopy',
+            side_effect=deepcopyWithConcurrentUpdate,
+        ):
+            with patch(
+                'xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysis',
+                side_effect=captureDosePlot,
+            ):
+                with patch(
+                    'xmipp3.protocols.protocol_movie_dose_analysis.plotDoseAnalysisDiff',
+                ):
+                    prot._updateDosePlots(1, 0.95, 1.05)
+
+        self.assertEqual(len(captured['ids']), len(captured['values']))
+        self.assertEqual(captured['ids'], [1])
+        self.assertEqual(captured['values'], [1.0])
 
     def testDosePlotsAreThrottled(self):
         from unittest.mock import patch
@@ -1318,27 +1528,39 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(prot._doneIds, {1, 2})
 
     def testLoadInputSetReturnsOpenSet(self):
-        from unittest.mock import patch
-
         class InputSet:
-            def __init__(self, filename=None):
+            def __init__(self):
                 self.closed = False
+                self.closeCalls = 0
+                self.loadCalls = 0
+                self.loadPropertiesCalls = 0
+
+            def close(self):
+                self.closed = True
+                self.closeCalls += 1
+
+            def load(self):
+                self.closed = False
+                self.loadCalls += 1
 
             def loadAllProperties(self):
-                pass
+                self.loadPropertiesCalls += 1
 
             def isStreamClosed(self):
                 return False
 
-            def close(self):
-                self.closed = True
-
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        logicalInput = InputSet()
+        prot.inputMovies.set(logicalInput)
 
-        with patch('xmipp3.protocols.protocol_movie_dose_analysis.SetOfMovies', InputSet):
-            inputSet = prot._loadInputSet('movies.sqlite')
+        inputSet = prot._loadInputSet('movies.sqlite')
 
+        self.assertIs(inputSet, logicalInput)
         self.assertFalse(inputSet.closed)
+        self.assertEqual(inputSet.closeCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.loadPropertiesCalls, 1)
+
         inputSet.close()
 
     def testLoadMoviesByIdsClosesInputSetOnce(self):

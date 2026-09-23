@@ -452,19 +452,22 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self._closeOutputSet()
 
     def _loadInputSet(self, movsFn):
-        """ Load and return an open input movie set. The caller must close it. """
-        self.debug("Loading input db: %s" % movsFn)
-        movSet = SetOfMovies(filename=movsFn)
+        """Reload and return the logical input movie set."""
+        self.debug("Reloading input set: %s" % movsFn)
+        movSet = self.inputMovies.get()
+        movSet.close()
+        movSet.load()
         movSet.loadAllProperties()
         self.isStreamClosed = movSet.isStreamClosed()
         return movSet
 
     def _loadMoviesByIds(self, movieIds):
-        inputMovies = self._loadInputSet(self.movsFn)
-        try:
-            return {movieId: inputMovies.getItem("id", movieId).clone() for movieId in movieIds}
-        finally:
-            inputMovies.close()
+        with self._lock:
+            inputMovies = self._loadInputSet(self.movsFn)
+            try:
+                return {movieId: inputMovies.getItem("id", movieId).clone() for movieId in movieIds}
+            finally:
+                inputMovies.close()
 
     @staticmethod
     def _getInputSetSignature(fileName):
@@ -478,16 +481,18 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         return _fileSignature(fileName), _fileSignature(fileName + '-wal')
 
     def _checkNewInput(self):
-        # Always reload the logical Set. With managed PostgreSQL persistence
-        # the compatibility SQLite/WAL files are not a reliable change signal.
-        movSet = self._loadInputSet(self.movsFn)
-        movSetIds = movSet.getIdSet()
-        self._inputSize = len(movSetIds)
+        # Always reload the logical Set before checking for new input.
+        with self._lock:
+            movSet = self._loadInputSet(self.movsFn)
+            try:
+                movSetIds = movSet.getIdSet()
+                self._inputSize = len(movSetIds)
+                self.isStreamClosed = movSet.isStreamClosed()
+            finally:
+                movSet.close()
+
         insertedIds = set(self.insertedIds)
         newIds = [idMov for idMov in movSetIds if idMov not in insertedIds]
-
-        self.isStreamClosed = movSet.isStreamClosed()
-        movSet.close()
 
         outputStep = self._getFirstJoinStep()
 
@@ -770,8 +775,9 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         if not self.finished and doneCount - self._lastPlotCount < self.PLOT_UPDATE_INTERVAL:
             return
 
-        tmpMeanDoseList = copy.deepcopy(self.meanDoseList)
-        tmpMeanDoseIds = sorted(self.meanDoseById)
+        meanDoseById = dict(self.meanDoseById)
+        tmpMeanDoseIds = sorted(meanDoseById)
+        tmpMeanDoseList = [meanDoseById[movieId] for movieId in tmpMeanDoseIds]
         tmpMedianDifferences = copy.deepcopy(self.medianDifferences)
         tmpMedianDifferenceIds = list(self.medianDifferenceIds)
         plotDoseAnalysis(self.getDosePlot(), tmpMeanDoseList, self.mu, lower, upper, tmpMeanDoseIds)
@@ -804,11 +810,12 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
     def _getInputSize(self):
         if self._inputSize is None:
-            inputSet = self._loadInputSet(self.movsFn)
-            try:
-                self._inputSize = inputSet.getSize()
-            finally:
-                inputSet.close()
+            with self._lock:
+                inputSet = self._loadInputSet(self.movsFn)
+                try:
+                    self._inputSize = inputSet.getSize()
+                finally:
+                    inputSet.close()
         return self._inputSize
 
     def getLimitIntervals(self):
