@@ -433,12 +433,17 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                 where = 'creation>"' + str(self.lastCreationTime) + '"'
             tmp = None
             newCount = 0
+            batchRemaining = self.classificationBatch.get() - len(newParticlesSet)
 
-            for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
+            for particle in particlesSet.iterItems(orderBy='creation',
+                                                   direction='ASC',
+                                                   where=where,
+                                                   limit=batchRemaining):
                 tmp = particle.getObjCreation()
                 newParticlesSet.append(particle.clone())
                 newCount += 1
 
+            inputExhausted = newCount < batchRemaining
             particlesSet.close()
 
             if tmp is not None:
@@ -464,7 +469,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                     if self._doClassification(newParticlesSet):
                         self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
                         newParticlesSet = self._loadEmptyParticleSet()
-                else:
+                elif inputExhausted:
                     self._insertFunctionStep(self.closeOutputStep,
                                              prerequisites=self.newDeps,
                                              needsGPU=False)
@@ -518,8 +523,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
     def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
         self._updateFnClassification()
+        imgsOrigXmd = self.imgsOrigXmd
+        imgsFn = self.imgsFn
         classStep = self._insertFunctionStep(self.runClassificationSteps,
-                                             newParticlesSet,
+                                             newParticlesSet, imgsOrigXmd, imgsFn,
                                              prerequisites=[],
                                              needsGPU=True)
         updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
@@ -527,12 +534,12 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                                               needsGPU=False)
         self.newDeps.append(updateStep)
 
-    def runClassificationSteps(self, newParticlesSet):
+    def runClassificationSteps(self, newParticlesSet, imgsOrigXmd, imgsFn):
         
-        self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+        self.convertInputStep(newParticlesSet, imgsOrigXmd, imgsFn)
         
         numTrain = min(len(newParticlesSet), self.training.get())
-        self.classification(self.imgsFn, self.numberClasses, self.imgsOrigXmd,
+        self.classification(imgsFn, self.numberClasses, imgsOrigXmd,
                             self.mask.get(), self.sigmaProt, numTrain, self.resolutionPca)
         # self.classificationLaunch = False
 
@@ -648,12 +655,27 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self._createModelFile()
         
         self._loadClassesInfo(self._getExtraPath(CONTRAST_AVERAGES_FILE))
-        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE))
 
         params = {}
         if update:
             self.info(r'Last creation time processed is %s' % str(self.lastCreationTimeProcessed))
             params = {"where": 'creation>"' + str(self.lastCreationTimeProcessed) + '"'}
+
+        mdRows = emtable.Table.iterRows(
+            'particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE)
+        )
+
+        if update:
+            particleIds = (
+                particle.getObjId()
+                for particle in clsSet.getImages().iterItems(**params)
+            )
+            mdIter = self._iterRowsForParticleIds(
+                mdRows,
+                particleIds,
+            )
+        else:
+            mdIter = mdRows
 
         with self._lock:
             clsSet.classifyItems(updateItemCallback=self._updateParticle,
@@ -662,6 +684,27 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                                  iterParams=params,
                                  doClone=False,  # So the creation time is maintained
                                  raiseOnNextFailure=False)  # So streaming can happen
+
+    @staticmethod
+    def _iterRowsForParticleIds(rows, particleIds):
+        rowIter = iter(rows)
+        row = next(rowIter, None)
+
+        for particleId in particleIds:
+            while (
+                    row is not None
+                    and row.get(XMIPPCOLUMNS.itemId.value) < particleId
+            ):
+                row = next(rowIter, None)
+
+            if (
+                    row is not None
+                    and row.get(XMIPPCOLUMNS.itemId.value) == particleId
+            ):
+                yield row
+                row = next(rowIter, None)
+            else:
+                yield None
 
     def _loadOutputSet(self, outputName):
         """
