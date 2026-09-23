@@ -142,6 +142,14 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             label="Check GMM degeneracy?",
             expertLevel=LEVEL_ADVANCED,
         )
+        form.addParam(
+            "saveGmmFits",
+            BooleanParam,
+            default=False,
+            help="Save extra files with information about GMM fits.",
+            label="Save GMM fits?",
+            expertLevel=LEVEL_ADVANCED,
+        )
 
         form.addParallelSection(threads=0, mpi=4)
 
@@ -311,6 +319,9 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getPreprocessedMetadataPath(self):
         return self._getExtraPath("preprocessed.xmd")
 
+    def _getGmmDiagnosticsPath(self):
+        return self._getExtraPath("gmmDiagnostics")
+
     def _getEstimatorType(self):
         return ESTIMATORS[self.estimatorType.get()]
 
@@ -389,6 +400,9 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         if self.gmmReweighting.get():
             scriptArgs += "--gmm "
             scriptArgs += "--estimator-max-iter 1 "
+
+            if self.saveGmmFits.get():
+                scriptArgs += f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
         else:
             scriptArgs += "--no-gmm"
 
