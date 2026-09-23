@@ -7,10 +7,55 @@
 # *
 # ******************************************************************************
 
+from unittest.mock import patch
+
 from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols import XmippProtClassifyPcaStreaming
+
+
+class _LogicalParticles:
+    def __init__(self):
+        self.loadCalls = 0
+
+    def getFileName(self):
+        raise AssertionError(
+            "Streaming must not use the Set storage filename as its "
+            "authoritative input."
+        )
+
+    def loadAllProperties(self):
+        self.loadCalls += 1
+
+
+class _Pointer:
+    def __init__(self, value):
+        self._value = value
+
+    def get(self):
+        return self._value
+
+
+class _EmptyParticles:
+    def __init__(self):
+        self.infoSource = None
+
+    def copyInfo(self, source):
+        self.infoSource = source
+
+
+class _StreamingSetContractHarness:
+    def __init__(self, particles):
+        self.inputParticles = _Pointer(particles)
+        self.inputFn = "/tmp/compatibility.sqlite"
+        self.emptyParticles = _EmptyParticles()
+
+    def debug(self, *args, **kwargs):
+        pass
+
+    def _createSetOfParticles(self):
+        return self.emptyParticles
 
 
 class TestXmippClassifyPcaResume(BaseTest):
@@ -41,6 +86,42 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot._updateVarsToContinue = lambda: resumeCalls.append(True)
 
         return prot, resumeCalls
+
+    def testStreamingReadsTheLogicalInputSetInsteadOfReconstructingStorage(self):
+        particles = _LogicalParticles()
+        harness = _StreamingSetContractHarness(particles)
+
+        module = "xmipp3.protocols.protocol_alignPCA_2D"
+
+        with patch(
+            module + ".SetOfParticles",
+            side_effect=AssertionError(
+                "Streaming must not reconstruct SetOfParticles from a "
+                "compatibility storage filename."
+            ),
+        ):
+            loadedParticles = (
+                XmippProtClassifyPcaStreaming._loadInputParticleSet(harness)
+            )
+            emptyParticles = (
+                XmippProtClassifyPcaStreaming._loadEmptyParticleSet(harness)
+            )
+
+        self.assertIs(
+            particles,
+            loadedParticles,
+            "Streaming must refresh and iterate the logical input Set.",
+        )
+        self.assertIs(
+            particles,
+            emptyParticles.infoSource,
+            "The temporary batch Set must copy metadata from the logical input Set.",
+        )
+        self.assertGreaterEqual(
+            particles.loadCalls,
+            2,
+            "Both streaming reads must refresh the logical Set state.",
+        )
 
     def testResumeRestoresClassificationCheckpoint(self):
         prot = self._newPcaProtocol()

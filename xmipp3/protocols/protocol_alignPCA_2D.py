@@ -610,9 +610,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
     # --------------------------- UTILS functions -----------------------------
     def _loadInputParticleSet(self):
-        """ Returns te input set of particles"""
-        self.debug("Loading input db: %s" % self.inputFn)
-        partSet = SetOfParticles(filename=self.inputFn)
+        """Return the logical input particle Set with refreshed state."""
+        partSet = self.inputParticles.get()
         partSet.loadAllProperties()
 
         return partSet
@@ -621,11 +620,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         return self.inputParticles
 
     def _loadEmptyParticleSet(self):
-        partSet = SetOfParticles(filename=self.inputFn)
+        partSet = self.inputParticles.get()
         partSet.loadAllProperties()
         copyPartSet = self._createSetOfParticles()
         copyPartSet.copyInfo(partSet)
-        partSet.close()
 
         return copyPartSet
 
