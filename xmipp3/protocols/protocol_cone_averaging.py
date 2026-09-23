@@ -40,6 +40,7 @@ from pyworkflow.protocol.params import (
     BooleanParam,
     EnumParam,
     StringParam,
+    FloatParam,
 )
 from pyworkflow.constants import BETA
 
@@ -177,6 +178,22 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             default=False,
             help="Save extra files with information about GMM fits.",
             label="Save GMM fits?",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "gmmMinSep",
+            FloatParam,
+            default=0.05,
+            help="Minimum relative separation between GMM components.",
+            label="Minimum GMM separation",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "gmmMinWeight",
+            FloatParam,
+            default=0.6,
+            help="Minimum weight for the good component of the GMM.",
+            label="Minimum GMM good weight",
             expertLevel=LEVEL_ADVANCED,
         )
 
@@ -333,6 +350,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
         if self.checkDegenerateGmm.get():
             estimationArgs += "--gmm-check-degenerate "
+            estimationArgs += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
+            estimationArgs += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
         else:
             estimationArgs += "--no-gmm-check-degenerate "
 
