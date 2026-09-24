@@ -128,6 +128,55 @@ class TestXmippScreenParticlesRegression(BaseTest):
         self.assertEqual({1}, outputSet.ids)
         self.assertEqual([1], outputSet.appended)
 
+    def testStreamingOutputReusesLogicalSetWithoutLegacySqlite(self):
+        class LogicalOutputSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+                self.copyInfoCalls = 0
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+            def copyInfo(self, inputSet):
+                self.copyInfoCalls += 1
+
+        class FreshOutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self, filename=None):
+                self.filename = filename
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+
+        inputSet = object()
+        prot = self._newProtocol()
+        logicalOutput = LogicalOutputSet()
+        prot.outputParticles = logicalOutput
+        prot.inputParticles = SimpleNamespace(get=lambda: inputSet)
+        prot._getPath = lambda baseName: '/tmp/' + baseName
+
+        with patch(
+            'xmipp3.protocols.protocol_screen_particles.os.path.exists',
+            return_value=False,
+        ):
+            outputSet = prot._loadOutputSet(
+                FreshOutputSet,
+                'outputParticles.sqlite',
+            )
+
+        self.assertIs(
+            outputSet,
+            logicalOutput,
+            "Streaming particles output must reuse the logical Set when "
+            "the legacy SQLite file is absent.",
+        )
+        self.assertEqual(1, logicalOutput.enableAppendCalls)
+        self.assertEqual(1, logicalOutput.copyInfoCalls)
+
     def testProcessedCheckpointIsWrittenAfterOutputUpdate(self):
         prot = self._newProtocol()
         prot.finished = False

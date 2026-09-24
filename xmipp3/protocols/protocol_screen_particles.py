@@ -555,16 +555,22 @@ There are different merit values to be calculated:
                 outputStep.setStatus(cons.STATUS_NEW)
 
     def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
+        outputSet = (getattr(self, 'outputParticles', None)
+                     if baseName == 'outputParticles.sqlite' else None)
+
+        if outputSet is not None:
             outputSet.enableAppend()
         else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-            self._store(outputSet)
-            self._defineTransformRelation(self.inputParticles, outputSet)
+            setFile = self._getPath(baseName)
+            if os.path.exists(setFile):
+                outputSet = SetClass(filename=setFile)
+                outputSet.loadAllProperties()
+                outputSet.enableAppend()
+            else:
+                outputSet = SetClass(filename=setFile)
+                outputSet.setStreamState(outputSet.STREAM_OPEN)
+                self._store(outputSet)
+                self._defineTransformRelation(self.inputParticles, outputSet)
 
         outputSet.copyInfo(self.inputParticles.get())
 

@@ -675,20 +675,32 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         """
         Load the output set if it exists or create a new one.
         """
-        setFile = self._getPath(baseName)
+        outputNameByBaseName = {
+            'ctfs.sqlite': OUTPUT_CTF,
+            'micrographs.sqlite': OUTPUT_MICS,
+            'ctfsDiscarded.sqlite': OUTPUT_CTF_DISCARDED,
+            'micrographsDiscarded.sqlite': OUTPUT_MICS_DISCARDED,
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
 
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            if (outputSet.__len__() == 0):
-                pwutils.path.cleanPath(setFile)
-
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
+        if outputSet is not None:
             outputSet.enableAppend()
         else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+            setFile = self._getPath(baseName)
+
+            if os.path.exists(setFile):
+                outputSet = SetClass(filename=setFile)
+                if (outputSet.__len__() == 0):
+                    pwutils.path.cleanPath(setFile)
+
+            if os.path.exists(setFile):
+                outputSet = SetClass(filename=setFile)
+                outputSet.loadAllProperties()
+                outputSet.enableAppend()
+            else:
+                outputSet = SetClass(filename=setFile)
+                outputSet.setStreamState(outputSet.STREAM_OPEN)
 
         micSet = self.inputCTF.get().getMicrographs()
 

@@ -523,14 +523,26 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         pass
 
     def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
+        outputNameByBaseName = {
+            'outputParticles.sqlite': 'outputParticles',
+            'eliminatedParticles.sqlite': 'eliminatedParticles',
+            'outputAverages.sqlite': 'outputAverages',
+            'eliminatedAverages.sqlite': 'eliminatedAverages',
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
+
+        if outputSet is not None:
             outputSet.enableAppend()
         else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+            setFile = self._getPath(baseName)
+            if os.path.exists(setFile):
+                outputSet = SetClass(filename=setFile)
+                outputSet.loadAllProperties()
+                outputSet.enableAppend()
+            else:
+                outputSet = SetClass(filename=setFile)
+                outputSet.setStreamState(outputSet.STREAM_OPEN)
 
         inputs = self.inputImages
         outputSet.copyInfo(inputs)
@@ -812,15 +824,21 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             # If there are no classes, nothing to do
             return
 
-        baseName = '%sClasses.sqlite' % suffix
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetOfClasses2D(filename=setFile)
-            outputSet.loadAllProperties()
+        outputName = '%sClasses' % suffix
+        outputSet = getattr(self, outputName, None)
+
+        if outputSet is not None:
             outputSet.enableAppend()
         else:
-            outputSet = SetOfClasses2D(filename=setFile)
-            outputSet.setStreamState(streamingState)
+            baseName = '%sClasses.sqlite' % suffix
+            setFile = self._getPath(baseName)
+            if os.path.exists(setFile):
+                outputSet = SetOfClasses2D(filename=setFile)
+                outputSet.loadAllProperties()
+                outputSet.enableAppend()
+            else:
+                outputSet = SetOfClasses2D(filename=setFile)
+                outputSet.setStreamState(streamingState)
 
         outputSet.copyInfo(self.getInput())  # if fails, delete
 
@@ -831,12 +849,12 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         outputSet.appendFromClasses(self.getInput(), enableFunc)
 
         outputSet.setStreamState(streamingState)
-        outputName = '%sClasses' % suffix
         if self.hasAttribute(outputName):
             outputSet.write()  # Write to commit changes
             outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protocol
-            outputAttr.copy(outputSet, copyId=False)
+            if outputAttr is not outputSet:
+                # Copy the properties to the object contained in the protocol
+                outputAttr.copy(outputSet, copyId=False)
             # Persist changes
             self._store(outputAttr)
         else:

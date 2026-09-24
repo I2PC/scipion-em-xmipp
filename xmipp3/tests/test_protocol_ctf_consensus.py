@@ -295,6 +295,59 @@ class TestXmippCTFConsensusBase(BaseTest):
             self.assertFalse(ok, "A CTF without the correct parameters"
                                  " is included in the output set")
 
+    def testStreamingCtfOutputReusesLogicalSetWithoutLegacySqlite(self):
+        from unittest.mock import patch
+
+        class LogicalOutputSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+        class FreshOutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self, filename=None):
+                self.filename = filename
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+        class InputCtfSet:
+            def getMicrographs(self):
+                return object()
+
+        class InputPointer:
+            def get(self):
+                return InputCtfSet()
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        logicalOutput = LogicalOutputSet()
+        prot.outputCTF = logicalOutput
+        prot.inputCTF = InputPointer()
+        prot._getPath = lambda baseName: '/tmp/' + baseName
+
+        with patch(
+            'xmipp3.protocols.protocol_ctf_consensus.os.path.exists',
+            return_value=False,
+        ):
+            outputSet = prot._loadOutputSet(
+                FreshOutputSet,
+                'ctfs.sqlite',
+            )
+
+        self.assertIs(
+            outputSet,
+            logicalOutput,
+            "Streaming CTF output must reuse the logical Set when "
+            "the legacy SQLite file is absent.",
+        )
+        self.assertEqual(
+            1,
+            logicalOutput.enableAppendCalls,
+        )
+
     def testStreamingInputDoesNotDependOnSqliteMtime(self):
         fnCtfSet = self._createCtfSet(
             "ctf_streaming_mtime.sqlite",

@@ -126,6 +126,63 @@ class TestXmippParticlePickConsensusRegression(BaseTest):
         self.assertEqual({1, 2}, prot.checkedMics)
         self.assertEqual({1, 2}, prot.processedMics)
 
+    def testStreamingOutputReusesLogicalSetWithoutLegacySqlite(self):
+        class LogicalOutputSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+                self.micrographs = None
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+            def setMicrographs(self, micrographs):
+                self.micrographs = micrographs
+
+        class FreshOutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self, filename=None):
+                self.filename = filename
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+            def setBoxSize(self, boxSize):
+                self.boxSize = boxSize
+
+            def setMicrographs(self, micrographs):
+                self.micrographs = micrographs
+
+        class MainInput:
+            def getBoxSize(self):
+                return 128
+
+            def getMicrographs(self, asPointer=False):
+                return object()
+
+        prot = self._newProtocol()
+        logicalOutput = LogicalOutputSet()
+        prot.consensusCoordinates = logicalOutput
+        prot.getMainInput = lambda: MainInput()
+        prot._getPath = lambda baseName: '/tmp/' + baseName
+
+        with patch(
+            'xmipp3.protocols.protocol_particle_pick_consensus.os.path.exists',
+            return_value=False,
+        ):
+            outputSet = prot._loadOutputSet(
+                FreshOutputSet,
+                'coordinates.sqlite',
+            )
+
+        self.assertIs(
+            outputSet,
+            logicalOutput,
+            "Streaming coordinates output must reuse the logical Set when "
+            "the legacy SQLite file is absent.",
+        )
+        self.assertEqual(1, logicalOutput.enableAppendCalls)
+
     def testCheckNewOutputSkipsAlreadyPersistedMicrograph(self):
         prot = self._newProtocol()
         prot.checkedMics = {1}

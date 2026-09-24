@@ -87,6 +87,56 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         self.assertEqual([[2]], scheduled)
         self.assertTrue(inputSet.closed)
 
+    def testStreamingOutputReusesLogicalSetWithoutLegacySqlite(self):
+        class LogicalOutputSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+        class FreshOutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self, filename=None):
+                self.filename = filename
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+
+        class InputPointer:
+            def get(self):
+                return object()
+
+        prot = self._newProtocol()
+        logicalOutput = LogicalOutputSet()
+        prot.outputMicrographs = logicalOutput
+        prot.inputMicrographs = InputPointer()
+        prot._getPath = lambda baseName: '/tmp/' + baseName
+
+        with patch(
+            'xmipp3.protocols.protocol_tilt_analysis.os.path.exists',
+            return_value=False,
+        ):
+            outputSet = prot._loadOutputSet(
+                FreshOutputSet,
+                'micrograph.sqlite',
+            )
+
+        self.assertIs(
+            outputSet,
+            logicalOutput,
+            "Streaming output must reuse the logical Set when the "
+            "legacy SQLite file is absent.",
+        )
+        self.assertEqual(
+            1,
+            logicalOutput.enableAppendCalls,
+        )
+
     def testAppendNewMicrographsSkipsAlreadyPersistedIds(self):
         prot = self._newProtocol()
         outputSet = _FakeOutputSet([1])

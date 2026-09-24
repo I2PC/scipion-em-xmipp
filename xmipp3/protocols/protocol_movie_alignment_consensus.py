@@ -752,6 +752,19 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         """
         Load the output set if it exists or create a new one.
         """
+        outputNameByBaseName = {
+            'movies.sqlite': 'outputMovies',
+            'micrographs.sqlite': 'outputMicrographs',
+            'moviesDiscarded.sqlite': 'outputMoviesDiscarded',
+            'micrographsDiscarded.sqlite': 'outputMicrographsDiscarded',
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
+
+        if outputSet is not None:
+            outputSet.enableAppend()
+            return outputSet
+
         setFile = self._getPath(baseName)
 
         if os.path.exists(setFile) and os.path.getsize(setFile) > 0:

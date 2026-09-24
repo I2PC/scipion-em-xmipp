@@ -695,6 +695,17 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         """
         Load the output set if it exists or create a new one.
         """
+        outputNameByBaseName = {
+            'micrograph.sqlite': OUTPUT_MICS,
+            'micrographDISCARDED.sqlite': OUTPUT_MICS_DISCARDED,
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
+
+        if outputSet is not None:
+            outputSet.enableAppend()
+            return outputSet
+
         setFile = self._getPath(baseName)
         # -----------------Si no lo pones asi no funciona
         if os.path.exists(setFile):

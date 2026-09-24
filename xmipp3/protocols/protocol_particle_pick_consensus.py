@@ -488,15 +488,21 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             self._defineTransformRelation(inCorrds, outputSet)
 
     def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
+        outputSet = (getattr(self, self.outputName, None)
+                     if baseName == 'coordinates.sqlite' else None)
+
+        if outputSet is not None:
             outputSet.enableAppend()
         else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-            outputSet.setBoxSize(self.getMainInput().getBoxSize())
+            setFile = self._getPath(baseName)
+            if os.path.exists(setFile):
+                outputSet = SetClass(filename=setFile)
+                outputSet.loadAllProperties()
+                outputSet.enableAppend()
+            else:
+                outputSet = SetClass(filename=setFile)
+                outputSet.setStreamState(outputSet.STREAM_OPEN)
+                outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
         inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)

@@ -613,6 +613,21 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
     def _loadOutputSet(self, SetClass, baseName):
         """ Load the output set if it exists or create a new one based on the inputs.
         """
+        outputNameByBaseName = {
+            'movies.sqlite': OUTPUT_MOVIES,
+            'moviesDiscarded.sqlite': OUTPUT_MOVIES_DISCARDED,
+            'micrographs.sqlite': OUTPUT_MICS,
+            'micrographsDiscarded.sqlite': OUTPUT_MICS_DISCARDED,
+            'micrographs_dose-weighted.sqlite': OUTPUT_MICS_DW,
+            'micrographs_dose-weightedDiscarded.sqlite': OUTPUT_MICS_DW_DISCARDED,
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
+
+        if outputSet is not None:
+            outputSet.enableAppend()
+            return outputSet
+
         if SetClass == SetOfMicrographs:
             if self.inputMics is None:
                 # if no mics to do, do nothing and exit

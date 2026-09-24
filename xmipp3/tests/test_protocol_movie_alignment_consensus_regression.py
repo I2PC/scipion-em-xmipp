@@ -277,6 +277,57 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         self.assertEqual(expectedPath, prot._getMicsPath())
 
+    def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
+        class LogicalOutputSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+        class FreshOutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self, filename=None):
+                self.filename = filename
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+
+        class InputPointer:
+            def get(self):
+                return object()
+
+        prot = self._newProtocol()
+        logicalOutput = LogicalOutputSet()
+        prot.outputMovies = logicalOutput
+        prot.inputMovies1 = InputPointer()
+        prot._getPath = lambda baseName: '/tmp/' + baseName
+
+        with patch(
+            'xmipp3.protocols.protocol_movie_alignment_consensus.os.path.exists',
+            return_value=False,
+        ):
+            outputSet = prot._loadOutputSet(
+                FreshOutputSet,
+                'movies.sqlite',
+                fixSampling=False,
+            )
+
+        self.assertIs(
+            outputSet,
+            logicalOutput,
+            "Streaming movie output must reuse the logical Set when "
+            "the legacy SQLite file is absent.",
+        )
+        self.assertEqual(
+            1,
+            logicalOutput.enableAppendCalls,
+        )
+
     def testOutputCheckpointIsWrittenAfterOutputSetsAreUpdated(self):
         prot = self._newProtocol()
         prot.allMovies1 = {1: object()}

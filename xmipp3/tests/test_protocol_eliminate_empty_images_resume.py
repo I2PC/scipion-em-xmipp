@@ -58,6 +58,56 @@ class TestXmippEliminateEmptyResume(BaseTest):
             prot._getResumeOutputNames()
         )
 
+    def testStreamingParticleOutputReusesLogicalSetWithoutLegacySqlite(self):
+        from unittest.mock import patch
+
+        class LogicalOutputSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+                self.copyInfoCalls = 0
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+            def copyInfo(self, inputSet):
+                self.copyInfoCalls += 1
+
+        class FreshOutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self, filename=None):
+                self.filename = filename
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+
+        prot = self.newProtocol(XmippProtEliminateEmptyParticles)
+        logicalOutput = LogicalOutputSet()
+        prot.outputParticles = logicalOutput
+        prot.inputImages = object()
+        prot._getPath = lambda baseName: '/tmp/' + baseName
+
+        with patch(
+            'xmipp3.protocols.protocol_eliminate_empty_images.os.path.exists',
+            return_value=False,
+        ):
+            outputSet = prot._loadOutputSet(
+                FreshOutputSet,
+                'outputParticles.sqlite',
+            )
+
+        self.assertIs(
+            outputSet,
+            logicalOutput,
+            "Streaming particles output must reuse the logical Set when "
+            "the legacy SQLite file is absent.",
+        )
+        self.assertEqual(1, logicalOutput.enableAppendCalls)
+        self.assertEqual(1, logicalOutput.copyInfoCalls)
+
     def testParticlesRestoreStreamingStateFromPersistedOutputs(self):
         prot = self.newProtocol(XmippProtEliminateEmptyParticles)
 
@@ -85,6 +135,72 @@ class TestXmippEliminateEmptyResume(BaseTest):
         self.assertTrue(accepted.closed)
         self.assertTrue(eliminated.closed)
         self.assertTrue(inputSet.closed)
+
+    def testStreamingClassOutputReusesLogicalSetWithoutLegacySqlite(self):
+        from unittest.mock import patch
+        from pyworkflow.object import Set
+
+        class LogicalClassSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+                self.closed = False
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+
+            def appendFromClasses(self, inputSet, enableFunc):
+                self.enableFunc = enableFunc
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+            def write(self):
+                pass
+
+            def copy(self, other, copyId=False):
+                raise AssertionError(
+                    'Logical class output must be reused directly, not replaced.'
+                )
+
+            def close(self):
+                self.closed = True
+
+        class FakeClass:
+            def __init__(self, objId):
+                self._objId = objId
+
+            def getObjId(self):
+                return self._objId
+
+        inputSet = [FakeClass(1)]
+        prot = self.newProtocol(XmippProtEliminateEmptyClasses)
+        logicalOutput = LogicalClassSet()
+        prot.outputClasses = logicalOutput
+        prot.classesDict = {1: 10}
+        prot.getInput = lambda: inputSet
+        prot._getPath = lambda baseName: '/tmp/' + baseName
+        prot._store = lambda *args, **kwargs: None
+
+        with patch(
+            'xmipp3.protocols.protocol_eliminate_empty_images.os.path.exists',
+            return_value=False,
+        ), patch(
+            'xmipp3.protocols.protocol_eliminate_empty_images.SetOfClasses2D',
+            side_effect=AssertionError(
+                'A fresh class Set must not be created when the logical output exists.'
+            ),
+        ):
+            prot.createOutputClasses(
+                'output',
+                Set.STREAM_OPEN,
+                {1: 1},
+            )
+
+        self.assertEqual(1, logicalOutput.enableAppendCalls)
+        self.assertTrue(logicalOutput.closed)
 
     def testClassesRestoreStateWithoutCountingClassOutputsTwice(self):
         prot = self.newProtocol(XmippProtEliminateEmptyClasses)

@@ -556,6 +556,19 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
         except for the case when the original movies are kept and shifts
         refers to that one.
         """
+        outputNameByBaseName = {
+            self.estimatedDatabase: OUTPUT_ESTIMATED_GAINS,
+            self.residualDatabase: OUTPUT_RESIDUAL_GAINS,
+            'orientedGain.sqlite': OUTPUT_ORIENTED_GAINS,
+            'movies.sqlite': OUTPUT_MOVIES,
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
+
+        if outputSet is not None:
+            outputSet.enableAppend()
+            return outputSet
+
         setFile = self._getPath(baseName)
         if os.path.exists(setFile):
             outputSet = SetClass(filename=setFile)
