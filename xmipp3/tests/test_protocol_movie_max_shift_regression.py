@@ -20,6 +20,10 @@ from xmipp3.protocols.protocol_movie_max_shift import (
     OUTPUT_MOVIES,
     XmippProtMovieMaxShift,
 )
+from xmipp3.tests.streaming_test_utils import (
+    FreshOutputSetProbe,
+    LogicalOutputSetProbe,
+)
 
 
 class _FakeInputSet:
@@ -196,28 +200,9 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
     def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
         from unittest.mock import patch
 
-        class LogicalOutputSet:
-            def __init__(self):
-                self.enableAppendCalls = 0
-
-            def enableAppend(self):
-                self.enableAppendCalls += 1
-
-        class FreshOutputSet:
-            STREAM_OPEN = 1
-
-            def __init__(self, filename=None):
-                self.filename = filename
-
-            def setStreamState(self, state):
-                self.streamState = state
-
-            def copyInfo(self, inputSet):
-                self.inputSet = inputSet
-
         prot = self._newProtocol()
 
-        logicalOutput = LogicalOutputSet()
+        logicalOutput = LogicalOutputSetProbe()
         prot.outputMovies = logicalOutput
         prot.inputMics = None
         prot._loadInputSet = (
@@ -234,7 +219,7 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
             return_value=False,
         ):
             outputSet = prot._loadOutputSet(
-                FreshOutputSet,
+                FreshOutputSetProbe,
                 'movies.sqlite',
             )
 

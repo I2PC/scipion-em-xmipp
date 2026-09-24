@@ -10,7 +10,11 @@
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
-from xmipp3.tests.streaming_test_utils import FakeOutputSet as _FakeOutputSet
+from xmipp3.tests.streaming_test_utils import (
+    FakeOutputSet as _FakeOutputSet,
+    FreshOutputSetProbe,
+    LogicalOutputSetProbe,
+)
 
 
 class _FakeMovie:
@@ -76,31 +80,12 @@ class TestXmippMovieGainRegression(BaseTest):
     def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
         from unittest.mock import patch
 
-        class LogicalOutputSet:
-            def __init__(self):
-                self.enableAppendCalls = 0
-
-            def enableAppend(self):
-                self.enableAppendCalls += 1
-
-        class FreshOutputSet:
-            STREAM_OPEN = 1
-
-            def __init__(self, filename=None):
-                self.filename = filename
-
-            def setStreamState(self, state):
-                self.streamState = state
-
-            def copyInfo(self, inputSet):
-                self.inputSet = inputSet
-
         class InputPointer:
             def get(self):
                 return object()
 
         prot = self._newProtocol()
-        logicalOutput = LogicalOutputSet()
+        logicalOutput = LogicalOutputSetProbe()
         prot.outputMovies = logicalOutput
         prot.inputMovies = InputPointer()
         prot._getPath = lambda baseName: '/tmp/' + baseName
@@ -110,7 +95,7 @@ class TestXmippMovieGainRegression(BaseTest):
             return_value=False,
         ):
             outputSet = prot._loadOutputSet(
-                FreshOutputSet,
+                FreshOutputSetProbe,
                 'movies.sqlite',
             )
 
