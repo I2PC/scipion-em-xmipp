@@ -36,6 +36,7 @@ from pyworkflow.protocol.constants import *
 from pwem.objects import SetOfCoordinates, Coordinate
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 from pyworkflow import UPDATED, PROD
+from xmipp3.utils import loadOutputSetForAppend
 
 
 PICK_MODE_LARGER = 0
@@ -491,18 +492,12 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         outputSet = (getattr(self, self.outputName, None)
                      if baseName == 'coordinates.sqlite' else None)
 
-        if outputSet is not None:
-            outputSet.enableAppend()
-        else:
-            setFile = self._getPath(baseName)
-            if os.path.exists(setFile):
-                outputSet = SetClass(filename=setFile)
-                outputSet.loadAllProperties()
-                outputSet.enableAppend()
-            else:
-                outputSet = SetClass(filename=setFile)
-                outputSet.setStreamState(outputSet.STREAM_OPEN)
-                outputSet.setBoxSize(self.getMainInput().getBoxSize())
+        outputSet, isNew = loadOutputSetForAppend(
+            self, SetClass, baseName,
+            self.outputName if baseName == 'coordinates.sqlite' else None
+        )
+        if isNew:
+            outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
         inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)

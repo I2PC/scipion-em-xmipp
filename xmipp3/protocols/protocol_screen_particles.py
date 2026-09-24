@@ -44,6 +44,7 @@ from pwem.protocols import ProtProcessParticles
 
 from pwem import emlib
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
+from xmipp3.utils import loadOutputSetForAppend
 
 
 class XmippProtScreenParticles(ProtProcessParticles):
@@ -558,19 +559,13 @@ There are different merit values to be calculated:
         outputSet = (getattr(self, 'outputParticles', None)
                      if baseName == 'outputParticles.sqlite' else None)
 
-        if outputSet is not None:
-            outputSet.enableAppend()
-        else:
-            setFile = self._getPath(baseName)
-            if os.path.exists(setFile):
-                outputSet = SetClass(filename=setFile)
-                outputSet.loadAllProperties()
-                outputSet.enableAppend()
-            else:
-                outputSet = SetClass(filename=setFile)
-                outputSet.setStreamState(outputSet.STREAM_OPEN)
-                self._store(outputSet)
-                self._defineTransformRelation(self.inputParticles, outputSet)
+        outputSet, isNew = loadOutputSetForAppend(
+            self, SetClass, baseName,
+            'outputParticles' if baseName == 'outputParticles.sqlite' else None
+        )
+        if isNew:
+            self._store(outputSet)
+            self._defineTransformRelation(self.inputParticles, outputSet)
 
         outputSet.copyInfo(self.inputParticles.get())
 

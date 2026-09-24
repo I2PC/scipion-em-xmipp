@@ -41,6 +41,7 @@ from pwem.objects import SetOfParticles, SetOfAverages, SetOfClasses2D, Class2D,
 
 from xmipp3.convert import (writeSetOfParticles, readSetOfParticles,
                             setXmippAttributes)
+from xmipp3.utils import loadOutputSetForAppend
 
 
 class XmippProtEliminateEmptyBase(ProtClassify2D):
@@ -532,17 +533,9 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         outputName = outputNameByBaseName.get(baseName)
         outputSet = getattr(self, outputName, None) if outputName else None
 
-        if outputSet is not None:
-            outputSet.enableAppend()
-        else:
-            setFile = self._getPath(baseName)
-            if os.path.exists(setFile):
-                outputSet = SetClass(filename=setFile)
-                outputSet.loadAllProperties()
-                outputSet.enableAppend()
-            else:
-                outputSet = SetClass(filename=setFile)
-                outputSet.setStreamState(outputSet.STREAM_OPEN)
+        outputSet, _ = loadOutputSetForAppend(
+            self, SetClass, baseName, outputName
+        )
 
         inputs = self.inputImages
         outputSet.copyInfo(inputs)

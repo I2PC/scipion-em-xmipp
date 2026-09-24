@@ -211,3 +211,63 @@ class TestXmippScreenParticlesRegression(BaseTest):
         prot._store = lambda *args: None
         prot._initializeZscores()
         self.assertEqual(4.0, prot.varThreshold.get())
+
+
+    def testSharedStreamingOutputLoaderContract(self):
+        import xmipp3.utils as xmippUtils
+
+        loader = getattr(xmippUtils, 'loadOutputSetForAppend', None)
+        self.assertIsNotNone(
+            loader,
+            'Streaming output Set loading should be shared instead of '
+            'duplicated across protocols.',
+        )
+
+        class LogicalOutputSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+        class FreshOutputSet:
+            STREAM_OPEN = 7
+
+            def __init__(self, filename=None):
+                self.filename = filename
+                self.streamState = None
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+        class Protocol:
+            def __init__(self, logicalOutput=None):
+                if logicalOutput is not None:
+                    self.outputParticles = logicalOutput
+
+            def _getPath(self, baseName):
+                return '/tmp/' + baseName
+
+        logicalOutput = LogicalOutputSet()
+        outputSet, isNew = loader(
+            Protocol(logicalOutput),
+            FreshOutputSet,
+            'outputParticles.sqlite',
+            'outputParticles',
+        )
+
+        self.assertIs(outputSet, logicalOutput)
+        self.assertFalse(isNew)
+        self.assertEqual(1, logicalOutput.enableAppendCalls)
+
+        with patch('xmipp3.utils.os.path.exists', return_value=False):
+            outputSet, isNew = loader(
+                Protocol(),
+                FreshOutputSet,
+                'outputParticles.sqlite',
+                'missingOutput',
+            )
+
+        self.assertTrue(isNew)
+        self.assertEqual('/tmp/outputParticles.sqlite', outputSet.filename)
+        self.assertEqual(FreshOutputSet.STREAM_OPEN, outputSet.streamState)

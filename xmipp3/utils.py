@@ -31,6 +31,7 @@ This module contains utils functions for Xmipp protocols
 from os.path import join, basename, isfile
 import numpy as np
 import math
+import os
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from pwem import emlib
@@ -39,6 +40,26 @@ from pyworkflow.object import Object
 
 def validateXmippGpuBins():
     pass
+
+
+def loadOutputSetForAppend(protocol, SetClass, baseName, outputName=None):
+    """Reuse a logical output Set or reopen/create its legacy backing Set."""
+    outputSet = getattr(protocol, outputName, None) if outputName else None
+
+    if outputSet is not None:
+        outputSet.enableAppend()
+        return outputSet, False
+
+    setFile = protocol._getPath(baseName)
+    if os.path.exists(setFile):
+        outputSet = SetClass(filename=setFile)
+        outputSet.loadAllProperties()
+        outputSet.enableAppend()
+        return outputSet, False
+
+    outputSet = SetClass(filename=setFile)
+    outputSet.setStreamState(outputSet.STREAM_OPEN)
+    return outputSet, True
 
 
 BAD_IMPORT_TENSORFLOW_KERAS_MSG = '''
