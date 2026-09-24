@@ -12,7 +12,11 @@ from unittest.mock import patch
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_tilt_analysis import XmippProtTiltAnalysis
-from xmipp3.tests.streaming_test_utils import FakeOutputSet as _FakeOutputSet
+from xmipp3.tests.streaming_test_utils import (
+    FakeOutputSet as _FakeOutputSet,
+    FreshOutputSetProbe,
+    LogicalOutputSetProbe,
+)
 
 
 class _FakeInputSet:
@@ -73,31 +77,12 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         self.assertTrue(inputSet.closed)
 
     def testStreamingOutputReusesLogicalSetWithoutLegacySqlite(self):
-        class LogicalOutputSet:
-            def __init__(self):
-                self.enableAppendCalls = 0
-
-            def enableAppend(self):
-                self.enableAppendCalls += 1
-
-        class FreshOutputSet:
-            STREAM_OPEN = 1
-
-            def __init__(self, filename=None):
-                self.filename = filename
-
-            def setStreamState(self, state):
-                self.streamState = state
-
-            def copyInfo(self, inputSet):
-                self.inputSet = inputSet
-
         class InputPointer:
             def get(self):
                 return object()
 
         prot = self._newProtocol()
-        logicalOutput = LogicalOutputSet()
+        logicalOutput = LogicalOutputSetProbe()
         prot.outputMicrographs = logicalOutput
         prot.inputMicrographs = InputPointer()
         prot._getPath = lambda baseName: '/tmp/' + baseName
@@ -107,7 +92,7 @@ class TestXmippTiltAnalysisRegression(BaseTest):
             return_value=False,
         ):
             outputSet = prot._loadOutputSet(
-                FreshOutputSet,
+                FreshOutputSetProbe,
                 'micrograph.sqlite',
             )
 

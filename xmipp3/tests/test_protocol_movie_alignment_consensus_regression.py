@@ -20,6 +20,10 @@ from xmipp3.protocols.protocol_movie_alignment_consensus import (
     DISCARDED,
     XmippProtConsensusMovieAlignment,
 )
+from xmipp3.tests.streaming_test_utils import (
+    FreshOutputSetProbe,
+    LogicalOutputSetProbe,
+)
 
 
 class _FakeMovie:
@@ -278,31 +282,12 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         self.assertEqual(expectedPath, prot._getMicsPath())
 
     def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
-        class LogicalOutputSet:
-            def __init__(self):
-                self.enableAppendCalls = 0
-
-            def enableAppend(self):
-                self.enableAppendCalls += 1
-
-        class FreshOutputSet:
-            STREAM_OPEN = 1
-
-            def __init__(self, filename=None):
-                self.filename = filename
-
-            def setStreamState(self, state):
-                self.streamState = state
-
-            def copyInfo(self, inputSet):
-                self.inputSet = inputSet
-
         class InputPointer:
             def get(self):
                 return object()
 
         prot = self._newProtocol()
-        logicalOutput = LogicalOutputSet()
+        logicalOutput = LogicalOutputSetProbe()
         prot.outputMovies = logicalOutput
         prot.inputMovies1 = InputPointer()
         prot._getPath = lambda baseName: '/tmp/' + baseName
@@ -312,7 +297,7 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
             return_value=False,
         ):
             outputSet = prot._loadOutputSet(
-                FreshOutputSet,
+                FreshOutputSetProbe,
                 'movies.sqlite',
                 fixSampling=False,
             )
