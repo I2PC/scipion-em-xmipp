@@ -784,6 +784,69 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertTrue(prot._hasEnoughDoseSamples())
 
+    def testStreamingOutputAppendReusesExistingLogicalOutputWithoutLegacySqlite(self):
+        from unittest.mock import patch
+
+        class LogicalOutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self):
+                self.enableAppendCalls = 0
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+        class FreshOutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self, filename=None):
+                self.filename = filename
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+            def copyInfo(self, inputMovies):
+                self.inputMovies = inputMovies
+
+        class InputPointer:
+            def get(self):
+                return object()
+
+        prot = self.newProtocol(
+            XmippProtMovieDoseAnalysis
+        )
+
+        logicalOutput = LogicalOutputSet()
+
+        prot.outputMovies = logicalOutput
+        prot.inputMovies = InputPointer()
+        prot._getPath = (
+            lambda baseName:
+            '/tmp/' + baseName
+        )
+
+        with patch(
+            'xmipp3.protocols.protocol_movie_dose_analysis.os.path.exists',
+            return_value=False,
+        ):
+            outputSet = prot._loadOutputSet(
+                FreshOutputSet,
+                'movies.sqlite',
+            )
+
+        self.assertIs(
+            outputSet,
+            logicalOutput,
+            "Streaming output append must reuse the logical output "
+            "even when the legacy SQLite file does not exist.",
+        )
+
+        self.assertEqual(
+            logicalOutput.enableAppendCalls,
+            1,
+        )
+
+
     def testStreamingInputReloadsWhenPhysicalSignatureIsUnchanged(self):
         class InputSet:
             def getIdSet(self):

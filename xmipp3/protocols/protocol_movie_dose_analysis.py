@@ -563,6 +563,17 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         except for the case when the original movies are kept and shifts
         refers to that one.
         """
+        outputNameByBaseName = {
+            'movies.sqlite': OUTPUT_MOVIES,
+            'movies_discarded.sqlite': OUTPUT_MOVIES_DISCARDED,
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
+
+        if outputSet is not None:
+            outputSet.enableAppend()
+            return outputSet
+
         setFile = self._getPath(baseName)
         if os.path.exists(setFile) and os.path.getsize(setFile) > 0:
             outputSet = SetClass(filename=setFile)
