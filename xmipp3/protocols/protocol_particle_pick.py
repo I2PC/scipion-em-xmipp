@@ -43,6 +43,219 @@ from xmipp3.convert import readSetOfCoordinates
 class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
     """ Picks particles in a set of micrographs
     either manually or in a supervised mode.
+
+    AI Generated
+
+    ## Overview
+
+    The Manual Picking protocol allows the user to select particle coordinates on
+    a set of micrographs, either manually or in supervised mode.
+
+    Particle picking is the step where the approximate positions of particles are
+    identified in the micrographs. These coordinates are later used by extraction
+    protocols to cut out particle images for classification, alignment, and
+    reconstruction.
+
+    This protocol launches the Xmipp supervised particle-picking graphical
+    interface from within Scipion. The user can inspect micrographs, define the
+    particle size, pick particles, correct coordinates, and optionally use
+    supervised or automatic assistance depending on the picking session.
+
+    The main output is a set of particle coordinates associated with the input
+    micrographs. The protocol can also save manually discarded coordinates if the
+    user requests it.
+
+    ## Inputs and General Workflow
+
+    The input is a set of micrographs.
+
+    When the protocol runs, it opens the particle-picking graphical interface. The
+    user interacts with the micrographs and creates coordinate files. These
+    coordinate files are stored in the protocol working directory.
+
+    Once coordinates are available, the protocol creates a Scipion
+    **SetOfCoordinates** linked to the input micrographs. It also reports the box
+    size or particle size used during the picking session.
+
+    If the option to save discarded particles is enabled, the protocol can also
+    create an output set containing coordinates that were manually discarded during
+    the picking process.
+
+    ## Input Micrographs
+
+    The protocol works on a set of input micrographs.
+
+    These micrographs should normally be motion-corrected and suitable for visual
+    inspection. In most workflows, CTF estimation may be performed before or after
+    picking depending on the processing strategy, but the micrographs used for
+    manual picking should have enough contrast for the user to recognize particles.
+
+    The quality of particle picking strongly depends on the quality of the
+    micrographs. Contaminated areas, carbon edges, crystalline ice, strong drift,
+    or very low contrast may lead to incorrect coordinates and should be avoided
+    during picking.
+
+    ## Interactive Picking Interface
+
+    The protocol launches the Xmipp supervised picker interface.
+
+    In this interface, the user can inspect micrographs and select particles. The
+    user can also correct mistakes, reject bad picks, and adjust the picking
+    session according to the appearance of the data.
+
+    The picking interface stores information such as the particle size, the current
+    picking state, the number of manually picked particles, the number of
+    automatically picked particles when applicable, and the last active micrograph.
+
+    This makes the protocol useful even before final output coordinates are
+    created, because the summary can report the current state of the picking
+    session.
+
+    ## Manual and Supervised Picking
+
+    The protocol supports manual picking and supervised picking.
+
+    In manual picking, the user directly selects particle positions. This is useful
+    for small datasets, for training examples, for difficult specimens, or when the
+    user wants complete control over the selected coordinates.
+
+    In supervised picking, the user may provide examples and use automatic
+    assistance to identify additional particles. This can accelerate picking while
+    still allowing user supervision and correction.
+
+    From a biological point of view, the goal is to select coordinates that
+    represent true particles and avoid contaminants, aggregates, damaged particles,
+    ice artifacts, and background features.
+
+    ## Particle Size and Box Size
+
+    During picking, the user defines a particle size. This value is later stored
+    and reported by the protocol as the picking box size.
+
+    The particle size should approximately match the apparent diameter of the
+    particle in the micrograph. It is important because it guides visual selection
+    and may be used by later extraction protocols to suggest an extraction box
+    size.
+
+    If the particle size is too small, the picking may focus only on part of the
+    particle. If it is too large, nearby particles or background features may be
+    included in the visual picking region.
+
+    The particle size defined here is not necessarily the final extraction box
+    size. Extraction often uses a somewhat larger box to include the particle plus
+    surrounding background.
+
+    ## Save Discarded Particles
+
+    The **Save discarded particles** option creates an additional output containing
+    coordinates that were manually discarded.
+
+    This can be useful for quality-control, training, or method-development
+    workflows. For example, discarded coordinates may represent contaminants,
+    false positives, bad particles, or examples that should not be extracted.
+
+    In routine biological processing, users may not need this output. However, it
+    can be valuable when building training sets for automatic picking or when
+    documenting why certain candidate particles were rejected.
+
+    The discarded-coordinate output is only generated when there is a valid
+    coordinate output and discarded coordinates are available.
+
+    ## Run in Interactive Mode
+
+    The **Run in interactive mode** option controls whether the protocol remains
+    available for interactive picking sessions.
+
+    If enabled, the user can pick particles across different sessions. This is the
+    normal behavior for manual or supervised picking, because particle selection is
+    often iterative.
+
+    If disabled, the protocol finishes once an output coordinate set is created.
+    This can be useful in scheduled or automated workflows where another protocol
+    is waiting for the picking protocol to finish.
+
+    Most users should keep interactive mode enabled during manual picking.
+
+    ## Output Coordinates
+
+    The main output is **outputCoordinates**, a set of particle coordinates linked
+    to the input micrographs.
+
+    Each coordinate identifies the position of a selected particle in its
+    corresponding micrograph. These coordinates are normally passed to an extraction
+    protocol to generate particle images.
+
+    The output coordinate set also stores the picking box size. This value can be
+    used by later protocols or wizards to suggest appropriate extraction settings.
+
+    The coordinate output should be visually inspected before extraction,
+    especially when using supervised or automatic assistance.
+
+    ## Output Box Size
+
+    The protocol also produces a **boxsize** output.
+
+    This output stores the particle size used during picking. It is useful because
+    the picking size is often needed later to choose an extraction box size.
+
+    For example, an extraction protocol may suggest a box size based on the
+    particle size from picking, often using a larger value to include surrounding
+    background.
+
+    ## Temporary Summary Before Final Output
+
+    If the final coordinate output has not yet been created, the protocol can still
+    show a temporary summary based on the picking configuration file.
+
+    This summary may include:
+
+    - the number of manually picked particles;
+    - the particle size;
+    - whether automatic picking was used;
+    - the number of automatically picked particles;
+    - the last micrograph visited.
+
+    This is useful during interactive work because the user can monitor progress
+    before finalizing the picking output.
+
+    ## Practical Recommendations
+
+    Use clean, representative micrographs for the initial picking session. Avoid
+    micrographs with strong contamination, poor ice, severe drift, or very low
+    contrast when defining examples.
+
+    Choose a particle size that matches the apparent particle diameter. This value
+    will influence later box-size suggestions.
+
+    Manually inspect picks even when supervised or automatic assistance is used.
+    False positives at this stage can propagate into particle extraction and
+    classification.
+
+    Consider saving discarded particles if you are developing automatic picking
+    models, preparing training examples, or documenting rejected particle-like
+    objects.
+
+    Use interactive mode for normal manual picking. Disable it only when the
+    protocol is part of a scheduled workflow that should finish automatically after
+    coordinates are produced.
+
+    After picking, continue with an extraction protocol to generate particle images
+    from the selected coordinates.
+
+    ## Final Perspective
+
+    Manual Picking is the coordinate-generation step that connects micrograph
+    inspection with particle extraction.
+
+    For biological users, this protocol is important because the quality of the
+    selected coordinates directly affects all downstream processing. Good picking
+    provides true particle images for classification and reconstruction. Poor
+    picking introduces contaminants, background, aggregates, or damaged particles
+    that can reduce the quality of the final result.
+
+    The protocol is especially useful when expert visual judgment is needed, when
+    training supervised picking, or when preparing reliable initial coordinates for
+    a new specimen.
     """
     _label = 'manual-picking (step 1)'
 

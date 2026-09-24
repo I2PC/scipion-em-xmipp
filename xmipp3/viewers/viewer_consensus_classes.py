@@ -30,11 +30,11 @@ This module implement the wrappers around
 visualization program.
 """
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
-from pyworkflow.protocol.params import Form, Line, LabelParam, IntParam
+from pyworkflow.protocol.params import Form, LabelParam, IntParam, HiddenBooleanParam
 from pyworkflow.protocol.params import GE
 
 from pwem.viewers.showj import *
-from pwem.viewers import TableView, ObjectView
+from pwem.viewers import ObjectView
 from pwem.objects import SetOfClasses
 
 from xmipp3.protocols.protocol_consensus_classes import XmippProtConsensusClasses
@@ -56,9 +56,11 @@ class XmippConsensusClassesViewer(ProtocolViewer):
 
     def _defineParams(self, form: Form):
         form.addSection(label='Classes')
+        form.addParam('visualizeAllClasses', HiddenBooleanParam,
+                      label='All classes' )
         form.addParam('visualizeClasses', IntParam,
                       validators=[GE(1)], default=1,
-                      label='Classes' )
+                      label='Specific class' )
 
         form.addSection(label='Graphs')
         form.addParam('visualizeDendrogram', LabelParam,
@@ -69,6 +71,7 @@ class XmippConsensusClassesViewer(ProtocolViewer):
 
     def _getVisualizeDict(self):
         return {
+            'visualizeAllClasses': self._visualizeAllClasses,
             'visualizeClasses': self._visualizeClasses,
             'visualizeDendrogram': self._visualizeDendrogram,
             'visualizeCostFunction': self._visualizeCostFunction,
@@ -84,11 +87,22 @@ class XmippConsensusClassesViewer(ProtocolViewer):
     def _getMergedIntersections(self, size) -> SetOfClasses:
         return self.protocol._obtainMergedIntersections(size)
     
+    def _visualizeAllClasses(self, param=None):
+        labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'
+        labelRender = '_representative._filename'
+        outputClasses = self.protocol.outputClasses
+        return [ObjectView( self._project, outputClasses.strId(), outputClasses.getFileName(),
+                            viewParams={ORDER: labels,
+                                        VISIBLE: labels,
+                                        RENDER: labelRender,
+                                        SORT_BY: '_size desc',
+                                        MODE: MODE_MD})]
+
     def _visualizeClasses(self, param=None):
         count = self.visualizeClasses.get()
         classes = self._getMergedIntersections(count)
         return self._showSetOfClasses3D(classes)
-        
+
     def _visualizeDendrogram(self, param=None):
         linkage = self._getLinkageMatrix()
         elbows = self._getElbows()

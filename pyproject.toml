@@ -19,7 +19,7 @@ keywords = ["scipion electron-microscopy cryo-em structural-biology image-proces
 license = {text = "GNU General Public License v3 (GPLv3)"}
 
 [project.urls]
-Homepage = "https://github.com/I2PC/scipion-em-xmipp"
+Homepage = "https://i2pc.github.io/docs/"
 Issues = "https://github.com/I2PC/scipion-em-xmipp/issues"
 
 [tool.setuptools.dynamic]

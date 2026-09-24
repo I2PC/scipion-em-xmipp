@@ -52,7 +52,315 @@ class XmippProtML2D(ProtClassify2D):
     
     Although the calculations can be rather time-consuming (especially for 
     many, large experimental images and a large number of references we 
-    strongly recommend to let the calculations converge. 
+    strongly recommend to let the calculations converge.
+
+    AI Generated
+
+    ## Overview
+
+    The ML2D protocol performs 2D alignment and classification of particle images
+    using a maximum-likelihood target function.
+
+    Unlike simple hard-assignment classification methods, maximum-likelihood 2D
+    classification treats particle assignment and alignment in a probabilistic
+    way. Each particle may contribute to the estimation of the 2D classes according
+    to its likelihood under different orientations, shifts, and class references.
+    This makes the method more robust when the images are noisy, as is usually the
+    case in cryo-EM.
+
+    The output of the protocol is a set of refined 2D classes. The experimental
+    particles themselves are not modified; instead, they are assigned to classes
+    and associated with refined 2D alignment parameters.
+
+    ML2D is useful for obtaining representative 2D averages, separating different
+    views or particle populations, and improving the organization of particle
+    datasets before later 3D processing.
+
+    ## Inputs and General Workflow
+
+    The main input is a set of particle images. The protocol converts the input
+    particles into Xmipp metadata format and then runs the selected maximum-
+    likelihood 2D classification program.
+
+    Initial references can be generated automatically from subsets of the input
+    particles, or they can be provided by the user. The algorithm then iteratively
+    updates the class references and particle assignments until convergence or
+    until the maximum number of iterations is reached.
+
+    At the end, the protocol creates a Scipion **SetOfClasses2D** containing the
+    final 2D classes. Each class has a representative image, and particles are
+    assigned to classes with their corresponding 2D alignment information.
+
+    ## Input Particles
+
+    The **Input particles** parameter defines the particle set to be classified.
+
+    The particles should be reasonably prepared before running ML2D. In practical
+    terms, this usually means that they should have been extracted with a sensible
+    box size, normalized, and possibly preprocessed according to the needs of the
+    workflow.
+
+    ML2D can perform 2D alignment during classification, so the particles do not
+    necessarily need to be perfectly aligned beforehand. However, very poorly
+    centered particles, strong contaminants, or highly heterogeneous mixtures can
+    make convergence slower and the resulting classes harder to interpret.
+
+    As with all 2D classification methods, the quality of the output depends
+    strongly on the quality of the input particle set.
+
+    ## Generating Initial Classes
+
+    The option **Generate classes?** controls how the initial 2D references are
+    obtained.
+
+    If this option is set to **Yes**, the protocol generates the initial class
+    references automatically, typically by averaging subsets of the experimental
+    images. This is often the preferred option when the user wants to reduce
+    reference bias.
+
+    If the option is set to **No**, the user must provide a set of class images to
+    be used as initial references. This can be useful when good prior references
+    are available, for example from a previous classification run or from a related
+    dataset.
+
+    However, user-provided references can introduce bias. If the initial references
+    are too specific or incorrect, the classification may be guided toward those
+    patterns. Automatic reference generation is therefore often safer for
+    exploratory analysis.
+
+    ## Number of Classes
+
+    When initial references are generated automatically, the **Number of classes**
+    parameter defines how many 2D classes will be produced.
+
+    A small number of classes gives a compact summary of the dataset, but may merge
+    different views, conformations, or particle qualities. A large number of
+    classes provides more detail, but each class may contain fewer particles and
+    therefore have a noisier average.
+
+    The appropriate number depends on the dataset size and heterogeneity. For small
+    or homogeneous datasets, fewer classes may be sufficient. For large or
+    heterogeneous datasets, more classes may be needed to separate different views
+    or particle populations.
+
+    If the user provides initial references, the number of classes is determined by
+    the number of provided reference images.
+
+    ## User-Provided Class Images
+
+    The **Class image(s)** parameter is used when automatic class generation is
+    disabled.
+
+    These images serve as the initial 2D references for the maximum-likelihood
+    classification. They may come from a previous classification, manually selected
+    averages, or another related processing workflow.
+
+    This option can accelerate convergence when the references are appropriate.
+    However, it can also bias the classification toward the provided references.
+    For this reason, it should be used carefully, especially when the goal is to
+    discover unexpected heterogeneity.
+
+    ## ML2D and MLF2D
+
+    The option **Use MLF2D instead of ML2D?** switches from the standard ML2D
+    method to a Fourier-space maximum-likelihood variant.
+
+    Standard ML2D works in image space. MLF2D performs maximum-likelihood
+    classification in Fourier space and can use CTF-related information more
+    explicitly.
+
+    When MLF2D is selected, the input particles must contain CTF information. The
+    protocol checks this requirement before running.
+
+    The Fourier-space variant is useful when the user wants the classification to
+    take microscope transfer effects into account more directly. However, it also
+    requires that the particle metadata contain reliable CTF information.
+
+    ## CTF-Amplitude Correction
+
+    When MLF2D is used, the option **Use CTF-amplitude correction?** controls
+    whether CTF amplitude correction is applied.
+
+    If enabled, the method uses the CTF information associated with the particles.
+    This can make the Fourier-space comparison more physically meaningful.
+
+    If disabled, the protocol does not use this CTF correction in the same way, and
+    the image pixel size must be available so that the Fourier-space calculations
+    are properly scaled.
+
+    This option is relevant only for MLF2D. In routine use, it should usually be
+    left enabled when reliable CTF information is available.
+
+    ## Phase-Flipped Images
+
+    The **Are the images CTF phase flipped?** option tells MLF2D whether the input
+    particles have already been phase-flipped.
+
+    This is important because phase flipping changes the relationship between the
+    particle images and the CTF model. If this option is set incorrectly, the
+    Fourier-space likelihood calculation may use an inconsistent CTF convention.
+
+    Users should check the preprocessing history of the particles before setting
+    this option. If particles were extracted or processed with phase flipping, this
+    should be indicated here.
+
+    ## High-Resolution Limit
+
+    The **High-resolution limit** parameter is used in MLF2D to exclude frequencies
+    beyond a given resolution from the classification.
+
+    For example, a limit of 20 Å means that frequencies higher than 20 Å are not
+    used in the likelihood calculation. If the value is set to zero, no such limit
+    is imposed.
+
+    Excluding very high-resolution frequencies can be useful because these
+    frequencies may be dominated by noise, especially in early processing stages.
+    A conservative limit can make classification more stable and less sensitive to
+    high-frequency noise.
+
+    This parameter should be chosen according to the quality of the particles and
+    the stage of processing. Early exploratory classification usually benefits from
+    a relatively low-resolution comparison.
+
+    ## Mirror Alignment
+
+    The option **Also include mirror in the alignment?** allows the alignment
+    search to include mirrored versions of the particle images.
+
+    This can be useful when particles may appear in mirror-related views, for
+    example when they can adsorb to the grid in different orientations such as
+    face-up and face-down.
+
+    Including mirrors makes the search more flexible, but it also increases the
+    space of possible transformations. Users should keep it enabled when mirror
+    ambiguity is expected and disable it only when such transformations are known
+    to be inappropriate for the dataset.
+
+    ## Fast Version
+
+    The **Use the fast version?** option is available for standard ML2D.
+
+    When enabled, the protocol uses a reduced search-space approach to accelerate
+    the computation. This can be important because maximum-likelihood
+    classification can be computationally expensive, especially with many
+    particles, large image boxes, many classes, or fine angular sampling.
+
+    The fast version is usually a good practical choice. However, because it avoids
+    searching the complete solution space, users should be cautious when working
+    with very difficult datasets or when maximum classification accuracy is more
+    important than speed.
+
+    ## Normalization Refinement
+
+    The option **Refine the normalization for each image?** enables a variant of
+    the algorithm that accounts for image-normalization errors.
+
+    This can be useful when particles have residual differences in intensity scale
+    or background that were not fully corrected during preprocessing. By refining
+    normalization at the particle level, the classification may become less
+    sensitive to such variations.
+
+    However, this option adds model flexibility and may increase computation time.
+    It should be used when normalization differences are suspected to affect the
+    classification.
+
+    ## Maximum Number of Iterations
+
+    The **Maximum number of iterations** parameter defines when the iterative
+    process should stop if convergence has not already been reached.
+
+    Maximum-likelihood classification can require many iterations, especially for
+    large or heterogeneous datasets. Stopping too early may produce poorly
+    converged classes, while allowing more iterations gives the algorithm more
+    opportunity to stabilize.
+
+    The default value is intended to allow convergence in many cases. Users should
+    avoid stopping the protocol prematurely unless there is a clear reason.
+
+    ## In-Plane Rotation Sampling
+
+    The **In-plane rotation sampling** parameter defines the angular step, in
+    degrees, used when searching over rotations within the image plane.
+
+    A smaller step gives a finer angular search and can improve alignment accuracy,
+    but it increases computation time. A larger step is faster but may give less
+    accurate alignments.
+
+    The appropriate value depends on particle size, expected angular precision,
+    image quality, and computational resources. The default value is a reasonable
+    starting point for many datasets.
+
+    ## Noise and Offset Parameters
+
+    The **Std for pixel noise** parameter defines the expected standard deviation
+    of the pixel noise used by the maximum-likelihood model.
+
+    The **Std for origin offset** parameter defines the expected standard deviation
+    of particle shifts, in pixels.
+
+    These parameters influence the probabilistic model used during classification.
+    They are advanced options and should usually be left at their default values
+    unless the user has a specific reason to tune the likelihood model.
+
+    The origin-offset parameter is particularly relevant when particles are not
+    well centered. A larger value allows larger shifts, whereas a smaller value
+    assumes that particles are already well centered.
+
+    ## Outputs and Their Interpretation
+
+    The main output is a **SetOfClasses2D**.
+
+    Each class contains particles assigned to that class and a representative 2D
+    average. The particles also receive 2D alignment information derived from the
+    classification.
+
+    The class averages should be inspected visually. Good classes usually show
+    clear structural features, consistent particle views, and reasonable particle
+    counts. Poor classes may be noisy, contain contaminants, represent badly
+    centered particles, or mix incompatible views.
+
+    The output classes can be used for particle cleaning, subset selection,
+    exploratory structural analysis, or as preparation for later 3D processing.
+
+    ## Practical Recommendations
+
+    Use automatic reference generation for exploratory classification, especially
+    when you want to avoid reference bias.
+
+    Use user-provided references only when they are reliable and when the goal is
+    to refine or reproduce a known classification.
+
+    Choose the number of classes according to dataset size and heterogeneity. Too
+    few classes may merge important differences; too many classes may produce noisy
+    or empty-looking averages.
+
+    Let the protocol converge when possible. Maximum-likelihood classification can
+    be time-consuming, but premature stopping may reduce class quality.
+
+    Use MLF2D only when the particles have reliable CTF information and when
+    Fourier-space treatment is desired.
+
+    Check whether particles are phase-flipped before using MLF2D, and set the
+    corresponding option consistently.
+
+    Inspect the final class averages and particle distribution across classes.
+    Classes with clear density and reasonable particle counts are usually more
+    trustworthy than very small or noisy classes.
+
+    ## Final Perspective
+
+    ML2D is a probabilistic 2D alignment and classification protocol. Its main
+    strength is that it can handle noisy cryo-EM particles by estimating class
+    averages and particle alignments within a maximum-likelihood framework.
+
+    For biological users, ML2D is useful for producing interpretable 2D averages,
+    evaluating particle quality, separating different views or populations, and
+    preparing particle subsets for further 3D analysis.
+
+    The most important practical choices are the number of classes, the use of
+    automatic or provided references, the possible use of Fourier-space MLF2D, and
+    whether the protocol is allowed enough iterations to converge.
+
     """
     _label = 'ml2d'
     

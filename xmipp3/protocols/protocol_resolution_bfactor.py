@@ -48,8 +48,220 @@ FN_METADATA_BFACTOR_RESOLUTION = 'bfactor_resolution.xmd'
 
 class XmippProtbfactorResolution(ProtAnalysis3D):
     """    
-    Given a local resolution map and an atomic model, this protocols provides the matching between the
+    Given a local resolution map and an atomic model, this protocols provides
+    the matching between the
     local resolution with the local bfactor per residue.
+
+    AI Generated
+
+    ## Overview
+
+    The Local Resolution/Local B-factor protocol relates a local-resolution map to
+    an atomic model.
+
+    Local-resolution maps describe how the estimated resolution varies across a
+    cryo-EM reconstruction. Some regions of a map may be well resolved, while
+    others may be flexible, poorly ordered, or supported by fewer particles. Atomic
+    models also contain per-atom or per-residue B-factor values, which are often
+    used to describe local uncertainty, disorder, or mobility.
+
+    This protocol compares these two types of information. It samples the local
+    resolution around the atoms of an input atomic model and assigns a
+    resolution-derived value to the model. The resulting output is a PDB file in
+    which the B-factor column has been replaced by the normalized local-resolution
+    information.
+
+    This output can be opened in molecular-visualization tools, such as ChimeraX,
+    to color the atomic model according to the local-resolution behavior of the
+    map.
+
+    ## Inputs and General Workflow
+
+    The protocol requires:
+
+    - an atomic model;
+    - either a local-resolution map or an already normalized local-resolution map;
+    - when normalization is requested, the global FSC resolution.
+
+    The input volume is checked and converted to MRC format if needed. The protocol
+    then runs the Xmipp local-resolution-to-PDB matching program. For each residue,
+    it estimates the local resolution from the surrounding map values, using either
+    the median or the mean.
+
+    Finally, it writes an output atomic structure file called `chimeraPDB.pdb`,
+    registered in Scipion as the output structure.
+
+    ## Atomic Model
+
+    The **Atomic model** parameter should point to an atomic structure associated
+    with the cryo-EM map.
+
+    The atom positions are used to sample the local-resolution map. The protocol
+    then estimates a local-resolution value for each residue and writes it into the
+    B-factor column of the output PDB file.
+
+    The atomic model and the local-resolution map must be in the same coordinate
+    system. If the model is shifted, rotated, or scaled relative to the map, the
+    assigned local-resolution values will be incorrect.
+
+    ## Normalize Resolution
+
+    The **Normalize Resolution** option controls whether the protocol normalizes
+    the local-resolution map before matching it to the atomic model.
+
+    When this option is enabled, the normalized local-resolution value is computed
+    as:
+
+    \[
+    \frac{LR - FSC}{FSC}
+    \]
+
+    where \(LR\) is the local resolution at a voxel and \(FSC\) is the global FSC
+    resolution in angstroms.
+
+    This normalized value indicates whether a region is locally better or worse
+    than the global FSC resolution. Values above zero indicate local resolution
+    worse than the global reference; values below zero indicate local resolution
+    better than the global reference.
+
+    When this option is disabled, the protocol assumes that the input map is
+    already a normalized local-resolution map.
+
+    ## Local Resolution Map
+
+    The **Local Resolution Map** parameter is used when normalization is enabled.
+
+    This map should contain local-resolution values in angstroms. The user must
+    also provide the global **FSC resolution** so that the protocol can compute the
+    normalized value.
+
+    The local-resolution map should correspond to the same reconstruction and
+    coordinate frame as the atomic model.
+
+    ## Normalized Local Resolution Map
+
+    The **Normalized Local Resolution Map** parameter is used when normalization is
+    disabled.
+
+    In this case, the input map is assumed to already contain values of the form:
+
+    \[
+    \frac{LR - FSC}{FSC}
+    \]
+
+    The protocol does not normalize the map again. It directly uses the provided
+    values for matching to the atomic model.
+
+    This option is useful when the normalized map has already been computed by a
+    previous workflow.
+
+    ## FSC Resolution
+
+    The **FSC resolution** parameter is required when the protocol normalizes the
+    local-resolution map.
+
+    This value is the global resolution of the map in angstroms, usually obtained
+    from an FSC criterion such as FSC = 0.143 or FSC = 0.5, depending on the
+    workflow.
+
+    The choice of FSC resolution affects the normalized values. Therefore, users
+    should report which FSC criterion was used when interpreting or presenting the
+    result.
+
+    ## Use Median
+
+    The **Use median** option controls how the local-resolution value is estimated
+    for each residue.
+
+    If enabled, the protocol uses the median of local-resolution values around the
+    residue. The median is more robust to outliers and is usually a good choice
+    when the local-resolution map contains noisy or extreme voxels.
+
+    If disabled, the protocol uses the mean. The mean may be more sensitive to all
+    values in the neighborhood, but it can also be more affected by outliers.
+
+    For most biological interpretation, the median is a sensible default.
+
+    ## Is the Atomic Model Centered?
+
+    The **is the atomic centered** option tells the protocol whether the atomic
+    model is centered in the middle of the local-resolution map.
+
+    This affects how atom coordinates are interpreted relative to the volume grid.
+    If the model is centered as expected, the option should be enabled.
+
+    If the coordinate convention differs, the user should disable this option or
+    ensure that the model and map are properly aligned before running the protocol.
+
+    Incorrect centering can produce wrong residue-level assignments.
+
+    ## Output Structure
+
+    The main output is **outputStructure**.
+
+    This is an atomic structure file named `chimeraPDB.pdb`. In this output, the
+    B-factor column is replaced by the normalized local-resolution value assigned
+    to each atom or residue.
+
+    The output can be opened in molecular viewers and colored by B-factor. In that
+    case, the coloring will reflect local-resolution-derived values rather than
+    the original crystallographic or model B-factors.
+
+    This output is mainly intended for visualization and interpretation.
+
+    ## Interpreting the Output
+
+    The output structure should be interpreted as a visualization bridge between
+    map quality and atomic-model location.
+
+    Regions with values above zero correspond to areas where the local resolution
+    is worse than the global FSC resolution. Regions with values below zero
+    correspond to areas where the local resolution is better than the global FSC
+    resolution.
+
+    The values are not the original atomic B-factors. They are local-resolution
+    annotations stored in the B-factor column for convenience.
+
+    This distinction is important when using downstream tools that display or
+    analyze B-factor values.
+
+    ## Practical Recommendations
+
+    Use an atomic model that is correctly fitted into the map before running this
+    protocol.
+
+    Make sure that the local-resolution map and the atomic model are in the same
+    coordinate frame.
+
+    Use normalization when the input map contains local-resolution values in
+    angstroms. Disable normalization only if the input map is already normalized.
+
+    Choose the global FSC resolution carefully and record the criterion used to
+    obtain it.
+
+    Use the median option for robust residue-level estimates, especially when the
+    local-resolution map is noisy.
+
+    After the protocol finishes, open the output PDB in ChimeraX or another viewer
+    and color by B-factor to inspect the spatial distribution of local-resolution
+    quality.
+
+    Remember that the output B-factor column no longer contains conventional
+    atomic B-factors.
+
+    ## Final Perspective
+
+    Local Resolution/Local B-factor is a visualization and interpretation protocol
+    that maps local-resolution information onto an atomic model.
+
+    For biological users, its main value is that it makes map-quality variation
+    visible directly on the molecular structure. This helps identify which domains,
+    loops, interfaces, or residues are supported by better or worse local map
+    resolution.
+
+    The protocol should be used with properly aligned maps and models, and the
+    result should be interpreted as local-resolution annotation rather than as a
+    new atomic B-factor refinement.
     """
     _label = 'local resolution/local bfactor'
     _lastUpdateVersion = VERSION_2_0

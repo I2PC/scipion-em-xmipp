@@ -50,7 +50,323 @@ from xmipp3.constants import OTHER
 
 
 class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):
-    """Extracts particles based on coordinates from tilted pairs of micrographs."""
+    """Extracts particles based on coordinates from tilted pairs of micrographs.
+
+    AI Generated
+
+    ## Overview
+
+    The Extract Particle Pairs protocol extracts particle images from pairs of
+    tilted and untilted micrographs using a previously defined set of paired
+    coordinates. It is intended for workflows in which each particle has two
+    corresponding views: one acquired from an untilted micrograph and one from a
+    tilted micrograph.
+
+    This type of data is commonly used in random conical tilt, validation,
+    orientation assignment, and other workflows where the geometrical relationship
+    between tilted and untilted views is important. The central purpose of this
+    protocol is therefore not only to crop particle images, but also to preserve the
+    pairing between the two views of the same particle.
+
+    The output is a set of particle pairs. Each pair contains one untilted particle
+    and its corresponding tilted particle. This paired structure is essential for
+    downstream protocols that rely on the tilt geometry or on the comparison
+    between the two acquisition conditions.
+
+    ## Inputs and General Workflow
+
+    The main input is a set of **tilted-pair coordinates**. This object contains
+    two linked coordinate sets: one for the untilted micrographs and one for the
+    tilted micrographs. Each coordinate in the untilted set is associated with the
+    corresponding coordinate in the tilted set.
+
+    By default, particles are extracted from the same micrographs that were used
+    during picking. Alternatively, the user may provide another set of tilted-pair
+    micrographs. This is useful when coordinates were picked on one version of the
+    micrographs, for example a downsampled or preprocessed version, but extraction
+    should be performed from another version.
+
+    For each micrograph, the protocol writes the corresponding coordinate file,
+    optionally applies preprocessing operations, extracts particle boxes centered
+    on the coordinates, normalizes the extracted images if requested, and finally
+    reconstructs the particle-pair object by matching the untilted and tilted
+    particles.
+
+    The protocol only keeps pairs for which both members are valid. If either the
+    untilted or tilted particle is rejected or cannot be extracted, the pair is not
+    included in the final output.
+
+    ## Coordinates Tilted Pairs
+
+    The **Coordinates tilted pairs** input defines the geometrical correspondence
+    between the two views. This is the most important input of the protocol.
+
+    Each pair represents the same physical particle observed in two different
+    micrographs: one untilted and one tilted. Preserving this relationship is the
+    main difference between this protocol and standard single-micrograph particle
+    extraction.
+
+    Users should ensure that the coordinate-pair object is correct before running
+    the protocol. If the pairing is wrong, downstream tilted-pair analysis will be
+    affected even if the extracted particle images look visually reasonable.
+
+    ## Micrographs Source
+
+    The **Micrographs source** option controls which micrographs are used for
+    extraction.
+
+    If **same as picking** is selected, the protocol extracts the particles from
+    the micrographs associated with the input tilted-pair coordinates. This is the
+    simplest and safest option, and it is appropriate when picking was performed
+    directly on the micrographs that should be used for extraction.
+
+    If **other** is selected, the user must provide another set of tilted-pair
+    micrographs. This option is useful in multiscale workflows, for example when
+    particles were picked on downsampled micrographs but should be extracted from
+    higher-resolution micrographs.
+
+    When another micrograph set is used, the protocol attempts to match the
+    coordinates and micrographs by micrograph name. Differences in pixel size are
+    handled automatically by rescaling the coordinates. However, the biological
+    meaning of the extraction still depends on the micrographs being correctly
+    matched. Users should therefore verify that the tilted and untilted micrographs
+    correspond to the same acquisition pairs.
+
+    ## CTF Information for Untilited and Tilted Micrographs
+
+    The protocol allows the user to provide separate CTF estimations for the
+    untilted and tilted micrographs.
+
+    CTF information has two roles. First, it can be associated with the extracted
+    particles, so that downstream protocols know the optical parameters of each
+    image. Second, it is required if the user wants to perform phase flipping during
+    extraction.
+
+    Because tilted-pair data contain two different micrograph sets, the protocol
+    asks separately for:
+
+    - CTF estimation for untilted micrographs.
+    - CTF estimation for tilted micrographs.
+
+    If CTF information is available for only one of the two views, the protocol can
+    still use it for that view. However, for complete paired downstream analysis, it
+    is usually preferable to provide CTF information for both untilted and tilted
+    micrographs.
+
+    Phase flipping cannot be performed unless CTF information is provided.
+
+    ## Particle Box Size
+
+    The **particle box size** defines the size, in pixels, of the extracted
+    particles.
+
+    The box should be large enough to contain the full particle in both the
+    untilted and tilted views, plus a surrounding region of background. This is
+    especially important for tilted particles, where the apparent projection may
+    occupy a slightly different region of the box because of the tilt geometry and
+    coordinate-pairing accuracy.
+
+    If the box is too small, part of the particle may be cut off, damaging
+    classification, alignment, or reconstruction. If the box is too large, the
+    particles will contain excessive background, increasing computational cost and
+    possibly making alignment less stable.
+
+    When downsampling is used, the box size should be interpreted as the final
+    particle box size after the intended scaling. Users should visually inspect the
+    output particles to confirm that both untilted and tilted views are properly
+    centered and fully contained.
+
+    ## Downsampling Factor
+
+    The **downsampling factor** allows the user to reduce the size of the
+    micrographs before extraction. A value of 1.0 means that no downsampling is
+    applied. Values greater than 1.0 produce particles at a coarser sampling rate.
+
+    Downsampling is useful when the goal is to perform exploratory analysis,
+    initial classification, or faster screening of the paired dataset. It reduces
+    image size and computational cost.
+
+    However, strong downsampling removes high-resolution information. Therefore, it
+    should be used carefully if the extracted particle pairs will be used for
+    high-resolution interpretation.
+
+    When downsampling is applied, the protocol updates the output sampling rate and
+    rescales the coordinates accordingly, so that the extracted particles remain
+    geometrically consistent with the input coordinate pairs.
+
+    ## Border Handling
+
+    By default, Xmipp skips particles whose boxes would fall outside the micrograph
+    boundaries. This is usually the safest behavior because particles close to the
+    edge may be incomplete.
+
+    The option **Fill pixels outside borders** allows the protocol to keep such
+    particles by filling the missing pixels with the closest available pixel values.
+    This may be useful if the user wants to retain as many particle pairs as
+    possible, but it should be used with caution.
+
+    For tilted-pair data, a particle pair is only useful if both views are valid.
+    Keeping edge particles may therefore introduce incomplete or artificial image
+    regions into one member of the pair. In most routine workflows, excluding
+    border particles is preferable.
+
+    ## Dust Removal
+
+    The protocol can perform **dust removal**, which replaces unusually extreme
+    pixel values with values compatible with a normal background distribution.
+
+    This operation is recommended for many cryo-EM datasets because detector
+    artifacts, hot pixels, contamination, or other image anomalies may introduce
+    very bright or very dark pixels. These outliers can interfere with
+    normalization and later classification.
+
+    The **threshold for dust removal** defines how extreme a pixel must be before
+    it is corrected. The default value is appropriate for many cryo-EM datasets.
+    For high-contrast data, such as negative stain, a higher threshold may be safer
+    because true signal can be more intense.
+
+    Dust removal should be understood as an artifact-suppression step. It is not
+    intended to modify the biological particle signal.
+
+    ## Contrast Inversion
+
+    The **Invert contrast** option changes the sign convention of the extracted
+    images.
+
+    Different cryo-EM packages use different contrast conventions. Xmipp, Spider,
+    Relion, and EMAN usually expect particles to appear as white densities on a
+    dark background. If the input micrographs show particles as dark features on a
+    bright background, contrast inversion should be enabled.
+
+    This operation does not change the structural information, but it is important
+    for compatibility with downstream processing. Using the wrong contrast
+    convention may lead to confusing visual inspection and poor behavior in some
+    algorithms.
+
+    In tilted-pair workflows, the same contrast convention should normally be used
+    for both untilted and tilted particles.
+
+    ## Phase Flipping
+
+    The protocol can perform **CTF phase flipping** before particle extraction,
+    provided that CTF information is available.
+
+    Phase flipping compensates for the phase reversals introduced by the microscope
+    contrast transfer function. It is a simple form of CTF correction and may be
+    useful in workflows based on Xmipp or EMAN conventions.
+
+    However, not all downstream programs expect phase-flipped particles. Some
+    modern refinement workflows prefer to keep the original images and account for
+    the CTF internally. Therefore, phase flipping should be selected according to
+    the requirements of the downstream tilted-pair workflow.
+
+    For this protocol, phase flipping may depend on whether CTF estimations are
+    available for the untilted micrographs, the tilted micrographs, or both. Users
+    should be careful when only one member of the pair has CTF information, because
+    this can lead to different correction states for the two views.
+
+    ## Normalization
+
+    The **Normalize** option is recommended in most workflows. It places extracted
+    particles on a comparable intensity scale, usually by making the background
+    have approximately zero mean and unit standard deviation.
+
+    The protocol offers several normalization types:
+
+    **OldXmipp** normalizes using the statistics of the whole image.
+
+    **NewXmipp** estimates normalization statistics from the background region
+    outside a circular mask.
+
+    **Ramp** subtracts a background ramp and then applies the NewXmipp-style
+    background normalization.
+
+    For most biological users, the Ramp option is a good default because it helps
+    remove slow background variations while producing particles with comparable
+    intensity statistics.
+
+    The **background radius** defines the circular region used to separate particle
+    and background. Pixels outside this circle are treated as background. If the
+    value is not explicitly set, the protocol uses approximately half the box size.
+    The radius should not be larger than half the particle box size.
+
+    A good normalization is particularly important for paired-particle workflows
+    because the untilted and tilted views should be comparable in intensity scale
+    as far as possible.
+
+    ## Preservation of Particle Pairs
+
+    A key feature of this protocol is that it preserves the relationship between
+    untilted and tilted particles.
+
+    Internally, the protocol extracts particles from both micrograph sets and then
+    reconstructs the final paired object. A pair is included in the output only when
+    both the untilted and tilted particle are present and enabled.
+
+    This behavior is important. It avoids producing incomplete pairs, which would
+    not be usable in downstream tilted-pair analysis. As a consequence, the final
+    number of particle pairs may be smaller than the number of initial coordinate
+    pairs if some particles are rejected, fall outside micrograph borders, or fail
+    during extraction.
+
+    ## Outputs and Their Interpretation
+
+    The main output is a **ParticlesTiltPair** object.
+
+    This output contains two linked particle sets:
+
+    - the untilted particle set;
+    - the tilted particle set.
+
+    Each entry in the output corresponds to a pair formed by one untilted particle
+    and its associated tilted particle. The output also keeps the relationship to
+    the original tilted-pair coordinates.
+
+    If CTF information was provided, it may be associated with the corresponding
+    particles. If phase flipping was performed, the output particle sets are marked
+    accordingly.
+
+    The output should be interpreted as the paired image dataset that will be used
+    by downstream protocols requiring tilted-pair information.
+
+    ## Practical Recommendations
+
+    For routine use, start by extracting from the same micrographs used for picking,
+    unless there is a clear reason to use another micrograph set.
+
+    Choose a particle box size large enough to contain the particle in both views.
+    Tilted particles may require slightly more care because their projection and
+    centering can differ from the untilted view.
+
+    Keep dust removal and normalization enabled in most cases. These operations
+    usually make the particle pairs more stable for downstream processing.
+
+    Use downsampling for exploratory analysis or fast initial screening, but avoid
+    excessive downsampling if high-resolution information will be needed later.
+
+    Only enable phase flipping if CTF information is available and if the downstream
+    workflow expects phase-flipped particles.
+
+    After extraction, visually inspect both the untilted and tilted particle sets.
+    Check that particles are centered, have the expected contrast, are not cut by
+    the box boundaries, and remain correctly paired.
+
+    ## Final Perspective
+
+    The Extract Particle Pairs protocol is the tilted-pair counterpart of standard
+    particle extraction. Its purpose is not simply to crop particles from
+    micrographs, but to produce a clean, geometrically consistent dataset of paired
+    particle views.
+
+    Good parameter choices at this stage are important because errors in box size,
+    contrast, normalization, CTF handling, or micrograph-coordinate matching can
+    propagate into all later tilted-pair analyses.
+
+    For biological users, the most important point is that the protocol defines the
+    working paired-particle dataset. The quality and consistency of this output
+    will strongly influence the reliability of any downstream interpretation based
+    on tilted and untilted views.
+    """
     _label = 'extract particle pairs'
 
     def __init__(self, **kwargs):
@@ -158,7 +474,7 @@ class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):
                            'phase flip is not recommended.')
         form.addParam('doNormalize', BooleanParam, default=True,
                       label='Normalize (Recommended)',
-                      help='It subtract a ramp in the gray values and '
+                      help='It subtracts a ramp in the gray values and '
                            'normalizes so that in the background there is 0 '
                            'mean and standard deviation 1.')
         form.addParam('normType', EnumParam,

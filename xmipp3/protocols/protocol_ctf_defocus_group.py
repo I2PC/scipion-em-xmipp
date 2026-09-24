@@ -47,6 +47,153 @@ class XmippProtCTFDefocusGroup(ProtProcessParticles):
     The output is a metadata file containing 
      a list of defocus values that delimite 
     each defocus group.
+
+    AI Generated:
+
+    # Defocus Group (XmippProtCTFDefocusGroup) — User Manual
+
+    ## Overview
+
+    The Defocus Group protocol divides a set of particles into groups according
+    to their defocus values. Its main purpose is to organize particles into
+    subsets whose CTF behavior is sufficiently similar that they can be
+    treated together in later analyses.
+
+    In practical cryo-EM workflows, defocus grouping is often used when one
+    wants to study or process particles while accounting for variations in
+    imaging conditions across the dataset. Since the CTF depends strongly on
+    defocus, particles acquired at different defocus values may not be
+    equivalent from the point of view of image formation. Grouping them helps
+    preserve a better balance between experimental realism and computational
+    simplicity.
+
+    For a biological user, this protocol is not a data-cleaning step but a way
+    of structuring the dataset. It is especially useful when downstream methods
+    benefit from dividing particles into CTF-homogeneous subsets.
+
+    ## Inputs and General Workflow
+
+    The protocol requires a **set of particles with associated CTF information**.
+    In particular, each particle must carry CTF metadata, since the grouping is
+    based on defocus.
+
+    The protocol examines the defocus values of the particles, sorts them, and
+    then separates them into groups such that particles within the same group
+    have sufficiently similar CTF behavior. The output is a set of defocus
+    groups, each defined by a minimum and maximum defocus value and the number
+    of particles assigned to that interval.
+
+    Although the CTF is a multidimensional function, this protocol uses
+    primarily the **defocus U** value to create the groups. In that sense, it
+    is a simplified, one-dimensional grouping strategy.
+
+    ## Why Defocus Grouping Matters
+
+    The contrast transfer function changes with defocus, and this affects how
+    structural information is represented in the images. If particles with very
+    different defocus values are pooled together indiscriminately, their CTF
+    modulation may differ enough to complicate averaging, classification, or
+    interpretation.
+
+    Defocus grouping addresses this by creating subsets of particles whose CTFs
+    are close enough to be considered similar for practical purposes.
+    Biologically, this does not change the underlying structure of the sample,
+    but it improves the consistency of how that structure is represented in
+    the images.
+
+    This can be useful in workflows that model or compensate for CTF effects
+    at the group level rather than for each particle independently.
+
+    ## Grouping Criterion
+
+    The key parameter in this protocol is the **error for grouping**. This
+    parameter controls how different two defocus values are allowed to be
+    before the particles are assigned to different groups.
+
+    The criterion is based on the frequency at which the phase difference
+    between the CTFs reaches approximately 90 degrees. If the difference
+    between two defocus values would cause their CTF phases to diverge too
+    strongly, the protocol places them in separate groups.
+
+    Conceptually, this means that the grouping is not based on an arbitrary
+    numerical defocus interval, but on a physically meaningful estimate of
+    when two CTFs become too different.
+
+    ## Interpreting the Grouping Parameter
+
+    The grouping parameter determines how finely the dataset is divided.
+
+    Smaller grouping tolerance leads to broader acceptance of defocus variation
+    within a group, and therefore to fewer, larger groups. Larger grouping
+    strictness creates more groups, each containing particles with more similar
+    defocus values.
+
+    From a practical perspective, there is a trade-off. If the groups are too
+    broad, important CTF differences may be ignored. If they are too narrow,
+    the dataset may become fragmented into many small groups, which can be
+    inconvenient or statistically weak for downstream processing.
+
+    In most biological workflows, the right choice depends on dataset size and
+    the intended downstream use. Large datasets can often tolerate finer
+    grouping, whereas smaller datasets may require more conservative grouping
+    to keep enough particles per group.
+
+    ## Simplifications and Limitations
+
+    This protocol groups particles mainly according to **defocus U**, so it
+    does not fully represent all possible differences in CTF shape. In
+    particular, astigmatism and other CTF parameters are not the main drivers
+    of the grouping, even though they may still influence image formation.
+
+    This simplification is often acceptable when defocus is the dominant source
+    of CTF variation, but users should keep in mind that it is an approximation.
+    For datasets with strong astigmatism or unusually heterogeneous imaging
+    conditions, the groups may not capture all meaningful differences.
+
+    Therefore, the protocol should be understood as a practical and physically
+    motivated grouping tool, not as a complete description of CTF heterogeneity.
+
+    ## Outputs and Their Interpretation
+
+    The protocol produces a **set of defocus groups**. Each group corresponds
+    to a defocus interval and contains information such as:
+    * the minimum defocus in the group
+    * the maximum defocus in the group
+    * the number of particles assigned to that group
+
+    This output can be used to inspect how defocus is distributed across the
+    dataset and to organize downstream analysis accordingly.
+
+    Biologically, the groups do not correspond to different structural states,
+    but to different imaging conditions. Their meaning is therefore technical
+    rather than conformational.
+
+    ## Practical Recommendations
+
+    This protocol is most useful when downstream methods benefit from handling
+    particles in CTF-similar subsets. It can also be valuable as an exploratory
+    tool to understand the distribution of defocus values in a dataset.
+
+    A good practice is to inspect the number and size of the resulting groups.
+    If the protocol generates too many very small groups, the grouping may be
+    too strict. If it generates only a few very broad groups, the grouping may
+    be too permissive.
+
+    Users should also remember that defocus grouping is not a substitute for
+    proper CTF estimation or quality control. It assumes that the CTF metadata
+    attached to the particles are already reliable.
+
+    ## Final Perspective
+
+    The Defocus Group protocol provides a practical way to partition a particle
+    dataset according to the similarity of CTF conditions. By organizing
+    particles into defocus-consistent subsets, it helps downstream analyses
+    account for one of the main experimental sources of variation in cryo-EM
+    imaging.
+
+    For most biological users, it should be seen as a dataset organization tool
+    that improves CTF consistency at the group level, rather than as a
+    filtering or correction procedure.
     """
     _label = 'defocus group'
     

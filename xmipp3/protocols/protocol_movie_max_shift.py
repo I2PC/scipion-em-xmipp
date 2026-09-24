@@ -31,7 +31,7 @@ import numpy as np
 import copy
 
 from pyworkflow import VERSION_3_0
-from pyworkflow import UPDATED
+from pyworkflow import UPDATED, PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
@@ -63,9 +63,225 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                                                 above are met.
             - *by frame or movie*: Rejects movies if one of the conditions
                                              above are met.
+
+    AI Generated
+
+    ## Overview
+
+    The Movie Maxshift protocol automatically separates aligned movies according
+    to the amount of motion estimated during movie alignment.
+
+    During cryo-EM movie acquisition, particles and ice may move because of
+    beam-induced motion, mechanical instabilities, charging, or other acquisition
+    effects. Movie-alignment protocols estimate this motion as a sequence of shifts
+    between frames. If a movie shows excessive motion, it may produce a blurred or
+    unreliable averaged micrograph even after alignment.
+
+    This protocol evaluates the alignment shifts already stored in a set of aligned
+    movies. It can reject movies based on large jumps between consecutive frames,
+    large total accumulated motion across the whole movie, or a combination of both
+    criteria.
+
+    The output consists of accepted and discarded movie sets. When associated
+    micrographs are available from the previous movie-alignment protocol, the
+    protocol also produces accepted and discarded micrograph sets.
+
+    ## Inputs and General Workflow
+
+    The main input is a set of previously aligned movies.
+
+    The protocol does not perform movie alignment itself. Instead, it reads the
+    shift trajectory already associated with each movie. For each movie, it
+    computes motion statistics from the X and Y shifts and applies the selected
+    rejection rule.
+
+    Movies that satisfy the selected motion-quality criteria are placed in the
+    accepted output set. Movies that exceed the selected thresholds are placed in
+    the discarded output set.
+
+    If the input aligned movies are associated with output micrographs from the
+    previous alignment protocol, those micrographs are also separated into accepted
+    and discarded sets using the same movie decisions.
+
+    ## Input Movies
+
+    The **Input movies** parameter must point to a set of aligned movies.
+
+    This is required because the protocol evaluates the shifts estimated during
+    movie alignment. If the movies do not contain alignment information, the
+    protocol cannot compute frame-to-frame motion or total movie travel.
+
+    Typical inputs are movie sets produced by movie-alignment protocols such as
+    FlexAlign, MotionCorr-like workflows, or other Scipion-compatible alignment
+    steps.
+
+    ## Rejection Type
+
+    The **Rejection type** parameter defines how the protocol decides whether a
+    movie should be discarded.
+
+    There are four possible criteria:
+
+    **By frame** rejects movies if the maximum displacement between two consecutive
+    frames is larger than the selected frame-shift threshold.
+
+    **By whole movie** rejects movies if the total accumulated trajectory length
+    over the full movie is larger than the selected movie-shift threshold.
+
+    **By frame and movie** rejects movies only if both conditions are met: the movie
+    has a large frame-to-frame jump and a large total displacement.
+
+    **By frame or movie** rejects movies if either condition is met. This is the
+    most conservative option and is the default behavior.
+
+    The best choice depends on how strict the user wants the quality-control step
+    to be. The “or” criterion removes any movie that violates either motion limit,
+    whereas the “and” criterion removes only movies that are problematic by both
+    measures.
+
+    ## Maximum Frame Shift
+
+    The **Max. frame shift** parameter defines the largest allowed displacement
+    between consecutive frames.
+
+    The protocol computes the difference between the X and Y shifts of consecutive
+    frames and converts this displacement into angstroms using the movie sampling
+    rate. If the largest frame-to-frame displacement exceeds the threshold, the
+    movie satisfies the frame-rejection condition.
+
+    Large frame-to-frame jumps may indicate unstable alignment, sudden specimen
+    movement, stage instability, charging events, or problematic frames. Such jumps
+    can be especially damaging because they may not be well corrected by smooth
+    motion models.
+
+    This threshold is used when the rejection type includes the frame criterion.
+
+    ## Maximum Movie Shift
+
+    The **Max. movie shift** parameter defines the largest allowed total travel
+    across the movie.
+
+    The protocol computes the distance between consecutive points of the shift
+    trajectory and sums these distances along the movie. This gives the total path
+    length traveled by the aligned frames, expressed in angstroms.
+
+    A movie may have no single extreme jump but still show a large accumulated
+    motion. Such movies may be less reliable because the specimen has moved
+    substantially during exposure.
+
+    This threshold is used when the rejection type includes the whole-movie
+    criterion.
+
+    ## Frame-to-Frame Motion Versus Total Motion
+
+    The two rejection criteria capture different types of problems.
+
+    Frame-to-frame motion detects sudden jumps. A movie with one abrupt movement
+    may be rejected even if its total motion is not very large.
+
+    Total movie motion detects accumulated drift. A movie may move gradually and
+    smoothly, but if the accumulated travel is very large, the final correction may
+    still be less reliable.
+
+    Using both criteria gives a more complete assessment of movie behavior. The
+    default “by frame or movie” option is strict because it discards movies that
+    fail either test.
+
+    ## Accepted Movies
+
+    The **outputMovies** set contains the movies that pass the selected motion
+    criteria.
+
+    These movies keep their original alignment information. They can be used for
+    downstream processing or for generating accepted micrographs when available.
+
+    The accepted set should be understood as the subset whose estimated motion is
+    within the user-defined limits.
+
+    ## Discarded Movies
+
+    The **outputMoviesDiscarded** set contains movies that exceed the selected
+    motion thresholds.
+
+    A discarded movie is not necessarily completely unusable, but it has motion
+    behavior that the user decided to consider risky. Users may inspect discarded
+    movies to decide whether the thresholds are too strict or whether the discarded
+    movies show real acquisition problems.
+
+    This output is useful for troubleshooting, quality-control reports, and
+    understanding how much data is lost because of excessive motion.
+
+    ## Associated Micrograph Outputs
+
+    If the input movies come from a previous protocol that also produced
+    micrographs, Movie Maxshift can separate those micrographs into accepted and
+    discarded sets using the same movie decisions.
+
+    Depending on the previous protocol, these may be regular averaged micrographs
+    or dose-weighted micrographs.
+
+    This is useful because downstream processing often continues from
+    micrographs rather than movies. By propagating the movie-level decision to the
+    micrographs, the protocol allows the user to continue the workflow only with
+    motion-acceptable micrographs.
+
+    If no associated micrograph set is found, the protocol still produces the
+    movie outputs, but no micrograph outputs are created.
+
+    ## Streaming Behavior
+
+    The protocol supports streaming input.
+
+    As new aligned movies appear, their shifts are evaluated and the accepted and
+    discarded outputs are updated. The output sets remain open while the input
+    stream is open and are closed when all movies have been processed.
+
+    This makes the protocol useful for online quality control during data
+    acquisition or automated processing.
+
+    ## Practical Recommendations
+
+    Use this protocol after movie alignment, not before. It requires alignment
+    shifts stored in the input movies.
+
+    Start with the default rejection type, **by frame or movie**, if you want a
+    conservative quality-control filter.
+
+    Use **by frame** when you mainly want to detect abrupt jumps between frames.
+
+    Use **by whole movie** when you mainly want to detect large accumulated drift.
+
+    Use **by frame and movie** when you want a more permissive rule that discards
+    only movies with both sudden jumps and large total travel.
+
+    Inspect a subset of discarded movies and their corresponding micrographs. This
+    helps determine whether the thresholds are appropriate for the dataset.
+
+    Be careful with very strict thresholds. They may remove useful data,
+    especially in datasets with strong but well-corrected beam-induced motion.
+
+    Remember that this protocol evaluates the magnitude of estimated motion. It
+    does not directly evaluate CTF quality, particle quality, ice contamination, or
+    final reconstruction performance.
+
+    ## Final Perspective
+
+    Movie Maxshift is a movie-alignment quality-control protocol. It uses the
+    motion trajectory estimated during alignment to identify movies with excessive
+    frame-to-frame jumps or excessive accumulated drift.
+
+    For biological users and facility workflows, this provides a simple and
+    interpretable way to remove movies that may compromise downstream processing.
+    It is especially useful in automated pipelines, where problematic movies should
+    be detected and separated before CTF estimation, particle picking, and
+    reconstruction.
+
+    The protocol is most effective when thresholds are chosen in relation to the
+    expected motion behavior of the dataset and when accepted/discarded results are
+    checked visually during workflow setup.
     """
     _label = 'movie maxshift'
-    _devStatus = UPDATED
+    _devStatus = PROD
     _lastUpdateVersion = VERSION_3_0
     _possibleOutputs = {OUTPUT_MICS: SetOfMicrographs,
                         OUTPUT_MICS_DW: SetOfMicrographs,
@@ -106,13 +322,13 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                            ' - *by frame or movie*: Rejects movies if one of '
                                     'the conditions above are met.')
 
-        form.addParam('maxFrameShift', params.FloatParam, default=5,
+        form.addParam('maxFrameShift', params.FloatParam, default=10,
                        label='Max. frame shift (A)',
                        condition='rejType==%s or rejType==%s or rejType==%s'
                                   % (self.REJ_FRAME, self.REJ_AND, self.REJ_OR),
                        help='Maximum drift between consecutive frames '
                             'to evaluate the frame condition.')
-        form.addParam('maxMovieShift', params.FloatParam, default=15,
+        form.addParam('maxMovieShift', params.FloatParam, default=45,
                        label='Max. movie shift (A)',
                        condition='rejType==%s or rejType==%s or rejType==%s'
                                   % (self.REJ_MOVIE, self.REJ_AND, self.REJ_OR),
@@ -234,24 +450,30 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             # initialize the criteria values
             rejectedByMovie = False
             rejectedByFrame = False
+
             if any(shiftListX) or any(shiftListY):
                 # we use np.arrays to use np.diff()
                 shiftArrayX = np.asarray(shiftListX)
                 shiftArrayY = np.asarray(shiftListY)
 
                 evalBoth = self.rejType==self.REJ_AND or self.rejType==self.REJ_OR
-                if self.rejType == self.REJ_MOVIE or evalBoth:
-                    rangeX = np.max(shiftArrayX) - np.min(shiftArrayX)
-                    rangeY = np.max(shiftArrayY) - np.min(shiftArrayY)
-                    rangeM = max(rangeX, rangeY) * sampling
-                    rejectedByMovie = rangeM > self.maxMovieShift.get()
 
+                # --- Evaluation for accumulated displacement ---
+                if self.rejType == self.REJ_MOVIE or evalBoth:
+                    deltaX = np.diff(shiftArrayX)
+                    deltaY = np.diff(shiftArrayY)
+                    # Magnitude for each step
+                    stepDistances = np.sqrt(deltaX ** 2 + deltaY ** 2)
+                    # Total sum of the displacement
+                    totalPath = np.sum(stepDistances) * sampling
+                    rejectedByMovie = totalPath > self.maxMovieShift.get()
+
+                # --- Evaluation by maximum displacement between frames ---
                 if self.rejType == self.REJ_FRAME or evalBoth:
-                    frameShiftX = np.abs(np.diff(shiftArrayX))
-                    frameShiftY = np.abs(np.diff(shiftArrayY))
-                    maxShiftX = np.max(frameShiftX)
-                    maxShiftY = np.max(frameShiftY)
-                    maxShiftM = max(maxShiftX, maxShiftY) * sampling
+                    frameShiftX = np.diff(shiftArrayX)
+                    frameShiftY = np.diff(shiftArrayY)
+                    frameShifts = np.sqrt(frameShiftX ** 2 + frameShiftY ** 2)
+                    maxShiftM = np.max(frameShifts) * sampling
                     rejectedByFrame = maxShiftM > self.maxFrameShift.get()
 
                 if self.rejType == self.REJ_AND:

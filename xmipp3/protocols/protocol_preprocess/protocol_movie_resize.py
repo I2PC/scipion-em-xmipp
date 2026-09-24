@@ -46,6 +46,216 @@ RESIZE_FACTOR = 2
 class XmippProtMovieResize(ProtProcessMovies):
     """
     Resize a set of movies. Only downsampling is allowed.
+
+    AI Generated
+
+    ## Overview
+
+    The Movie Resize protocol downsamples a set of cryo-EM movies.
+
+    Movies can be very large, and many early processing or quality-control steps do
+    not require the original full pixel size. Downsampling movies reduces file
+    size, memory use, and computational cost. It can also prepare movies for
+    workflows that expect a specific sampling rate or image dimension.
+
+    This protocol resizes each movie in Fourier space and produces a new set of
+    movies with updated sampling rate metadata.
+
+    Only downsampling is allowed. The protocol does not support increasing movie
+    dimensions or decreasing the sampling rate.
+
+    ## Inputs and General Workflow
+
+    The input is a set of movies.
+
+    For each movie, the protocol computes the new movie dimensions and output
+    sampling rate according to the selected resize option. It then runs
+    `xmipp_image_resize` on the movie stack, preserving the number of frames while
+    changing the X and Y image size.
+
+    The output movies are written as MRC movie stacks with names such as:
+
+    `movie_000001_resize.mrcs`
+
+    The protocol supports streaming. As new movies arrive in the input set, they
+    are resized and appended to the output movie set.
+
+    ## Input Movies
+
+    The **Input movies** parameter defines the movie set to be resized.
+
+    All movies are expected to share the dimensions and sampling rate stored in the
+    input movie set. The protocol uses those values to compute the output size and
+    sampling rate.
+
+    The input movies are not modified. The protocol writes new resized movie files.
+
+    ## Resize Option
+
+    The **Resize option** parameter defines how the downsampling is specified.
+
+    There are three options:
+
+    **Sampling Rate**: the user provides the desired output sampling rate.
+
+    **Dimensions**: the user provides the desired output image size in pixels.
+
+    **Factor**: the user provides a downsampling factor.
+
+    In all cases, the protocol computes a new X and Y dimension and keeps the same
+    number of movie frames.
+
+    ## Resize by Sampling Rate
+
+    When **Sampling Rate** is selected, the user provides the desired output
+    sampling rate in angstroms per pixel.
+
+    The requested sampling rate must be larger than the original sampling rate,
+    because only downsampling is allowed.
+
+    The protocol computes the downsampling factor as:
+
+    \[
+    \text{factor} =
+    \frac{\text{new sampling rate}}{\text{original sampling rate}}
+    \]
+
+    and then computes the new image dimension from that factor.
+
+    This option is useful when the user wants the output movies to match a specific
+    physical pixel size.
+
+    ## Resize by Dimensions
+
+    When **Dimensions** is selected, the user provides the desired output image
+    size in pixels.
+
+    The new dimension must be smaller than or equal to the original movie
+    dimension, because only downsampling is allowed.
+
+    The protocol computes the new sampling rate from the ratio between the
+    original and new dimensions.
+
+    This option is useful when a downstream workflow requires a specific movie
+    width and height.
+
+    ## Resize by Factor
+
+    When **Factor** is selected, the user provides the downsampling factor.
+
+    The factor must be greater than or equal to 1. A factor of 2 halves the image
+    dimensions and doubles the sampling rate. A factor of 4 reduces the dimensions
+    by four and multiplies the sampling rate by four.
+
+    This option is useful when the user wants a simple integer or numerical
+    downsampling ratio.
+
+    ## Fourier Resize
+
+    The protocol uses Fourier resizing.
+
+    For each movie, it calls `xmipp_image_resize` with the Fourier option and the
+    new X, Y, and frame dimensions. The number of frames is kept unchanged.
+
+    Fourier resizing is appropriate for downsampling because it changes the spatial
+    sampling while preserving the frequency-domain interpretation of the movie
+    data.
+
+    ## Output Movies
+
+    The main output is **outputMovies**.
+
+    This output is a new Scipion movie set containing the resized movies. Each
+    output movie:
+
+    - keeps the same object identifier as the corresponding input movie;
+    - points to the resized `.mrcs` file;
+    - copies the acquisition information;
+    - stores the updated sampling rate;
+    - keeps the same frame range as the input movie set.
+
+    The output set can be used in downstream movie-processing workflows.
+
+    ## Streaming Behavior
+
+    The protocol supports streaming input.
+
+    As new movies appear in the input set, the protocol inserts processing steps
+    for them. Each movie is resized independently. When a movie has been processed,
+    it is appended to the output movie set.
+
+    The output set remains open while the input stream is open. When the input
+    stream closes and all movies have been processed, the output stream is closed.
+
+    This makes the protocol suitable for online processing workflows where movies
+    arrive progressively during data acquisition.
+
+    ## Summary Information
+
+    The protocol summary reports the number of input movies, their original size,
+    the number of output movies, and the resized output size.
+
+    This allows the user to quickly verify that the expected downsampling was
+    performed.
+
+    ## Validation Rules
+
+    The protocol validates that only downsampling is requested.
+
+    For **Factor**, the factor must be greater than or equal to 1.
+
+    For **Dimensions**, the requested new dimension must not be larger than the
+    input movie dimension.
+
+    For **Sampling Rate**, the requested sampling rate must be larger than the
+    original sampling rate.
+
+    If these conditions are not met, the protocol reports an error.
+
+    ## Interpreting the Result
+
+    The resized movies should be interpreted as downsampled versions of the input
+    movies.
+
+    The protocol does not align, dose-weight, correct motion, estimate CTF, or
+    change the number of frames. It only changes the spatial sampling of each movie.
+
+    Downsampling reduces high-resolution information. This is often acceptable for
+    early quality-control or low-resolution processing, but it may not be
+    appropriate if the full-resolution movie information is needed later.
+
+    ## Practical Recommendations
+
+    Use this protocol to reduce movie size and accelerate early processing.
+
+    Choose resizing by sampling rate when the output should match a target pixel
+    size.
+
+    Choose resizing by dimensions when a downstream protocol expects a specific
+    image size.
+
+    Choose resizing by factor for simple downsampling ratios.
+
+    Do not use downsampled movies for final high-resolution workflows unless the
+    chosen sampling rate still supports the target resolution.
+
+    Keep the original movies available if later full-resolution processing may be
+    needed.
+
+    In streaming workflows, use the output movie set as the downsampled stream for
+    downstream protocols.
+
+    ## Final Perspective
+
+    Movie Resize is a movie-preprocessing protocol for spatial downsampling.
+
+    For biological users, its value is that it creates smaller and faster-to-process
+    movie stacks while preserving movie metadata such as acquisition information,
+    frame range, and updated sampling rate.
+
+    The protocol is useful for reducing computational cost and preparing movies for
+    early processing, but it should be used with awareness that downsampling limits
+    the highest resolution that can be recovered from the resized data.
     """
     _label = 'movie resize'
     _lastUpdateVersion = VERSION_1_2

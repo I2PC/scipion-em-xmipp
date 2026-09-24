@@ -41,6 +41,261 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
     Estimate the orientation of a rotational axis and symmetrize.
     The user should know the order of the axis (two-fold, three-fold, ...)
     If this is unknown you may try several and see the most consistent results.
+
+    AI Generated
+
+    ## Overview
+
+    The Rotational Symmetry protocol estimates the orientation of a rotational
+    symmetry axis in a 3D volume and then symmetrizes the volume according to that
+    axis.
+
+    Many cryo-EM structures have rotational symmetry, such as two-fold, three-fold,
+    or higher-order axes. If the symmetry order is known, this protocol can search
+    for the axis orientation that best explains the symmetry present in the map.
+    After the axis has been estimated, the protocol rotates the volume into the
+    corresponding orientation and applies cyclic symmetrization.
+
+    The protocol is useful when the user knows the expected order of the symmetry
+    axis but does not know its exact orientation in the volume.
+
+    The main output is a symmetrized volume. The protocol also outputs the
+    estimated rotational and tilt angles of the symmetry axis.
+
+    ## Inputs and General Workflow
+
+    The input is a single 3D volume.
+
+    The user provides the expected rotational symmetry order and chooses how the
+    axis orientation should be searched. The search can be global, local, or a
+    combination of global and local.
+
+    The protocol first copies the input volume to a working file. It then searches
+    for the symmetry axis using the selected mode. Once the best axis orientation
+    has been found, the volume is rotated according to the estimated angles and
+    symmetrized with the selected cyclic order.
+
+    Finally, the symmetrized volume is registered as the output volume, and the
+    estimated axis angles are stored as additional outputs.
+
+    ## Input Volume
+
+    The **Input volume** parameter defines the map in which the rotational symmetry
+    axis will be searched.
+
+    The volume should already be reasonably centered and should contain the
+    structure whose symmetry is being analyzed. Strong miscentering, artifacts,
+    large background regions, or severe asymmetry may make the symmetry-axis
+    estimation less reliable.
+
+    The protocol does not refine the reconstruction. It works only on the provided
+    map and produces a symmetrized version of it.
+
+    ## Symmetry Order
+
+    The **Symmetry order** parameter defines the order of the rotational symmetry
+    axis.
+
+    For example:
+
+    - 2 means a two-fold rotational axis;
+    - 3 means a three-fold rotational axis;
+    - 4 means a four-fold rotational axis.
+
+    The user is expected to know or hypothesize this order before running the
+    protocol. If the order is unknown, the user can try several possible values and
+    compare which results are most consistent with the map and with the biological
+    structure.
+
+    Using an incorrect symmetry order may produce an artificially symmetrized
+    volume and can obscure real asymmetric features.
+
+    ## Search Mode
+
+    The **Search mode** parameter controls how the orientation of the symmetry axis
+    is estimated.
+
+    There are three options:
+
+    **Global** performs a coarse search over the specified rotational and tilt
+    angle ranges.
+
+    **Local** starts from user-provided initial rotational and tilt angles and
+    refines the axis orientation locally.
+
+    **Global+Local** first performs a global coarse search and then refines the
+    best result locally. This is the default and usually the safest option when the
+    axis orientation is not known.
+
+    The search mode should be chosen according to how much the user already knows
+    about the axis orientation.
+
+    ## Global Search
+
+    In global search mode, the protocol scans a range of possible symmetry-axis
+    orientations.
+
+    The user defines the minimum, maximum, and step values for:
+
+    - rotational angle;
+    - tilt angle.
+
+    The protocol evaluates possible axis orientations over this grid and writes
+    the best result to an intermediate metadata file.
+
+    Global search is useful when the symmetry axis could be anywhere in the volume.
+    However, the accuracy of the initial result depends on the angular step size. A
+    smaller step gives a finer search but increases computation time.
+
+    ## Local Search
+
+    In local search mode, the user provides an initial estimate of the symmetry
+    axis orientation.
+
+    The parameters are:
+
+    - **Initial rotational angle**;
+    - **Initial tilt angle**.
+
+    The protocol then performs a local refinement around this starting orientation.
+
+    Local search is useful when the user already has a good approximate axis
+    orientation, for example from previous analysis, visual inspection, or a
+    related map. It is faster than a full global search but can fail if the initial
+    orientation is too far from the correct axis.
+
+    ## Global+Local Search
+
+    In Global+Local mode, the protocol first performs a coarse global search and
+    then refines the best candidate with a local search.
+
+    This mode combines the robustness of global exploration with the accuracy of
+    local refinement. It is recommended when the symmetry order is known but the
+    axis orientation is not known precisely.
+
+    The global step reduces the risk of starting the local refinement from a poor
+    orientation.
+
+    ## Rotational Angle Range
+
+    The **Rotational angle** parameters define the angular range explored during
+    global or Global+Local search.
+
+    The parameters are:
+
+    - minimum rotational angle;
+    - maximum rotational angle;
+    - rotational step.
+
+    All values are expressed in degrees.
+
+    A broad range such as 0 to 360 degrees explores the full rotational space. A
+    smaller range can be used when the approximate direction is already known.
+
+    ## Tilt Angle Range
+
+    The **Tilt angle** parameters define the tilt range explored during global or
+    Global+Local search.
+
+    In this convention, tilt = 0 degrees corresponds to a top axis, while tilt = 90
+    degrees corresponds to a side axis.
+
+    The parameters are:
+
+    - minimum tilt angle;
+    - maximum tilt angle;
+    - tilt step.
+
+    As with the rotational range, smaller steps give a finer search but increase
+    computation time.
+
+    ## Symmetrization Step
+
+    After estimating the symmetry-axis orientation, the protocol symmetrizes the
+    volume.
+
+    It first rotates the volume using the estimated Euler orientation of the
+    symmetry axis. It then applies cyclic symmetry of the selected order.
+
+    For example, if the symmetry order is 3, the protocol applies C3
+    symmetrization. If the order is 4, it applies C4 symmetrization.
+
+    The result is a new volume in which density has been averaged according to the
+    estimated rotational symmetry.
+
+    ## Output Volume
+
+    The main output is **outputVolume**.
+
+    This volume is the symmetrized version of the input map. It is written as
+    `volume_symmetrized.mrc` and keeps the sampling rate and metadata copied from
+    the input volume.
+
+    The original input volume is not modified.
+
+    The output can be used for visualization, further processing, or comparison
+    with the unsymmetrized input map.
+
+    ## Estimated Symmetry-Axis Angles
+
+    The protocol also outputs two scalar values:
+
+    - **rotSym**, the estimated rotational angle of the symmetry axis;
+    - **tiltSym**, the estimated tilt angle of the symmetry axis.
+
+    These values describe the orientation of the detected symmetry axis in degrees.
+
+    They are also shown in the protocol summary, helping the user document the
+    axis orientation found by the search.
+
+    ## Interpreting the Result
+
+    The symmetrized output should be interpreted carefully.
+
+    If the symmetry order and axis are correct, symmetrization can improve the
+    apparent signal by averaging equivalent density. It can make symmetric features
+    clearer and reduce asymmetric noise.
+
+    However, if the symmetry order is wrong, if the axis is incorrectly estimated,
+    or if the biological structure is only approximately symmetric, the output may
+    contain artificial density or may erase real asymmetric features.
+
+    The symmetrized volume should therefore be compared with the original input
+    map.
+
+    ## Practical Recommendations
+
+    Use this protocol when the expected rotational symmetry order is known.
+
+    Use **Global+Local** search when the axis orientation is unknown. Use **Local**
+    search only when a reliable approximate orientation is already available.
+
+    Start with moderate angular steps for global search. If the result is
+    promising, repeat with a finer search or use local refinement.
+
+    Try different symmetry orders if the correct order is uncertain, but interpret
+    the results biologically rather than selecting only the visually sharpest map.
+
+    Always compare the symmetrized volume with the original volume to check
+    whether real asymmetric features have been lost.
+
+    Do not use this protocol as evidence that a structure truly has a given
+    symmetry. It is a tool for estimating and applying a hypothesized rotational
+    symmetry.
+
+    ## Final Perspective
+
+    Rotational Symmetry is a volume-processing protocol for detecting the
+    orientation of a known-order rotational axis and applying the corresponding
+    cyclic symmetrization.
+
+    For biological users, it is useful when a map is expected to contain rotational
+    symmetry but the axis is not aligned with the standard coordinate axes.
+
+    The protocol provides both a symmetrized map and the estimated axis angles,
+    making it useful for reorientation, symmetry validation, visualization, and
+    preparation of maps for downstream workflows that assume a particular symmetry
+    axis.
     """
     _label = 'rotational symmetry'
     _version = pyworkflow.VERSION_1_1

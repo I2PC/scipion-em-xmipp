@@ -38,9 +38,283 @@ from pyworkflow import UPDATED, PROD
 
 class XmippProtReconstructFourier(ProtReconstruct3D):
     """    
-    Reconstruct a volume using Xmipp_reconstruct_fourier from a given set of particles.
+    Reconstruct a volume using Xmipp_reconstruct_fourier from a given set of
+    particles.
     The alignment parameters will be converted to a Xmipp xmd file
     and used as direction projections to reconstruct.
+
+    AI Generated
+
+    ## Overview
+
+    The Reconstruct Fourier protocol reconstructs a 3D volume from a set of
+    particles with known projection-alignment parameters.
+
+    In single-particle cryo-EM, each particle image is interpreted as a 2D
+    projection of the 3D structure from a particular direction. Once particles
+    have projection angles and shifts, those images can be inserted into Fourier
+    space and combined to produce a 3D map. This protocol performs that
+    reconstruction using Xmipp Fourier reconstruction programs.
+
+    The protocol can optionally correct the CTF before reconstruction, impose
+    symmetry, limit the maximum resolution used in Fourier space, and generate
+    independent half-map reconstructions for resolution assessment.
+
+    The main output is a reconstructed volume. If half maps are requested, the
+    output volume also keeps the two half-map file names associated with it.
+
+    ## Inputs and General Workflow
+
+    The main input is a set of particles with projection-alignment information.
+
+    The protocol first converts the input particle set into Xmipp metadata format.
+    If CTF information is available and CTF correction is requested, the particles
+    are corrected by Wiener filtering before reconstruction. Otherwise, the
+    original particle metadata are used directly.
+
+    If the **Use halves** option is enabled, the corrected particle metadata are
+    split into two random subsets. Each subset is reconstructed independently, and
+    the two resulting half maps are averaged to produce the final output volume.
+
+    If halves are not requested, all particles are reconstructed together into a
+    single output volume.
+
+    Finally, the reconstructed volume is registered in Scipion with the sampling
+    rate of the input particles.
+
+    ## Input Particles
+
+    The **Input particles** parameter should point to a SetOfParticles with 3D
+    projection alignment.
+
+    This is essential. The protocol does not determine particle orientations from
+    scratch. It assumes that each particle already has projection angles and shifts
+    from a previous refinement, angular assignment, classification, or imported
+    alignment.
+
+    If the angular assignments are poor, the reconstruction will also be poor. The
+    output volume should therefore be interpreted in relation to the quality of the
+    input particle alignment.
+
+    The input particles should also have a consistent box size, sampling rate, and
+    contrast convention.
+
+    ## Symmetry Group
+
+    The **Symmetry group** parameter defines the symmetry imposed during
+    reconstruction.
+
+    For asymmetric particles, use **c1**. If the particle has known point-group
+    symmetry, the corresponding Xmipp symmetry group can be specified.
+
+    Correct symmetry can improve the reconstruction by averaging equivalent views
+    and increasing signal. However, incorrect symmetry can introduce artificial
+    density, blur asymmetric features, or obscure real biological differences.
+
+    Users should impose symmetry only when it is justified by prior structural or
+    biological knowledge.
+
+    ## Maximum Resolution
+
+    The **Maximum resolution** parameter limits the highest-resolution information
+    used during Fourier reconstruction.
+
+    The value is given in angstroms. If it is set to -1, the protocol uses the
+    Nyquist limit.
+
+    Limiting the maximum resolution can be useful when the input particles or
+    angular assignments are not reliable at high frequency. It can reduce the
+    influence of high-frequency noise during reconstruction.
+
+    Internally, the angstrom value is converted to a digital frequency using the
+    particle sampling rate. The reconstruction program then uses this value as the
+    maximum Fourier-space resolution.
+
+    ## CTF Correction
+
+    The **Correct CTF** option applies Wiener-filter CTF correction to the
+    particles before reconstruction, when CTF metadata are available.
+
+    CTF correction compensates for the contrast transfer effects introduced by the
+    microscope. This can make the reconstructed map more physically meaningful,
+    especially when particles come from different defocus values.
+
+    If the particles already have CTF information, the protocol writes a corrected
+    stack and metadata file before reconstruction. If the particles are marked as
+    phase-flipped, this information is passed to the CTF-correction step.
+
+    If CTF information is not present, the protocol simply reconstructs from the
+    input particle metadata without CTF correction.
+
+    ## Correct CTF Envelope
+
+    The **Correct CTF envelope** option is available when CTF correction is
+    enabled.
+
+    The CTF envelope models additional attenuation of signal at higher spatial
+    frequencies. Correcting it may be useful when the envelope has been estimated
+    reliably.
+
+    This option should be used with caution. If the envelope estimate is poor,
+    correcting it may amplify noise or introduce artifacts.
+
+    Most users should enable it only when they understand how the envelope was
+    estimated and why it is appropriate for the dataset.
+
+    ## Use Halves
+
+    The **Use halves** option creates two independent reconstructions from two
+    random subsets of the input particles.
+
+    This is useful for resolution estimation and validation. Half maps are commonly
+    used to compute FSC curves and to assess reproducibility of structural signal.
+
+    When this option is enabled, the protocol:
+
+    1. splits the particle metadata into two subsets;
+    2. reconstructs half map 1;
+    3. reconstructs half map 2;
+    4. averages the two half maps to create the final output volume;
+    5. stores the half-map file names in the output volume metadata.
+
+    The final averaged map can be used for visualization or downstream processing,
+    while the half maps can be used for validation.
+
+    ## Padding Factor
+
+    The **Padding factor** parameters control padding of the input projections and
+    the reconstructed volume during Fourier reconstruction.
+
+    There are two values:
+
+    - **Projection padding**;
+    - **Volume padding**.
+
+    Padding can improve interpolation accuracy in Fourier space, but it increases
+    memory use and computation time. Larger padding values may therefore be more
+    accurate but slower and more demanding.
+
+    The default values are a practical compromise for many datasets. Advanced users
+    may adjust them when reconstruction accuracy or performance needs to be tuned.
+
+    ## Approximative Version
+
+    The **Approximative version** option enables a faster approximation of the
+    Fourier reconstruction algorithm.
+
+    When enabled, reconstruction is faster but may be slightly less precise than
+    the full version.
+
+    This option is useful for routine reconstruction or exploratory workflows where
+    speed is important. If maximum numerical precision is required, advanced users
+    may disable the approximation.
+
+    The approximative version is not compatible with the legacy CPU implementation.
+
+    ## Legacy Version
+
+    The **Legacy version** option uses the original CPU implementation of the
+    Fourier reconstruction algorithm.
+
+    This option is provided mainly for backward compatibility. In routine use, it
+    should usually not be necessary.
+
+    The legacy version cannot be used with GPU execution and is not compatible with
+    the approximative version.
+
+    ## Extra Parameters
+
+    The **Extra parameters** field allows advanced users to pass additional options
+    to the underlying Xmipp Fourier reconstruction program.
+
+    This can be useful for specialized workflows that require options not exposed
+    directly in the graphical form.
+
+    Most users should leave this field empty. Incorrect extra parameters may cause
+    the reconstruction to fail or produce unexpected results.
+
+    ## GPU and CPU Execution
+
+    The protocol supports GPU and CPU execution.
+
+    GPU execution is enabled by default and uses the Xmipp CUDA Fourier
+    reconstruction program when available. GPU execution is usually faster and is
+    recommended for large datasets.
+
+    If GPU execution is requested but the required Xmipp CUDA programs are not
+    available, the protocol reports a validation error.
+
+    The CPU version has limitations. In particular, the non-GPU version can use
+    only a single thread; MPI should be used instead for CPU parallelism. The
+    legacy version is CPU-only.
+
+    ## Output Volume
+
+    The main output is **outputVolume**.
+
+    This volume is reconstructed from the input particles and registered with the
+    same sampling rate as the input particle set.
+
+    If **Use halves** is disabled, the output volume is reconstructed directly from
+    all particles.
+
+    If **Use halves** is enabled, the output volume is the average of the two
+    independent half-map reconstructions, and the half-map file names are stored
+    with the output volume.
+
+    The output volume can be used for visualization, post-processing, FSC
+    calculation, refinement assessment, or as input to other 3D analysis
+    protocols.
+
+    ## Interpreting the Reconstruction
+
+    The reconstructed volume reflects the input particles and their assigned
+    orientations.
+
+    Good input alignments, appropriate CTF handling, and correct symmetry usually
+    lead to a more interpretable map. Poor alignments, incorrect CTF metadata,
+    wrong symmetry, or inconsistent particle populations can produce blurred or
+    distorted density.
+
+    If half maps are generated, they should be used for validation. Agreement
+    between half maps provides evidence that the reconstructed features are
+    supported reproducibly by independent subsets of particles.
+
+    ## Practical Recommendations
+
+    Use this protocol after particles have reliable 3D projection alignment.
+
+    Enable CTF correction when reliable CTF metadata are available and the
+    downstream reconstruction strategy requires corrected particles.
+
+    Use half maps when you plan to estimate resolution or validate the map with
+    FSC.
+
+    Use symmetry only when it is biologically justified.
+
+    Keep the default padding values unless memory use, speed, or reconstruction
+    accuracy requires adjustment.
+
+    Use GPU execution when available. It is usually the practical choice for large
+    particle sets.
+
+    Inspect the output volume and, when generated, compare the two half maps. Poor
+    agreement between half maps may indicate overfitting, bad alignments,
+    heterogeneity, or insufficient particle quality.
+
+    ## Final Perspective
+
+    Reconstruct Fourier is a core 3D reconstruction protocol. It converts a set of
+    projection-aligned particles into a 3D map using Fourier-space reconstruction.
+
+    For biological users, the key point is that the protocol does not solve the
+    orientation problem; it uses orientations that already exist in the input
+    particles. Therefore, the quality of the reconstructed volume depends strongly
+    on the quality of the previous alignment or refinement step.
+
+    Used with reliable particle alignments, appropriate CTF correction, and
+    well-chosen symmetry, the protocol produces maps and half maps that can support
+    subsequent validation, post-processing, interpretation, and refinement.
     """
     _label = 'reconstruct fourier'
     _devStatus = PROD

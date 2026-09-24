@@ -34,7 +34,123 @@ from xmipp3.convert import createItemMatrix, writeSetOfParticles, getImageLocati
 
 
 class XmippProtCL2DAlign(ProtAlign2D):
-    """ Aligns a set of particles using the CL2D algorithm, allowing for an optional reference 2D image. Accurate alignment is critical for improving class averages and achieving high-quality 2D classifications."""
+    """ Aligns a set of particles using the CL2D algorithm, allowing for an
+    optional reference 2D image. Accurate alignment is critical for improving
+    class averages and achieving high-quality 2D classifications.
+
+    AI Generated:
+
+    This protocol uses the CL2D engine to perform a pure alignment of a
+    particle stack in 2D. Conceptually, it runs CL2D in the special case of
+    one reference class (--nref 1), so the algorithm iteratively estimates for
+    every particle the in-plane rotation/shift that best matches a reference,
+    and it stores those alignment parameters back into the particle
+    transformations. The practical point is simple: you end up with a new
+    particle set that has a consistent 2D alignment (in-plane rotation + x/y
+    shifts), plus an average image that summarizes the aligned data. This can
+    be used as a preprocessing step before 2D classification, for diagnostics,
+    or for making a clean average quickly.
+
+    What you provide as input
+
+    You provide a SetOfParticles as input. The protocol writes them into an
+    Xmipp metadata file (images.xmd) with alignment cleared (ALIGN_NONE) so
+    that CL2D starts from the raw images without inheriting previous alignment
+    information. The alignment results are then written by CL2D into that
+    metadata and later imported back into Scipion objects.
+
+    Reference strategy: with or without a user-provided reference
+
+    The main user choice is whether to align against a specific reference
+    image or to let CL2D generate one internally.
+
+    If Use a Reference Image is enabled, you provide one reference image
+    through the referenceImage parameter. The protocol accepts three types: a
+    single Particle, a SetOfAverages, or a SetOfClasses2D. Internally it always
+    resolves this to one image: if you provide a set (averages or classes), it
+    simply takes the first item (for classes it takes the representative of the
+    first class). This resolved image is passed to CL2D as
+    --ref0 <imageLocation>, and all particles will be aligned to it. This
+    mode is useful when you already have a trusted target view (for example, a
+    good 2D average from a previous run) and you want the whole dataset
+    brought into that reference frame.
+
+    If Use a Reference Image is disabled, the protocol does not use --ref0.
+    Instead it runs CL2D with --nref0 1, meaning CL2D will build an initial
+    reference automatically (in practice, by averaging subsets according to
+    its internal initialization). This is the usual “no-prior” mode when you
+    just want a stable alignment without deciding in advance what the reference
+    should look like.
+
+    A key practical implication: using a reference can make alignment outcomes
+    more reproducible and can force alignment toward a particular view, while
+    “no reference” tends to produce a reference that reflects the dominant
+    signal in your data (which can be good, but may also drift if your dataset
+    has mixed views or strong junk).
+
+    How strong the alignment is allowed to be
+
+    Two parameters control the alignment search.
+
+    Maximum shift (px) sets the translation search window. Biologically, this
+    should match your expectation of miscentering: if particles are already
+    well centered, small values are fine and faster; if extraction/centering is
+    rough, too small a maximum shift will prevent correct alignment and you may
+    see blurred averages.
+
+    Number of iterations controls how many refinement rounds CL2D will do. More
+    iterations give the algorithm more opportunity to converge, particularly
+    when SNR is low, but the cost increases and over-refinement of noise is
+    possible if the dataset is very heterogeneous or dominated by junk.
+
+    What the protocol runs internally
+
+    After converting input to Xmipp metadata (images.xmd), the protocol runs:
+
+    xmipp_classify_CL2D -i images.xmd --odir <extraDir> --nref 1 --iter <N>
+    --maxShift <S> ...
+
+    with either --ref0 <reference> (reference mode) or --nref0 1 (no-reference
+    mode). Even though the executable name says “classify”, here it is being
+    used as an alignment tool because the classification is restricted to a
+    single class; the only thing that changes across iterations is the estimated
+    alignment of each particle to that class/reference.
+
+    Outputs you get
+
+    You get two outputs:
+
+    outputAverage: a single Particle pointing to the CL2D-produced class
+    average (internally it is taken from level_00/class_classes.stk, image
+    index 1). This is the aligned average of your dataset with respect to the
+    chosen (or internally generated) reference.
+
+    outputParticles: a new SetOfParticles where each particle has a 2D
+    transform imported from the CL2D metadata via createItemMatrix(...,
+    align=ALIGN_2D). The set is explicitly marked as ALIGN_2D, and the protocol
+    also sets the representative of the particle set to the produced average,
+    which is handy for quick visualization.
+
+    Validation checks (what can make it fail)
+
+    The main hard requirement is that MPI must be > 1 (the protocol enforces
+    this because it expects CL2D to run in parallel).
+
+    If you use a reference image, the protocol checks that the reference and
+    input particles have exactly the same dimensions. If sizes differ, the
+    protocol refuses to run because CL2D cannot align images of different box
+    sizes.
+
+    When this protocol is most useful in practice
+
+    In a typical workflow, this is useful when you want a quick, consistent 2D
+    alignment for: generating a clean average for reporting/diagnostics,
+    preparing particles for subsequent 2D classification (especially if your
+    next step benefits from roughly aligned inputs), or aligning a subset
+    against a known reference view to compare datasets. If you notice that
+    results are dominated by a wrong view or drift, switching between
+    “reference” and “no reference”, or tightening the maximum shift, are
+    """
     _label = 'align with cl2d'
     
     # --------------------------- DEFINE param functions -----------------------

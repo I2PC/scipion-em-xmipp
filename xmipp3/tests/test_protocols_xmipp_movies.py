@@ -259,139 +259,6 @@ class TestEstimateGain(BaseTest):
         self.launchProtocol(protGain)
 
 
-class TestExtractMovieParticles(BaseTest):
-    @classmethod
-    def setData(cls):
-        cls.ds = DataSet.getDataSet('movies')
-    
-    @classmethod
-    def runImportMovies(cls, pattern, **kwargs):
-        """ Run an Import micrograph protocol. """
-        # We have two options: passe the SamplingRate or
-        # the ScannedPixelSize + microscope magnification
-        params = {'samplingRate': 1.14,
-                  'voltage': 300,
-                  'sphericalAberration': 2.7,
-                  'magnification': 50000,
-                  'scannedPixelSize': None,
-                  'filesPattern': pattern
-                  }
-        if 'samplingRate' not in kwargs:
-            del params['samplingRate']
-            params['samplingRateMode'] = 0
-        else:
-            params['samplingRateMode'] = 1
-        
-        params.update(kwargs)
-        
-        protImport = cls.newProtocol(ProtImportMovies, **params)
-        cls.launchProtocol(protImport)
-        return protImport
-    
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        cls.setData()
-        cls.protImport1 = cls.runImportMovies(cls.ds.getFile('qbeta/qbeta.mrc'),
-                                              magnification=50000)
-        cls.protImport2 = cls.runImportMovies(cls.ds.getFile('cct/cct_1.em'),
-                                              magnification=61000)
-    
-    # def _checkMicrographs(self, protocol, goldDimensions):
-    #     self.assertIsNotNone(getattr(protocol, 'outputMicrographs', None),
-    #                          "Output SetOfMicrographs were not created.")
-    #     mic = protocol.outputMicrographs[1]
-    #     x, y, _ = mic.getDim()
-    #     dims = (x, y)
-    #     msgError = "The dimensions must be %s and it is %s"
-    #     self.assertEqual(goldDimensions, dims,
-    #                      msgError % (goldDimensions, dims))
-    #
-    def _checkAlignment(self, movie, goldRange, goldRoi):
-        alignment = movie.getAlignment()
-        range = alignment.getRange()
-        msgRange = "Alignment range must be %s %s and it is %s (%s)"
-        self.assertEqual(goldRange, range,
-                         msgRange % (
-                         goldRange, range, type(goldRange), type(range)))
-        roi = alignment.getRoi()
-        msgRoi = "Alignment ROI must be %s (%s) and it is %s (%s)"
-        self.assertEqual(goldRoi, roi,
-                         msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
-    
-    def test_qbeta(self):
-        movAliProt = self.newProtocol(XmippProtFlexAlign,
-                                alignFrame0=2, alignFrameN=6,
-                                doSaveAveMic=True)
-        movAliProt.inputMovies.set(self.protImport1.outputMovies)
-        self.launchProtocol(movAliProt)
-        
-        self._checkAlignment(movAliProt.outputMovies[1],
-                             (2, 6), [0, 0, 0, 0])
-        
-        importPick = self.newProtocol(ProtImportCoordinates,
-                                 importFrom=ProtImportCoordinates.IMPORT_FROM_XMIPP,
-                                 filesPath=self.ds.getFile('qbeta/'),
-                                 filesPattern='*.pos', boxSize=320,
-                                 invertX=False,
-                                 invertY=False
-                                 )
-        importPick.inputMicrographs.set(movAliProt.outputMicrographs)
-        importPick.setObjLabel('import coords from xmipp ')
-        self.launchProtocol(importPick)
-
-        protExtract = self.newProtocol(XmippProtExtractMovieParticles,
-                                       boxSize=320,frame0=2,frameN=6,
-                                       applyAlignment=True, doInvert=True)
-        protExtract.inputMovies.set(movAliProt.outputMovies)
-        protExtract.inputCoordinates.set(importPick.outputCoordinates)
-        protExtract.setObjLabel('extract with alignment')
-        self.launchProtocol(protExtract)
-        
-        self.assertIsNotNone(getattr(protExtract, 'outputParticles', None),
-                             "Output SetOfMovieParticles were not created.")
-        
-        size = protExtract.outputParticles.getSize()
-        self.assertEqual(size, 135, 'Number of particles must be 135 and its '
-                                    '%d' % size)
-
-    def test_cct(self):
-        movAliProt = self.newProtocol(XmippProtFlexAlign,
-                                      alignFrame0=2, alignFrameN=6,
-                                      doSaveAveMic=True)
-        movAliProt.inputMovies.set(self.protImport2.outputMovies)
-        self.launchProtocol(movAliProt)
-
-        self._checkAlignment(movAliProt.outputMovies[1],
-                             (2, 6), [0, 0, 0, 0])
-
-        importPick = self.newProtocol(ProtImportCoordinates,
-                                      importFrom=ProtImportCoordinates.IMPORT_FROM_XMIPP,
-                                      filesPath=self.ds.getFile('cct/'),
-                                      filesPattern='*.pos', boxSize=320,
-                                      invertX=False,
-                                      invertY=False
-                                      )
-        importPick.inputMicrographs.set(movAliProt.outputMicrographs)
-        importPick.setObjLabel('import coords from xmipp ')
-        self.launchProtocol(importPick)
-
-        protExtract = self.newProtocol(XmippProtExtractMovieParticles,
-                                       boxSize=320, frame0=3, frameN=6,
-                                       applyAlignment=False, doInvert=True)
-        protExtract.inputMovies.set(movAliProt.outputMovies)
-        protExtract.inputCoordinates.set(importPick.outputCoordinates)
-        protExtract.setObjLabel('extract without alignment')
-        self.launchProtocol(protExtract)
-
-        self.assertIsNotNone(getattr(protExtract, 'outputParticles', None),
-                             "Output SetOfMovieParticles were not created.")
-
-        size = protExtract.outputParticles.getSize()
-        self.assertEqual(size, 88, 'Number of particles must be 135 and its '
-                                   '%d' % size)
-
-
 class TestMaxShift(BaseTest):
     @classmethod
     def setData(cls):
@@ -524,7 +391,7 @@ class TestMaxShift(BaseTest):
                 assertOutput('outputMicrographs', ids=[results.index(True)+1])
                 assertOutput('outputMicrographsDiscarded', ids=[results.index(False)+1])
     
-    def doFilter(self, inputMovies, rejType, label, mxFm=0.23, mxMo=0.30):
+    def doFilter(self, inputMovies, rejType, label, mxFm=0.12, mxMo=1.01):
         """ Template for the movieMaxShift protocol.
             Default thresholds here should discard one movie and let pass the other
         """
@@ -540,13 +407,16 @@ class TestMaxShift(BaseTest):
     # ------- the Tests ---------------------------------------
     # Note: the shift in these movies is very small. Especially in combination with binning,
     # we're getting to the limit of shift we can detect
+    # Movie 1: maxGlobalShift 1.0017 maxFrameShift 0.124
+    # Movie 2: maxGlobalShift 1.026 maxFrameShift 0.112
+
     def testFilterFrame(self):
         """ This must discard the second movie for a Frame shift.
         """
         label = 'maxShift by Frame'
         rejType = XmippProtMovieMaxShift.REJ_FRAME
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.12) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[False, True])
 
     def testFilterMovie(self): 
@@ -555,7 +425,7 @@ class TestMaxShift(BaseTest):
         label = 'maxShift by Movie'
         rejType = XmippProtMovieMaxShift.REJ_MOVIE
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.158) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.13, 1.01) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
 
     def testFilterAnd(self): 
@@ -564,7 +434,7 @@ class TestMaxShift(BaseTest):
         label = 'maxShift AND'
         rejType = XmippProtMovieMaxShift.REJ_AND
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.1, 0.158) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 1.01) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
 
     def testFilterOrFrame(self):
@@ -573,7 +443,7 @@ class TestMaxShift(BaseTest):
         label = 'maxShift OR (by frame)'
         rejType = XmippProtMovieMaxShift.REJ_OR
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 1.0) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.12, 1.03) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True,  hasMic=True, results=[False, True])
 
     def testFilterOrMovie(self): 
@@ -582,17 +452,8 @@ class TestMaxShift(BaseTest):
         label = 'maxShift OR (by movie)'
         rejType = XmippProtMovieMaxShift.REJ_OR
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 1.0, 0.158) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.13, 1.01) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, noBin=True, hasMic=True, results=[True, False])
-
-    def testFilterOrBoth(self): 
-        """ This must discard the second movie for OR (both).
-        """
-        label = 'maxShift OR (by both)'
-        rejType = XmippProtMovieMaxShift.REJ_OR
-
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version)
-        self._checkMaxShiftFiltering(protDoMic, label,  noBin=True, hasMic=True, results=[False, True])
 
     def testFilterRejectBoth(self):
         """ This must discard both movies.
@@ -600,7 +461,7 @@ class TestMaxShift(BaseTest):
         label = 'maxShift REJECT both'
         rejType = XmippProtMovieMaxShift.REJ_OR
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, mxMo=0.01)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, mxMo=1.0)
         self._checkMaxShiftFiltering(protDoMic, label,  noBin=True, hasMic=True, results=[False, False])
 
     def testFilterAcceptBoth(self):

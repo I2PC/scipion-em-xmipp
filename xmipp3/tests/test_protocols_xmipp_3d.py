@@ -1508,9 +1508,9 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getFirstItem().getDim(), (64, 64, 1),
                          (MSG_WRONG_DIM, "particles"))
         self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
-        self.assertEqual(protShiftParticlesCenterOfMass.shiftX.get(), 32.0, (MSG_WRONG_SHIFT, "x"))
-        self.assertEqual(protShiftParticlesCenterOfMass.shiftY.get(), 32.0, (MSG_WRONG_SHIFT, "y"))
-        self.assertEqual(protShiftParticlesCenterOfMass.shiftZ.get(), 32.0, (MSG_WRONG_SHIFT, "z"))
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftX.get(), 0.0, (MSG_WRONG_SHIFT, "x"))
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftY.get(), 0.0, (MSG_WRONG_SHIFT, "y"))
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftZ.get(), 0.0, (MSG_WRONG_SHIFT, "z"))
 
         protShiftVolPart = self.newProtocol(XmippProtShiftVolume,
                                             inputVol=protImportVol.outputVolume,
@@ -1894,7 +1894,8 @@ class TestXmippReconstructSignificant(TestXmippBase):
                              MSG_WRONG_GALLERY)
         # Reconstruct significant (default values)
         protReconstructSignificant = self.newProtocol(XmippProtReconstructSignificant,
-                                                      inputSet=protCreateGallery.outputReprojections)
+                                                      inputSet=protCreateGallery.outputReprojections,
+                                                      iter=5)
         self.launchProtocol(protReconstructSignificant)
         self.assertIsNotNone(protReconstructSignificant.getFiles(),
                              MSG_WRONG_RECONSTRUCTION)
@@ -1904,7 +1905,8 @@ class TestXmippReconstructSignificant(TestXmippBase):
         protReconstructSignificant2 = self.newProtocol(XmippProtReconstructSignificant,
                                                        inputSet=protCreateGallery.outputReprojections,
                                                        thereisRefVolume=True,
-                                                       refVolume=protCreatePhantom1.outputVolume)
+                                                       refVolume=protCreatePhantom1.outputVolume,
+                                                       iter=5)
         self.launchProtocol(protReconstructSignificant2)
         self.assertIsNotNone(protReconstructSignificant2.getFiles(),
                              MSG_WRONG_RECONSTRUCTION)

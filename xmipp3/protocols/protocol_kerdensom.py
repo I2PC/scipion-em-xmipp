@@ -39,8 +39,241 @@ from xmipp3.convert import (writeSetOfParticles, readSetOfClasses2D,
 
 
 class KendersomBaseClassify(ProtClassify2D):
-    """ Class to create a base template for Kendersom and rotational spectra protocols that share
-    a common structure. 
+    """ Class to create a base template for Kendersom and rotational spectra
+    protocols that share a common structure.
+
+    AI Generated
+
+    ## Overview
+
+    The Kerdensom protocol performs 2D classification of a set of aligned particle
+    images using a self-organizing map approach.
+
+    The method is based on Kohonen self-organizing maps combined with fuzzy
+    clustering ideas. Instead of producing only a small number of independent and
+    clearly separated classes, Kerdensom organizes the classes on a two-dimensional
+    map. Neighboring classes in this map are expected to represent similar image
+    patterns.
+
+    This makes the protocol especially useful when the dataset contains gradual or
+    continuous variability. For example, particles may differ by small changes in
+    orientation, conformation, flexibility, occupancy, or image quality. In such
+    cases, the transition between classes may be smooth rather than sharply
+    separated.
+
+    The input particles must already be aligned. Kerdensom is not intended to solve
+    the initial alignment problem. Its purpose is to organize already aligned images
+    into a structured set of representative 2D classes.
+
+    ## Inputs and General Workflow
+
+    The main input is a set of aligned particles. The protocol converts these
+    images into a vector representation, optionally applying a mask to focus the
+    classification on the relevant region of the particle.
+
+    The Kerdensom algorithm then classifies these vectors into a two-dimensional
+    self-organizing map. The size of this map is defined by the user through the X
+    and Y dimensions. Each position in the map corresponds to one class.
+
+    After the classification, the protocol converts the resulting class
+    representatives back into images and computes an average image for each class.
+    The final output is a Scipion set of 2D classes.
+
+    ## Input Images
+
+    The **Input images** parameter should point to a SetOfParticles with alignment
+    information.
+
+    This requirement is important. Since the method compares image intensities
+    across particles, the particles should already be in a common orientation or
+    reference frame. If the particles are not aligned, the classification may
+    separate images mainly by rotations or shifts rather than by meaningful
+    biological or structural differences.
+
+    Typical inputs include particles after a 2D alignment step, particles extracted
+    from a homogeneous subset, or images that have already been centered and
+    oriented by a previous protocol.
+
+    ## Use of a Mask
+
+    The protocol can optionally use a **mask** during vectorization and
+    classification.
+
+    A mask restricts the comparison to the region of the image that is most
+    relevant for classification. This is useful when the particle occupies only
+    part of the box or when the background contains noise, carbon edges,
+    neighboring particles, contaminants, or other features that should not drive
+    the classification.
+
+    Using a mask can help the self-organizing map focus on the biological signal.
+    However, the mask should be chosen carefully. If it is too tight, it may remove
+    important parts of the particle. If it is too broad, background noise may still
+    influence the classification.
+
+    For most particle datasets, a soft mask around the particle region is usually
+    preferable to a very sharp or overly restrictive mask.
+
+    ## Dimension of the Map
+
+    The **Dimension of the map** defines the size of the self-organizing map. The
+    two parameters, X and Y, determine the number of class positions.
+
+    For example, a 7 by 7 map produces 49 class positions.
+
+    This does not only define the number of classes. It also defines their
+    organization. Classes that are close to each other on the map should correspond
+    to similar particle appearances, while classes that are far apart should
+    represent more different image patterns.
+
+    A small map gives a compact summary of the dataset, but may merge distinct
+    states or views. A large map gives a more detailed description of variability,
+    but may produce classes with fewer particles and noisier averages.
+
+    The best map size depends on the number of particles, the heterogeneity of the
+    dataset, and the goal of the analysis. For exploratory analysis, a moderate map
+    size is usually a good starting point.
+
+    ## Regularization Factors
+
+    Kerdensom uses a deterministic annealing strategy controlled by two
+    regularization factors:
+
+    - the **Initial regularization factor**;
+    - the **Final regularization factor**.
+
+    The algorithm starts with a high regularization value and gradually decreases
+    it. At the beginning, stronger regularization encourages a smoother and more
+    organized map. As the regularization decreases, the classes are allowed to
+    adapt more closely to the data.
+
+    The initial regularization factor must be larger than the final regularization
+    factor. This is checked by the protocol.
+
+    If the resulting map is too smooth, different classes may look too similar. In
+    that case, lower regularization values may help the classes adapt more strongly
+    to the data.
+
+    If the resulting map is poorly organized, with neighboring classes not showing
+    a clear relationship, higher regularization values may help preserve the
+    self-organizing structure.
+
+    These parameters are advanced options. In routine use, the default values are a
+    reasonable starting point.
+
+    ## Regularization Steps
+
+    The **Regularization steps** parameter controls how many steps are used to
+    decrease the regularization factor from its initial value to its final value.
+
+    More steps provide a more gradual annealing process, which may help the map
+    organize more smoothly. Fewer steps make the transition faster and may reduce
+    computation time.
+
+    In most cases, the default value should be sufficient. Advanced users may
+    increase the number of steps when working with complex datasets or when the map
+    organization appears unstable.
+
+    ## Additional Parameters
+
+    The **Additional parameters** field allows advanced users to pass extra options
+    directly to the underlying Xmipp Kerdensom program.
+
+    This option is intended for users who already know the command-line behavior of
+    the underlying method. Most users should leave this field empty.
+
+    Changing additional parameters without understanding their effect may make the
+    classification harder to interpret or less reproducible.
+
+    ## Class Representatives and Class Averages
+
+    After classification, the protocol produces class representatives and class
+    averages.
+
+    The representative images describe the positions of the self-organizing map.
+    The class averages are computed from the experimental particles assigned to
+    each class.
+
+    If a class has particles assigned to it, the protocol computes the average of
+    those particles. If a class is empty, the protocol creates an empty average
+    image with the correct dimensions.
+
+    The class average is often the most useful image for biological
+    interpretation, because it shows the average experimental signal of particles
+    assigned to that class.
+
+    ## Output Classes
+
+    The main output is a **SetOfClasses2D**.
+
+    Each class contains the particles assigned to that position in the
+    self-organizing map, together with an average image. The number of possible
+    classes is determined by the X and Y dimensions of the map, although some
+    classes may be empty if no particles are assigned to them.
+
+    The output classes can be inspected in Scipion to evaluate the organization of
+    the map, the quality of the averages, and the distribution of particles across
+    classes.
+
+    A well-organized Kerdensom result often shows gradual transitions between
+    neighboring classes. This can be very useful for identifying continuous
+    structural variability or for selecting subsets of particles corresponding to
+    particular appearances.
+
+    ## Interpreting the Self-Organizing Map
+
+    The two-dimensional layout of the output should be interpreted as part of the
+    result.
+
+    Neighboring classes are expected to be similar. For example, one region of the
+    map may contain particles with one appearance, while another region may contain
+    a different appearance, with intermediate classes forming a gradual transition.
+
+    This makes Kerdensom different from ordinary classification methods where class
+    numbers are often arbitrary and unordered. Here, the spatial organization of
+    the classes is meaningful.
+
+    However, the map should not be overinterpreted. The position of a class in the
+    map is a data-driven organization, not a direct physical coordinate. It should
+    be used as a guide to explore variability, not as definitive proof of a
+    continuous biological pathway.
+
+    ## Practical Recommendations
+
+    Use Kerdensom with particles that have already been aligned. If the particles
+    are not aligned, run an alignment or 2D classification protocol first.
+
+    Start with a moderate map size, such as the default 7 by 7 map. Increase the
+    map size if the dataset is large and contains rich variability. Decrease it if
+    the dataset is small or if many classes become empty or too noisy.
+
+    Use a mask when the particle occupies a well-defined region and the background
+    may interfere with classification. Make sure the mask includes the relevant
+    particle density.
+
+    Keep the default regularization values at first. If the map is too smooth,
+    reduce the regularization factors. If the map is poorly organized, increase
+    them.
+
+    Inspect both the class averages and the map layout. The most informative
+    result is not only whether individual classes look good, but whether
+    neighboring classes show a coherent organization.
+
+    Be cautious with very small classes. They may represent rare states, but they
+    may also reflect noise, contaminants, or unstable classification.
+
+    ## Final Perspective
+
+    Kerdensom is a 2D classification protocol designed to organize aligned
+    particles into a structured self-organizing map.
+
+    For biological users, its main value is exploratory. It can reveal gradual
+    changes in particle appearance, help identify heterogeneous subsets, and
+    provide a visual organization of the dataset that is richer than a simple list
+    of independent classes.
+
+    The protocol is most useful when the particles are already reasonably aligned
+    and when the user wants to study continuous or subtle variability rather than
+    only obtain a few sharply separated 2D classes.
     """
     
     #--------------------------- DEFINE param functions --------------------------------------------

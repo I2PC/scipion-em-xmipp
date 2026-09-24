@@ -86,9 +86,460 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
        The algorithm reports the cross correlation (global alignment) or cost (local) function
        per defocus group, so that we can see which was the percentile of each particle in its
        defocus group. You may want to perform iterations one by one, and remove from one
-       iteration to the next, those particles that worse fit the model."""
+       iteration to the next, those particles that worse fit the model.
+
+       AI Generated
+
+        ## Overview
+
+        The Highres protocol performs iterative high-resolution 3D refinement of a
+        particle set against one or two reference volumes.
+
+        This protocol is intended for the later stages of single-particle cryo-EM
+        processing, when the user already has a reasonable initial volume and wants to
+        improve the angular assignment, reconstruction, and map quality. It assumes a
+        mostly homogeneous particle population, although it can reduce the influence of
+        poorly fitting particles through several weighting schemes.
+
+        The protocol works iteratively. In each iteration, it prepares particles and
+        references at a sampling rate appropriate for the current estimated resolution,
+        assigns particle orientations, weights and qualifies particles, reconstructs
+        two half maps, post-processes the result, evaluates the FSC, and prepares the
+        next reference.
+
+        The main outputs are a refined volume with associated half maps and a particle
+        set containing the final projection-alignment parameters and Xmipp quality
+        attributes.
+
+        ## Inputs and General Workflow
+
+        The protocol requires full-size particle images and, unless continuing from a
+        previous run, one or more initial volumes.
+
+        The particle images should be provided at the finest available sampling rate.
+        The reference volumes and masks do not need to be at the same sampling rate as
+        the particles; the protocol rescales images, volumes, and masks internally
+        according to the resolution reached in each iteration.
+
+        The workflow is organized into iterations. Each iteration typically performs:
+
+        - global, local, stochastic, automatic, or no angular assignment;
+        - particle weighting;
+        - particle qualification by alignment quality;
+        - reconstruction of two half maps;
+        - post-processing of the reconstructed volume;
+        - FSC-based resolution evaluation;
+        - cleanup of intermediate files when requested.
+
+        This iterative structure allows the refinement to move progressively from
+        coarser to finer information.
+
+        ## Continue from a Previous Run
+
+        The **Continue from a previous run?** option allows the protocol to resume from
+        an earlier Highres run.
+
+        When this option is enabled, the user selects a previous run, and several
+        parameters and intermediate files are reused. This is useful when the user
+        wants to extend the number of iterations, change later-stage settings, or
+        continue after a partial workflow.
+
+        If new input particles are not provided, the particle metadata from the
+        previous run are reused. If new particles are provided, they are converted and
+        used in the continuation.
+
+        This option is useful for iterative refinement strategies where the user
+        examines one run and then continues with adjusted parameters.
+
+        ## Full-Size Images
+
+        The **Full-size Images** parameter defines the particle set to be refined.
+
+        The particles should be at full resolution, meaning the finest sampling rate
+        available for the project. The protocol may internally downsample them during
+        early iterations, but it keeps the full-size images as the original source.
+
+        The particle set should be reasonably clean and should correspond to a mostly
+        homogeneous structural population. The protocol is not designed to solve
+        strong heterogeneity by itself.
+
+        If the input particles already contain useful quality values from a previous
+        run, these may be carried into the metadata in some continuation or
+        no-alignment workflows.
+
+        ## Initial Volumes
+
+        The **Initial volumes** parameter provides the starting reference for the
+        refinement.
+
+        The input can be a single volume or a set of two volumes. If two volumes are
+        provided, they are used as the initial references for the two half-map
+        branches.
+
+        If no initial volume is provided and the input particles already have angular
+        assignments, the protocol can generate an initial reconstruction from the
+        particles using Fourier reconstruction.
+
+        The initial volume does not need to be high resolution, but it should be a
+        reasonable representation of the particle. A poor or incorrect starting volume
+        can lead to incorrect angular assignments and poor convergence.
+
+        ## Particle Radius
+
+        The **Radius of particle** parameter defines the radius, in pixels, of a
+        spherical mask covering the particle in the input images.
+
+        If the value is -1 or otherwise not positive, the protocol uses approximately
+        half the particle box size.
+
+        This radius is used in several internal operations, such as masking particles
+        and references. It should cover the particle density while excluding as much
+        empty background as possible.
+
+        For elongated or non-spherical particles, the spherical mask is only an
+        approximation, but it is still useful for limiting the region used during
+        alignment and reconstruction.
+
+        ## Symmetry Group
+
+        The **Symmetry group** parameter defines the symmetry imposed during angular
+        assignment and reconstruction.
+
+        Use **c1** when no symmetry is present. If the particle has a known symmetry,
+        the appropriate Xmipp symmetry group can be provided.
+
+        Correct symmetry can improve signal and stability. Incorrect symmetry can
+        produce misleading maps by forcing together non-equivalent density. Symmetry
+        should therefore be imposed only when justified by the biological structure.
+
+        ## Correct CTF Envelope
+
+        The **Correct CTF envelope** option controls whether the CTF envelope is
+        corrected during refinement.
+
+        Envelope correction can be useful when the envelope has been estimated
+        reliably. If the envelope is not reliable, applying this correction may amplify
+        noise or introduce artifacts.
+
+        This option should be used cautiously and according to the quality of the CTF
+        metadata.
+
+        ## Remove Intermediate Files
+
+        The **Remove intermediate files** option helps save disk space by deleting
+        temporary files that are no longer needed.
+
+        High-resolution refinement can generate many intermediate files, especially
+        projection galleries, angle metadata, temporary stacks, and iteration
+        directories. Removing them can substantially reduce storage requirements.
+
+        Users who need to debug the protocol or inspect intermediate results may want
+        to disable this option temporarily.
+
+        ## Next Reference Preparation
+
+        At the end of each iteration, the protocol prepares the reference volumes for
+        the next iteration.
+
+        This preparation can include FSC-based filtering, additional low-pass
+        filtering, spherical or cylindrical masking, positivity enforcement, user
+        masks, dropout, and optional custom commands.
+
+        The goal is to prevent the next angular assignment from using unreliable
+        high-frequency information or noisy regions of the map.
+
+        ## Low-Pass Filter for the Next Reference
+
+        The **Low pass filter?** option controls whether the reference for the next
+        iteration is filtered according to the current estimated resolution.
+
+        The maximum frequency used for the next reference is based on the current
+        resolution plus the **Resolution offset**. A positive offset makes the
+        reference more conservative by using less high-resolution information. A
+        negative offset makes the process more aggressive by allowing more information.
+
+        This mechanism helps reduce overfitting during refinement.
+
+        ## FSC Criterion and Resolution Offset
+
+        The **FSC criterion** defines how the protocol estimates resolution from the
+        FSC between the two half maps. Common values are 0.143 and 0.5.
+
+        The **Resolution offset** modifies the low-pass filtering applied to the next
+        reference. For example, if the current resolution is 8 Å and the offset is 2 Å,
+        the next reference may be filtered around 10 Å.
+
+        A conservative offset can make refinement more stable, especially in early
+        iterations. A more aggressive setting may converge faster but can increase the
+        risk of overfitting or instability.
+
+        ## Masks for the Next Reference
+
+        The protocol can apply several types of masking to the next reference.
+
+        The **Spherical mask?** option applies a spherical mask based on the particle
+        radius. If helical symmetry post-processing is enabled, a cylindrical mask may
+        be used instead.
+
+        The **Mask** parameter allows the user to provide an external volume mask.
+        Smooth masks are recommended, and values should range from 0 to 1.
+
+        Masks should include the relevant particle density while excluding solvent and
+        irrelevant regions. Overly tight masks can remove real density, whereas overly
+        loose masks may allow noise to influence alignment.
+
+        ## Positivity and Dropout
+
+        The **Positivity?** option removes negative values from the next reference.
+        This can help stabilize refinement when negative density is not meaningful for
+        the map.
+
+        The **Dropout** parameter randomly drops voxels inside the binary mask with a
+        given probability. This is an advanced regularization option that can reduce
+        dependence on specific reference features.
+
+        Most users should keep dropout at 0 unless they have a specific reason to use
+        it.
+
+        ## Angular Assignment Modes
+
+        The **Image alignment** parameter defines how particle orientations are updated.
+
+        The available modes are:
+
+        **Global** searches over a projection gallery and is useful when orientations
+        are still uncertain.
+
+        **Local** refines orientations and other parameters around existing angular
+        assignments.
+
+        **Automatic** starts with global alignment and then switches to local alignment
+        in later iterations.
+
+        **Stochastic** performs global alignment using random subsets of images.
+
+        **No alignment** reconstructs using existing particle orientations without
+        changing them.
+
+        The appropriate mode depends on the stage of refinement. Early stages usually
+        benefit from global alignment. Later high-resolution refinement usually
+        benefits from local alignment.
+
+        ## Number of Iterations
+
+        The **Number of iterations** parameter controls how many refinement cycles are
+        performed.
+
+        For global, local, and stochastic modes, the user specifies the number of
+        iterations directly. In automatic mode, the protocol uses a predefined
+        transition strategy. In no-alignment mode, only one iteration is needed.
+
+        It is often better to run a moderate number of iterations, inspect the results,
+        and then continue from the previous run if further refinement is needed.
+
+        ## Multiresolution Approach
+
+        The **Multiresolution approach** adapts the sampling rate of the images to the
+        current estimated resolution.
+
+        In early iterations, when the map is low resolution, the protocol can work with
+        downsampled images. As the resolution improves, it moves toward finer sampling.
+
+        This reduces computational cost and helps the refinement focus on information
+        that is meaningful at the current stage.
+
+        The **Max. Target Resolution** list defines the target resolution schedule in
+        angstroms. The protocol also limits how quickly the resolution can improve
+        between iterations.
+
+        ## Angular Search Limits
+
+        The **Max. shift** parameter defines the maximum allowed particle shift as a
+        percentage of the image size.
+
+        The **Tilt angle** parameters define the minimum and maximum tilt angles used
+        during angular assignment. In this convention, 0 degrees corresponds to top
+        views and 90 degrees to side views.
+
+        Restricting tilt angles can be useful for specimens with known orientation
+        ranges, but incorrect restrictions can exclude valid views and bias the
+        reconstruction.
+
+        ## Local Alignment Options
+
+        In local alignment mode, the protocol can optimize several parameters around
+        the current particle assignment.
+
+        These include:
+
+        - shifts;
+        - scale;
+        - angles;
+        - gray-value scale and offset;
+        - defocus.
+
+        Shift and angle optimization are commonly useful. Scale, gray-value, and
+        defocus optimization are more specialized and should be used only when there is
+        a clear reason.
+
+        The local alignment also uses a Fourier padding factor, which affects
+        projection accuracy and computational cost.
+
+        ## Restrict Reconstruction Angles
+
+        The **Restrict reconstruction angles** option allows reconstruction to use only
+        particles whose assigned tilt angles fall within a selected range.
+
+        This can be useful for special cases such as helices, where side views close to
+        90 degrees may be preferred for reconstruction.
+
+        This option should be used carefully. Excluding orientations can improve a
+        specific reconstruction strategy, but it also reduces the number of particles
+        and angular coverage.
+
+        ## Particle Weights
+
+        The protocol can assign weights to particles during reconstruction.
+
+        Several weighting options are available:
+
+        **Weight by SSNR** uses signal-to-noise information.
+
+        **Weight by Continuous cost** uses the local-assignment cost.
+
+        **Weight by angular stability** downweights particles whose angular assignment
+        is unstable between iterations.
+
+        **Weight by CC percentile** weights particles according to their cross-
+        correlation percentile within their defocus group.
+
+        The **Minimum CC weight** defines the lower bound for CC-based weights.
+
+        These weights help reduce the influence of poorly fitting or unstable
+        particles without necessarily removing them completely.
+
+        ## Particle Qualification
+
+        The protocol evaluates particle quality within defocus groups.
+
+        For global alignment, the relevant score is usually cross-correlation. For
+        local alignment, the relevant score may be a cost function. The protocol
+        computes percentiles within defocus groups so that particles are compared with
+        others acquired under similar CTF conditions.
+
+        This information is stored in the output particle metadata and can be useful
+        for later particle filtering or inspection.
+
+        ## Reconstruction and Half Maps
+
+        Each iteration reconstructs two half maps from two particle subsets.
+
+        The two half maps are used to estimate FSC and monitor resolution. The final
+        average map for the iteration is produced from the two half maps.
+
+        The final output volume keeps the half-map file names associated with it, so
+        they can be used for validation or post-processing.
+
+        ## Post-Processing Options
+
+        The protocol includes several optional post-processing operations.
+
+        These include:
+
+        - applying an ad hoc mask;
+        - symmetrizing within a mask;
+        - applying helical symmetry;
+        - running a custom post-processing command;
+        - significant denoising in real space;
+        - significant denoising in Fourier space;
+        - Laplacian denoising;
+        - blind deconvolution;
+        - attenuation of undershooting;
+        - difference evaluation.
+
+        These options are advanced and should be used only when the user understands
+        their purpose. Post-processing can improve interpretability, but inappropriate
+        post-processing can also introduce misleading features.
+
+        ## Helical Symmetry Post-Processing
+
+        The protocol includes specialized options for applying helical symmetry during
+        post-processing.
+
+        The user can define a helical radius, request dihedral symmetry, and specify
+        search ranges for helical rotation and axial shift.
+
+        These options are useful only for helical specimens. They should not be enabled
+        for non-helical particles.
+
+        ## Output Volume
+
+        The main output is **outputVolume**.
+
+        This volume corresponds to the final averaged reconstruction from the last
+        iteration. It is registered with the sampling rate used in the final iteration
+        and includes links to the two half maps.
+
+        The output should be inspected together with the FSC, filtered maps, and
+        particle statistics generated during refinement.
+
+        ## Output Particles
+
+        The protocol also produces **outputParticles** when final angle metadata are
+        available.
+
+        This particle set contains the input particles updated with final projection
+        alignment parameters. The output particles may also include Xmipp attributes
+        such as shifts, angles, scale, maximum cross-correlation, percentile scores,
+        weights, angular stability, continuous-assignment cost, and related quality
+        fields.
+
+        This output is useful for later reconstruction, particle filtering, local
+        defocus refinement, or additional analysis.
+
+        ## Practical Recommendations
+
+        Use this protocol after obtaining a reasonable initial model and a reasonably
+        clean particle set.
+
+        Start with global alignment if orientations are still uncertain. Move to local
+        alignment when particles stop changing substantially between iterations.
+
+        Use automatic alignment when you want the protocol to perform this transition
+        for you.
+
+        Keep the multiresolution approach enabled for most workflows. It reduces cost
+        and helps avoid using high-frequency information too early.
+
+        Use conservative low-pass filtering for the next reference to reduce
+        overfitting.
+
+        Inspect FSC curves, filtered volumes, particle weights, and the number of used
+        and rejected particles after each iteration.
+
+        Do not rely on this protocol to solve strong heterogeneity. If the particle
+        population is mixed, use classification or subset selection before high-
+        resolution refinement.
+
+        Use post-processing options cautiously and document them clearly if the output
+        map will be interpreted biologically.
+
+        ## Final Perspective
+
+        Highres is an advanced iterative 3D refinement protocol for producing
+        high-resolution cryo-EM reconstructions from full-size particles.
+
+        For biological users, the protocol is most useful when the project has already
+        passed the initial-model and cleaning stages and the goal is to refine a mostly
+        homogeneous particle set toward a reliable final map.
+
+        The quality of the result depends on the starting reference, particle
+        homogeneity, angular-assignment strategy, CTF information, weighting choices,
+        and careful control of overfitting through half-map FSC evaluation and
+        reference filtering.
+       """
     _label = 'highres'
-    _devStatus = UPDATED
+    _devStatus = PROD
 
     _lastUpdateVersion = VERSION_1_1
     
@@ -332,6 +783,24 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         self._insertFunctionStep('cleanDirectory',iteration)
 
     #--------------------------- STEPS functions ---------------------------------------------------
+    def getNumGpus(self):
+        return len(self._stepsExecutor.getGpuList())
+
+    def getGpusList(self, separator):
+        strGpus = ""
+        for elem in self._stepsExecutor.getGpuList():
+            strGpus = strGpus + str(elem) + separator
+        return strGpus[:-1]
+
+    def setGPU(self, oneGPU=False):
+        if oneGPU:
+            gpus = self.getGpusList(",")[0]
+        else:
+            gpus = self.getGpusList(",")
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        self.info(f'Visible GPUS: {gpus}')
+        return gpus
+
     def convertInputStep(self, inputParticlesId):
         if self.alignmentMethod==self.NO_ALIGNMENT:
             writeSetOfParticles(self.inputParticles.get(),self.imgsFn, postprocessImageRow=getPreviousQuality)
@@ -510,29 +979,16 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
-                        N_GPUs = len((self.gpuList.get()).split(','))
-                        args += ' -gpusPerNode %d' % N_GPUs
+                        gpuId = self.setGPU(oneGPU=False)
+                        args += ' -gpusPerNode %d' % self.getNumGpus()
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-                    count=0
-                    GpuListCuda=''
-                    if self.useQueueForSteps() or self.useQueue():
-                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                        GpuList = GpuList.split(",")
-                        for elem in GpuList:
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            count+=1
-                    else:
-                        GpuListAux = ''
-                        for elem in self.getGpuList():
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            GpuListAux = GpuListAux+str(elem)+','
-                            count+=1
-                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                     if self.numberOfMpi.get()==1:
-                        args += " --device %s" %(GpuListCuda)
+                        gpuId = self.setGPU(oneGPU=True)
+
+                    args += " --device %s" % (gpuId.replace(',', ' '))
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
-                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.getNumGpus()+1)
                     else:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
@@ -920,24 +1376,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     # cleanPath(join(fnDirSignificant,"angles_iter001_00.xmd"))
                                     cleanPath(join(fnDirSignificant,"images_significant_iter001_00.xmd"))
                             else:
-                                count=0
-                                GpuListCuda=''
-                                if self.useQueueForSteps() or self.useQueue():
-                                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                                    GpuList = GpuList.split(",")
-                                    for elem in GpuList:
-                                        GpuListCuda = GpuListCuda+str(count)+' '
-                                        count+=1
-                                else:
-                                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-                                    GpuListAux = ''
-                                    for elem in self.getGpuList():
-                                        GpuListCuda = GpuListCuda+str(count)+' '
-                                        GpuListAux = GpuListAux+str(elem)+','
-                                        count+=1
-                                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                                gpuID = self.setGPU(oneGPU=False)
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
-                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup,self.numberOfReplicates.get(), GpuListCuda)
+                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup, self.numberOfReplicates.get(), gpuID)
                                 self.runJob(CUDA_ALIGN_SIGNIFICANT,args, numberOfMpi=1)
 
                             if exists(fnAnglesGroup):
@@ -1427,29 +1868,15 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
-                        N_GPUs = len((self.gpuList.get()).split(','))
-                        args += ' -gpusPerNode %d' % N_GPUs
+                        gpuId = self.setGPU(oneGPU=False)
+                        args += ' -gpusPerNode %d' % self.getNumGpus()
                         args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-                    count=0
-                    GpuListCuda=''
-                    if self.useQueueForSteps() or self.useQueue():
-                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                        GpuList = GpuList.split(",")
-                        for elem in GpuList:
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            count+=1
-                    else:
-                        GpuListAux = ''
-                        for elem in self.getGpuList():
-                            GpuListCuda = GpuListCuda+str(count)+' '
-                            GpuListAux = GpuListAux+str(elem)+','
-                            count+=1
-                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                     if self.numberOfMpi.get()==1:
-                        args += " --device %s" %(GpuListCuda)
+                        gpuId = self.setGPU(oneGPU=True)
+                    args += " --device %s" % (gpuId.replace(',', ' '))
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
-                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.getNumGpus()+1)
                     else:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:

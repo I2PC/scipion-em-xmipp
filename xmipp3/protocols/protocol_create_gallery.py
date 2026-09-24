@@ -41,6 +41,162 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     Create a gallery of projections from a volume.
     This gallery of projections may help to understand the images
     observed in the microscope.
+
+    AI Generated:
+
+    ## Overview
+
+    The Create Gallery protocol generates a systematic set of 2D projections
+    from a 3D volume. These projections simulate how the structure would appear
+    from different viewing directions, providing a direct link between the
+    reconstructed volume and the particle images observed in the microscope.
+
+    For biological users, this protocol is especially useful for interpreting
+    2D class averages, validating reconstructions, or gaining intuition about
+    the structural features of a macromolecule. By comparing experimental
+    images with the generated projections, one can assess whether the
+    reconstructed volume is consistent with the data and whether certain views
+    are over- or under-represented.
+
+    This type of gallery is also commonly used for visualization, teaching,
+    and figure preparation.
+
+    ## Inputs and General Workflow
+
+    The protocol requires a **3D volume** as input. From this volume, it
+    computes projections over a range of orientations defined by the user.
+
+    The angular sampling is controlled by specifying ranges for **rotational
+    (in-plane rotation)** and **tilt (out-of-plane angle)**. The protocol
+    systematically samples these angles to generate a grid of projections
+    covering the orientation space.
+
+    If symmetry is present in the structure, it can be specified so that
+    redundant views are avoided and the gallery reflects the true symmetry of
+    the particle.
+
+    The output is a set of 2D images representing projections of the volume
+    from different directions, which can be directly compared with experimental
+    particle images or class averages.
+
+    ## Angular Sampling: Exploring the Orientation Space
+
+    The most important parameters for biological interpretation are the angular
+    ranges and steps.
+
+    The **rotational angle** typically spans 0 to 360 degrees and controls
+    rotation around the projection axis. The **tilt angle** determines the
+    viewing direction, where 0 degrees corresponds to a top view and 90 degrees
+    to a side view.
+
+    The step size defines how densely the orientation space is sampled. Smaller
+    steps produce a more detailed and complete gallery but increase
+    computational cost and the number of generated images.
+
+    From a practical point of view, coarse sampling is often sufficient for e
+    xploratory analysis or quick comparisons, while finer sampling is useful
+    when trying to match specific experimental views or when preparing
+    publication-quality figures.
+
+    ## Symmetry Considerations
+
+    The symmetry group defines how orientations are reduced according to the
+    intrinsic symmetry of the structure.
+
+    For asymmetric particles, the default **c1** symmetry should be used. For
+    symmetric assemblies (for example cyclic or dihedral symmetries), specifying
+    the correct symmetry ensures that equivalent orientations are not
+    redundantly sampled.
+
+    Biologically, this is important because symmetry determines which views are
+    unique. Using the wrong symmetry may lead to misleading interpretations
+    when comparing projections to experimental data.
+
+    ## Projection Methods
+
+    The protocol offers several methods to compute projections, which mainly
+    differ in computational approach and numerical properties.
+
+    The **Fourier method** is the default and most commonly used option. It
+    computes projections using the central slice theorem in Fourier space and
+    provides a good balance between accuracy and efficiency. For most
+    biological applications, this is the recommended choice.
+
+    The **Real space method** performs projections by integrating along rays
+    through the volume. It is conceptually straightforward but generally slower.
+
+    The **Shears method** is an alternative real-space approach that can be
+    efficient in certain situations but is less commonly used in routine
+     workflows.
+
+    In most cases, users do not need to change the default method unless there
+    is a specific reason to explore numerical differences.
+
+    ## Advanced Parameters
+
+    Several advanced parameters are available, mainly affecting the
+    Fourier-based projection.
+
+    The **padding factor** controls how much the volume is expanded before
+    projection. Increasing padding can improve interpolation accuracy but also
+    increases computational cost.
+
+    The **maximum frequency** defines the highest spatial frequency considered
+    in the projection. Limiting this value can reduce noise or numerical
+    artifacts but may also remove high-resolution information.
+
+    The **interpolation method** determines how values are estimated between
+    sampled points. Higher-order interpolation (such as cubic B-spline)
+    typically produces smoother and more accurate projections.
+
+    Another parameter, **shift sigma**, introduces small random shifts in the
+    projections. While not commonly used in standard workflows, it can be
+    helpful when simulating more realistic image variability.
+
+    For most biological use cases, the default values of these parameters
+    are appropriate.
+
+    ## Outputs and Their Interpretation
+
+    The protocol produces a set of 2D images corresponding to projections of
+    the input volume. Each image is associated with a specific orientation,
+    and together they form a gallery covering the sampled angular space.
+
+    These projections can be directly compared with experimental particle
+    images or 2D class averages. Good agreement between projections and
+    experimental data supports the validity of the reconstructed volume.
+
+    From a biological perspective, the gallery helps to:
+    * Identify characteristic views of the structure
+    * Understand how structural features appear in projection
+    * Detect missing or underrepresented orientations in the data
+
+    ## Practical Recommendations
+
+    A typical use of this protocol is to generate projections after obtaining a
+    3D reconstruction and compare them visually with 2D class averages. This
+    helps verify that the reconstruction explains the observed data.
+
+    For exploratory analysis, moderate angular steps (for example 5–10 degrees)
+    are usually sufficient. For more detailed comparisons or figure
+    preparation, smaller steps may be beneficial.
+
+    If the structure has known symmetry, it is important to specify it
+    correctly to avoid redundant projections and to obtain a biologically
+    meaningful gallery.
+
+    In most cases, the default Fourier projection method with standard
+    parameters provides reliable results without further tuning.
+
+    ## Final Perspective
+
+    The Create Gallery protocol is a simple but powerful tool for connecting 3D
+    structures with their 2D experimental observations. By visualizing how a
+    volume appears from different orientations, it provides valuable intuition
+    and serves as a practical validation step in cryo-EM workflows.
+
+    For biological users, it is often one of the most direct ways to assess
+    whether a reconstruction truly reflects the underlying data.
     """
     _devStatus = PROD
 

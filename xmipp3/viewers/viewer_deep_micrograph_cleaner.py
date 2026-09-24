@@ -34,7 +34,15 @@ from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 
 from pwem import emlib
 from xmipp3.convert import getXmippAttribute
-from xmipp3.protocols.protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
+from xmipp3.protocols.protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen, NUM_THUMBNAILS
+from xmippLib import Image
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+from matplotlib.patches import Patch
+import matplotlib
+
 
 class XmippDeepMicrographViewer(ProtocolViewer):
     """         
@@ -61,10 +69,18 @@ class XmippDeepMicrographViewer(ProtocolViewer):
                            " to the threshold indicated in the box.\n"
                            "If you like the result, save the result"
                            " with the '+Coordinates' button")
-
+        form.addParam('visualizeMaskAndMic', LabelParam,
+                    label=f"Visualize {NUM_THUMBNAILS} micrographs with the mask and coords. overlayed",
+                    help="Visualize micrographs with the DeepMicrographCleaner mask "
+                         "overlayed using a color transparency and the coords stamp.\n"
+                         "The transparency and the color (blue to yellow) indicates the Deep score factor applied."
+                         f"Will be shown the first {NUM_THUMBNAILS} miccrographs."
+                         f"If aliasing arise is because the compresion of the thumbnails"
+        )
     def _getVisualizeDict(self):
         return {'visualizeCoordinates': self._visualizeCoordinates,
-                'visualizeHistogram': self._visualizeHistogram}
+                'visualizeHistogram': self._visualizeHistogram,
+                'visualizeMaskAndMic': self._visualizeMaskAndMic}
 
     def _visualizeCoordinates(self, e=None):
         views = []
@@ -119,13 +135,70 @@ class XmippDeepMicrographViewer(ProtocolViewer):
                 plotter.createSubPlot("Deep micrograph score",
                                       "Deep micrograph score",
                                       "Number of Coordinates")
-                cScores = [getXmippAttribute(coord, mdLabel).get()
-                           for coord in outCoords]
+                cScores = [getXmippAttribute(coord, mdLabel).get() for coord in outCoords]
                 plotter.plotHist(cScores, nbins=numberOfBins)
                 views.append(plotter)
             else:
                 print(" > 'outputCoordinates' don't have 'xmipp_zScoreDeepLearning2' label.")
         else:
             print(" > Output not ready yet.")
+
+        return views
+
+    def _visualizeMaskAndMic(self, e=None):
+        if not self.protocol.saveMicThumbnailWithMask.get():
+            return None
+
+        views = []
+        thumb_dir = self.protocol._getExtraPath('thumbnails')
+        thumbs = sorted([
+            os.path.join(thumb_dir, f)
+            for f in os.listdir(thumb_dir)
+            if f.lower().endswith('.png')
+        ])
+
+        if not thumbs:
+            return None
+
+        n = len(thumbs)
+        per_page = 15
+        cols = 5
+        rows = int(per_page / cols)
+
+        for page_start in range(0, n, per_page):
+            page_thumbs = thumbs[page_start:page_start + per_page]
+
+            fig = plt.figure(figsize=(cols * 5, rows * 5))
+            gs = matplotlib.gridspec.GridSpec(rows, cols, figure=fig, wspace=0.05, hspace=0.08)
+
+            axes = []
+            for i in range(rows * cols):
+                r, c = divmod(i, cols)
+                ax = fig.add_subplot(gs[r, c])
+                ax.axis('off')
+                axes.append(ax)
+
+            for i, fn in enumerate(page_thumbs):
+                img = mpimg.imread(fn)
+                axes[i].imshow(img)
+
+            for i in range(len(page_thumbs), rows * cols):
+                fig.delaxes(axes[i])
+
+            cmap = plt.get_cmap('YlGnBu')
+            norm = matplotlib.colors.Normalize(vmin=0, vmax=1)
+            sm = matplotlib.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+
+            cbar_ax = fig.add_axes([0.2, 0.05, 0.5, 0.02])
+            cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
+            cbar.set_label('Mask deep score')
+
+            try:
+                fig.canvas.manager.set_window_title(f'Thumbnails {page_start + 1}-{page_start + len(page_thumbs)}'  )
+            except AttributeError:
+                pass
+
+            views.append(fig)
 
         return views
