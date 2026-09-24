@@ -9,6 +9,7 @@ import unittest
 from pyworkflow.object import Set
 
 from xmipp3.protocols import protocol_particle_pick_automatic as auto_pick
+from xmipp3.tests.streaming_test_utils import OutputStep as _OutputStep
 
 
 class _Mic:
@@ -38,21 +39,6 @@ class _OutputCoords:
 
     def getUniqueValues(self, attr):
         return list(self.micIds)
-
-
-class _OutputStep:
-    def __init__(self):
-        self.prerequisites = []
-        self.status = None
-
-    def addPrerequisites(self, *deps):
-        self.prerequisites.extend(deps)
-
-    def isWaiting(self):
-        return True
-
-    def setStatus(self, status):
-        self.status = status
 
 
 class _InputHarness:

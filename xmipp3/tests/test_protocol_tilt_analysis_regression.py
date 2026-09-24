@@ -12,6 +12,7 @@ from unittest.mock import patch
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_tilt_analysis import XmippProtTiltAnalysis
+from xmipp3.tests.streaming_test_utils import FakeOutputSet as _FakeOutputSet
 
 
 class _FakeInputSet:
@@ -36,22 +37,6 @@ class _FakeMicrograph:
 
     def getObjId(self):
         return self._objId
-
-
-class _FakeOutputSet:
-    def __init__(self, ids=None):
-        self.ids = set(ids or [])
-        self.appended = []
-
-    def getSize(self):
-        return len(self.ids)
-
-    def getIdSet(self):
-        return set(self.ids)
-
-    def append(self, mic):
-        self.ids.add(mic.getObjId())
-        self.appended.append(mic.getObjId())
 
 
 class TestXmippTiltAnalysisRegression(BaseTest):

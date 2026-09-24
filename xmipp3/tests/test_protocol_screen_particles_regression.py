@@ -14,6 +14,8 @@ from pyworkflow.object import Float
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
+from xmipp3.tests.streaming_test_utils import LogicalOutputSetProbe, FreshOutputSetProbe
+from xmipp3.tests.streaming_test_utils import FakeOutputSet as _FakeOutputSet
 
 
 class _FakeParticle:
@@ -44,25 +46,6 @@ class _FakeInputSet:
 
     def close(self):
         self.closed = True
-
-
-class _FakeOutputSet:
-    def __init__(self, ids=None):
-        self.ids = set(ids or [])
-        self.appended = []
-
-    def getSize(self):
-        return len(self.ids)
-
-    def getIdSet(self):
-        return set(self.ids)
-
-    def append(self, particle):
-        self.ids.add(particle.getObjId())
-        self.appended.append(particle.getObjId())
-
-    def iterItems(self, orderBy='id'):
-        return iter([])
 
 
 class TestXmippScreenParticlesRegression(BaseTest):
@@ -154,7 +137,7 @@ class TestXmippScreenParticlesRegression(BaseTest):
 
         inputSet = object()
         prot = self._newProtocol()
-        logicalOutput = LogicalOutputSet()
+        logicalOutput = LogicalOutputSetProbe()
         prot.outputParticles = logicalOutput
         prot.inputParticles = SimpleNamespace(get=lambda: inputSet)
         prot._getPath = lambda baseName: '/tmp/' + baseName
@@ -164,16 +147,11 @@ class TestXmippScreenParticlesRegression(BaseTest):
             return_value=False,
         ):
             outputSet = prot._loadOutputSet(
-                FreshOutputSet,
+                FreshOutputSetProbe,
                 'outputParticles.sqlite',
             )
 
-        self.assertIs(
-            outputSet,
-            logicalOutput,
-            "Streaming particles output must reuse the logical Set when "
-            "the legacy SQLite file is absent.",
-        )
+        self.assertIs(outputSet, logicalOutput)
         self.assertEqual(1, logicalOutput.enableAppendCalls)
         self.assertEqual(1, logicalOutput.copyInfoCalls)
 
@@ -248,10 +226,10 @@ class TestXmippScreenParticlesRegression(BaseTest):
             def _getPath(self, baseName):
                 return '/tmp/' + baseName
 
-        logicalOutput = LogicalOutputSet()
+        logicalOutput = LogicalOutputSetProbe()
         outputSet, isNew = loader(
             Protocol(logicalOutput),
-            FreshOutputSet,
+            FreshOutputSetProbe,
             'outputParticles.sqlite',
             'outputParticles',
         )
@@ -263,11 +241,11 @@ class TestXmippScreenParticlesRegression(BaseTest):
         with patch('xmipp3.utils.os.path.exists', return_value=False):
             outputSet, isNew = loader(
                 Protocol(),
-                FreshOutputSet,
+                FreshOutputSetProbe,
                 'outputParticles.sqlite',
                 'missingOutput',
             )
 
         self.assertTrue(isNew)
         self.assertEqual('/tmp/outputParticles.sqlite', outputSet.filename)
-        self.assertEqual(FreshOutputSet.STREAM_OPEN, outputSet.streamState)
+        self.assertEqual(FreshOutputSetProbe.STREAM_OPEN, outputSet.streamState)

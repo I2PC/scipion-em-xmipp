@@ -10,6 +10,7 @@
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
+from xmipp3.tests.streaming_test_utils import FakeOutputSet as _FakeOutputSet
 
 
 class _FakeMovie:
@@ -25,25 +26,6 @@ class _FakeMovie:
 
     def clone(self):
         return _FakeMovie(self._objId, self._samplingRate)
-
-
-class _FakeOutputSet:
-    def __init__(self, ids=None):
-        self.ids = set(ids or [])
-        self.appended = []
-
-    def getSize(self):
-        return len(self.ids)
-
-    def getIdSet(self):
-        return set(self.ids)
-
-    def setSamplingRate(self, samplingRate):
-        self.samplingRate = samplingRate
-
-    def append(self, item):
-        self.ids.add(item.getObjId())
-        self.appended.append(item.getObjId())
 
 
 class _FreshOutputSet(_FakeOutputSet):

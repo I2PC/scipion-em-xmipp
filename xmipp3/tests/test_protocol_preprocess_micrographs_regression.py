@@ -12,6 +12,7 @@ import os
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
+from xmipp3.tests.streaming_test_utils import FakeOutputSet as _FakeOutputSet
 
 
 class _FakeMicrograph:
@@ -31,25 +32,6 @@ class _FakeMicrograph:
 
     def clone(self):
         return _FakeMicrograph(self._objId, self._fileName, self._micName)
-
-
-class _FakeOutputSet:
-    def __init__(self, ids=None):
-        self.ids = set(ids or [])
-        self.appended = []
-
-    def getSize(self):
-        return len(self.ids)
-
-    def getIdSet(self):
-        return set(self.ids)
-
-    def isEmpty(self):
-        return False
-
-    def append(self, mic):
-        self.ids.add(mic.getObjId())
-        self.appended.append(mic.getObjId())
 
 
 class _FreshOutputSet(_FakeOutputSet):
@@ -82,11 +64,20 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
         prot = self._newProtocol()
         mic = _FakeMicrograph(1)
         outputFn = prot._getOutputMicrograph(mic)
-        os.makedirs(os.path.dirname(outputFn), exist_ok=True)
-        open(outputFn, 'w').close()
-        self.assertFalse(prot._isMicPipelineDone(mic))
-        prot.markMicDoneStep(mic.getObjId())
-        self.assertTrue(prot._isMicPipelineDone(mic))
+        doneFn = prot._getMicDoneMarker(mic.getObjId())
+
+        if os.path.exists(doneFn):
+            os.remove(doneFn)
+
+        try:
+            os.makedirs(os.path.dirname(outputFn), exist_ok=True)
+            open(outputFn, 'w').close()
+            self.assertFalse(prot._isMicPipelineDone(mic))
+            prot.markMicDoneStep(mic.getObjId())
+            self.assertTrue(prot._isMicPipelineDone(mic))
+        finally:
+            if os.path.exists(doneFn):
+                os.remove(doneFn)
 
     def testRestoreInsertedMicsUsesCompletionMarkers(self):
         prot = self._newProtocol()

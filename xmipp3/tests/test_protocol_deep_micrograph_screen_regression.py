@@ -10,6 +10,7 @@ from unittest.mock import patch
 from pyworkflow.object import Set
 
 from xmipp3.protocols import protocol_deep_micrograph_screen as deep_screen
+from xmipp3.tests.streaming_test_utils import OutputStep as _OutputStep
 
 
 class _Mic:
@@ -36,21 +37,6 @@ class _OutputCoords:
 
     def enableAppend(self):
         self.enabledAppend = True
-
-
-class _OutputStep:
-    def __init__(self):
-        self.prerequisites = []
-        self.status = None
-
-    def addPrerequisites(self, *deps):
-        self.prerequisites.extend(deps)
-
-    def isWaiting(self):
-        return True
-
-    def setStatus(self, status):
-        self.status = status
 
 
 class _Harness:
@@ -245,6 +231,9 @@ class _AutomaticBatchHarness:
 
     def isInStreaming(self):
         return False
+
+    def _getPersistedAutomaticBatchSize(self):
+        return None
 
     def _getNumPickedMics(self):
         return self.pickedMics

@@ -13,6 +13,7 @@ from xmipp3.protocols.protocol_eliminate_empty_images import (
     XmippProtEliminateEmptyParticles,
     XmippProtEliminateEmptyClasses,
 )
+from xmipp3.tests.streaming_test_utils import LogicalOutputSetProbe, FreshOutputSetProbe
 
 
 class _FakeSet:
@@ -85,7 +86,7 @@ class TestXmippEliminateEmptyResume(BaseTest):
                 self.inputSet = inputSet
 
         prot = self.newProtocol(XmippProtEliminateEmptyParticles)
-        logicalOutput = LogicalOutputSet()
+        logicalOutput = LogicalOutputSetProbe()
         prot.outputParticles = logicalOutput
         prot.inputImages = object()
         prot._getPath = lambda baseName: '/tmp/' + baseName
@@ -95,16 +96,11 @@ class TestXmippEliminateEmptyResume(BaseTest):
             return_value=False,
         ):
             outputSet = prot._loadOutputSet(
-                FreshOutputSet,
+                FreshOutputSetProbe,
                 'outputParticles.sqlite',
             )
 
-        self.assertIs(
-            outputSet,
-            logicalOutput,
-            "Streaming particles output must reuse the logical Set when "
-            "the legacy SQLite file is absent.",
-        )
+        self.assertIs(outputSet, logicalOutput)
         self.assertEqual(1, logicalOutput.enableAppendCalls)
         self.assertEqual(1, logicalOutput.copyInfoCalls)
 
