@@ -592,6 +592,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self.meanDoseList = [doseById[movieId] for movieId in sorted(doseById)]
 
     def _getNewDoneIds(self, doneListIds):
+        # Movies run under parallel step execution and do not necessarily
+        # finish in id order, so a still-pending id must be skipped rather
+        # than stopping the scan - otherwise it permanently blocks every
+        # higher id that already finished from ever being counted as done.
         insertedIds = sorted(set(self.insertedIds))
         processedIds = set(self.processedIds)
         doneIds = set(doneListIds)
@@ -601,7 +605,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             if movieId in doneIds:
                 continue
             if movieId not in processedIds:
-                break
+                continue
             newDone.append(movieId)
 
         return newDone
