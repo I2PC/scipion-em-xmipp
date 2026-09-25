@@ -41,7 +41,7 @@ import pyworkflow.utils as pwutils
 
 from pwem.protocols import ProtCTFMicrographs
 from pwem.emlib.metadata import Row
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem import emlib
@@ -461,18 +461,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
     def _checkNewInput(self):
         if self.calculateConsensus:
-            # Check if there are new ctf to process from the input set
-            self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-            mTime = max(datetime.fromtimestamp(os.path.getmtime(self.ctfFn1)),
-                        datetime.fromtimestamp(os.path.getmtime(self.ctfFn2)))
-            self.debug('Last check: %s, modification: %s'
-                       % (pwutils.prettyTime(self.lastCheck),
-                          pwutils.prettyTime(mTime)))
-            # If the input movies.sqlite have not changed since our last check,
-            # it does not make sense to check for new input data
-            if self.lastCheck > mTime and self.insertedIds:  # If this is empty it is dut to a static "continue" action or it is the first round
-                return None
-
             ctfsSet1 = self._loadInputCtfSet(self.ctfFn1)
             ctfsSet2 = self._loadInputCtfSet(self.ctfFn2)
 
@@ -484,39 +472,25 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
             newIds = list(set(newIds1).intersection(set(newIds2)))
 
-            self.lastCheck = datetime.now()
-            self.isStreamClosed = ctfsSet1.isStreamClosed() and \
-                                  ctfsSet2.isStreamClosed()
+            self.isStreamClosed = ctfsSet1.isStreamClosed() and ctfsSet2.isStreamClosed()
             ctfsSet1.close()
             ctfsSet2.close()
         else:
-            self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-            mTime = datetime.fromtimestamp(os.path.getmtime(self.ctfFn1))
-            self.debug('Last check: %s, modification: %s'
-                       % (pwutils.prettyTime(self.lastCheck),
-                          pwutils.prettyTime(mTime)))
-            # If the input ctfs.sqlite have not changed since our last check,
-            # it does not make sense to check for new input data
-            if self.lastCheck > mTime and self.insertedIds:
-                return None
-
-            # Open input ctfs.sqlite and close it as soon as possible
             ctfSet = self._loadInputCtfSet(self.ctfFn1)
             ctfSetIds = ctfSet.getIdSet()
             newIds = [idCTF for idCTF in ctfSetIds if idCTF not in self.insertedIds]
 
-            self.lastCheck = datetime.now()
             self.isStreamClosed = ctfSet.isStreamClosed()
             ctfSet.close()
 
         outputStep = self._getFirstJoinStep()
 
-        if self.isContinued() and not self.insertedIds:  # For "Continue" action and the first round
+        if getattr(self, '_originalRunMode', self.runMode.get()) == MODE_RESUME and not self.insertedIds:
             doneIds, _, _, _ = self._getAllDoneIds()
             skipIds = list(set(newIds).intersection(set(doneIds)))
             newIds = list(set(newIds).difference(set(doneIds)))
             self.info("Skipping CTFs with ID: %s, seems to be done" % skipIds)
-            self.insertedIds = doneIds  # During the first round of "Continue" action it has to be filled
+            self.insertedIds = doneIds
 
         if newIds:
             fDeps = self._insertNewCtfsSteps(newIds)
@@ -584,15 +558,16 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         def updateRelationsAndClose(cSet, mSet, first, label=''):
 
-            if os.path.exists(self._getPath('ctfs'+label+'.sqlite')):
+            if cSet is not None and mSet is not None:
 
-                micsAttrName = OUTPUT_MICS+label
+                micsAttrName = OUTPUT_MICS + label
                 self._updateOutputSet(micsAttrName, mSet, streamMode)
+
                 # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Boolean,...)
                 # that happens somewhere while scheduling.
                 cSet.setMicrographs(Pointer(self, extended=micsAttrName))
 
-                self._updateOutputSet(OUTPUT_CTF+label, cSet, streamMode)
+                self._updateOutputSet(OUTPUT_CTF + label, cSet, streamMode)
 
                 if first:
                     self._defineTransformRelation(self.inputCTF.get().getMicrographs(), mSet)
@@ -700,20 +675,32 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         """
         Load the output set if it exists or create a new one.
         """
-        setFile = self._getPath(baseName)
+        outputNameByBaseName = {
+            'ctfs.sqlite': OUTPUT_CTF,
+            'micrographs.sqlite': OUTPUT_MICS,
+            'ctfsDiscarded.sqlite': OUTPUT_CTF_DISCARDED,
+            'micrographsDiscarded.sqlite': OUTPUT_MICS_DISCARDED,
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
 
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            if (outputSet.__len__() == 0):
-                pwutils.path.cleanPath(setFile)
-
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
+        if outputSet is not None:
             outputSet.enableAppend()
         else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+            setFile = self._getPath(baseName)
+
+            if os.path.exists(setFile):
+                outputSet = SetClass(filename=setFile)
+                if (outputSet.__len__() == 0):
+                    pwutils.path.cleanPath(setFile)
+
+            if os.path.exists(setFile):
+                outputSet = SetClass(filename=setFile)
+                outputSet.loadAllProperties()
+                outputSet.enableAppend()
+            else:
+                outputSet = SetClass(filename=setFile)
+                outputSet.setStreamState(outputSet.STREAM_OPEN)
 
         micSet = self.inputCTF.get().getMicrographs()
 

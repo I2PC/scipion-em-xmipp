@@ -34,11 +34,10 @@ import time
 import numpy as np
 
 from pwem.protocols import ProtClassify2D
-from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import IntParam, StringParam, PointerParam, EnumParam, BooleanParam, FloatParam
-from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED
+from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED, MODE_RESUME
 from pyworkflow.constants import BETA
 
 from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
@@ -418,7 +417,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.newDeps = []
         newParticlesSet = self._loadEmptyParticleSet()
 
-        if self.isContinued() and False:
+        isResume = getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME
+        if isResume and self._hasStreamingCheckpoint():
             self.info('Continue protocol')
             self._updateVarsToContinue()
 
@@ -433,12 +433,17 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                 where = 'creation>"' + str(self.lastCreationTime) + '"'
             tmp = None
             newCount = 0
+            batchRemaining = self.classificationBatch.get() - len(newParticlesSet)
 
-            for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
+            for particle in particlesSet.iterItems(orderBy='creation',
+                                                   direction='ASC',
+                                                   where=where,
+                                                   limit=batchRemaining):
                 tmp = particle.getObjCreation()
                 newParticlesSet.append(particle.clone())
                 newCount += 1
 
+            inputExhausted = newCount < batchRemaining
             particlesSet.close()
 
             if tmp is not None:
@@ -464,7 +469,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                     if self._doClassification(newParticlesSet):
                         self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
                         newParticlesSet = self._loadEmptyParticleSet()
-                else:
+                elif inputExhausted:
                     self._insertFunctionStep(self.closeOutputStep,
                                              prerequisites=self.newDeps,
                                              needsGPU=False)
@@ -518,8 +523,10 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
     def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
         self._updateFnClassification()
+        imgsOrigXmd = self.imgsOrigXmd
+        imgsFn = self.imgsFn
         classStep = self._insertFunctionStep(self.runClassificationSteps,
-                                             newParticlesSet,
+                                             newParticlesSet, imgsOrigXmd, imgsFn,
                                              prerequisites=[],
                                              needsGPU=True)
         updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
@@ -527,12 +534,12 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                                               needsGPU=False)
         self.newDeps.append(updateStep)
 
-    def runClassificationSteps(self, newParticlesSet):
+    def runClassificationSteps(self, newParticlesSet, imgsOrigXmd, imgsFn):
         
-        self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
+        self.convertInputStep(newParticlesSet, imgsOrigXmd, imgsFn)
         
         numTrain = min(len(newParticlesSet), self.training.get())
-        self.classification(self.imgsFn, self.numberClasses, self.imgsOrigXmd,
+        self.classification(imgsFn, self.numberClasses, imgsOrigXmd,
                             self.mask.get(), self.sigmaProt, numTrain, self.resolutionPca)
         # self.classificationLaunch = False
 
@@ -610,9 +617,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
     # --------------------------- UTILS functions -----------------------------
     def _loadInputParticleSet(self):
-        """ Returns te input set of particles"""
-        self.debug("Loading input db: %s" % self.inputFn)
-        partSet = SetOfParticles(filename=self.inputFn)
+        """Return the logical input particle Set with refreshed state."""
+        partSet = self.inputParticles.get()
         partSet.loadAllProperties()
 
         return partSet
@@ -621,7 +627,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         return self.inputParticles
 
     def _loadEmptyParticleSet(self):
-        partSet = SetOfParticles(filename=self.inputFn)
+        partSet = self.inputParticles.get()
         partSet.loadAllProperties()
         copyPartSet = self._createSetOfParticles()
         copyPartSet.copyInfo(partSet)
@@ -644,37 +650,32 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.info('Starts classification round: %d' % self.classificationRound)
         self.classificationRound += 1
 
-    def _newParticlesToProcess(self):
-        particlesFile = self.inputFn
-        now = datetime.now()
-
-        lastCheck = getattr(self, "lastCheck", now)
-        self.lastCheck = lastCheck
-
-        mTime = datetime.fromtimestamp(os.path.getmtime(particlesFile))
-        self.debug("Last check: %s, modification: %s"
-                   % (lastCheck, prettyTime(mTime)))
-
-        fileUnchanged = lastCheck > mTime
-        alreadyProcessedSomething = bool(getattr(self, "lastCreationTime", None))
-        isLastRound = bool(getattr(self, "lastRound", False))
-
-        hasNewParticles = not (fileUnchanged and alreadyProcessedSomething and not isLastRound)
-
-        self.lastCheck = now
-        return hasNewParticles
-
     def _fillClassesFromLevel(self, clsSet, update=False):
         """ Create the SetOfClasses2D from a given iteration. """
         self._createModelFile()
         
         self._loadClassesInfo(self._getExtraPath(CONTRAST_AVERAGES_FILE))
-        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE))
 
         params = {}
         if update:
             self.info(r'Last creation time processed is %s' % str(self.lastCreationTimeProcessed))
             params = {"where": 'creation>"' + str(self.lastCreationTimeProcessed) + '"'}
+
+        mdRows = emtable.Table.iterRows(
+            'particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE)
+        )
+
+        if update:
+            particleIds = (
+                particle.getObjId()
+                for particle in clsSet.getImages().iterItems(**params)
+            )
+            mdIter = self._iterRowsForParticleIds(
+                mdRows,
+                particleIds,
+            )
+        else:
+            mdIter = mdRows
 
         with self._lock:
             clsSet.classifyItems(updateItemCallback=self._updateParticle,
@@ -683,6 +684,27 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                                  iterParams=params,
                                  doClone=False,  # So the creation time is maintained
                                  raiseOnNextFailure=False)  # So streaming can happen
+
+    @staticmethod
+    def _iterRowsForParticleIds(rows, particleIds):
+        rowIter = iter(rows)
+        row = next(rowIter, None)
+
+        for particleId in particleIds:
+            while (
+                    row is not None
+                    and row.get(XMIPPCOLUMNS.itemId.value) < particleId
+            ):
+                row = next(rowIter, None)
+
+            if (
+                    row is not None
+                    and row.get(XMIPPCOLUMNS.itemId.value) == particleId
+            ):
+                yield row
+                row = next(rowIter, None)
+            else:
+                yield None
 
     def _loadOutputSet(self, outputName):
         """
@@ -756,6 +778,11 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         with open(self._getExtraPath(LAST_DONE_FILE), 'w') as file:
             file.write('%s' % creationTime)
 
+    def _hasStreamingCheckpoint(self):
+        lastDoneFn = self._getExtraPath(LAST_DONE_FILE)
+        classificationFn = self._getExtraPath(CLASSIFICATION_FILE)
+        return os.path.exists(lastDoneFn) and os.path.getsize(lastDoneFn) > 0 and os.path.exists(classificationFn) and os.path.getsize(classificationFn) > 0
+
     def _getLastDone(self):
         # Open the file in read mode and read the number
         with open(self._getExtraPath(LAST_DONE_FILE), "r") as file:
@@ -765,16 +792,18 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
     def _updateVarsToContinue(self):
         """ Method to if needed and the protocol is set to continue then it will see in which state it was stopped """
 
-        if self._isClassificationDone():
+        if self._hasStreamingCheckpoint():
             self.lastCreationTime = self._getLastDone()
             self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
+            if self.mode.get() == self.UPDATE_CLASSES:
+                self.firstTimeDone = True
         else:
             self.lastCreationTime = ''
             self.classificationRound = 1
 
         self.lastCreationTimeProcessed = self.lastCreationTime
         # Convert the string to a datetime object
-        self.lastCheck = datetime.strptime(self.lastCreationTime, '%Y-%m-%d %H:%M:%S')
+        self.lastCheck = datetime.fromisoformat(str(self.lastCreationTime)) if self.lastCreationTime else datetime.now()
 
     def _validate(self):
         """ Check if the installation of this protocol is correct.

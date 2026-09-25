@@ -28,6 +28,8 @@ from os.path import exists, basename, join
 
 from pyworkflow.protocol.params import STEPS_PARALLEL, PointerParam, EnumParam, FileParam
 from pyworkflow.utils.path import *
+from pyworkflow.object import Set
+from pyworkflow.protocol.constants import STATUS_NEW
 
 from pwem.protocols import ProtParticlePickingAuto
 
@@ -349,11 +351,13 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
             createLink(os.path.join(srcDir, f), self._getExtraPath(f))
         copyFile(os.path.join(srcDir, "config.xmd"), self._getExtraPath("config.xmd"))
 
-        # Get the box size
         mdInfo = emlib.MetaData("properties@"+self._getExtraPath("config.xmd"))
-        self.boxSize = mdInfo.getValue(emlib.MDL_PICKING_PARTICLE_SIZE,mdInfo.firstObject())
         mdInfo.setValue(emlib.MDL_PICKING_MANUALPARTICLES_SIZE,0,mdInfo.firstObject())
         mdInfo.write("properties@"+self._getExtraPath("config.xmd"),emlib.MD_APPEND)
+
+    def _getBoxSize(self):
+        mdInfo = emlib.MetaData("properties@"+self._getExtraPath("config.xmd"))
+        return mdInfo.getValue(emlib.MDL_PICKING_PARTICLE_SIZE, mdInfo.firstObject())
 
     def _pickMicrograph(self, mic, *args):
         micPath = mic.getFileName()
@@ -381,7 +385,7 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
 
         if proceed:
             args = "-i %s " % micPath
-            args += "--particleSize %d " % self.boxSize
+            args += "--particleSize %d " % self._getBoxSize()
             args += "--model %s " % modelRoot
             args += "--outputRoot %s " % self._getExtraPath(micName)
             args += "--mode autoselect --thr %d" % self.numberOfThreads
@@ -393,7 +397,55 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
 
     def readCoordsFromMics(self, workingDir, micList, coordSet):
         readSetOfCoordinates(workingDir, micList, coordSet)
-        
+
+    def _checkNewInput(self):
+        micDict, self.streamClosed = self._loadInputList()
+        newMics = list(micDict.values())
+        outputStep = self._getFirstJoinStep()
+
+        if newMics:
+            fDeps = self._insertNewMicsSteps(newMics)
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+            self.updateSteps()
+
+    def _getOutputMicIds(self):
+        outputCoords = getattr(self, 'outputCoordinates', None)
+        if outputCoords is None or outputCoords.getSize() == 0:
+            return set()
+        return {int(micId) for micId in outputCoords.getUniqueValues('_micId')}
+
+    def _checkNewOutput(self):
+        if getattr(self, 'finished', False):
+            return
+
+        doneIds = set(self._readDoneList())
+        listOfMics = list(self.micDict.values())
+        processedMics = [mic for mic in listOfMics if self._isMicDone(mic)]
+        self.finished = self.streamClosed and len(processedMics) == len(listOfMics)
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        outputMicIds = self._getOutputMicIds()
+        newOutput = [mic for mic in processedMics if mic.getObjId() not in outputMicIds and mic.getObjId() not in doneIds]
+        checkpointMics = [mic for mic in processedMics if mic.getObjId() in outputMicIds and mic.getObjId() not in doneIds]
+
+        if newOutput:
+            newDone = self._updateOutputCoordSet(newOutput, streamMode)
+            checkpointMics.extend(mic for mic in newDone if mic.getObjId() not in doneIds)
+        elif self.finished:
+            self._updateStreamState(streamMode)
+        elif not checkpointMics:
+            if len(processedMics) == len(listOfMics):
+                self._streamingSleepOnWait()
+            return
+
+        if checkpointMics:
+            self._writeDoneList(checkpointMics)
+
+        if self.finished:
+            outputStep = self._getFirstJoinStep()
+            if outputStep and outputStep.isWaiting():
+                outputStep.setStatus(STATUS_NEW)
+
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         validateMsgs = []

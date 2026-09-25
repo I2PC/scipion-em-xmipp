@@ -36,6 +36,7 @@ from pyworkflow.protocol.constants import *
 from pwem.objects import SetOfCoordinates, Coordinate
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 from pyworkflow import UPDATED, PROD
+from xmipp3.utils import loadOutputSetForAppend
 
 
 PICK_MODE_LARGER = 0
@@ -377,13 +378,9 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # If continue from an stopped run, don't repeat what is done
+        # Restore committed and pending consensus results on Continue.
         if not self.checkedMics:
-            for fn in getFiles(self._getExtraPath()):
-                fn = removeBaseExt(fn)
-                if fn.startswith(self.FN_PREFIX):
-                    self.checkedMics.update([self.getMicId(fn)])
-                    self.processedMics.update([self.getMicId(fn)])
+            self._restoreProcessedMics()
 
         streamClosed = []
         readyMics = None
@@ -391,8 +388,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         for coordSet in self.inputCoordinates:
             currentPickMics, isSetClosed = getReadyMics(coordSet.get())
             streamClosed.append(isSetClosed)
-            if not readyMics:  # first time
-                readyMics = currentPickMics
+            if readyMics is None:  # first time, even when the first set is empty
+                readyMics = set(currentPickMics)
             else:  # available mics are those ready for all pickers
                 readyMics.intersection_update(currentPickMics)
             allMics = allMics.union(currentPickMics)
@@ -428,26 +425,32 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         self.finished = self.streamClosed and self.checkedMics == self.processedMics
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-        newFiles = getFiles(self._getTmpPath())
+        newFiles = [fn for fn in getFiles(self._getTmpPath()) if self._isConsensusResultFile(fn)]
         if newFiles or self.finished:  # when finished to close the output set
             outSet = self._loadOutputSet(SetOfCoordinates, 'coordinates.sqlite')
+            outputMicIds = self._getOutputMicIds(outSet)
 
             for fnTmp in newFiles:
-                coords = np.loadtxt(fnTmp)
-                moveFile(fnTmp, self._getExtraPath())
-                if coords.size == 2:  # special case with only one coordinate
-                    coords = [coords]
-                for coord in coords:
-                    newCoord = Coordinate()
+                micId = self.getMicId(fnTmp)
+                if micId not in outputMicIds and os.path.getsize(fnTmp):
+                    coords = np.loadtxt(fnTmp)
+                    if coords.size == 2:  # special case with only one coordinate
+                        coords = [coords]
                     micrographs = self.getMainInput().getMicrographs()
-                    newCoord.setMicrograph(micrographs[self.getMicId(fnTmp)])
-                    newCoord.setPosition(coord[0], coord[1])
-                    outSet.append(newCoord)
+                    for coord in coords:
+                        newCoord = Coordinate()
+                        newCoord.setMicrograph(micrographs[micId])
+                        newCoord.setPosition(coord[0], coord[1])
+                        outSet.append(newCoord)
+                    outputMicIds.add(micId)
 
-            firstTime = not self.hasAttribute(self.outputName)
             self._updateOutputSet(self.outputName, outSet, streamMode)
-            if firstTime:
-                self.defineRelations(outSet)
+            self._refreshOutputRelations(outSet)
+
+            # Move result markers only after output and relations are persisted.
+            for fnTmp in newFiles:
+                moveFile(fnTmp, self._getExtraPath())
+
             outSet.close()
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
@@ -455,19 +458,45 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(STATUS_NEW)
 
+    def _restoreProcessedMics(self):
+        for folder in (self._getExtraPath(), self._getTmpPath()):
+            for fn in getFiles(folder):
+                if self._isConsensusResultFile(fn):
+                    micId = self.getMicId(fn)
+                    self.checkedMics.add(micId)
+                    self.processedMics.add(micId)
+
+    @classmethod
+    def _isConsensusResultFile(cls, fn):
+        baseName = os.path.basename(fn)
+        return baseName.startswith(cls.FN_PREFIX) and baseName.endswith('.txt')
+
+    @staticmethod
+    def _getOutputMicIds(outputSet):
+        if not outputSet.getSize():
+            return set()
+        return {row['_micId'] for row in outputSet.aggregate(['MAX'], '_micId', ['_micId'])}
+
+    def _refreshOutputRelations(self, outputSet):
+        if self.mapper is not None:
+            self.mapper.deleteRelations(self)
+        self.defineRelations(outputSet)
+        if self.mapper is not None:
+            self.mapper.commit()
+
     def defineRelations(self, outputSet):
         for inCorrds in self.inputCoordinates:
             self._defineTransformRelation(inCorrds, outputSet)
 
     def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+        outputSet = (getattr(self, self.outputName, None)
+                     if baseName == 'coordinates.sqlite' else None)
+
+        outputSet, isNew = loadOutputSetForAppend(
+            self, SetClass, baseName,
+            self.outputName if baseName == 'coordinates.sqlite' else None
+        )
+        if isNew:
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
         inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
@@ -535,7 +564,14 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
     @classmethod
     def getMicId(self, fn):
-        return int(removeBaseExt(fn).lstrip(self.FN_PREFIX))
+        baseName = removeBaseExt(os.path.basename(fn))
+        return int(baseName[len(self.FN_PREFIX):])
+
+
+def _writeConsensusResult(posFn, consensusCoords):
+    tmpFn = posFn + '.tmp'
+    np.savetxt(tmpFn, consensusCoords)
+    os.replace(tmpFn, posFn)
 
 
 def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
@@ -569,6 +605,7 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
             and inAllMicrographs):
         print("Returning from worker: doing AND consensus and, at least, one "
               "picker is empty for this micrograph (%s)." % posFn)
+        _writeConsensusResult(posFn, np.empty((0, 2)))
         return
 
     # Add all the first coordinates to 'allCoords' and 'votes' lists
@@ -618,18 +655,21 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
     except Exception as exc:
         print("Some error occurred during Jaccard index calculation or "
               "writing it's file. Maybe a concurrence issue:\n%s" % exc)
-    # Write the consensus file only if there
-    # are some coordinates (size > 0)
-    if consensusCoords.size:
-        np.savetxt(posFn, consensusCoords)
+    # Always write a result marker, including empty consensus results.
+    _writeConsensusResult(posFn, consensusCoords)
 
 
 def getReadyMics(coordSet):
     coorSet = SetOfCoordinates(filename=coordSet.getFileName())
     coorSet._xmippMd = String()
     coorSet.loadAllProperties()
-    setClosed = coorSet.isStreamClosed()
-    coorSet.close()
-    currentPickMics = {micAgg["_micId"] for micAgg in
-                       coordSet.aggregate(["MAX"], "_micId", ["_micId"])}
+    try:
+        setClosed = coorSet.isStreamClosed()
+        currentPickMics = {
+            micAgg["_micId"]
+            for micAgg in coorSet.aggregate(["MAX"], "_micId", ["_micId"])
+        }
+    finally:
+        coorSet.close()
+
     return currentPickMics, setClosed

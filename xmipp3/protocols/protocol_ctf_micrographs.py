@@ -419,12 +419,14 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
             ctfSet.loadAllProperties()
             streamClosed = streamClosed and ctfSet.isStreamClosed()
             if not streamClosed:
-                initCtfCheck = lambda idItem: idItem in ctfSet
+                readyCtfIds = ctfSet.getIdSet()
+                initCtfCheck = lambda idItem: idItem in readyCtfIds
+            ctfSet.close()
 
         newItemDict = OrderedDict()
         for item in updatedSet:
-            micKey = item.getObjId()  # getKeyFunc(item)
-            if micKey not in self.micDict and initCtfCheck(micKey):
+            micKey = getKeyFunc(item)
+            if micKey not in self.micDict and initCtfCheck(item.getObjId()):
                 newItemDict[micKey] = item.clone()
         updatedSet.close()
         self.debug("Closed db.")
@@ -541,9 +543,10 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                         'ctfmodel_quadrant', 'ctf']:
                 pwutils.moveFile(_getFn(key), self._getExtraPath())
 
-        except Exception as ex:
+        except Exception:
             sys.stderr.write("xmipp_ctf_estimate_from_micrograph has " \
                              "failed with micrograph %s" % finalName)
+            raise
 
     def _createOutputStep(self):
         pass
@@ -559,6 +562,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                 validateMsgs.append('If you want to use a previous estimation '
                                     'of the CTF, the corresponding set of CTFs '
                                     'is needed')
+        return validateMsgs
 
     def _summary(self):
         summary = ProtCTFMicrographs._summary(self)

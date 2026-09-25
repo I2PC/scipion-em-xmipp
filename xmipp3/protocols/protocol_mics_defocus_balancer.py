@@ -25,21 +25,18 @@
 # **************************************************************************
 
 import os
-from datetime import datetime
 import numpy as np
 import random
 from collections import defaultdict
 
 from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
-from pyworkflow.object import Pointer
+from pyworkflow.object import Pointer, CsvList
 import pyworkflow.protocol.params as params
-import pyworkflow.utils as pwutils
 
 from pwem.protocols import ProtCTFMicrographs
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME, MODE_RESTART
 from pyworkflow import UPDATED, NEW
-
 
 OUTPUT_CTF =  "outputCTF"
 OUTPUT_MICS = "outputMicrographs"
@@ -279,6 +276,7 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
+        self.sampledIds = CsvList(pType=int)
 
 
     def _defineParams(self, form):
@@ -294,6 +292,14 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                       default=100, label='Minimum number of images to make sampling',
                       help='Minimum number of images to make the defocus balanced sampling.')
 
+    def _validate(self):
+        errors = []
+        if self.numImages.get() <= 0:
+            errors.append('Sample size must be greater than zero.')
+        if self.minImages.get() <= 0:
+            errors.append('Minimum number of images must be greater than zero.')
+        return errors
+
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
         self.initializeParams()
@@ -305,10 +311,13 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def initializeParams(self):
         self.finished = False
-        # Important to have both:
-        self.insertedIds = []   # Contains images that have been inserted in a Step (checkNewInput).
-        self.sampled_images = [] # Ids to be sample
-        # Contains images that have been processed in a Step (checkNewOutput).
+        self.insertedIds = []
+
+        if self.runMode.get() == MODE_RESTART and self.sampledIds:
+            self.sampledIds.clear()
+            self._store()
+
+        self.sampled_images = list(self.sampledIds)
         self.ctfFn = self.inputCTF.get().getFileName()
 
     def _getFirstJoinStepName(self):
@@ -338,41 +347,42 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # Check if there are new ctf to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(self.ctfFn))
-        self.debug('Last check: %s, modification: %s'
-                    % (pwutils.prettyTime(self.lastCheck),
-                        pwutils.prettyTime(mTime)))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.insertedIds:  # If this is empty it is dut to a static "continue" action or it is the first round
-            return None
+        if self.sampled_images:
+            return
 
+        isResume = getattr(self, '_originalRunMode', self.runMode.get()) == MODE_RESUME
+        if isResume and not self.insertedIds:
+            doneIds, _ = self._getAllDoneIds()
+            if doneIds:
+                self.sampled_images = doneIds
+                self.sampledIds.set(doneIds)
+                self._store()
+                self.info('Restoring the previously selected CTFs.')
+                return
+
+        # Check if there are new CTFs to process from the input set
         ctfsSet = self._loadInputCtfSet(self.ctfFn)
         ctfSetIds = ctfsSet.getIdSet()
         newIds = [idCTF for idCTF in ctfSetIds if idCTF not in self.insertedIds]
 
-        self.lastCheck = datetime.now()
         isStreamClosed = ctfsSet.isStreamClosed()
-
         ctfsSet.close()
 
         outputStep = self._getFirstJoinStep()
 
-        if self.isContinued() and not self.insertedIds:  # For "Continue" action and the first round
-            doneIds, _ = self._getAllDoneIds()
-            if doneIds:
-                self.finished = True
-                self.info('The sampling images are already created.')
-                return
+        if self.insertedIds:
+            return
 
-        if (newIds and len(newIds) >= self.minImages.get()) or isStreamClosed:
+        if newIds and (len(newIds) >= self.minImages.get() or isStreamClosed):
             fDeps = self._insertNewCtfsSteps(newIds)
 
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
             self.updateSteps()
+
+        elif isStreamClosed and not self.insertedIds:
+            self.finished = True
+            self.info('Input stream is closed and no CTFs are available for sampling.')
 
     def _loadInputCtfSet(self, ctfFn):
         self.debug("Loading input db: %s" % ctfFn)
@@ -389,14 +399,19 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
             defocusU = ctf.getDefocusU()
             ctfDefocus[ctfId] = defocusU
 
+        inputCtfSet.close()
+
         self.sampled_images = balanced_sampling(image_dict=ctfDefocus, N=self.numImages.get(), bins=10)
         self.info('The number of CTFs selected for defocus balanced sampling is the following: %d'
-                  %len(self.sampled_images))
+                  % len(self.sampled_images))
 
         stats = compute_statistics(list(ctfDefocus.values()))
         message = ("The defocus statistics are the following: range %d   min %d   max %d   mean %d   std %.1f"
-                   %(stats["range"], stats["min"], stats["max"],stats["mean"], stats["std"]))
+                   % (stats["range"], stats["min"], stats["max"], stats["mean"], stats["std"]))
         self.summaryVar.set(message)
+        self.sampledIds.set(self.sampled_images)
+        # Persist the selected ids before output creation so Resume can reuse exactly the same sample.
+        self._store()
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
@@ -413,19 +428,28 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                 outputStep.setStatus(STATUS_NEW)
 
     def createOutputs(self, newDone):
-        cSet = self._loadOutputSet(SetOfCTF, 'ctfs.sqlite')
-        mSet = self._loadOutputSet(SetOfMicrographs,
-                                   'micrographs.sqlite')
+        cSet = self._loadOutputSet(SetOfCTF, 'ctfs.sqlite', OUTPUT_CTF)
+        mSet = self._loadOutputSet(SetOfMicrographs, 'micrographs.sqlite', OUTPUT_MICS)
         self.fillOutput(cSet, mSet, newDone)
 
         return cSet, mSet
 
-    def _loadOutputSet(self, SetClass, baseName):
+    def _loadOutputSet(self, SetClass, baseName, outputName):
         """
-        Create the output set.
+        Create or reopen an output set for append.
         """
+        if hasattr(self, outputName):
+            outputSet = getattr(self, outputName)
+            outputSet.enableAppend()
+            return outputSet
+
         setFile = self._getPath(baseName)
-        outputSet = SetClass(filename=setFile)
+        if os.path.exists(setFile):
+            outputSet = SetClass(filename=setFile)
+            outputSet.loadAllProperties()
+            outputSet.enableAppend()
+        else:
+            outputSet = SetClass(filename=setFile)
 
         micSet = self.inputCTF.get().getMicrographs()
 
@@ -438,22 +462,36 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
     def fillOutput(self, ctfSet, micSet, newDone):
         inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+        ctfIds = set(ctfSet.getIdSet()) if ctfSet.getSize() else set()
+        micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
 
         for ctfId in newDone:
             ctf = inputCtfSet[ctfId].clone()
             mic = ctf.getMicrograph().clone()
-            ctfSet.append(ctf)
-            micSet.append(mic)
+
+            if ctf.getObjId() not in ctfIds:
+                ctfSet.append(ctf)
+                ctfIds.add(ctf.getObjId())
+
+            if mic.getObjId() not in micIds:
+                micSet.append(mic)
+                micIds.add(mic.getObjId())
 
         inputCtfSet.close()
 
     def updateRelations(self, cSet, mSet):
         micsAttrName = OUTPUT_MICS
         self._updateOutputSet(micsAttrName, mSet)
-        # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Booelan,...)
+        # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Boolean,...)
         # that happens somewhere while scheduling.
         cSet.setMicrographs(Pointer(self, extended=micsAttrName))
         self._updateOutputSet(OUTPUT_CTF, cSet)
+
+        # Rebuild relations atomically from the protocol point of view. This makes
+        # repeating updateRelations on Resume safe after a partial output publication.
+        if self.mapper is not None:
+            self.mapper.deleteRelations(self)
+
         self._defineTransformRelation(self.inputCTF.get().getMicrographs(), mSet)
         self._defineTransformRelation(self.inputCTF, cSet)
         self._defineCtfRelation(mSet, cSet)
@@ -466,6 +504,20 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
             sizeOutput = self.outputCTF.getSize()
             doneIds.extend(list(self.outputCTF.getIdSet()))
 
+        elif hasattr(self, OUTPUT_MICS):
+            micIds = set(self.outputMicrographs.getIdSet())
+            if micIds:
+                inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+                try:
+                    for ctf in inputCtfSet:
+                        mic = ctf.getMicrograph()
+                        if mic is not None and mic.getObjId() in micIds:
+                            doneIds.append(ctf.getObjId())
+                finally:
+                    inputCtfSet.close()
+
+                sizeOutput = len(doneIds)
+
         return doneIds, sizeOutput
 
     def _summary(self):
@@ -473,10 +525,8 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         if not hasattr(self, OUTPUT_MICS):
             summary.append("Output set not ready yet.")
         else:
-            populationSize = self.minImages.get()
             outputSize = self.outputMicrographs.getSize()
-            summary.append("From %d micrographs extract a balanced defocus sample of: %d micrographs"
-                           % (populationSize, outputSize))
+            summary.append("Balanced defocus sample: %d micrographs" % outputSize)
             summary.append(self.summaryVar.get())
 
         return summary
@@ -495,41 +545,62 @@ def balanced_sampling(image_dict, N, bins=10):
     - sampled_images (list): List of sampled image IDs.
     """
 
+    if not image_dict or N <= 0:
+        return []
 
-    # Step 1: Get all defocus values and determine the bin edges
+    target = min(N, len(image_dict))
+    bins = max(1, bins)
     defocus_values = list(image_dict.values())
+
+    if min(defocus_values) == max(defocus_values):
+        return random.sample(list(image_dict.keys()), target)
+
     bin_edges = np.linspace(min(defocus_values), max(defocus_values), bins + 1)
 
-    # Step 2: Organize image IDs by bins
     binned_images = defaultdict(list)
     for image_id, defocus in image_dict.items():
-        # Find the bin index for the current defocus value
         bin_index = np.digitize(defocus, bin_edges) - 1
-        # Avoid indexing beyond the available bins
-        bin_index = min(bin_index, bins - 1)
+        bin_index = max(0, min(bin_index, bins - 1))
         binned_images[bin_index].append(image_id)
 
-    # Step 3: Calculate how many images to sample per bin
-    images_per_bin = max(1, N // bins)
-    sampled_images = []
+    non_empty_bins = sorted(
+        bin_index for bin_index, images in binned_images.items() if images
+    )
 
-    for bin_index in range(bins):
-        images_in_bin = binned_images[bin_index]
-
-        if len(images_in_bin) > images_per_bin:
-            # Randomly sample from the bin if there are more images than needed
-            sampled_images.extend(random.sample(images_in_bin, images_per_bin))
+    if target <= len(non_empty_bins):
+        if target == 1:
+            selected_positions = [len(non_empty_bins) // 2]
         else:
-            # If fewer images than needed, take all images in this bin
-            sampled_images.extend(images_in_bin)
+            selected_positions = [
+                round(i * (len(non_empty_bins) - 1) / (target - 1))
+                for i in range(target)
+            ]
 
-    # If we have fewer than N images, randomly sample additional images to reach N
-    if len(sampled_images) < N:
-        remaining_images = list(set(image_dict.keys()) - set(sampled_images))
-        sampled_images.extend(random.sample(remaining_images, N - len(sampled_images)))
+        return [
+            random.choice(binned_images[non_empty_bins[position]])
+            for position in selected_positions
+        ]
 
-    # Limit to N images in case there are extra
-    return sampled_images[:N]
+    available_by_bin = {}
+    for bin_index in non_empty_bins:
+        available = list(binned_images[bin_index])
+        random.shuffle(available)
+        available_by_bin[bin_index] = available
+
+    sampled_images = []
+    while len(sampled_images) < target:
+        added = False
+        for bin_index in non_empty_bins:
+            available = available_by_bin[bin_index]
+            if available:
+                sampled_images.append(available.pop())
+                added = True
+                if len(sampled_images) == target:
+                    break
+        if not added:
+            break
+
+    return sampled_images
 
 
 def compute_statistics(values):
@@ -543,17 +614,19 @@ def compute_statistics(values):
     - dict: A dictionary containing the statistics: min, max, mean, median, std, variance, and range.
     """
 
-    # Convert to a NumPy array for efficient computation
     values = np.array(values)
+    if values.size == 0:
+        raise ValueError('Cannot compute statistics for an empty collection.')
 
-    # Compute statistics
+    ddof = 1 if values.size > 1 else 0
+
     stats = {
         "min": np.min(values),
         "max": np.max(values),
         "mean": np.mean(values),
         "median": np.median(values),
-        "std": np.std(values, ddof=1),  # Sample standard deviation
-        "variance": np.var(values, ddof=1),  # Sample variance
+        "std": np.std(values, ddof=ddof),
+        "variance": np.var(values, ddof=ddof),
         "range": np.max(values) - np.min(values),
     }
 

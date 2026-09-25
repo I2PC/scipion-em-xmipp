@@ -25,7 +25,6 @@
 # *
 # **************************************************************************
 import os
-from datetime import datetime
 from os.path import exists
 import numpy as np
 import copy
@@ -35,7 +34,7 @@ from pyworkflow import UPDATED, PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
-from pyworkflow.protocol.constants import STATUS_NEW
+from pyworkflow.protocol.constants import MODE_RESUME, STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
 
@@ -44,7 +43,7 @@ from pwem.objects import SetOfMicrographs, SetOfMovies
 
 
 OUTPUT_MICS = "outputMicrographs"
-OUTPUT_MICS_DISCARDED = "outputMicrographs"
+OUTPUT_MICS_DISCARDED = "outputMicrographsDiscarded"
 OUTPUT_MOVIES = "outputMovies"
 OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 OUTPUT_MICS_DW = "outputMicrographsDoseWeighted"
@@ -369,8 +368,17 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     def _loadMicAssociatedInputSet(self):
         """ Load the input set of mics and create a list. """
+        if not self.outMicName:
+            return None
+
         parentProt = self.getMapper().getParent(self.inputMovies.get())
+        if parentProt is None:
+            return None
+
         micSet = getattr(parentProt, self.outMicName, None)
+        if micSet is None:
+            return None
+
         micSet.loadAllProperties()
         micSet.close()
 
@@ -384,28 +392,18 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     def _checkNewInput(self):
         # Check if there are new micrographs to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(self.movsFn))
-        self.debug('Last check: %s, modification: %s'
-                   % (pwutils.prettyTime(self.lastCheck),
-                      pwutils.prettyTime(mTime)))
-        # If the input micrographs.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.insertedIds: # If this is empty it is dut to a static "continue" action or it is the first round
-            return None
-
-        # Open input micrographs.sqlite and close it as soon as possible
+        # Always reload the Set so managed PostgreSQL snapshots are refreshed.
         movSet = self._loadInputSet(self.movsFn)
         movSetIds = movSet.getIdSet()
         newIds = [idMic for idMic in movSetIds if idMic not in self.insertedIds]
 
         self.isStreamClosed = movSet.isStreamClosed()
-        self.lastCheck = datetime.now()
         movSet.close()
 
         outputStep = self._getFirstJoinStep()
 
-        if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
+        if (getattr(self, '_originalRunMode', self.runMode.get()) == MODE_RESUME
+                and not self.insertedIds):
             doneIds, _, _, _ = self._getAllDoneIds()
             skipIds = list(set(newIds).intersection(set(doneIds)))
             newIds = list(set(newIds).difference(set(doneIds)))
@@ -548,16 +546,17 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                     outSet.append(micOut)
 
             inputMovies = self._loadInputSet(self.movsFn)
-            inputMics = self._loadMicAssociatedInputSet()
-            inputMicsIds = inputMics.getIdSet()
+            inputMics = (self._loadMicAssociatedInputSet()
+                         if self.inputMics is not None else None)
+            inputMicsIds = inputMics.getIdSet() if inputMics is not None else set()
 
             for movieId in newDoneList:
                 movie = inputMovies.getItem("id", movieId).clone()
                 tryToAppend(movieSet, movie)
-                if movieId in inputMicsIds:
+                if micsSet is not None and movieId in inputMicsIds:
                     mic = inputMics.getItem("id", movieId).clone()
                     tryToAppend(micsSet, mic)
-                else:
+                elif inputMics is not None:
                     self.info("Movie with id %d has not a micrograph associated" %movieId)
             
             if movieSet.getSize() > 0:
@@ -614,6 +613,21 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
     def _loadOutputSet(self, SetClass, baseName):
         """ Load the output set if it exists or create a new one based on the inputs.
         """
+        outputNameByBaseName = {
+            'movies.sqlite': OUTPUT_MOVIES,
+            'moviesDiscarded.sqlite': OUTPUT_MOVIES_DISCARDED,
+            'micrographs.sqlite': OUTPUT_MICS,
+            'micrographsDiscarded.sqlite': OUTPUT_MICS_DISCARDED,
+            'micrographs_dose-weighted.sqlite': OUTPUT_MICS_DW,
+            'micrographs_dose-weightedDiscarded.sqlite': OUTPUT_MICS_DW_DISCARDED,
+        }
+        outputName = outputNameByBaseName.get(baseName)
+        outputSet = getattr(self, outputName, None) if outputName else None
+
+        if outputSet is not None:
+            outputSet.enableAppend()
+            return outputSet
+
         if SetClass == SetOfMicrographs:
             if self.inputMics is None:
                 # if no mics to do, do nothing and exit

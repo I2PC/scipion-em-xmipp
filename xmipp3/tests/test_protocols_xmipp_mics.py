@@ -24,7 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from pwem.objects import SetOfMicrographs
+from pwem.objects import SetOfMicrographs, SetOfCTF, Micrograph, CTFModel
 from pwem.protocols import (ProtImportMicrographs, ProtCreateStreamData,
                             ProtImportCoordinates, ProtImportCTF)
 from pyworkflow.object import Pointer
@@ -291,6 +291,178 @@ class TestXmippCTFEstimation(TestXmippBase):
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
 
+    def testInitialCtfStreamingInputFiltering(self):
+        micSetFn = self.proj.getTmpPath('ctf_streaming_mics.sqlite')
+        ctfSetFn = self.proj.getTmpPath('ctf_streaming_ctfs.sqlite')
+        micSet = SetOfMicrographs(filename=micSetFn)
+        for micId in (1, 2, 3):
+            mic = Micrograph()
+            mic.setObjId(micId)
+            mic.setFileName(self.proj.getTmpPath('mic_%03d.mrc' % micId))
+            mic.setMicName('mic_%03d' % micId)
+            micSet.append(mic)
+        micSet.setStreamState(micSet.STREAM_OPEN)
+        micSet.write()
+        micSet.close()
+
+        ctfSet = SetOfCTF(filename=ctfSetFn)
+        for ctfId in (1, 3):
+            ctf = CTFModel()
+            ctf.setObjId(ctfId)
+            ctfSet.append(ctf)
+        ctfSet.setStreamState(ctfSet.STREAM_OPEN)
+        ctfSet.write()
+        ctfSet.close()
+
+        protCTF = self.newProtocol(XmippProtCTFMicrographs, doInitialCTF=True)
+        protCTF.ctfRelations.set(ctfSet)
+        protCTF.micDict = {}
+
+        newMics, streamClosed = protCTF._loadSet(micSet, SetOfMicrographs, lambda mic: mic.getMicName())
+        self.assertFalse(streamClosed)
+        self.assertEqual(list(newMics.keys()), ['mic_001', 'mic_003'])
+
+        protCTF.micDict.update(newMics)
+        newMics, streamClosed = protCTF._loadSet(micSet, SetOfMicrographs, lambda mic: mic.getMicName())
+        self.assertFalse(streamClosed)
+        self.assertEqual(len(newMics), 0)
+
+    def testResumeRecoversPersistedCtfBeforeDoneList(self):
+        mic = self.protImport.outputMicrographs.getFirstItem().clone()
+        outputFn = self.proj.getTmpPath('ctf_resume_output.sqlite')
+        outputCtf = SetOfCTF(filename=outputFn)
+        ctf = CTFModel()
+        ctf.setMicrograph(mic)
+        outputCtf.append(ctf)
+        outputCtf.write()
+        outputCtf.close()
+
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        protCTF.micDict = {mic.getMicName(): mic}
+        protCTF.streamClosed = False
+        protCTF.outputCTF = SetOfCTF(filename=outputFn)
+        updatedIds = []
+        writtenIds = []
+        protCTF._readDoneList = lambda: []
+        protCTF._isMicDone = lambda mic: True
+        protCTF._updateOutputCTFSet = lambda mics, streamMode: updatedIds.extend(mic.getObjId() for mic in mics) or list(mics)
+        protCTF._writeDoneList = lambda mics: writtenIds.extend(mic.getObjId() for mic in mics)
+        protCTF._streamingSleepOnWait = lambda: None
+
+        protCTF._checkNewOutput()
+
+        self.assertEqual(updatedIds, [])
+        self.assertEqual(writtenIds, [mic.getObjId()])
+
+
+
+    def testCtfInputSetSignatureDetectsWalChanges(self):
+        sqliteFn = self.proj.getTmpPath('ctf_input_signature.sqlite')
+        walFn = sqliteFn + '-wal'
+        with open(sqliteFn, 'wb') as f:
+            f.write(b'db')
+
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        inputSet = type('InputSet', (), {'getFileName': lambda self: sqliteFn})()
+        loadCalls = []
+        protCTF.getInputMicrographs = lambda: inputSet
+        protCTF._loadInputList = lambda: (loadCalls.append(True) or ({}, False))
+        protCTF._getFirstJoinStep = lambda: None
+
+        protCTF._checkNewInput()
+        protCTF._checkNewInput()
+        self.assertEqual(len(loadCalls), 1)
+
+        with open(walFn, 'wb') as f:
+            f.write(b'wal')
+        protCTF._checkNewInput()
+        self.assertEqual(len(loadCalls), 2)
+
+        with open(walFn, 'ab') as f:
+            f.write(b'-updated')
+        protCTF._checkNewInput()
+        self.assertEqual(len(loadCalls), 3)
+
+        with open(sqliteFn, 'ab') as f:
+            f.write(b'-updated')
+        protCTF._checkNewInput()
+        self.assertEqual(len(loadCalls), 4)
+
+    def testCtfDoneIdsAreCachedBetweenChecks(self):
+        mics = {}
+        for micId in (1, 2, 3):
+            mic = Micrograph()
+            mic.setObjId(micId)
+            mic.setMicName('mic_%03d' % micId)
+            mics[mic.getMicName()] = mic
+
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        protCTF.micDict = mics
+        protCTF.streamClosed = False
+        readCalls = []
+        checkedIds = []
+        protCTF._readDoneList = lambda: (readCalls.append(True) or [1, 2])
+        protCTF._isMicDone = lambda mic: (checkedIds.append(mic.getObjId()) or False)
+
+        protCTF._checkNewOutput()
+        protCTF._checkNewOutput()
+
+        self.assertEqual(len(readCalls), 1)
+        self.assertEqual(checkedIds, [3, 3])
+
+    def testCtfCompletedMicsAreNotRescanned(self):
+        class TrackingMic:
+            def __init__(self, micId):
+                self.micId = micId
+                self.idCalls = 0
+
+            def getObjId(self):
+                self.idCalls += 1
+                return self.micId
+
+        mic1 = TrackingMic(1)
+        mic2 = TrackingMic(2)
+        mic3 = TrackingMic(3)
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        protCTF.micDict = {'mic_001': mic1, 'mic_002': mic2, 'mic_003': mic3}
+        protCTF.streamClosed = False
+        protCTF._readDoneList = lambda: [1, 2]
+        protCTF._isMicDone = lambda mic: False
+
+        protCTF._checkNewOutput()
+        completedCalls = (mic1.idCalls, mic2.idCalls)
+        protCTF._checkNewOutput()
+
+        self.assertEqual((mic1.idCalls, mic2.idCalls), completedCalls)
+
+    def testCtfPendingCacheIncludesNewStreamingMics(self):
+        mic1 = Micrograph()
+        mic1.setObjId(1)
+        mic1.setMicName('mic_001')
+        mic2 = Micrograph()
+        mic2.setObjId(2)
+        mic2.setMicName('mic_002')
+        protCTF = self.newProtocol(XmippProtCTFMicrographs)
+        protCTF.micDict = {mic1.getMicName(): mic1}
+        protCTF.streamClosed = False
+        checkedIds = []
+        protCTF._readDoneList = lambda: []
+        protCTF._isMicDone = lambda mic: (checkedIds.append(mic.getObjId()) or False)
+        protCTF._checkNewOutput()
+
+        inputSet = type('InputSet', (), {'getFileName': lambda self: 'unused.sqlite'})()
+        protCTF.getInputMicrographs = lambda: inputSet
+        protCTF._getInputSetSignature = lambda _: ('updated',)
+        protCTF._loadInputList = lambda: ({mic2.getMicName(): mic2}, False)
+        protCTF._insertNewMicsSteps = lambda mics: (protCTF.micDict.update({mic.getMicName(): mic for mic in mics}) or [])
+        protCTF._getFirstJoinStep = lambda: None
+        protCTF.updateSteps = lambda: None
+
+        protCTF._checkNewInput()
+        checkedIds.clear()
+        protCTF._checkNewOutput()
+
+        self.assertEqual(checkedIds, [1, 2])
 
 class TestXmippAutomaticPicking(TestXmippBase):
     """This class check if the protocol to pick the micrographs automatically in Xmipp works properly."""

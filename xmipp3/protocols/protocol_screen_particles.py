@@ -44,6 +44,7 @@ from pwem.protocols import ProtProcessParticles
 
 from pwem import emlib
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
+from xmipp3.utils import loadOutputSetForAppend
 
 
 class XmippProtScreenParticles(ProtProcessParticles):
@@ -426,17 +427,29 @@ There are different merit values to be calculated:
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         self._initializeZscores()
-        self.outputSize = 0
         self.inputSize = 0
-        self.check = None
         self.fnInputMd = self._getExtraPath("input.xmd")
         self.fnInputOldMd = self._getExtraPath("inputOld.xmd")
         self.fnOutputMd = self._getExtraPath("output.xmd")
+        self.fnProcessedIds = self._getExtraPath("processed_ids.txt")
 
-        self.inputSize, self.streamClosed = self._loadInput()
-        partsSteps = self._insertNewPartsSteps()
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=partsSteps, wait=True)
+        if not self.isContinued():
+            for fileName in (self.fnInputMd, self.fnInputOldMd, self.fnOutputMd, self.fnProcessedIds):
+                cleanPath(fileName)
+
+        processedIds = self._readProcessedIds()
+        self.outputSize = len(processedIds)
+        partsSteps = []
+
+        if os.path.exists(self.fnOutputMd):
+            self.inputSize, self.streamClosed = self._getInputStatus()
+            self.outputSize += len(set(self._readMetadataIds(self.fnInputMd)).difference(processedIds))
+        else:
+            self.inputSize, self.streamClosed = self._loadInput()
+            if not isEmpty(self.fnInputMd):
+                partsSteps = self._insertNewPartsSteps()
+
+        self._insertFunctionStep('createOutputStep', prerequisites=partsSteps, wait=True)
 
     def _getFirstJoinStep(self):
         for s in self._steps:
@@ -467,13 +480,9 @@ There are different merit values to be calculated:
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # Check if there are new particles to process from the input set
-        partsFile = self.inputParticles.get().getFileName()
-        mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime:
-            return None
+        # Consume any pending output before preparing another input batch.
+        if os.path.exists(self.fnOutputMd):
+            return
 
         self.inputSize, self.streamClosed = self._loadInput()
         if not isEmpty(self.fnInputMd):
@@ -483,31 +492,32 @@ There are different merit values to be calculated:
                 outputStep.addPrerequisites(*fDeps)
             self.updateSteps()
 
-    def _loadInput(self):
-        self.lastCheck = datetime.now()
+    def _getInputStatus(self):
         partsFile = self.inputParticles.get().getFileName()
         inPartsSet = SetOfParticles(filename=partsFile)
         inPartsSet.loadAllProperties()
+        inputSize = inPartsSet.getSize()
+        streamClosed = inPartsSet.isStreamClosed()
+        inPartsSet.close()
+        return inputSize, streamClosed
 
-        check = None
-        for p in inPartsSet.iterItems(orderBy='creation', direction='DESC'):
-            check = p.getObjCreation()
-            break
-        if self.check is None:
-            writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=ALIGN_NONE, orderBy='creation')
+    def _loadInput(self):
+        partsFile = self.inputParticles.get().getFileName()
+        inPartsSet = SetOfParticles(filename=partsFile)
+        inPartsSet.loadAllProperties()
+        processedIds = self._readProcessedIds()
+
+        newParticles = (particle for particle in inPartsSet.iterItems(orderBy='creation') if particle.getObjId() not in processedIds)
+        writeSetOfParticles(newParticles, self.fnInputMd, alignType=ALIGN_NONE)
+
+        if processedIds:
+            oldParticles = (particle for particle in inPartsSet.iterItems(orderBy='creation') if particle.getObjId() in processedIds)
+            writeSetOfParticles(oldParticles, self.fnInputOldMd, alignType=ALIGN_NONE)
         else:
-            writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=ALIGN_NONE, orderBy='creation',
-                                where='creation>"' + str(self.check) + '"')
-            writeSetOfParticles(inPartsSet, self.fnInputOldMd,
-                                alignType=ALIGN_NONE, orderBy='creation',
-                                where='creation<"' + str(self.check) + '"')
-        self.check = check
+            cleanPath(self.fnInputOldMd)
 
         streamClosed = inPartsSet.isStreamClosed()
         inputSize = inPartsSet.getSize()
-
         inPartsSet.close()
 
         return inputSize, streamClosed
@@ -515,31 +525,30 @@ There are different merit values to be calculated:
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        self.finished = self.streamClosed and \
-                        self.outputSize == self.inputSize
-
+        self.finished = self.streamClosed and self.outputSize == self.inputSize
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         newData = os.path.exists(self.fnOutputMd)
         lastToClose = self.finished and hasattr(self, 'outputParticles')
         if newData or lastToClose:
-
             outSet = self._loadOutputSet(SetOfParticles, 'outputParticles.sqlite')
+            batchIds = []
 
             if newData:
+                batchIds = self._readMetadataIds(self.fnInputMd)
                 partsSet = self._createSetOfParticles()
                 readSetOfParticles(self.fnOutputMd, partsSet)
-                outSet.copyItems(partsSet)
-                for item in partsSet:
-                    self._calculateSummaryValues(item)
-                self._store()
-
-                writeSetOfParticles(outSet.iterItems(orderBy='_xmipp_zScore'),
-                                    self._getPath("images.xmd"),
-                                    alignType=ALIGN_NONE)
-                cleanPath(self.fnOutputMd)
+                self._appendNewParticles(outSet, partsSet)
+                self._recalculateSummaryValues(outSet)
+                writeSetOfParticles(outSet.iterItems(orderBy='_xmipp_zScore'), self._getPath("images.xmd"), alignType=ALIGN_NONE)
 
             self._updateOutputSet('outputParticles', outSet, streamMode)
+
+            if newData:
+                self._writeProcessedIds(batchIds)
+                self.outputSize = len(self._readProcessedIds())
+                self._store()
+                cleanPath(self.fnOutputMd)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -547,20 +556,58 @@ There are different merit values to be calculated:
                 outputStep.setStatus(cons.STATUS_NEW)
 
     def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+        outputSet = (getattr(self, 'outputParticles', None)
+                     if baseName == 'outputParticles.sqlite' else None)
+
+        outputSet, isNew = loadOutputSetForAppend(
+            self, SetClass, baseName,
+            'outputParticles' if baseName == 'outputParticles.sqlite' else None
+        )
+        if isNew:
             self._store(outputSet)
             self._defineTransformRelation(self.inputParticles, outputSet)
 
         outputSet.copyInfo(self.inputParticles.get())
 
         return outputSet
+
+    def _readProcessedIds(self):
+        if not os.path.exists(self.fnProcessedIds):
+            return set()
+        with open(self.fnProcessedIds) as inputFile:
+            return {int(line.strip()) for line in inputFile if line.strip()}
+
+    def _writeProcessedIds(self, particleIds):
+        processedIds = self._readProcessedIds()
+        newIds = [particleId for particleId in particleIds if particleId not in processedIds]
+        if not newIds:
+            return
+        with open(self.fnProcessedIds, 'a') as outputFile:
+            for particleId in newIds:
+                outputFile.write('%d\n' % particleId)
+            outputFile.flush()
+            os.fsync(outputFile.fileno())
+
+    def _readMetadataIds(self, metadataFile):
+        if not os.path.exists(metadataFile) or isEmpty(metadataFile):
+            return []
+        metadata = emlib.MetaData('Particles@%s' % metadataFile)
+        return [int(metadata.getValue(emlib.MDL_ITEM_ID, objId)) for objId in metadata]
+
+    def _appendNewParticles(self, outputSet, particles):
+        outputIds = set(outputSet.getIdSet()) if outputSet.getSize() else set()
+        for particle in particles:
+            particleId = particle.getObjId()
+            if particleId not in outputIds:
+                outputSet.append(particle)
+                outputIds.add(particleId)
+
+    def _recalculateSummaryValues(self, outputSet):
+        zScores = [particle._xmipp_zScore.get() for particle in outputSet]
+        if zScores:
+            self.minZScore.set(min(zScores))
+            self.maxZScore.set(max(zScores))
+            self.sumZScore.set(sum(zScores))
 
     # --------------------------- STEP functions -----------------------------
     def sortImagesStep(self):
@@ -612,11 +659,21 @@ There are different merit values to be calculated:
         self.outputSize += getSize(self.fnInputMd)
 
     def _initializeZscores(self):
-        # Store the set for later access , ;-(
-        self.minZScore = Float()
-        self.maxZScore = Float()
-        self.sumZScore = Float()
-        self.varThreshold = Float()
+        # Preserve persisted statistics and the variance threshold on Continue.
+        if not self.isContinued():
+            self.minZScore = Float()
+            self.maxZScore = Float()
+            self.sumZScore = Float()
+            self.varThreshold = Float()
+        else:
+            if not hasattr(self, 'minZScore'):
+                self.minZScore = Float()
+            if not hasattr(self, 'maxZScore'):
+                self.maxZScore = Float()
+            if not hasattr(self, 'sumZScore'):
+                self.sumZScore = Float()
+            if not hasattr(self, 'varThreshold'):
+                self.varThreshold = Float()
         self._store()
 
     def _calculateSummaryValues(self, particle):

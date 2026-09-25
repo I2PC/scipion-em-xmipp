@@ -222,13 +222,9 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
         return deps
 
     def _checkNewInput(self):
-        # If continue from an stopped run, don't repeat what is done
+        # Restore committed and pending duplicate-removal results on Continue.
         if not self.checkedMics:
-            for fn in getFiles(self._getExtraPath()):
-                fn = removeBaseExt(fn)
-                if fn.startswith(self.FN_PREFIX):
-                    self.checkedMics.update([self.getMicId(fn)])
-                    self.processedMics.update([self.getMicId(fn)])
+            self._restoreProcessedMics()
 
         readyMics, self.streamClosed = getReadyMics(self.inputCoordinates.get())
 

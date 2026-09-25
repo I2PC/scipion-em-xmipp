@@ -492,11 +492,25 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
 
     def _insertAllSteps(self):
         self._defineInputs()
+        inputMics, _ = self._loadInputMics()
         self.insertedDict = {}
-        preprocessSteps = self._insertNewMicsSteps(self.insertedDict,
-                                                   self.inputMicrographs.get())
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=preprocessSteps, wait=True)
+        self._restoreInsertedMics(inputMics)
+        preprocessSteps = self._insertNewMicsSteps(self.insertedDict, inputMics)
+        self._insertFunctionStep('createOutputStep', prerequisites=preprocessSteps, wait=True)
+
+    def _loadInputMics(self):
+        micsFile = self.inputMicrographs.get().getFileName()
+        micsSet = SetOfMicrographs(filename=micsFile)
+        micsSet.loadAllProperties()
+        inputMics = [m.clone() for m in micsSet]
+        streamClosed = micsSet.isStreamClosed()
+        micsSet.close()
+        return inputMics, streamClosed
+
+    def _restoreInsertedMics(self, inputMics):
+        for mic in inputMics:
+            if self._isMicPipelineDone(mic):
+                self.insertedDict[mic.getObjId()] = None
 
     def createOutputStep(self):
         pass
@@ -519,7 +533,7 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
         for mic in inputMics:
             if mic.getObjId() not in insertedDict:
                 fnOut = self._getOutputMicrograph(mic)
-                stepId = self._insertStepsForMicrograph(mic.getFileName(), fnOut)
+                stepId = self._insertStepsForMicrograph(mic.getObjId(), mic.getFileName(), fnOut)
                 deps.append(stepId)
                 insertedDict[mic.getObjId()] = stepId
         return deps
@@ -532,18 +546,11 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
 
     def _checkNewInput(self):
         # Check if there are new micrographs to process from the input set
-        micsFile = self.inputMicrographs.get().getFileName()
-        micsSet = SetOfMicrographs(filename=micsFile)
-        micsSet.loadAllProperties()
-        self.SetOfMicrographs = [m.clone() for m in micsSet]
-        self.streamClosed = micsSet.isStreamClosed()
-        micsSet.close()
-        newMics = any(m.getObjId() not in self.insertedDict
-                      for m in self.inputMics)
+        self.SetOfMicrographs, self.streamClosed = self._loadInputMics()
+        newMics = [m for m in self.SetOfMicrographs if m.getObjId() not in self.insertedDict]
         outputStep = self._getFirstJoinStep()
         if newMics:
-            fDeps = self._insertNewMicsSteps(self.insertedDict,
-                                             self.inputMics)
+            fDeps = self._insertNewMicsSteps(self.insertedDict, newMics)
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
             self.updateSteps()
@@ -552,26 +559,24 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        # Load previously done items (from text file)
-        doneList = self._readDoneList()
-        # Check for newly done items
-        newDone = [m.clone() for m in self.SetOfMicrographs
-                   if int(m.getObjId()) not in doneList and self._isMicDone(m)]
+        processedMics = [m.clone() for m in self.SetOfMicrographs if self._isMicPipelineDone(m)]
 
         # We have finished when there is not more input micrographs (stream closed)
-        # and the number of processed micrographs is equal to the number of inputs
-        self.finished = self.streamClosed and (len(doneList) + len(newDone)) == len(self.SetOfMicrographs)
+        # and every input micrograph has completed the whole preprocessing pipeline.
+        self.finished = self.streamClosed and len(processedMics) == len(self.SetOfMicrographs)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-        if newDone:
-            self._writeDoneList(newDone)
-        elif not self.finished:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
+        if not processedMics and not self.finished:
             return
 
         outSet = self.getOutputMics()
+        outputIds = self._getOutputMicIds(outSet)
+        doneIds = set(self._readDoneList())
+        newDone = [m for m in processedMics if int(m.getObjId()) not in outputIds]
+        pendingDone = [m for m in processedMics if int(m.getObjId()) not in doneIds]
+
+        if not newDone and not pendingDone and not self.finished:
+            return
 
         def tryToAppend(outSet, micOut, tries=1):
             """ When micrograph is very big, sometimes it's not ready to be read
@@ -604,10 +609,9 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
             tryToAppend(outSet, micOut)
 
         self._updateOutputSet(OUTPUT_MICROGRAPHS, outSet, streamMode)
-        
-        if len(doneList)==0: #firstTime
-            self._defineTransformRelation(self.inputMicrographs, outSet) 
-            
+        self._refreshOutputRelation(outSet)
+        if pendingDone:
+            self._writeDoneList(pendingDone)
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
@@ -627,13 +631,23 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
                                           * self.downFactor.get())
 
             self._defineOutputs(**{OUTPUT_MICROGRAPHS: outputSet})
-            self._defineTransformRelation(inputs, outputSet)
             self.info("Storing set 1rst time: %s" % outputSet)
             # self._store(outputSet)
         else:
             outputSet = getattr(self, OUTPUT_MICROGRAPHS)
 
         return outputSet
+
+    def _getOutputMicIds(self, outputSet):
+        return set(outputSet.getIdSet()) if outputSet.getSize() else set()
+
+    def _refreshOutputRelation(self, outputSet):
+        mapper = getattr(self, 'mapper', None)
+        if mapper is not None:
+            mapper.deleteRelations(self)
+        self._defineTransformRelation(self.inputMicrographs, outputSet)
+        if mapper is not None:
+            mapper.commit()
 
 
     def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
@@ -646,7 +660,7 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
         # outputSet.close()
 
     
-    def _insertStepsForMicrograph(self, inputMic, outputMic):
+    def _insertStepsForMicrograph(self, micId, inputMic, outputMic):
         self.params['inputMic'] = inputMic
         self.params['outputMic'] = outputMic
         self.lastStepId = None
@@ -681,7 +695,18 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
         # Normalize
         self.__insertOneStep(self.doNormalize, "xmipp_transform_normalize",
                             "-i %(inputMic)s --method OldXmipp")
-        return self.lastStepId
+        return self._insertFunctionStep('markMicDoneStep', micId, prerequisites=[self.lastStepId])
+
+    def markMicDoneStep(self, micId):
+        doneFn = self._getMicDoneMarker(micId)
+        os.makedirs(os.path.dirname(doneFn), exist_ok=True)
+        open(doneFn, 'w').close()
+
+    def _getMicDoneMarker(self, micId):
+        return self._getExtraPath('DONE', 'mic_%06d.TXT' % micId)
+
+    def _isMicPipelineDone(self, mic):
+        return os.path.exists(self._getMicDoneMarker(mic.getObjId()))
     
     def __insertOneStep(self, condition, program, arguments):
         """Insert operation if the condition is met.
