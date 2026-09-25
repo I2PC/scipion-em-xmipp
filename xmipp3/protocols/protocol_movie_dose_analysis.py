@@ -523,13 +523,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         return outputSet
 
     def _checkNewOutput(self):
-        # Check if we should force the median calculation because the stream is closed and all movies are done
-        maxMicSize = self._loadInputSet(self.movsFn).getSize()
-        all_processed = self.isStreamClosed and len(
-            self.processedIds) == maxMicSize
-        enough_samples = len(self.meanDoseList) >= self.n_samples.get()
-
-        if (enough_samples or all_processed) and not hasattr(self, 'mu'):
+        if len(self.meanDoseList) >= self.n_samples.get() and not hasattr(self, 'mu'):
             medianDoseExperimental = np.median(self.meanDoseList)
             if hasattr(self, 'dosePerFrame'):
                 refDose = self.dosePerFrame
