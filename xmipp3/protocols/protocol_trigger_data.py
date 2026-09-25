@@ -37,6 +37,8 @@ from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 
+from xmipp3.utils import loadOutputSetForAppend
+
 SIGNAL_FILENAME = "STOP_STREAM.TXT"
 
 class XmippProtTriggerData(EMProtocol, Protocol):
@@ -471,27 +473,32 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                             else int(len(self.splitedImages) / self.outputSize.get())
                         for _ in range(numIter):
                             self.outputCount += 1
+                            splitOutputName = "%s%d" % (outputName, self.outputCount)
                             imageSet = self._loadOutputSet(self.getImagesClass(),
                                                            '%s%d.sqlite'
                                                            % (self.getImagesType('lower'),
                                                               self.outputCount),
                                                            self.splitedImages[:splitLimIndex
-                                                                              or len(self.splitedImages)])
+                                                                              or len(self.splitedImages)],
+                                                           outputName=splitOutputName)
                             # The splitted outputSets are always closed
-                            self._updateOutputSet("%s%d" % (outputName, self.outputCount),
+                            self._updateOutputSet(splitOutputName,
                                                   imageSet, Set.STREAM_CLOSED)
                             self.splitedImages = self.splitedImages[splitLimIndex:] if splitLimIndex else []
                 else:  # Full streaming case
-                    if not os.path.exists(self._getPath(imsSqliteFn)):
+                    if getattr(self, outputName, None) is None and \
+                            not os.path.exists(self._getPath(imsSqliteFn)):
                         imageSet = self._loadOutputSet(self.getImagesClass(),
                                                        imsSqliteFn,
-                                                       self.images)
+                                                       self.images,
+                                                       outputName=outputName)
                     else:
                         # if finished no images to add, but we need to close the set
                         imagesToAdd = self.newImages if not self.finished else []
                         imageSet = self._loadOutputSet(self.getImagesClass(),
                                                        imsSqliteFn,
-                                                       imagesToAdd)
+                                                       imagesToAdd,
+                                                       outputName=outputName)
                     streamMode = Set.STREAM_CLOSED if self.finished else \
                         Set.STREAM_OPEN
                     self._updateOutputSet(outputName, imageSet, streamMode)
@@ -499,18 +506,18 @@ class XmippProtTriggerData(EMProtocol, Protocol):
             else:
                 # Always reopen/update the static output. This repairs Resume if
                 # the SQLite was persisted before the protocol output attribute.
-                imageSet = self._loadOutputSet(self.getImagesClass(), imsSqliteFn, self.images)
+                imageSet = self._loadOutputSet(self.getImagesClass(), imsSqliteFn, self.images,
+                                               outputName=outputName)
                 self._updateOutputSet(outputName, imageSet, Set.STREAM_CLOSED)
 
-    def _loadOutputSet(self, SetClass, baseName, newImages):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+    def _loadOutputSet(self, SetClass, baseName, newImages, outputName=None):
+        # Reuse the logical output Scipion already knows about before
+        # falling back to the on-disk backing file, otherwise an output
+        # still awaiting its backing file to materialize would be silently
+        # discarded and replaced with an empty fresh Set.
+        outputSet, _ = loadOutputSetForAppend(
+            self, SetClass, baseName, outputName
+        )
 
         inputs = self.inputImages.get()
         outputSet.copyInfo(inputs)

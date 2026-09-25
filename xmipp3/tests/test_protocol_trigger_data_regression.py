@@ -137,6 +137,30 @@ class TestXmippTriggerDataRegression(BaseTest):
         self.assertEqual({1, 2}, outputSet.getIdSet())
         self.assertEqual([2], outputSet.appended)
 
+    def testLoadOutputSetReusesLogicalOutputWithoutBackingFile(self):
+        # Regression test: an output that Scipion already knows about
+        # (protocol.outputParticles is set) must be reused even when its
+        # backing file was never materialized on disk yet. Falling through
+        # to "no backing file -> build a fresh, empty Set" would silently
+        # discard whatever was already appended to the real logical output.
+        prot = self._newProtocol()
+        prot.inputImages = SimpleNamespace(get=lambda: object())
+        prot._getPath = lambda name: name
+
+        existingOutputSet = _FakeOutputSet()
+        existingOutputSet.ids = {1, 2}
+        prot.outputParticles = existingOutputSet
+
+        with patch('xmipp3.protocols.protocol_trigger_data.os.path.exists', return_value=False):
+            outputSet = prot._loadOutputSet(
+                _FakeOutputSet, 'particles.dat', [_FakeImage(2), _FakeImage(3)],
+                outputName='outputParticles',
+            )
+
+        self.assertIs(existingOutputSet, outputSet)
+        self.assertEqual({1, 2, 3}, outputSet.getIdSet())
+        self.assertEqual([3], outputSet.appended)
+
     def testStaticOutputIsRepublishedWhenSqliteAlreadyExists(self):
         prot = self._newProtocol(allImages=False, outputSize=1)
         prot.images = [_FakeImage(1)]
