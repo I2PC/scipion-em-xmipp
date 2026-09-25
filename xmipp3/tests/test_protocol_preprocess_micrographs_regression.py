@@ -145,3 +145,31 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
         prot._defineTransformRelation = lambda *args: events.append('define')
         prot._refreshOutputRelation(object())
         self.assertEqual(['delete', 'define', 'commit'], events)
+
+# Finalization regression: the executor performs one last stepsCheck callback
+# after it has already found no pending steps.
+from unittest.mock import Mock
+
+from pyworkflow.tests import BaseTest, setupTestProject
+from xmipp3.protocols.protocol_preprocess_micrographs import (
+    XmippProtPreprocessMicrographs,
+)
+
+
+class TestXmippPreprocessMicrographsFinalizationRegression(BaseTest):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testFinishedStepsCheckIsNoOp(self):
+        prot = self.newProtocol(XmippProtPreprocessMicrographs)
+        prot.finished = True
+        prot._checkNewInput = Mock()
+        prot._checkNewOutput = Mock()
+
+        prot._stepsCheck()
+
+        prot._checkNewInput.assert_not_called()
+        prot._checkNewOutput.assert_not_called()
+

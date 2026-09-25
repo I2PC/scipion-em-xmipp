@@ -662,10 +662,16 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             self.finished = self.isStreamClosed and allDone == maxMicSize
             streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-            if not self.finished and not newDone:
-                # If we are not finished and no new output have been produced
-                # it does not make sense to proceed and updated the outputs
-                # so we exit from the function here
+            if not newDone:
+                # Nothing new remains to be published. In particular, the
+                # executor performs one final streaming check after all steps
+                # are terminal, so avoid reloading the input Set once the
+                # protocol is already finished.
+                if self.finished:
+                    outputStep = self._getFirstJoinStep()
+                    if outputStep and outputStep.isWaiting():
+                        outputStep.setStatus(cons.STATUS_NEW)
+                    self._store()
                 return
 
             # Update the file with the newly done movies

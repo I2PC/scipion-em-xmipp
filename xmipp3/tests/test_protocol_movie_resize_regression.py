@@ -199,3 +199,29 @@ class TestXmippMovieResizeRegression(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+import unittest
+from unittest.mock import Mock
+
+from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+    XmippProtMovieResize,
+)
+
+
+class TestXmippMovieResizeFinalizationRegression(unittest.TestCase):
+
+    def testFinishedStepsCheckIsNoOp(self):
+        class _Harness:
+            finished = True
+
+            def __init__(self):
+                self._checkNewInput = Mock()
+                self._checkNewOutput = Mock()
+
+        protocol = _Harness()
+
+        XmippProtMovieResize._stepsCheck(protocol)
+
+        protocol._checkNewInput.assert_not_called()
+        protocol._checkNewOutput.assert_not_called()
+

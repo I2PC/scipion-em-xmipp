@@ -8,6 +8,7 @@
 # *****************************************************************************
 
 import unittest
+from unittest.mock import Mock
 
 from xmipp3.protocols.protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
 
@@ -48,6 +49,30 @@ class TestMovieDoseAnalysisRegression(unittest.TestCase):
         newDone = prot._getNewDoneIds(doneListIds=[1, 2, 4, 5])
 
         self.assertEqual([3], newDone)
+
+
+    def testFinishedCheckDoesNotReloadInputWithoutNewMovies(self):
+        """A final streaming check must be a no-op when everything is done."""
+        prot = XmippProtMovieDoseAnalysis()
+        prot.insertedIds = [1]
+        prot.processedIds = [1]
+        prot._doneIds = {1}
+        prot._acceptedIds = {1}
+        prot._discardedIds = set()
+        prot._inputSize = 1
+        prot.isStreamClosed = True
+        prot.finished = True
+        prot.mu = 1.0
+        prot.meanDoseById = {1: 1.0}
+        prot._lastPlotCount = 1
+
+        prot._loadMoviesByIds = Mock(return_value={})
+        prot._getFirstJoinStep = Mock(return_value=None)
+        prot._store = Mock()
+
+        prot._checkNewOutput()
+
+        prot._loadMoviesByIds.assert_not_called()
 
 
 if __name__ == "__main__":

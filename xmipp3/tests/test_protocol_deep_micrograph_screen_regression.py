@@ -5,7 +5,7 @@
 # **************************************************************************
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from pyworkflow.object import Set
 
@@ -158,6 +158,17 @@ class TestXmippDeepMicrographScreenRegression(unittest.TestCase):
         deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
         self.assertTrue(protocol.finished)
         self.assertEqual([('output', Set.STREAM_CLOSED)], protocol.events)
+
+    def testFinishedStepsCheckIsNoOp(self):
+        protocol = _InputHarness()
+        protocol.finished = True
+        protocol._checkNewInput = Mock()
+        protocol._checkNewOutput = Mock()
+
+        deep_screen.XmippProtDeepMicrographScreen._stepsCheck(protocol)
+
+        protocol._checkNewInput.assert_not_called()
+        protocol._checkNewOutput.assert_not_called()
 
 
 if __name__ == '__main__':

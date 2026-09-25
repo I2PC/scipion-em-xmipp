@@ -481,6 +481,13 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
+    def _stepsCheck(self):
+        if getattr(self, 'finished', False):
+            return
+
+        self._checkNewInput()
+        self._checkNewOutput()
+
     def _checkNewInput(self):
         newMics = self._loadInputList()
         outputStep = self._getFirstJoinStep()

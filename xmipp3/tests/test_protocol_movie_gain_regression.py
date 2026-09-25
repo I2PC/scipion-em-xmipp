@@ -144,3 +144,29 @@ class TestXmippMovieGainRegression(BaseTest):
         self.assertEqual([1], residual.appended)
         self.assertEqual([1], movies.appended)
         self.assertEqual(['estimatedGains', 'residualGains', 'outputMovies', 'done'], events)
+
+# Finalization regression: the executor performs one last stepsCheck callback
+# after it has already found no pending steps.
+from unittest.mock import Mock
+
+from pyworkflow.tests import BaseTest, setupTestProject
+from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
+
+
+class TestXmippMovieGainFinalizationRegression(BaseTest):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testFinishedStepsCheckIsNoOp(self):
+        prot = self.newProtocol(XmippProtMovieGain)
+        prot.finished = True
+        prot._checkNewInput = Mock()
+        prot._checkNewOutput = Mock()
+
+        prot._stepsCheck()
+
+        prot._checkNewInput.assert_not_called()
+        prot._checkNewOutput.assert_not_called()
+

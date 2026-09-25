@@ -398,6 +398,13 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
     def readCoordsFromMics(self, workingDir, micList, coordSet):
         readSetOfCoordinates(workingDir, micList, coordSet)
 
+    def _stepsCheck(self):
+        if getattr(self, 'finished', False):
+            return
+
+        self._checkNewInput()
+        self._checkNewOutput()
+
     def _checkNewInput(self):
         micDict, self.streamClosed = self._loadInputList()
         newMics = list(micDict.values())

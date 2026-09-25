@@ -277,3 +277,29 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
         self.assertEqual([2], doneIds)
         self.assertEqual(1, sizeOutput)
         self.assertTrue(inputSet.closed)
+
+import unittest
+from unittest.mock import Mock
+
+from xmipp3.protocols.protocol_mics_defocus_balancer import (
+    XmippProtMicDefocusSampler,
+)
+
+
+class TestXmippMicDefocusSamplerFinalizationRegression(unittest.TestCase):
+
+    def testFinishedStepsCheckIsNoOp(self):
+        class _Harness:
+            finished = True
+
+            def __init__(self):
+                self._checkNewInput = Mock()
+                self._checkNewOutput = Mock()
+
+        protocol = _Harness()
+
+        XmippProtMicDefocusSampler._stepsCheck(protocol)
+
+        protocol._checkNewInput.assert_not_called()
+        protocol._checkNewOutput.assert_not_called()
+

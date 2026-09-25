@@ -180,3 +180,29 @@ class TestXmippTriggerDataRegression(BaseTest):
             prot._fillingOutput()
 
         self.assertEqual([('outputParticles', outputSet, Set.STREAM_CLOSED)], updates)
+
+# Finalization regression: the executor performs one last stepsCheck callback
+# after it has already found no pending steps.
+from unittest.mock import Mock
+
+from pyworkflow.tests import BaseTest, setupTestProject
+from xmipp3.protocols.protocol_trigger_data import XmippProtTriggerData
+
+
+class TestXmippTriggerDataFinalizationRegression(BaseTest):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testFinishedStepsCheckIsNoOp(self):
+        prot = self.newProtocol(XmippProtTriggerData)
+        prot.finished = True
+        prot._checkNewInput = Mock()
+        prot._checkNewOutput = Mock()
+
+        prot._stepsCheck()
+
+        prot._checkNewInput.assert_not_called()
+        prot._checkNewOutput.assert_not_called()
+

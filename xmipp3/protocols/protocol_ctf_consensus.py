@@ -534,10 +534,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-        if not self.finished and (not newDoneDiscarded and not newDoneAccepted):
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
+        if not newDoneDiscarded and not newDoneAccepted:
+            if self.finished:
+                outputStep = self._getFirstJoinStep()
+                if outputStep and outputStep.isWaiting():
+                    outputStep.setStatus(STATUS_NEW)
+                self._store()
             return
 
         def readOrCreateOutputs(doneList, newDone, label=''):

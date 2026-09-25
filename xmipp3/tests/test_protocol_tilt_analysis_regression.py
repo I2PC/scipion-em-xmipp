@@ -7,7 +7,7 @@
 # *
 # *****************************************************************************
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from pyworkflow.tests import BaseTest, setupTestProject
 
@@ -27,6 +27,9 @@ class _FakeInputSet:
 
     def getIdSet(self):
         return set(self._ids)
+
+    def getSize(self):
+        return len(self._ids)
 
     def isStreamClosed(self):
         return self._streamClosed
@@ -128,3 +131,31 @@ class TestXmippTiltAnalysisRegression(BaseTest):
 
         self.assertEqual({1}, outputSet.ids)
         self.assertEqual([1], outputSet.appended)
+
+
+    def testFinishedCheckDoesNotReloadInputWithoutNewMicrographs(self):
+        """A terminal output check must not reload input items when none are new."""
+        prot = self._newProtocol()
+        prot.processedIds = [1]
+        prot.isStreamClosed = True
+
+        inputSet = _FakeInputSet([1], streamClosed=True)
+        prot._loadInputSet = Mock(return_value=inputSet)
+        prot._getAllDoneIds = lambda: ([1], 1, [1], [])
+        prot._getFirstJoinStep = lambda: None
+        prot._loadOutputSet = Mock()
+        prot._updateOutputSet = Mock()
+        prot._store = Mock()
+
+        prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+        self.assertEqual(
+            1,
+            prot._loadInputSet.call_count,
+            "The terminal check may read input size once, but must not "
+            "reload the Set again when newDone is empty.",
+        )
+        prot._loadOutputSet.assert_not_called()
+        prot._updateOutputSet.assert_not_called()
+        prot._store.assert_called_once()

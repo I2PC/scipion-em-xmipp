@@ -277,3 +277,27 @@ class TestXmippExtractParticlesBatching(unittest.TestCase):
         )
         self.assertEqual([], deps)
         self.assertEqual({}, protocol.micDict)
+
+import unittest
+from unittest.mock import Mock
+
+from xmipp3.protocols.protocol_extract_particles import XmippProtExtractParticles
+
+
+class TestXmippExtractParticlesFinalizationRegression(unittest.TestCase):
+
+    def testFinishedStepsCheckIsNoOp(self):
+        class _Harness:
+            finished = True
+
+            def __init__(self):
+                self._checkNewInput = Mock()
+                self._checkNewOutput = Mock()
+
+        protocol = _Harness()
+
+        XmippProtExtractParticles._stepsCheck(protocol)
+
+        protocol._checkNewInput.assert_not_called()
+        protocol._checkNewOutput.assert_not_called()
+

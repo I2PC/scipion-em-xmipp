@@ -23,6 +23,7 @@
 
 import os
 import time
+from unittest.mock import Mock
 from datetime import datetime
 
 from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
@@ -426,3 +427,34 @@ class TestXmippCTFConsensusBase(BaseTest):
             sorted(scheduledIds),
             "Restart must schedule all input CTFs instead of restoring previous outputs."
         )
+
+
+    def testFinishedCheckDoesNotReloadOutputsWithoutNewCtfs(self):
+        """The final streaming check must not reopen persisted CTF outputs."""
+
+        class _InputCtfSet:
+            def getIdSet(self):
+                return {1}
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.isStreamClosed = True
+        prot.acceptedIds = [1]
+        prot.discardedIds = []
+
+        prot._getAllDoneIds = lambda: ([1], 1, [1], [])
+        prot._loadInputCtfSet = lambda fn: _InputCtfSet()
+        prot.ctfFn1 = "ctfs.sqlite"
+
+        prot._loadOutputSet = Mock()
+        prot.fillOutput = Mock()
+        prot._updateOutputSet = Mock()
+        prot._getFirstJoinStep = lambda: None
+        prot._store = Mock()
+
+        prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+        prot._loadOutputSet.assert_not_called()
+        prot.fillOutput.assert_not_called()
+        prot._updateOutputSet.assert_not_called()

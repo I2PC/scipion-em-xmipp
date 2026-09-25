@@ -343,6 +343,9 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         return deps
 
     def _stepsCheck(self):
+        if getattr(self, 'finished', False):
+            return
+
         self._checkNewInput()
         self._checkNewOutput()
 

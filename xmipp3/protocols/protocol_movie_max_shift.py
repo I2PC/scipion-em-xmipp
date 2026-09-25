@@ -385,6 +385,9 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         return micSet
 
     def _stepsCheck(self):
+        if getattr(self, 'finished', False):
+            return
+
         # Input micrograph set can be loaded or None when checked for new inputs
         # If None, we load it
         self._checkNewInput()
@@ -392,7 +395,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     def _checkNewInput(self):
         # Check if there are new micrographs to process from the input set
-        # Always reload the Set so managed PostgreSQL snapshots are refreshed.
+        # Always reload the Set so newly persisted streaming items are visible.
         movSet = self._loadInputSet(self.movsFn)
         movSetIds = movSet.getIdSet()
         newIds = [idMic for idMic in movSetIds if idMic not in self.insertedIds]

@@ -451,8 +451,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # Always reload both input Sets. In ScipionWeb the SQLite files are
-        # compatibility snapshots whose refresh is triggered when the Set is loaded.
+        # Always reload both input Sets so newly persisted streaming
+        # items are visible before checking for new work.
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
         movieSet2 = self._loadInputMovieSet(self.movieFn2)
 
@@ -636,6 +636,13 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         self.finished = (self.isStreamClosed and allDone == maxMovieSize)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
+        if not newDoneDiscarded and not newDoneAccepted:
+            if self.finished:
+                outputStep = self._getFirstJoinStep()
+                if outputStep and outputStep.isWaiting():
+                    outputStep.setStatus(STATUS_NEW)
+            return
+
         def readOrCreateOutputs(doneList, newDone, label=''):
             if len(doneList) > 0 or len(newDone) > 0:
                 with self._lock:
@@ -653,12 +660,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
         movieSet, micSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
         movieSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded, newDoneDiscarded, DISCARDED)
-
-        if not self.finished and not newDoneDiscarded and not newDoneAccepted:
-        # If we are not finished and no new output have been produced
-        # it does not make sense to proceed and updated the outputs
-        # so we exit from the function here
-            return
 
         def updateOutputsAndClose(movieSet, micSet, label=''):
             if movieSet is None or micSet is None:

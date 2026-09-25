@@ -498,10 +498,12 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.finished = self.isStreamClosed and allDone == maxMicSize
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-        if not self.finished and not newDone:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
+        if not newDone:
+            if self.finished:
+                outputStep = self._getFirstJoinStep()
+                if outputStep and outputStep.isWaiting():
+                    outputStep.setStatus(cons.STATUS_NEW)
+                self._store()
             return
 
         micsAccepted = []

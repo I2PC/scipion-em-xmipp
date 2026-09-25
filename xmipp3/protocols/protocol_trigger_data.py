@@ -377,6 +377,9 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                                  prerequisites=[imsSteps], wait=True)
 
     def _stepsCheck(self):
+        if getattr(self, 'finished', False):
+            return
+
         self._checkNewInput()
         self._checkNewOutput()
 
@@ -386,8 +389,8 @@ class XmippProtTriggerData(EMProtocol, Protocol):
     def _checkNewInput(self):
         imsFile = self.inputImages.get().getFileName()
 
-        # Load the input set dynamically. Do not rely on the SQLite mtime:
-        # streaming databases may be updated without changing the main file mtime.
+        # Load the input Set dynamically so newly persisted streaming
+        # items are visible before checking for new work.
         inputClass = self.getImagesClass()
         self.imsSet = inputClass(filename=imsFile)
         self.imsSet.loadAllProperties()

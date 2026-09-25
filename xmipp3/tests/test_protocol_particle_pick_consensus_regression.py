@@ -240,3 +240,29 @@ class TestXmippParticlePickConsensusRegression(BaseTest):
         prot._refreshOutputRelations(object())
 
         self.assertEqual(['delete', 'define', 'commit'], events)
+
+import unittest
+from unittest.mock import Mock
+
+from xmipp3.protocols.protocol_particle_pick_consensus import (
+    XmippProtConsensusPicking,
+)
+
+
+class TestXmippConsensusPickingFinalizationRegression(unittest.TestCase):
+
+    def testFinishedStepsCheckIsNoOp(self):
+        class _Harness:
+            finished = True
+
+            def __init__(self):
+                self._checkNewInput = Mock()
+                self._checkNewOutput = Mock()
+
+        protocol = _Harness()
+
+        XmippProtConsensusPicking._stepsCheck(protocol)
+
+        protocol._checkNewInput.assert_not_called()
+        protocol._checkNewOutput.assert_not_called()
+

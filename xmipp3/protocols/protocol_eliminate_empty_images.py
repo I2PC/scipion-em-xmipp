@@ -471,6 +471,9 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         pass
 
     def _stepsCheck(self):
+        if getattr(self, 'finished', False):
+            return
+
         # Input particles set can be loaded or None when checked for new inputs
         # If None, we load it
         self._checkNewInput()

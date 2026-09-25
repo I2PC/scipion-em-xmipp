@@ -249,3 +249,27 @@ class TestXmippScreenParticlesRegression(BaseTest):
         self.assertTrue(isNew)
         self.assertEqual('/tmp/outputParticles.sqlite', outputSet.filename)
         self.assertEqual(FreshOutputSetProbe.STREAM_OPEN, outputSet.streamState)
+
+import unittest
+from unittest.mock import Mock
+
+from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
+
+
+class TestXmippScreenParticlesFinalizationRegression(unittest.TestCase):
+
+    def testFinishedStepsCheckIsNoOp(self):
+        class _Harness:
+            finished = True
+
+            def __init__(self):
+                self._checkNewInput = Mock()
+                self._checkNewOutput = Mock()
+
+        protocol = _Harness()
+
+        XmippProtScreenParticles._stepsCheck(protocol)
+
+        protocol._checkNewInput.assert_not_called()
+        protocol._checkNewOutput.assert_not_called()
+

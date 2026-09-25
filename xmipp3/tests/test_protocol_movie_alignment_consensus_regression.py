@@ -8,7 +8,7 @@
 # *****************************************************************************
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 from pwem.objects import SetOfMovies
@@ -458,3 +458,31 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot._getMovieSelecFileAccepted = lambda: selectionFn
 
         self.assertEqual([1, 2], prot._readtMovieId(True))
+
+
+    def testFinishedCheckDoesNotReloadOutputsWithoutNewMovies(self):
+        """The final streaming check must not reopen already persisted outputs."""
+        prot = self._newProtocol()
+        prot.allMovies1 = {1: object()}
+        prot.allMovies2 = {1: object()}
+        prot.isStreamClosed = True
+        prot.samplingRate = 1.0
+        prot.acquisition = _FakeAcquisition()
+
+        prot._readCertainDoneList = (
+            lambda label: [1] if label == ACCEPTED else []
+        )
+        prot._readtMovieId = lambda accepted: [1] if accepted else []
+        prot._loadOutputSet = Mock(return_value=_FakeOutputSet(ids=[1]))
+        prot.fillOutput = Mock()
+        prot._updateOutputSet = Mock()
+        prot._refreshOutputRelations = Mock()
+        prot._getFirstJoinStep = lambda: None
+
+        prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+        prot._loadOutputSet.assert_not_called()
+        prot.fillOutput.assert_not_called()
+        prot._updateOutputSet.assert_not_called()
+        prot._refreshOutputRelations.assert_not_called()

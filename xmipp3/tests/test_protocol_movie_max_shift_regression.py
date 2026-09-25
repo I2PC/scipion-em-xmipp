@@ -1,3 +1,4 @@
+from unittest.mock import Mock
 # *****************************************************************************
 # *
 # * This program is free software; you can redistribute it and/or modify
@@ -297,3 +298,15 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         prot.getMapper = lambda: FailMapper()
 
         self.assertIsNone(prot._loadMicAssociatedInputSet())
+
+    def testFinishedStepsCheckIsNoOp(self):
+        """The executor final callback must not touch streaming state again."""
+        prot = self.newProtocol(XmippProtMovieMaxShift)
+        prot.finished = True
+        prot._checkNewInput = Mock()
+        prot._checkNewOutput = Mock()
+
+        prot._stepsCheck()
+
+        prot._checkNewInput.assert_not_called()
+        prot._checkNewOutput.assert_not_called()

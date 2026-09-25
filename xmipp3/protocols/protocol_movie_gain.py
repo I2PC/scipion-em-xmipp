@@ -586,6 +586,13 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
 
         return outputSet
 
+    def _stepsCheck(self):
+        if getattr(self, 'finished', False):
+            return
+
+        self._checkNewInput()
+        self._checkNewOutput()
+
     def _checkNewInput(self):
         self._loadInputList()
         newMovies = any(m.getObjId() not in self.insertedDict for m in self.listOfMovies)
