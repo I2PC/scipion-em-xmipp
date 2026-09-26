@@ -425,6 +425,13 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                 self.updateRelations(ctfSet, micSet)
                 self.finished = True
                 self._store()  # Update the summary dictionary
+
+                # Unlock the join step in the same check that finishes
+                # sampling. A later _stepsCheck call may be skipped once
+                # self.finished is True.
+                outputStep = self._getFirstJoinStep()
+                if outputStep and outputStep.isWaiting():
+                    outputStep.setStatus(STATUS_NEW)
         else:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
