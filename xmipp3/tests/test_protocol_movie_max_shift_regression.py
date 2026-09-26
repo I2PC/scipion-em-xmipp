@@ -60,6 +60,9 @@ class _FakeItem:
         clone.enabled = self.enabled
         return clone
 
+    def getObjId(self):
+        return self.itemId
+
     def setEnabled(self, enabled):
         self.enabled = enabled
 
@@ -74,6 +77,9 @@ class _FakeOutputSet:
 
     def getSize(self):
         return len(self.items)
+
+    def getIdSet(self):
+        return {item.getObjId() for item in self.items}
 
     def close(self):
         self.closed = True
@@ -298,6 +304,133 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         prot.getMapper = lambda: FailMapper()
 
         self.assertIsNone(prot._loadMicAssociatedInputSet())
+
+    def testRetriesAssociatedMicrographDiscoveryWhileStillMissing(self):
+        # Streaming may expose movies before the sibling mic output exists.
+        prot = self._newProtocol()
+
+        # A previous streaming check already tried to discover associated mics
+        # and found none. The protocol must not treat that result as permanent.
+        prot.alreadyLoad = True
+        prot.inputMics = None
+        prot.outMicName = None
+
+        prot.setInputMics = Mock()
+        prot._insertFunctionStep = Mock(return_value=17)
+
+        deps = prot._insertNewMoviesSteps([2])
+
+        prot.setInputMics.assert_called_once_with()
+        self.assertEqual([17], deps)
+        self.assertIn(2, prot.insertedIds)
+
+    def testDiscoversUniqueGenericMicrographOutput(self):
+        prot = self._newProtocol()
+
+        sourceMics = SetOfMicrographs()
+
+        class ParentProtocol:
+            def iterOutputAttributes(self):
+                return [('alignedMics', sourceMics)]
+
+        class Mapper:
+            def getParent(self, _):
+                return ParentProtocol()
+
+        prot.getMapper = lambda: Mapper()
+
+        prot.setInputMics()
+
+        self.assertIs(sourceMics, prot.inputMics)
+        self.assertEqual('alignedMics', prot.inputMicName)
+        self.assertEqual(
+            'outputMicrographs',
+            prot.outMicName,
+            'A unique generic SetOfMicrographs output should be '
+            'consumed without depending on a protocol-specific name.',
+        )
+
+    def testDiscoversNewMotionCorrDoseWeightedMicrographs(self):
+        prot = self._newProtocol()
+
+        sourceMics = object()
+
+        class ParentProtocol:
+            micrographsDW = sourceMics
+
+        class Mapper:
+            def getParent(self, _):
+                return ParentProtocol()
+
+        prot.getMapper = lambda: Mapper()
+
+        prot.setInputMics()
+
+        self.assertIs(sourceMics, prot.inputMics)
+        self.assertEqual('micrographsDW', prot.inputMicName)
+        self.assertEqual(
+            'outputMicrographsDoseWeighted',
+            prot.outMicName,
+            'MaxShift must consume New MotionCorr micrographsDW but '
+            'publish its own canonical dose-weighted micrograph output.',
+        )
+
+    def testBackfillsMicrographPublishedAfterMovieWasAlreadyDone(self):
+        prot = self._newProtocol()
+        prot.acceptedIds = [1]
+        prot.inputMics = object()
+        prot.outMicName = 'outputMicrographs'
+        prot._getAllDoneIds = lambda: ([1], 1, [1], [])
+        prot._getFirstJoinStep = lambda: None
+        prot._store = lambda: None
+        prot._defineTransformRelation = lambda *args, **kwargs: None
+
+        movie = _FakeItem(1)
+        mic = _FakeItem(1)
+
+        prot._loadInputSet = lambda _: _FakeInputSet(
+            ids=[1], streamClosed=False, items={1: movie}
+        )
+        prot._loadMicAssociatedInputSet = lambda: _FakeInputSet(
+            ids=[1], streamClosed=False, items={1: mic}
+        )
+
+        movieOutput = _FakeOutputSet()
+        movieOutput.append(movie.clone())
+        micOutput = _FakeOutputSet()
+
+        def loadOutputSet(SetClass, baseName):
+            if SetClass is SetOfMovies:
+                return movieOutput
+            if SetClass is SetOfMicrographs:
+                return micOutput
+            raise AssertionError('Unexpected output Set class.')
+
+        prot._loadOutputSet = loadOutputSet
+
+        updatedOutputs = []
+        prot._updateOutputSet = (
+            lambda outputName, outputSet, streamMode:
+            updatedOutputs.append((outputName, outputSet, streamMode))
+        )
+
+        prot._checkNewOutput()
+
+        self.assertEqual(
+            {1},
+            movieOutput.getIdSet(),
+            'Backfilling a late micrograph must not duplicate the movie.',
+        )
+        self.assertEqual(
+            {1},
+            micOutput.getIdSet(),
+            'A micrograph that appears after its movie was already persisted '
+            'must be backfilled into the corresponding MaxShift output.',
+        )
+        self.assertTrue(
+            any(name == 'outputMicrographs' for name, _, _ in updatedOutputs),
+            'The backfilled micrograph Set must be published as outputMicrographs.',
+        )
 
     def testFinishedStepsCheckIsNoOp(self):
         """The executor final callback must not touch streaming state again."""

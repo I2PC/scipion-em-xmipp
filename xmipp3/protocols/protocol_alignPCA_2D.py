@@ -409,7 +409,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                             ' If multiple processors are available, it is recommended'
                             ' to set this value as high as possible (e.g., 24, 32...).')
 
-        form.addParallelSection(threads=3, mpi=1)
+        form.addParallelSection(threads=3, mpi=4)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -552,7 +552,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
             
             args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
-            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.classificationMPIs.get())
+            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
             
         else:
             args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)

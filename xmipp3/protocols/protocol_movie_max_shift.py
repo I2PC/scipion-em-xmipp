@@ -367,15 +367,16 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         return movSet
 
     def _loadMicAssociatedInputSet(self):
-        """ Load the input set of mics and create a list. """
-        if not self.outMicName:
+        """Load the micrograph Set associated with the input movies."""
+        inputMicName = getattr(self, 'inputMicName', None)
+        if not inputMicName:
             return None
 
         parentProt = self.getMapper().getParent(self.inputMovies.get())
         if parentProt is None:
             return None
 
-        micSet = getattr(parentProt, self.outMicName, None)
+        micSet = getattr(parentProt, inputMicName, None)
         if micSet is None:
             return None
 
@@ -422,8 +423,10 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
     def _insertNewMoviesSteps(self, newIds):
         """ Insert the processMovieStep for a given movie.
         """
-        if not self.alreadyLoad:
-            # looking for a setOfMicrographs related to the inputMovies
+        if not self.alreadyLoad or self.inputMics is None:
+            # Streaming parents may publish outputMovies before the sibling
+            # micrograph output exists. Keep retrying discovery until mics
+            # are actually available.
             self.setInputMics()
 
         # Insert the selection/rejection step process
@@ -492,6 +495,12 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     def _checkNewOutput(self):
         """ Check for already selected Movies and update the output set. """
+        # The producer may expose outputMovies before its sibling micrograph
+        # output. Keep trying discovery even when no new movie batch arrives.
+        if (getattr(self, 'inputMics', None) is None
+                and self.inputMovies.get() is not None):
+            self.setInputMics()
+
         # load if first time in order to make dataSets relations
         _, _, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
         # Check for newly done items
@@ -502,6 +511,39 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                            if movId not in doneListAccepted]
         newDoneDiscarded = [movId for movId in discardedIds
                             if movId not in doneListDiscarded]
+
+        # Movies can be persisted before their sibling micrographs become
+        # visible. Detect missing micrograph outputs and backfill them.
+        backfillAccepted = []
+        backfillDiscarded = []
+        if getattr(self, 'inputMics', None) is not None and self.outMicName:
+            inputMics = self._loadMicAssociatedInputSet()
+            if inputMics is not None:
+                inputMicIds = inputMics.getIdSet()
+
+                acceptedMicSet = getattr(self, self.outMicName, None)
+                acceptedMicIds = (
+                    acceptedMicSet.getIdSet()
+                    if acceptedMicSet is not None and acceptedMicSet.getSize() > 0
+                    else set()
+                )
+
+                discardedMicName = self.outMicName + 'Discarded'
+                discardedMicSet = getattr(self, discardedMicName, None)
+                discardedMicIds = (
+                    discardedMicSet.getIdSet()
+                    if discardedMicSet is not None and discardedMicSet.getSize() > 0
+                    else set()
+                )
+
+                backfillAccepted = [
+                    movId for movId in doneListAccepted
+                    if movId in inputMicIds and movId not in acceptedMicIds
+                ]
+                backfillDiscarded = [
+                    movId for movId in doneListDiscarded
+                    if movId in inputMicIds and movId not in discardedMicIds
+                ]
 
         firstTimeAccepted = len(doneListAccepted) == 0
         firstTimeDiscarded = len(doneListDiscarded) == 0
@@ -520,10 +562,12 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         self.debug('   newDoneAccepted: %d.' % len(newDoneAccepted))
         self.debug('   newDoneDiscarded: %d,' % len(newDoneDiscarded))
 
-        if not self.finished and (not newDoneDiscarded and not newDoneAccepted):
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
+        if (not self.finished
+                and not newDoneDiscarded
+                and not newDoneAccepted
+                and not backfillAccepted
+                and not backfillDiscarded):
+            # Nothing new to publish, including late sibling micrographs.
             return
 
         def fillOutput(newDoneList, firstTime, AccOrDisc='Accepted'):
@@ -535,6 +579,11 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             enable = False if AccOrDisc=='Discarded' else True
                 
             movieSet = self._loadOutputSet(SetOfMovies, 'movies%s.sqlite' % suffix)
+            micOutputName = self.outMicName + suffix if self.outMicName else None
+            firstTimeMics = (
+                micOutputName is not None
+                and getattr(self, micOutputName, None) is None
+            )
             micsSet = self._loadOutputSet(SetOfMicrographs,'micrographs%s%s.sqlite'%(suffix1, suffix))
             print('micrographs%s%s.sqlite'%(suffix1, suffix))
 
@@ -552,14 +601,26 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             inputMics = (self._loadMicAssociatedInputSet()
                          if self.inputMics is not None else None)
             inputMicsIds = inputMics.getIdSet() if inputMics is not None else set()
+            movieSetIds = movieSet.getIdSet() if movieSet.getSize() > 0 else set()
+            micsSetIds = (
+                micsSet.getIdSet()
+                if micsSet is not None and micsSet.getSize() > 0
+                else set()
+            )
 
             for movieId in newDoneList:
-                movie = inputMovies.getItem("id", movieId).clone()
-                tryToAppend(movieSet, movie)
-                if micsSet is not None and movieId in inputMicsIds:
+                if movieId not in movieSetIds:
+                    movie = inputMovies.getItem("id", movieId).clone()
+                    tryToAppend(movieSet, movie)
+                    movieSetIds.add(movieId)
+
+                if (micsSet is not None
+                        and movieId in inputMicsIds
+                        and movieId not in micsSetIds):
                     mic = inputMics.getItem("id", movieId).clone()
                     tryToAppend(micsSet, mic)
-                elif inputMics is not None:
+                    micsSetIds.add(movieId)
+                elif inputMics is not None and movieId not in inputMicsIds:
                     self.info("Movie with id %d has not a micrograph associated" %movieId)
             
             if movieSet.getSize() > 0:
@@ -569,22 +630,28 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             if self.inputMics is not None and micsSet.getSize() > 0:
                 self._updateOutputSet(self.outMicName + suffix, micsSet,
                                       streamMode)
-            if firstTime:  # define relation just the first time
-                if movieSet.getSize() > 0:
-                    self._defineTransformRelation(self.inputMovies.get(), movieSet)
-                if self.inputMics is not None and micsSet.getSize() > 0:
-                    self._defineTransformRelation(self.inputMics, micsSet)
+            if firstTime and movieSet.getSize() > 0:
+                self._defineTransformRelation(self.inputMovies.get(), movieSet)
+
+            if (firstTimeMics
+                    and self.inputMics is not None
+                    and micsSet is not None
+                    and micsSet.getSize() > 0):
+                self._defineTransformRelation(self.inputMics, micsSet)
             
             movieSet.close()
             if self.inputMics is not None:
                 micsSet.close()
 
         # We fill/update the output if there are something new or to close sets
-        if newDoneAccepted:
-            fillOutput(newDoneAccepted, firstTimeAccepted, AccOrDisc='Accepted')
+        acceptedToFill = list(dict.fromkeys(newDoneAccepted + backfillAccepted))
+        discardedToFill = list(dict.fromkeys(newDoneDiscarded + backfillDiscarded))
+
+        if acceptedToFill:
+            fillOutput(acceptedToFill, firstTimeAccepted, AccOrDisc='Accepted')
         # We fill/update the output for the discarded movies
-        if newDoneDiscarded:
-            fillOutput(newDoneDiscarded, firstTimeDiscarded, AccOrDisc='Discarded')
+        if discardedToFill:
+            fillOutput(discardedToFill, firstTimeDiscarded, AccOrDisc='Discarded')
 
         # Unlock createOutputStep if finished all jobs
         if self.finished:  
@@ -657,26 +724,53 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         return outputSet
 
     def setInputMics(self):
-        """ Setting the self.inputMics to the SetOfMics associated to
-            the input movies (or None if no relation is found).
-            The same for DoseWeighted mics
+        """Resolve sibling micrographs produced with the input movies.
+
+        Legacy movie-alignment protocols expose ``outputMicrographs`` /
+        ``outputMicrographsDoseWeighted`` while New MotionCorr exposes
+        ``micrographs`` / ``micrographsDW``. Keep the producer attribute
+        name separate from the canonical MaxShift output name.
         """
         self.alreadyLoad = True
         parentProt = self.getMapper().getParent(self.inputMovies.get())
+        self.inputMicName = None
         self.outMicName = None
         self.inputMics = None
 
-        if hasattr(parentProt, OUTPUT_MICS):
-            self.outMicName = OUTPUT_MICS
-            self.inputMics = getattr(parentProt, OUTPUT_MICS, None)
+        if parentProt is not None:
+            candidates = (
+                (OUTPUT_MICS, OUTPUT_MICS),
+                ('micrographs', OUTPUT_MICS),
+                (OUTPUT_MICS_DW, OUTPUT_MICS_DW),
+                ('micrographsDW', OUTPUT_MICS_DW),
+            )
 
-        if hasattr(parentProt, OUTPUT_MICS_DW):
-            self.outMicName = OUTPUT_MICS_DW
-            self.inputMics = getattr(parentProt, OUTPUT_MICS_DW, None)
+            for inputName, outputName in candidates:
+                micSet = getattr(parentProt, inputName, None)
+                if micSet is not None:
+                    self.inputMicName = inputName
+                    self.outMicName = outputName
+                    self.inputMics = micSet
 
-        if not self.inputMics:
-            self.warning("WARNING: The outputMovies has no outputMicrographs associated. Then, no outputMicrographs will be "
-                         "produced.")
+            # Fallback for other movie-alignment protocols: if the
+            # producer exposes exactly one SetOfMicrographs under an
+            # unknown name, it is unambiguous and safe to consume it.
+            # Do not guess when several micrograph outputs exist.
+            if self.inputMics is None:
+                genericMics = [
+                    (name, output)
+                    for name, output in parentProt.iterOutputAttributes()
+                    if isinstance(output, SetOfMicrographs)
+                ]
+
+                if len(genericMics) == 1:
+                    self.inputMicName, self.inputMics = genericMics[0]
+                    self.outMicName = OUTPUT_MICS
+
+        if self.inputMics is None:
+            self.warning(
+                "The input movies have no associated micrographs available yet."
+            )
 
     # ---------------------- INFO functions ------------------------------------
     def _validate(self):
