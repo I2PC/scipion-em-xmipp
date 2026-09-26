@@ -72,14 +72,63 @@ class _CtfFailureHarness:
 
 
 class TestXmippCtfStreamingFailures(unittest.TestCase):
-    def testCtfFailurePropagatesBeforeDoneCheckpoint(self):
+    def testCtfFailureDoesNotAbortFollowingMicrographs(self):
         with tempfile.TemporaryDirectory() as tmp:
-            protocol = _CtfFailureHarness(tmp)
+            attempted = []
 
-            with self.assertRaisesRegex(RuntimeError, "synthetic CTF failure"):
-                ctf_micrographs.XmippProtCTFMicrographs._estimateCTF(
-                    protocol, _Mic()
-                )
+            class _StreamingHarness(_CtfFailureHarness):
+                def _estimateCTF(self, mic, *args):
+                    return (
+                        ctf_micrographs.XmippProtCTFMicrographs._estimateCTF(
+                            self, mic, *args
+                        )
+                    )
+
+                def runJob(self, program, args):
+                    attempted.append(args)
+                    if len(attempted) == 1:
+                        raise RuntimeError("synthetic CTF failure")
+
+                def _getMicrographDir(self, mic):
+                    micDir = Path(tmp) / ("mic_%03d" % mic.getObjId())
+                    micDir.mkdir(exist_ok=True)
+                    return str(micDir)
+
+                def _getFileName(self, key, **kwargs):
+                    root = kwargs.get("root", tmp)
+                    return str(Path(root) / (key + ".dat"))
+
+                def evaluateSingleMicrograph(self, mic):
+                    return True
+
+            class _MicWithId(_Mic):
+                def __init__(self, objId):
+                    self.objId = objId
+
+                def getObjId(self):
+                    return self.objId
+
+                def getFileName(self):
+                    return "/tmp/mic_%03d.mrc" % self.objId
+
+                def getMicName(self):
+                    return "mic_%03d" % self.objId
+
+            protocol = _StreamingHarness(tmp)
+            protocol._calculateDownsampleList = lambda samplingRate: [1.0]
+            protocol.evaluateSingleMicrograph = lambda mic: True
+
+            ctf_micrographs.ProtCTFMicrographs._estimateCtfList(
+                protocol,
+                [_MicWithId(1), _MicWithId(2)],
+            )
+
+            self.assertGreaterEqual(
+                len(attempted),
+                2,
+                "A failed CTF estimation must not abort later micrographs "
+                "in the streaming batch.",
+            )
 
 
 if __name__ == "__main__":
