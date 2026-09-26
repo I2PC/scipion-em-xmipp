@@ -159,3 +159,14 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         prot._loadOutputSet.assert_not_called()
         prot._updateOutputSet.assert_not_called()
         prot._store.assert_called_once()
+
+    def testFinishedStepsCheckIsNoOp(self):
+        prot = self._newProtocol()
+        prot.finished = True
+        prot._checkNewInput = Mock()
+        prot._checkNewOutput = Mock()
+
+        prot._stepsCheck()
+
+        prot._checkNewInput.assert_not_called()
+        prot._checkNewOutput.assert_not_called()
