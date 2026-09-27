@@ -41,6 +41,8 @@ from pyworkflow.utils.properties import Message
 from pwem.protocols import ProtProcessMovies
 from pwem.objects import SetOfMicrographs, SetOfMovies
 
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
 
 OUTPUT_MICS = "outputMicrographs"
 OUTPUT_MICS_DISCARDED = "outputMicrographsDiscarded"
@@ -49,7 +51,8 @@ OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 OUTPUT_MICS_DW = "outputMicrographsDoseWeighted"
 OUTPUT_MICS_DW_DISCARDED = "outputMicrographsDoseWeightedDiscarded"
 
-class XmippProtMovieMaxShift(ProtProcessMovies):
+
+class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
     """
     Protocol to make an automatic rejection of those movies whose
     frames move more than a given threshold.
@@ -334,8 +337,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                        help='Maximum total travel to evaluate the whole movie '
                             'condition.')
 
-        
-    #--------------------------- INSERT steps functions ------------------------
+    # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
         """ Insert the steps to perform movie alignment evaluation
         """
@@ -344,27 +346,18 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                                  prerequisites=[], wait=True, needsGPU=False)
 
     def initializeStep(self):
-        self.samplingRate = self.inputMovies.get().getSamplingRate()
-        self.movsFn = self.inputMovies.get().getFileName()
-        # Important to have both:
-        self.insertedIds = []  # Contains images that have been inserted in a Step (checkNewInput).
-        # Contains images that have been processed in a Step (checkNewOutput).
+        inputMovies = self.inputMovies.get()
+
+        self.samplingRate = inputMovies.getSamplingRate()
+        self.insertedIds = []
+        self._lastInputId = 0
         self.acceptedIds = []
         self.discardedIds = []
-        self.isStreamClosed = self.inputMovies.get().isStreamClosed()
+        self.isStreamClosed = inputMovies.isStreamClosed()
         self.alreadyLoad = False
 
     def createOutputStep(self):
         self._closeOutputSet()
-
-    def _loadInputSet(self, movsFn):
-        """ Load the input set of movies and create a list. """
-        self.debug("Loading input db: %s" % movsFn)
-        movSet = SetOfMovies(filename=movsFn)
-        movSet.loadAllProperties()
-        movSet.close()
-        self.debug("Closed db.")
-        return movSet
 
     def _loadMicAssociatedInputSet(self):
         """Load the micrograph Set associated with the input movies."""
@@ -395,29 +388,65 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        # Check if there are new micrographs to process from the input set
-        # Always reload the Set so newly persisted streaming items are visible.
-        movSet = self._loadInputSet(self.movsFn)
-        movSetIds = movSet.getIdSet()
-        newIds = [idMic for idMic in movSetIds if idMic not in self.insertedIds]
+        inputSet = self._loadLogicalSet(self.inputMovies)
 
-        self.isStreamClosed = movSet.isStreamClosed()
-        movSet.close()
+        try:
+            newIds, self._lastInputId = self._discoverIdsAfter(
+                inputSet,
+                self._lastInputId,
+            )
+
+            producerClosed = inputSet.isStreamClosed()
+
+            newIds, terminalConsistent = (
+                self._reconcileClosedStreamIds(
+                    inputSet,
+                    newIds,
+                    self.insertedIds,
+                    producerClosed,
+                )
+            )
+
+            self.isStreamClosed = (
+                producerClosed
+                and terminalConsistent
+            )
+        finally:
+            inputSet.close()
 
         outputStep = self._getFirstJoinStep()
 
-        if (getattr(self, '_originalRunMode', self.runMode.get()) == MODE_RESUME
-                and not self.insertedIds):
+        if (
+            getattr(
+                self,
+                '_originalRunMode',
+                self.runMode.get(),
+            ) == MODE_RESUME
+            and not self.insertedIds
+        ):
             doneIds, _, _, _ = self._getAllDoneIds()
-            skipIds = list(set(newIds).intersection(set(doneIds)))
-            newIds = list(set(newIds).difference(set(doneIds)))
-            self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
-            self.insertedIds = doneIds # During the first round of "Continue" action it has to be filled
+            doneIds = list(doneIds)
+
+            skipIds = sorted(
+                set(newIds).intersection(doneIds)
+            )
+            newIds = sorted(
+                set(newIds).difference(doneIds)
+            )
+
+            self.info(
+                "Skipping Mics with ID: %s, seems to be done"
+                % skipIds
+            )
+
+            self.insertedIds = doneIds
 
         if newIds:
             fDeps = self._insertNewMoviesSteps(newIds)
+
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
+
             self.updateSteps()
 
     def _insertNewMoviesSteps(self, newIds):
@@ -441,57 +470,70 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         return deps
 
     def _evaluateMovieAlign(self, movIds):
-        """ Fill the accepted or the rejected list with the movie.
-        """
-        inputMovies = self._loadInputSet(self.movsFn)
+        """Fill the accepted or rejected lists for the given movies."""
+        inputMovies = self._loadLogicalSet(self.inputMovies)
         sampling = self.samplingRate
 
-        for movieId in movIds:
-            movie = inputMovies.getItem("id", movieId).clone()
-            alignment = movie.getAlignment()
-            # getShifts() returns the absolute shifts from a certain reference
-            shiftListX, shiftListY = alignment.getShifts()
-            # initialize the criteria values
-            rejectedByMovie = False
-            rejectedByFrame = False
+        try:
+            for movieId in movIds:
+                movie = inputMovies.getItem("id", movieId).clone()
+                alignment = movie.getAlignment()
+                # getShifts() returns the absolute shifts from a reference.
+                shiftListX, shiftListY = alignment.getShifts()
 
-            if any(shiftListX) or any(shiftListY):
-                # we use np.arrays to use np.diff()
-                shiftArrayX = np.asarray(shiftListX)
-                shiftArrayY = np.asarray(shiftListY)
+                rejectedByMovie = False
+                rejectedByFrame = False
 
-                evalBoth = self.rejType==self.REJ_AND or self.rejType==self.REJ_OR
+                if any(shiftListX) or any(shiftListY):
+                    shiftArrayX = np.asarray(shiftListX)
+                    shiftArrayY = np.asarray(shiftListY)
 
-                # --- Evaluation for accumulated displacement ---
-                if self.rejType == self.REJ_MOVIE or evalBoth:
-                    deltaX = np.diff(shiftArrayX)
-                    deltaY = np.diff(shiftArrayY)
-                    # Magnitude for each step
-                    stepDistances = np.sqrt(deltaX ** 2 + deltaY ** 2)
-                    # Total sum of the displacement
-                    totalPath = np.sum(stepDistances) * sampling
-                    rejectedByMovie = totalPath > self.maxMovieShift.get()
+                    evalBoth = (
+                        self.rejType == self.REJ_AND
+                        or self.rejType == self.REJ_OR
+                    )
 
-                # --- Evaluation by maximum displacement between frames ---
-                if self.rejType == self.REJ_FRAME or evalBoth:
-                    frameShiftX = np.diff(shiftArrayX)
-                    frameShiftY = np.diff(shiftArrayY)
-                    frameShifts = np.sqrt(frameShiftX ** 2 + frameShiftY ** 2)
-                    maxShiftM = np.max(frameShifts) * sampling
-                    rejectedByFrame = maxShiftM > self.maxFrameShift.get()
+                    if self.rejType == self.REJ_MOVIE or evalBoth:
+                        deltaX = np.diff(shiftArrayX)
+                        deltaY = np.diff(shiftArrayY)
+                        stepDistances = np.sqrt(
+                            deltaX ** 2 + deltaY ** 2
+                        )
+                        totalPath = (
+                            np.sum(stepDistances) * sampling
+                        )
+                        rejectedByMovie = (
+                            totalPath > self.maxMovieShift.get()
+                        )
 
-                if self.rejType == self.REJ_AND:
-                    if rejectedByFrame and rejectedByMovie:
-                        self.discardedIds.append(movieId)
+                    if self.rejType == self.REJ_FRAME or evalBoth:
+                        frameShiftX = np.diff(shiftArrayX)
+                        frameShiftY = np.diff(shiftArrayY)
+                        frameShifts = np.sqrt(
+                            frameShiftX ** 2
+                            + frameShiftY ** 2
+                        )
+                        maxShiftM = (
+                            np.max(frameShifts) * sampling
+                        )
+                        rejectedByFrame = (
+                            maxShiftM > self.maxFrameShift.get()
+                        )
+
+                    if self.rejType == self.REJ_AND:
+                        if rejectedByFrame and rejectedByMovie:
+                            self.discardedIds.append(movieId)
+                        else:
+                            self.acceptedIds.append(movieId)
                     else:
-                        self.acceptedIds.append(movieId)
-                else:  # for the OR and the individuals evaluations
-                    if rejectedByFrame or rejectedByMovie:
-                        self.discardedIds.append(movieId)
-                    else:
-                        self.acceptedIds.append(movieId)
-            else:  # we accept the movie if no shifts is associated
-                self.acceptedIds.append(movieId)
+                        if rejectedByFrame or rejectedByMovie:
+                            self.discardedIds.append(movieId)
+                        else:
+                            self.acceptedIds.append(movieId)
+                else:
+                    self.acceptedIds.append(movieId)
+        finally:
+            inputMovies.close()
 
     def _checkNewOutput(self):
         """ Check for already selected Movies and update the output set. """
@@ -512,45 +554,51 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         newDoneDiscarded = [movId for movId in discardedIds
                             if movId not in doneListDiscarded]
 
-        # Movies can be persisted before their sibling micrographs become
-        # visible. Detect missing micrograph outputs and backfill them.
+        # Movies may be persisted before their sibling micrographs become
+        # visible. Track only the missing sibling IDs and retry those IDs
+        # incrementally instead of rescanning the whole micrograph Set.
         backfillAccepted = []
         backfillDiscarded = []
-        if getattr(self, 'inputMics', None) is not None and self.outMicName:
-            inputMics = self._loadMicAssociatedInputSet()
-            if inputMics is not None:
-                inputMicIds = inputMics.getIdSet()
 
-                acceptedMicSet = getattr(self, self.outMicName, None)
-                acceptedMicIds = (
-                    acceptedMicSet.getIdSet()
-                    if acceptedMicSet is not None and acceptedMicSet.getSize() > 0
-                    else set()
+        if (
+            getattr(self, 'inputMics', None) is not None
+            and self.outMicName
+        ):
+            if not hasattr(self, '_pendingAcceptedMicIds'):
+                acceptedMicIds = self._getKnownPersistedOutputIds(
+                    self.outMicName,
+                )
+                discardedMicIds = self._getKnownPersistedOutputIds(
+                    self.outMicName + 'Discarded',
                 )
 
-                discardedMicName = self.outMicName + 'Discarded'
-                discardedMicSet = getattr(self, discardedMicName, None)
-                discardedMicIds = (
-                    discardedMicSet.getIdSet()
-                    if discardedMicSet is not None and discardedMicSet.getSize() > 0
-                    else set()
-                )
+                self._pendingAcceptedMicIds = set(
+                    doneListAccepted
+                ).difference(acceptedMicIds)
+                self._pendingDiscardedMicIds = set(
+                    doneListDiscarded
+                ).difference(discardedMicIds)
 
-                backfillAccepted = [
-                    movId for movId in doneListAccepted
-                    if movId in inputMicIds and movId not in acceptedMicIds
-                ]
-                backfillDiscarded = [
-                    movId for movId in doneListDiscarded
-                    if movId in inputMicIds and movId not in discardedMicIds
-                ]
+            self._pendingAcceptedMicIds.update(
+                newDoneAccepted
+            )
+            self._pendingDiscardedMicIds.update(
+                newDoneDiscarded
+            )
+
+            backfillAccepted = sorted(
+                self._pendingAcceptedMicIds
+            )
+            backfillDiscarded = sorted(
+                self._pendingDiscardedMicIds
+            )
 
         firstTimeAccepted = len(doneListAccepted) == 0
         firstTimeDiscarded = len(doneListDiscarded) == 0
 
         allDone = len(doneListAccepted) + len(doneListDiscarded) + \
                   len(newDoneAccepted) + len(newDoneDiscarded)
-        maxMicSize = self._loadInputSet(self.movsFn).getSize()
+        maxMicSize = self.inputMovies.get().getSize()
         # We have finished when there is not more input movies
         # (stream closed) and the number of processed movies is
         # equal to the number of inputs
@@ -597,39 +645,96 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                     micOut.setEnabled(enable)
                     outSet.append(micOut)
 
-            inputMovies = self._loadInputSet(self.movsFn)
-            inputMics = (self._loadMicAssociatedInputSet()
-                         if self.inputMics is not None else None)
-            inputMicsIds = inputMics.getIdSet() if inputMics is not None else set()
-            movieSetIds = movieSet.getIdSet() if movieSet.getSize() > 0 else set()
+            inputMovies = self._loadLogicalSet(self.inputMovies)
+            inputMics = (
+                self._loadMicAssociatedInputSet()
+                if self.inputMics is not None
+                else None
+            )
+
+            movieOutputName = OUTPUT_MOVIES + suffix
+            movieSetIds = self._getKnownPersistedOutputIds(
+                movieOutputName,
+            )
+
             micsSetIds = (
-                micsSet.getIdSet()
-                if micsSet is not None and micsSet.getSize() > 0
+                self._getKnownPersistedOutputIds(
+                    micOutputName,
+                )
+                if micOutputName is not None
                 else set()
             )
 
+            pendingMicIds = (
+                getattr(self, '_pendingDiscardedMicIds', set())
+                if AccOrDisc == 'Discarded'
+                else getattr(self, '_pendingAcceptedMicIds', set())
+            )
+
+            publishedMovieIds = []
+            publishedMicIds = []
+
             for movieId in newDoneList:
                 if movieId not in movieSetIds:
-                    movie = inputMovies.getItem("id", movieId).clone()
-                    tryToAppend(movieSet, movie)
-                    movieSetIds.add(movieId)
+                    movie = inputMovies.getItem(
+                        "id",
+                        movieId,
+                    )
 
-                if (micsSet is not None
-                        and movieId in inputMicsIds
-                        and movieId not in micsSetIds):
-                    mic = inputMics.getItem("id", movieId).clone()
-                    tryToAppend(micsSet, mic)
-                    micsSetIds.add(movieId)
-                elif inputMics is not None and movieId not in inputMicsIds:
-                    self.info("Movie with id %d has not a micrograph associated" %movieId)
+                    if movie is not None:
+                        tryToAppend(
+                            movieSet,
+                            movie.clone(),
+                        )
+                        movieSetIds.add(movieId)
+                        publishedMovieIds.append(movieId)
+
+                if inputMics is None or micsSet is None:
+                    continue
+
+                if movieId in micsSetIds:
+                    pendingMicIds.discard(movieId)
+                    continue
+
+                mic = inputMics.getItem(
+                    "id",
+                    movieId,
+                )
+
+                if mic is None:
+                    pendingMicIds.add(movieId)
+                    self.info(
+                        "Movie with id %d has not a micrograph "
+                        "associated yet" % movieId
+                    )
+                    continue
+
+                tryToAppend(
+                    micsSet,
+                    mic.clone(),
+                )
+                micsSetIds.add(movieId)
+                publishedMicIds.append(movieId)
+                pendingMicIds.discard(movieId)
             
             if movieSet.getSize() > 0:
                 self._updateOutputSet(OUTPUT_MOVIES + suffix, movieSet,
                                       streamMode)
+                self._markOutputIdsPersisted(
+                    movieOutputName,
+                    publishedMovieIds,
+                )
                                       
             if self.inputMics is not None and micsSet.getSize() > 0:
-                self._updateOutputSet(self.outMicName + suffix, micsSet,
-                                      streamMode)
+                self._updateOutputSet(
+                    self.outMicName + suffix,
+                    micsSet,
+                    streamMode,
+                )
+                self._markOutputIdsPersisted(
+                    micOutputName,
+                    publishedMicIds,
+                )
             if firstTime and movieSet.getSize() > 0:
                 self._defineTransformRelation(self.inputMovies.get(), movieSet)
 
@@ -639,6 +744,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                     and micsSet.getSize() > 0):
                 self._defineTransformRelation(self.inputMics, micsSet)
             
+            inputMovies.close()
             movieSet.close()
             if self.inputMics is not None:
                 micsSet.close()
@@ -663,22 +769,26 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     #--------------------------- UTILS functions -------------------------------
     def _getAllDoneIds(self):
-        doneIds = []
-        acceptedIds = []
-        discardedIds = []
-        sizeOutput = 0
+        acceptedIds = sorted(
+            self._getKnownPersistedOutputIds(
+                OUTPUT_MOVIES,
+            )
+        )
+        discardedIds = sorted(
+            self._getKnownPersistedOutputIds(
+                OUTPUT_MOVIES_DISCARDED,
+            )
+        )
 
-        if hasattr(self, OUTPUT_MOVIES):
-            sizeOutput += self.outputMovies.getSize()
-            acceptedIds.extend(list(self.outputMovies.getIdSet()))
-            doneIds.extend(acceptedIds)
+        doneIds = acceptedIds + discardedIds
+        sizeOutput = len(acceptedIds) + len(discardedIds)
 
-        if hasattr(self, OUTPUT_MOVIES_DISCARDED):
-            sizeOutput += self.outputMoviesDiscarded.getSize()
-            discardedIds.extend(list(self.outputMoviesDiscarded.getIdSet()))
-            doneIds.extend(discardedIds)
-
-        return doneIds, sizeOutput, acceptedIds, discardedIds
+        return (
+            doneIds,
+            sizeOutput,
+            acceptedIds,
+            discardedIds,
+        )
 
     def _loadOutputSet(self, SetClass, baseName):
         """ Load the output set if it exists or create a new one based on the inputs.
@@ -704,7 +814,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                 return None
             inputSet = self.inputMics
         else:
-            inputSet = self._loadInputSet(self.movsFn)
+            inputSet = self.inputMovies.get()
 
         setFile = self._getPath(baseName)
         print(setFile)
