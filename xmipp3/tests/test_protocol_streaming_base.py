@@ -2332,3 +2332,1048 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
         )
         self.assertIs(createdOutput.copiedFrom, logicalInput)
         self.assertEqual(pointer.getCalls, 1)
+
+class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
+
+    def testCTFConsensusUsesSharedStreamingBase(self):
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        self.assertTrue(
+            issubclass(
+                XmippProtCTFConsensus,
+                XmippStreamingBase,
+            ),
+            "CTFConsensus must reuse the shared Xmipp streaming helpers.",
+        )
+
+    def testCTFConsensusInitializeParamsDoesNotRequireInputFilename(self):
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+
+        class _LogicalCtfSet:
+            def getFileName(self):
+                raise AssertionError(
+                    "CTFConsensus initialization must not depend "
+                    "on inputCTF.getFileName()."
+                )
+
+        logicalInput = _LogicalCtfSet()
+        pointer = _Pointer(logicalInput)
+
+        class _Harness:
+            inputCTF = pointer
+
+            def initializeRejDict(self):
+                self.initializeRejDictCalls += 1
+
+            def setSecondaryAttributes(self):
+                self.setSecondaryAttributesCalls += 1
+
+        protocol = _Harness()
+        protocol.initializeRejDictCalls = 0
+        protocol.setSecondaryAttributesCalls = 0
+
+        XmippProtCTFConsensus.initializeParams(protocol)
+
+        self.assertFalse(protocol.finished)
+        self.assertFalse(protocol.isStreamClosed)
+        self.assertEqual(protocol.insertedIds, [])
+        self.assertEqual(protocol.acceptedIds, {})
+        self.assertEqual(protocol.discardedIds, {})
+        self.assertEqual(protocol._lastInputId, 0)
+        self.assertFalse(hasattr(protocol, "ctfFn1"))
+        self.assertEqual(protocol.initializeRejDictCalls, 1)
+        self.assertEqual(protocol.setSecondaryAttributesCalls, 1)
+        self.assertEqual(pointer.getCalls, 0)
+
+    def testCTFConsensusUsesIncrementalLogicalInputDiscovery(self):
+        from pyworkflow.protocol.constants import MODE_RESTART
+
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _LogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if where == "id > 3":
+                    return [4, 5]
+
+                if where == "id > 5":
+                    return [6]
+
+                raise AssertionError(
+                    "Unexpected incremental discovery query: %r" % (where,)
+                )
+
+            def getIdSet(self):
+                raise AssertionError(
+                    "CTFConsensus streaming discovery must not scan getIdSet()."
+                )
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _RunMode:
+            def get(self):
+                return MODE_RESTART
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+            calculateConsensus = False
+            insertedIds = [1, 2, 3]
+            _lastInputId = 3
+            isStreamClosed = False
+            _originalRunMode = MODE_RESTART
+            runMode = _RunMode()
+
+            @property
+            def ctfFn1(self):
+                raise AssertionError(
+                    "CTFConsensus streaming discovery must not depend "
+                    "on inputCTF.getFileName()."
+                )
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewCtfsSteps(self, newIds):
+                newIds = list(newIds)
+                self.batches.append(newIds)
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+            def info(self, message):
+                pass
+
+        protocol = _Harness()
+        protocol.insertedIds = [1, 2, 3]
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtCTFConsensus._checkNewInput(protocol)
+        XmippProtCTFConsensus._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[4, 5], [6]])
+        self.assertEqual(protocol.insertedIds, [1, 2, 3, 4, 5, 6])
+        self.assertEqual(protocol._lastInputId, 6)
+        self.assertFalse(protocol.isStreamClosed)
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 3"),
+                ("id", "id > 5"),
+            ],
+        )
+        self.assertEqual(pointer.getCalls, 2)
+        self.assertEqual(inputSet.loadCalls, 2)
+        self.assertEqual(inputSet.closeCalls, 2)
+        self.assertEqual(protocol.updateCalls, 2)
+
+    def testCTFConsensusMatchesIncrementalDualInputsAcrossPolls(self):
+        from pyworkflow.protocol.constants import MODE_RESTART
+
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _LogicalCtfSet:
+            def __init__(self, responses):
+                self.responses = dict(responses)
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if where not in self.responses:
+                    raise AssertionError(
+                        "Unexpected incremental discovery query: %r"
+                        % (where,)
+                    )
+
+                return list(self.responses[where])
+
+            def getIdSet(self):
+                raise AssertionError(
+                    "Dual-input consensus discovery must not scan getIdSet()."
+                )
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _RunMode:
+            def get(self):
+                return MODE_RESTART
+
+        inputSet1 = _LogicalCtfSet({
+            "id > 3": [4, 5],
+            "id > 5": [6],
+        })
+        inputSet2 = _LogicalCtfSet({
+            "id > 3": [4],
+            "id > 4": [5, 6],
+        })
+
+        pointer1 = _Pointer(inputSet1)
+        pointer2 = _Pointer(inputSet2)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer1
+            inputCTF2 = pointer2
+            calculateConsensus = True
+            insertedIds = [1, 2, 3]
+            _lastInputId1 = 3
+            _lastInputId2 = 3
+            _pendingInputIds1 = set()
+            _pendingInputIds2 = set()
+            isStreamClosed = False
+            _originalRunMode = MODE_RESTART
+            runMode = _RunMode()
+
+            @property
+            def ctfFn1(self):
+                raise AssertionError(
+                    "Dual-input consensus must not depend on ctfFn1."
+                )
+
+            @property
+            def ctfFn2(self):
+                raise AssertionError(
+                    "Dual-input consensus must not depend on ctfFn2."
+                )
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewCtfsSteps(self, newIds):
+                newIds = list(newIds)
+                self.batches.append(newIds)
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+            def info(self, message):
+                pass
+
+        protocol = _Harness()
+        protocol.insertedIds = [1, 2, 3]
+        protocol._pendingInputIds1 = set()
+        protocol._pendingInputIds2 = set()
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtCTFConsensus._checkNewInput(protocol)
+        XmippProtCTFConsensus._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[4], [5, 6]])
+        self.assertEqual(protocol.insertedIds, [1, 2, 3, 4, 5, 6])
+        self.assertEqual(protocol._lastInputId1, 6)
+        self.assertEqual(protocol._lastInputId2, 6)
+        self.assertEqual(protocol._pendingInputIds1, set())
+        self.assertEqual(protocol._pendingInputIds2, set())
+        self.assertFalse(protocol.isStreamClosed)
+
+        self.assertEqual(
+            inputSet1.uniqueCalls,
+            [
+                ("id", "id > 3"),
+                ("id", "id > 5"),
+            ],
+        )
+        self.assertEqual(
+            inputSet2.uniqueCalls,
+            [
+                ("id", "id > 3"),
+                ("id", "id > 4"),
+            ],
+        )
+        self.assertEqual(pointer1.getCalls, 2)
+        self.assertEqual(pointer2.getCalls, 2)
+        self.assertEqual(inputSet1.loadCalls, 2)
+        self.assertEqual(inputSet2.loadCalls, 2)
+        self.assertEqual(inputSet1.closeCalls, 2)
+        self.assertEqual(inputSet2.closeCalls, 2)
+        self.assertEqual(protocol.updateCalls, 2)
+
+    def testCTFConsensusRestoresPersistedOutputIdsOnlyOnce(self):
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        acceptedOutput = _CountingOutputSet({1, 3})
+        discardedOutput = _CountingOutputSet({2, 4})
+
+        class _Harness(XmippStreamingBase):
+            outputCTF = acceptedOutput
+            outputCTFDiscarded = discardedOutput
+
+        protocol = _Harness()
+
+        first = XmippProtCTFConsensus._getAllDoneIds(protocol)
+        second = XmippProtCTFConsensus._getAllDoneIds(protocol)
+
+        self.assertEqual(
+            first,
+            ([1, 3, 2, 4], 4, [1, 3], [2, 4]),
+        )
+        self.assertEqual(second, first)
+        self.assertEqual(acceptedOutput.getIdSetCalls, 1)
+        self.assertEqual(discardedOutput.getIdSetCalls, 1)
+
+    def testCTFConsensusPublishingUpdatesPersistedOutputCache(self):
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            OUTPUT_CTF,
+            OUTPUT_CTF_DISCARDED,
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _InputCtfSet:
+            def getIdSet(self):
+                return {1, 2, 8, 9}
+
+        class _PublishedCtfSet:
+            def __init__(self, ids):
+                self.ids = set(ids)
+                self.getIdSetCalls = 0
+                self.closeCalls = 0
+                self.micrographs = None
+
+            def getIdSet(self):
+                self.getIdSetCalls += 1
+                return set(self.ids)
+
+            def setMicrographs(self, micrographs):
+                self.micrographs = micrographs
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _PublishedMicSet:
+            def __init__(self):
+                self.closeCalls = 0
+
+            def close(self):
+                self.closeCalls += 1
+
+        acceptedOutput = _PublishedCtfSet({9})
+        discardedOutput = _PublishedCtfSet({8})
+        acceptedMics = _PublishedMicSet()
+        discardedMics = _PublishedMicSet()
+
+        class _Harness(XmippStreamingBase):
+            calculateConsensus = False
+            isStreamClosed = False
+            acceptedIds = {1: 'T'}
+            discardedIds = {2: 'F'}
+            ctfFn1 = "legacy-unused-by-this-test.sqlite"
+            outputCTF = acceptedOutput
+            outputCTFDiscarded = discardedOutput
+
+            def _getAllDoneIds(self):
+                return XmippProtCTFConsensus._getAllDoneIds(
+                    self,
+                )
+
+            def _loadInputCtfSet(self, ctfFn):
+                return _InputCtfSet()
+
+            def _loadOutputSet(self, SetClass, baseName):
+                outputs = {
+                    "ctfs.sqlite": acceptedOutput,
+                    "micrographs.sqlite": acceptedMics,
+                    "ctfsDiscarded.sqlite": discardedOutput,
+                    "micrographsDiscarded.sqlite": discardedMics,
+                }
+                return outputs[baseName]
+
+            def fillOutput(self, ctfSet, micSet, newDone, label):
+                pass
+
+            def _updateOutputSet(self, outputName, outputSet, streamMode):
+                self.updatedOutputs.append(outputName)
+
+            def _defineTransformRelation(self, *args):
+                pass
+
+            def _defineCtfRelation(self, *args):
+                pass
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _store(self):
+                pass
+
+            def _markOutputIdsPersisted(self, outputName, itemIds):
+                self.markCalls.append(
+                    (outputName, list(itemIds))
+                )
+                return super()._markOutputIdsPersisted(
+                    outputName,
+                    itemIds,
+                )
+
+        protocol = _Harness()
+        protocol.acceptedIds = {1: 'T'}
+        protocol.discardedIds = {2: 'F'}
+        protocol.updatedOutputs = []
+        protocol.markCalls = []
+
+        XmippProtCTFConsensus._checkNewOutput(protocol)
+
+        self.assertEqual(
+            protocol.markCalls,
+            [
+                (OUTPUT_CTF, [1]),
+                (OUTPUT_CTF_DISCARDED, [2]),
+            ],
+        )
+
+        self.assertEqual(
+            XmippProtCTFConsensus._getAllDoneIds(protocol),
+            ([1, 9, 2, 8], 4, [1, 9], [2, 8]),
+        )
+        self.assertEqual(acceptedOutput.getIdSetCalls, 1)
+        self.assertEqual(discardedOutput.getIdSetCalls, 1)
+
+    def testCTFConsensusCompletionDoesNotReloadInputSets(self):
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        acceptedOutput = _CountingOutputSet({1, 2})
+
+        class _Harness(XmippStreamingBase):
+            calculateConsensus = False
+            isStreamClosed = True
+            insertedIds = [1, 2]
+            acceptedIds = {1: 'T', 2: 'T'}
+            discardedIds = {}
+            outputCTF = acceptedOutput
+
+            @property
+            def ctfFn1(self):
+                raise AssertionError(
+                    "CTFConsensus completion must not depend on ctfFn1."
+                )
+
+            def _loadInputCtfSet(self, ctfFn):
+                raise AssertionError(
+                    "CTFConsensus completion must not reopen the input Set."
+                )
+
+            def _getAllDoneIds(self):
+                return XmippProtCTFConsensus._getAllDoneIds(
+                    self,
+                )
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _store(self):
+                self.storeCalls += 1
+
+        protocol = _Harness()
+        protocol.insertedIds = [1, 2]
+        protocol.acceptedIds = {1: 'T', 2: 'T'}
+        protocol.discardedIds = {}
+        protocol.storeCalls = 0
+
+        XmippProtCTFConsensus._checkNewOutput(protocol)
+
+        self.assertTrue(protocol.finished)
+        self.assertEqual(protocol.storeCalls, 1)
+        self.assertEqual(acceptedOutput.getIdSetCalls, 1)
+
+    def testCTFConsensusWorkerLoadsBatchFromLogicalInput(self):
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Ctf:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def clone(self):
+                return _Ctf(self.objId)
+
+            def getDefocusU(self):
+                return 10000
+
+            def getDefocusV(self):
+                return 9900
+
+            def getResolution(self):
+                return 3
+
+            def isEnabled(self):
+                return True
+
+        class _LogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.getItemCalls = []
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Ctf(value)
+
+            def close(self):
+                self.closeCalls += 1
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+            calculateConsensus = False
+            useCritXmipp = False
+            acceptedIds = {}
+            discardedIds = {}
+            discDict = {
+                'defocus': 0,
+                'astigmatism': 0,
+                'astigmatismPer': 0,
+                'singleResolution': 0,
+                '_xmipp_ctfCritFirstZero': 0,
+                '_xmipp_ctfCritfirstZeroRatio': 0,
+                '_xmipp_ctfCritCorr13': 0,
+                '_xmipp_ctfCritIceness': 0,
+                '_xmipp_ctfCritCtfMargin': 0,
+                '_xmipp_ctfCritNonAstigmaticValidty': 0,
+                'consensusResolution': 0,
+            }
+
+            @property
+            def ctfFn1(self):
+                raise AssertionError(
+                    "CTFConsensus workers must not depend on ctfFn1."
+                )
+
+            def _getDefociValues(self):
+                return 0, 50000
+
+            def _getMaxAstisgmatism(self):
+                return 5000
+
+            def _getMaxAstigmatismPer(self):
+                return 1
+
+            def _getMinResol(self):
+                return 10
+
+            def _getCtfResol(self, ctf):
+                return ctf.getResolution()
+
+        protocol = _Harness()
+        protocol.acceptedIds = {}
+        protocol.discardedIds = {}
+        protocol.discDict = dict(_Harness.discDict)
+
+        XmippProtCTFConsensus.selectCtfStep(
+            protocol,
+            [4, 7],
+        )
+
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [
+                ("id", 4),
+                ("id", 7),
+            ],
+        )
+        self.assertEqual(
+            protocol.acceptedIds,
+            {
+                4: 'T',
+                7: 'T',
+            },
+        )
+        self.assertEqual(protocol.discardedIds, {})
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testCTFConsensusFillOutputLoadsLogicalInput(self):
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            ACCEPTED,
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Micrograph:
+            def __init__(self, objId):
+                self.objId = objId
+                self.enabled = None
+
+            def clone(self):
+                return _Micrograph(self.objId)
+
+            def setEnabled(self, enabled):
+                self.enabled = enabled
+
+        class _Ctf:
+            def __init__(self, objId):
+                self.objId = objId
+                self.enabled = None
+                self.micrograph = _Micrograph(objId)
+
+            def clone(self):
+                return _Ctf(self.objId)
+
+            def getMicrograph(self):
+                return self.micrograph
+
+            def setEnabled(self, enabled):
+                self.enabled = enabled
+
+            def getDefocusU(self):
+                return 10000
+
+            def getDefocusV(self):
+                return 9900
+
+        class _LogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.getItemCalls = []
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Ctf(value)
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _OutputSet:
+            def __init__(self):
+                self.items = []
+
+            def append(self, item):
+                self.items.append(item)
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+        outputCtfs = _OutputSet()
+        outputMics = _OutputSet()
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+            calculateConsensus = False
+
+            @property
+            def ctfFn1(self):
+                raise AssertionError(
+                    "CTFConsensus output publishing must not depend on ctfFn1."
+                )
+
+            def _getEnable(self, ctfId, label):
+                return True
+
+        protocol = _Harness()
+
+        XmippProtCTFConsensus.fillOutput(
+            protocol,
+            outputCtfs,
+            outputMics,
+            [4, 7],
+            ACCEPTED,
+        )
+
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [
+                ("id", 4),
+                ("id", 7),
+            ],
+        )
+        self.assertEqual(
+            [ctf.objId for ctf in outputCtfs.items],
+            [4, 7],
+        )
+        self.assertEqual(
+            [mic.objId for mic in outputMics.items],
+            [4, 7],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testCTFConsensusOutputCreationUsesProtocolFactories(self):
+        from unittest.mock import patch
+
+        import xmipp3.protocols.protocol_ctf_consensus as ctf_consensus
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _InputMicrographs:
+            pass
+
+        class _InputCtfSet:
+            def __init__(self, micrographs):
+                self.micrographs = micrographs
+
+            def getMicrographs(self):
+                return self.micrographs
+
+        class _FactorySet:
+            STREAM_OPEN = "open"
+
+            def _initialize(self):
+                self.streamStates = []
+                self.enableAppendCalls = 0
+                self.copiedInfo = None
+                self.micrographs = None
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+            def setStreamState(self, state):
+                self.streamStates.append(state)
+
+            def copyInfo(self, other):
+                self.copiedInfo = other
+
+            def setMicrographs(self, micrographs):
+                self.micrographs = micrographs
+
+        class _FakeSetOfCTF(_FactorySet):
+            def __init__(self, *args, **kwargs):
+                raise AssertionError(
+                    "CTFConsensus must not construct SetOfCTF(filename=...)."
+                )
+
+        class _FakeSetOfMicrographs(_FactorySet):
+            def __init__(self, *args, **kwargs):
+                raise AssertionError(
+                    "CTFConsensus must not construct "
+                    "SetOfMicrographs(filename=...)."
+                )
+
+        inputMicrographs = _InputMicrographs()
+        inputCtfSet = _InputCtfSet(inputMicrographs)
+        pointer = _Pointer(inputCtfSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+
+            def _getPath(self, *args):
+                raise AssertionError(
+                    "CTFConsensus output creation must not depend on "
+                    "legacy sqlite paths."
+                )
+
+            def _newFactorySet(self, SetClass):
+                outputSet = object.__new__(SetClass)
+                outputSet._initialize()
+                return outputSet
+
+            def _createSetOfCTF(self, suffix=''):
+                self.factoryCalls.append(("ctf", suffix))
+                outputSet = self._newFactorySet(_FakeSetOfCTF)
+                self.createdSets.append(outputSet)
+                return outputSet
+
+            def _createSetOfMicrographs(self, suffix=''):
+                self.factoryCalls.append(("micrographs", suffix))
+                outputSet = self._newFactorySet(
+                    _FakeSetOfMicrographs,
+                )
+                self.createdSets.append(outputSet)
+                return outputSet
+
+        protocol = _Harness()
+        protocol.factoryCalls = []
+        protocol.createdSets = []
+
+        with patch.object(
+            ctf_consensus,
+            "SetOfCTF",
+            _FakeSetOfCTF,
+        ), patch.object(
+            ctf_consensus,
+            "SetOfMicrographs",
+            _FakeSetOfMicrographs,
+        ):
+            acceptedCtf = XmippProtCTFConsensus._loadOutputSet(
+                protocol,
+                _FakeSetOfCTF,
+                "ctfs.sqlite",
+            )
+            acceptedMics = XmippProtCTFConsensus._loadOutputSet(
+                protocol,
+                _FakeSetOfMicrographs,
+                "micrographs.sqlite",
+            )
+            discardedCtf = XmippProtCTFConsensus._loadOutputSet(
+                protocol,
+                _FakeSetOfCTF,
+                "ctfsDiscarded.sqlite",
+            )
+            discardedMics = XmippProtCTFConsensus._loadOutputSet(
+                protocol,
+                _FakeSetOfMicrographs,
+                "micrographsDiscarded.sqlite",
+            )
+
+        self.assertEqual(
+            protocol.factoryCalls,
+            [
+                ("ctf", ""),
+                ("micrographs", ""),
+                ("ctf", "Discarded"),
+                ("micrographs", "Discarded"),
+            ],
+        )
+
+        self.assertIs(acceptedCtf.micrographs, inputMicrographs)
+        self.assertIs(discardedCtf.micrographs, inputMicrographs)
+        self.assertIs(acceptedMics.copiedInfo, inputMicrographs)
+        self.assertIs(discardedMics.copiedInfo, inputMicrographs)
+
+        for outputSet in protocol.createdSets:
+            self.assertEqual(
+                outputSet.streamStates,
+                [outputSet.STREAM_OPEN],
+            )
+
+        self.assertEqual(pointer.getCalls, 4)
+
+    def testCTFConsensusClosedReconciliationAdvancesBothWatermarks(self):
+        from pyworkflow.protocol.constants import MODE_RESTART
+
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _ClosedLogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if where == "id > 3":
+                    return []
+
+                if where is None:
+                    return [1, 2, 3, 4]
+
+                raise AssertionError(
+                    "Unexpected query: %r" % where
+                )
+
+            def getSize(self):
+                return 4
+
+            def isStreamClosed(self):
+                return True
+
+            def close(self):
+                self.closeCalls += 1
+
+        input1 = _ClosedLogicalCtfSet()
+        input2 = _ClosedLogicalCtfSet()
+        pointer1 = _Pointer(input1)
+        pointer2 = _Pointer(input2)
+
+        class _RunMode:
+            def get(self):
+                return MODE_RESTART
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer1
+            inputCTF2 = pointer2
+            calculateConsensus = True
+            runMode = _RunMode()
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewCtfsSteps(self, newIds):
+                self.batches.append(list(newIds))
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+        protocol = _Harness()
+        protocol.insertedIds = [1, 2, 3]
+        protocol._lastInputId = 0
+        protocol._lastInputId1 = 3
+        protocol._lastInputId2 = 3
+        protocol._pendingInputIds1 = set()
+        protocol._pendingInputIds2 = set()
+        protocol.isStreamClosed = False
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtCTFConsensus._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[4]])
+        self.assertEqual(protocol.insertedIds, [1, 2, 3, 4])
+        self.assertEqual(protocol._lastInputId1, 4)
+        self.assertEqual(protocol._lastInputId2, 4)
+        self.assertEqual(protocol._pendingInputIds1, set())
+        self.assertEqual(protocol._pendingInputIds2, set())
+        self.assertTrue(protocol.isStreamClosed)
+        self.assertEqual(protocol.updateCalls, 1)
+
+        self.assertEqual(
+            input1.uniqueCalls,
+            [
+                ("id", "id > 3"),
+                ("id", None),
+            ],
+        )
+        self.assertEqual(
+            input2.uniqueCalls,
+            [
+                ("id", "id > 3"),
+                ("id", None),
+            ],
+        )
+        self.assertEqual(pointer1.getCalls, 1)
+        self.assertEqual(pointer2.getCalls, 1)
+        self.assertEqual(input1.loadCalls, 1)
+        self.assertEqual(input2.loadCalls, 1)
+        self.assertEqual(input1.closeCalls, 1)
+        self.assertEqual(input2.closeCalls, 1)
+
+    def testCTFConsensusInsertAllStepsDoesNotRequireSecondaryFilename(self):
+        from xmipp3.protocols.protocol_ctf_consensus import (
+            XmippProtCTFConsensus,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _LogicalCtfSet:
+            def getFileName(self):
+                raise AssertionError(
+                    "CTFConsensus must not require the secondary input filename."
+                )
+
+        inputSet2 = _LogicalCtfSet()
+        pointer2 = _Pointer(inputSet2)
+
+        class _Harness(XmippStreamingBase):
+            calculateConsensus = True
+            inputCTF2 = pointer2
+
+            def initializeParams(self):
+                self.initializeCalls += 1
+
+            def _insertFunctionStep(
+                self,
+                func,
+                prerequisites=None,
+                wait=False,
+                needsGPU=False,
+            ):
+                self.insertedSteps.append(
+                    (
+                        func,
+                        prerequisites,
+                        wait,
+                        needsGPU,
+                    )
+                )
+                return 1
+
+            def createOutputStep(self):
+                pass
+
+        protocol = _Harness()
+        protocol.initializeCalls = 0
+        protocol.insertedSteps = []
+
+        XmippProtCTFConsensus._insertAllSteps(protocol)
+
+        self.assertEqual(protocol.initializeCalls, 1)
+        self.assertEqual(pointer2.getCalls, 0)
+        self.assertEqual(len(protocol.insertedSteps), 1)
+
+        func, prerequisites, wait, needsGPU = (
+            protocol.insertedSteps[0]
+        )
+
+        self.assertEqual(func.__name__, "createOutputStep")
+        self.assertEqual(prerequisites, [])
+        self.assertTrue(wait)
+        self.assertFalse(needsGPU)

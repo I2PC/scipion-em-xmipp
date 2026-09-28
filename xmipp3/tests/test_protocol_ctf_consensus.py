@@ -84,11 +84,24 @@ class TestXmippCTFConsensusBase(BaseTest):
         ctfSet.write()
         ctfSet.close()
 
-    def _prepareStreamingCheck(self, fnCtfSet, insertedIds=None,
-                               originalRunMode=MODE_RESTART, doneIds=None):
+    def _prepareStreamingCheck(
+            self,
+            fnCtfSet,
+            insertedIds=None,
+            originalRunMode=MODE_RESTART,
+            doneIds=None,
+    ):
+        class _LogicalInputPointer:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def get(self):
+                return SetOfCTF(filename=self.filename)
+
         prot = self.newProtocol(XmippProtCTFConsensus)
-        prot.ctfFn1 = fnCtfSet
+        prot.inputCTF = _LogicalInputPointer(fnCtfSet)
         prot.insertedIds = list(insertedIds or [])
+        prot._lastInputId = max(prot.insertedIds, default=0)
         prot.isStreamClosed = False
         prot._originalRunMode = originalRunMode
 
@@ -111,7 +124,7 @@ class TestXmippCTFConsensusBase(BaseTest):
                 list(doneIds),
                 len(doneIds),
                 list(doneIds),
-                []
+                [],
             )
 
         return prot, scheduledIds
@@ -297,8 +310,6 @@ class TestXmippCTFConsensusBase(BaseTest):
                                  " is included in the output set")
 
     def testStreamingCtfOutputReusesLogicalSetWithoutLegacySqlite(self):
-        from unittest.mock import patch
-
         class LogicalOutputSet:
             def __init__(self):
                 self.enableAppendCalls = 0
@@ -307,13 +318,7 @@ class TestXmippCTFConsensusBase(BaseTest):
                 self.enableAppendCalls += 1
 
         class FreshOutputSet:
-            STREAM_OPEN = 1
-
-            def __init__(self, filename=None):
-                self.filename = filename
-
-            def setStreamState(self, state):
-                self.streamState = state
+            pass
 
         class InputCtfSet:
             def getMicrographs(self):
@@ -327,22 +332,17 @@ class TestXmippCTFConsensusBase(BaseTest):
         logicalOutput = LogicalOutputSet()
         prot.outputCTF = logicalOutput
         prot.inputCTF = InputPointer()
-        prot._getPath = lambda baseName: '/tmp/' + baseName
 
-        with patch(
-            'xmipp3.protocols.protocol_ctf_consensus.os.path.exists',
-            return_value=False,
-        ):
-            outputSet = prot._loadOutputSet(
-                FreshOutputSet,
-                'ctfs.sqlite',
-            )
+        outputSet = prot._loadOutputSet(
+            FreshOutputSet,
+            'ctfs.sqlite',
+        )
 
         self.assertIs(
             outputSet,
             logicalOutput,
-            "Streaming CTF output must reuse the logical Set when "
-            "the legacy SQLite file is absent.",
+            "Streaming CTF output must reuse the logical Set without "
+            "depending on a legacy SQLite path.",
         )
         self.assertEqual(
             1,
@@ -352,24 +352,25 @@ class TestXmippCTFConsensusBase(BaseTest):
     def testStreamingInputDoesNotDependOnSqliteMtime(self):
         fnCtfSet = self._createCtfSet(
             "ctf_streaming_mtime.sqlite",
-            [1]
+            [1],
         )
 
         originalMtime = os.path.getmtime(fnCtfSet)
 
         prot, scheduledIds = self._prepareStreamingCheck(
             fnCtfSet,
-            insertedIds=[1]
+            insertedIds=[1],
         )
 
         # Reproduce the old mtime optimisation:
         # lastCheck is newer than the SQLite mtime.
         prot.lastCheck = datetime.fromtimestamp(originalMtime + 60)
 
-        # New data arrives.
+        # New data arrives in the backing Set.
         self._appendCtf(fnCtfSet, 2)
 
-        # Simulate a compatibility SQLite whose main-file mtime does not change.
+        # Keep the backing SQLite mtime unchanged. Discovery must still happen
+        # through the logical Set API, not through filesystem timestamps.
         os.utime(fnCtfSet, (originalMtime, originalMtime))
 
         prot._checkNewInput()
@@ -377,20 +378,21 @@ class TestXmippCTFConsensusBase(BaseTest):
         self.assertEqual(
             [2],
             sorted(scheduledIds),
-            "A new CTF must be detected even if the SQLite mtime does not change."
+            "A new CTF must be detected even if the backing SQLite mtime "
+            "does not change.",
         )
 
     def testResumeSkipsAlreadyProcessedCtfs(self):
         fnCtfSet = self._createCtfSet(
             "ctf_resume.sqlite",
-            [1, 2, 3]
+            [1, 2, 3],
         )
 
         prot, scheduledIds = self._prepareStreamingCheck(
             fnCtfSet,
             insertedIds=[],
             originalRunMode=MODE_RESUME,
-            doneIds=[1]
+            doneIds=[1],
         )
 
         prot._checkNewInput()
@@ -398,26 +400,28 @@ class TestXmippCTFConsensusBase(BaseTest):
         self.assertEqual(
             [2, 3],
             sorted(scheduledIds),
-            "Continue must only schedule CTFs not already present in the outputs."
+            "Continue must only schedule CTFs not already present in "
+            "the persisted outputs.",
         )
 
         self.assertEqual(
             [1, 2, 3],
             sorted(prot.insertedIds),
-            "Processed and newly scheduled CTFs must be tracked after Continue."
+            "Persisted and newly scheduled CTFs must be tracked after "
+            "Continue.",
         )
 
     def testRestartDoesNotReusePreviousDoneCtfs(self):
         fnCtfSet = self._createCtfSet(
             "ctf_restart.sqlite",
-            [1, 2, 3]
+            [1, 2, 3],
         )
 
         prot, scheduledIds = self._prepareStreamingCheck(
             fnCtfSet,
             insertedIds=[],
             originalRunMode=MODE_RESTART,
-            doneIds=[1]
+            doneIds=[1],
         )
 
         prot._checkNewInput()
@@ -425,26 +429,21 @@ class TestXmippCTFConsensusBase(BaseTest):
         self.assertEqual(
             [1, 2, 3],
             sorted(scheduledIds),
-            "Restart must schedule all input CTFs instead of restoring previous outputs."
+            "Restart must schedule all input CTFs instead of restoring "
+            "previous outputs.",
         )
 
 
     def testFinishedCheckDoesNotReloadOutputsWithoutNewCtfs(self):
-        """The final streaming check must not reopen persisted CTF outputs."""
-
-        class _InputCtfSet:
-            def getIdSet(self):
-                return {1}
-
+        # The final streaming check must not reopen persisted CTF outputs.
         prot = self.newProtocol(XmippProtCTFConsensus)
         prot.calculateConsensus = False
         prot.isStreamClosed = True
+        prot.insertedIds = [1]
         prot.acceptedIds = [1]
         prot.discardedIds = []
 
         prot._getAllDoneIds = lambda: ([1], 1, [1], [])
-        prot._loadInputCtfSet = lambda fn: _InputCtfSet()
-        prot.ctfFn1 = "ctfs.sqlite"
 
         prot._loadOutputSet = Mock()
         prot.fillOutput = Mock()

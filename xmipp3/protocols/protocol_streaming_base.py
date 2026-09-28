@@ -53,6 +53,7 @@ class XmippStreamingBase:
             discoveredIds,
             knownIds,
             producerClosed,
+        watermarkAttr='_lastInputId',
     ):
         """Recover late-visible rows only after producer stream closure."""
         discoveredIds = list(discoveredIds)
@@ -72,9 +73,13 @@ class XmippStreamingBase:
         )
 
         if reconciledIds:
-            self._lastInputId = max(
-                getattr(self, '_lastInputId', 0),
-                max(reconciledIds),
+            setattr(
+                self,
+                watermarkAttr,
+                max(
+                    getattr(self, watermarkAttr, 0),
+                    max(reconciledIds),
+                ),
             )
 
         visibleIds = set(discoveredIds)
