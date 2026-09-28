@@ -32,7 +32,7 @@ from datetime import datetime
 
 import pyworkflow.protocol.constants as cons
 from pyworkflow.utils import cleanPath
-from pyworkflow.object import Set, Float
+from pyworkflow.object import Set, Float, CsvList
 from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         Range, LEVEL_ADVANCED, FloatParam,
                                         BooleanParam)
@@ -44,10 +44,10 @@ from pwem.protocols import ProtProcessParticles
 
 from pwem import emlib
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
-from xmipp3.utils import loadOutputSetForAppend
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 
-class XmippProtScreenParticles(ProtProcessParticles):
+class XmippProtScreenParticles(XmippStreamingBase, ProtProcessParticles):
     """Protocol to attach different merit values to every particle metadata for subsequent pruning the set.
 There are different merit values to be calculated:
     - zScore evaluates the similarity of a particles with an average (lower zScore -> higher similarity).
@@ -431,25 +431,36 @@ There are different merit values to be calculated:
         self.fnInputMd = self._getExtraPath("input.xmd")
         self.fnInputOldMd = self._getExtraPath("inputOld.xmd")
         self.fnOutputMd = self._getExtraPath("output.xmd")
-        self.fnProcessedIds = self._getExtraPath("processed_ids.txt")
 
         if not self.isContinued():
-            for fileName in (self.fnInputMd, self.fnInputOldMd, self.fnOutputMd, self.fnProcessedIds):
+            for fileName in (
+                self.fnInputMd,
+                self.fnInputOldMd,
+                self.fnOutputMd,
+            ):
                 cleanPath(fileName)
 
-        processedIds = self._readProcessedIds()
+        processedIds = self._getKnownProcessedParticleIds()
         self.outputSize = len(processedIds)
         partsSteps = []
 
         if os.path.exists(self.fnOutputMd):
             self.inputSize, self.streamClosed = self._getInputStatus()
-            self.outputSize += len(set(self._readMetadataIds(self.fnInputMd)).difference(processedIds))
+            pendingIds = set(
+                self._readMetadataIds(self.fnInputMd)
+            ).difference(processedIds)
+            self.outputSize += len(pendingIds)
         else:
             self.inputSize, self.streamClosed = self._loadInput()
+
             if not isEmpty(self.fnInputMd):
                 partsSteps = self._insertNewPartsSteps()
 
-        self._insertFunctionStep('createOutputStep', prerequisites=partsSteps, wait=True)
+        self._insertFunctionStep(
+            'createOutputStep',
+            prerequisites=partsSteps,
+            wait=True,
+        )
 
     def _getFirstJoinStep(self):
         for s in self._steps:
@@ -496,100 +507,231 @@ There are different merit values to be calculated:
             self.updateSteps()
 
     def _getInputStatus(self):
-        partsFile = self.inputParticles.get().getFileName()
-        inPartsSet = SetOfParticles(filename=partsFile)
-        inPartsSet.loadAllProperties()
-        inputSize = inPartsSet.getSize()
-        streamClosed = inPartsSet.isStreamClosed()
-        inPartsSet.close()
+        inPartsSet = self._loadLogicalSet(self.inputParticles)
+
+        try:
+            inputSize = inPartsSet.getSize()
+            streamClosed = inPartsSet.isStreamClosed()
+        finally:
+            inPartsSet.close()
+
         return inputSize, streamClosed
 
+    def _getRejectedParticleIds(self):
+        rejectedIds = getattr(
+            self,
+            '_rejectedParticleIds',
+            None,
+        )
+        if rejectedIds is None:
+            rejectedIds = CsvList(pType=int)
+            self._rejectedParticleIds = rejectedIds
+
+        return set(rejectedIds)
+
+    def _markRejectedParticleIds(self, particleIds):
+        rejectedIds = getattr(
+            self,
+            '_rejectedParticleIds',
+            None,
+        )
+        if rejectedIds is None:
+            rejectedIds = CsvList(pType=int)
+            self._rejectedParticleIds = rejectedIds
+
+        knownRejectedIds = set(rejectedIds)
+        knownRejectedIds.update(particleIds)
+        rejectedIds.set(
+            sorted(knownRejectedIds)
+        )
+
+        return set(rejectedIds)
+
+    def _getKnownProcessedParticleIds(self):
+        processedIds = self._getKnownPersistedOutputIds(
+            'outputParticles',
+        )
+        processedIds.update(
+            self._getRejectedParticleIds()
+        )
+        return processedIds
+
     def _loadInput(self):
-        partsFile = self.inputParticles.get().getFileName()
-        inPartsSet = SetOfParticles(filename=partsFile)
-        inPartsSet.loadAllProperties()
-        processedIds = self._readProcessedIds()
+        inPartsSet = self._loadLogicalSet(self.inputParticles)
+        processedIds = self._getKnownProcessedParticleIds()
 
-        newParticles = (particle for particle in inPartsSet.iterItems(orderBy='creation') if particle.getObjId() not in processedIds)
-        writeSetOfParticles(newParticles, self.fnInputMd, alignType=ALIGN_NONE)
+        try:
+            newIds, self._lastInputId = self._discoverIdsAfter(
+                inPartsSet,
+                getattr(self, '_lastInputId', 0),
+            )
+            producerClosed = inPartsSet.isStreamClosed()
 
-        if processedIds:
-            oldParticles = (particle for particle in inPartsSet.iterItems(orderBy='creation') if particle.getObjId() in processedIds)
-            writeSetOfParticles(oldParticles, self.fnInputOldMd, alignType=ALIGN_NONE)
-        else:
-            cleanPath(self.fnInputOldMd)
+            newIds, terminalConsistent = (
+                self._reconcileClosedStreamIds(
+                    inPartsSet,
+                    newIds,
+                    processedIds,
+                    producerClosed,
+                )
+            )
 
-        streamClosed = inPartsSet.isStreamClosed()
-        inputSize = inPartsSet.getSize()
-        inPartsSet.close()
+            newIds = [
+                particleId
+                for particleId in newIds
+                if particleId not in processedIds
+            ]
+
+            newParticles = (
+                inPartsSet.getItem('id', particleId)
+                for particleId in newIds
+            )
+            writeSetOfParticles(
+                newParticles,
+                self.fnInputMd,
+                alignType=ALIGN_NONE,
+            )
+
+            if processedIds:
+                oldParticles = (
+                    inPartsSet.getItem('id', particleId)
+                    for particleId in sorted(processedIds)
+                )
+                writeSetOfParticles(
+                    oldParticles,
+                    self.fnInputOldMd,
+                    alignType=ALIGN_NONE,
+                )
+            else:
+                cleanPath(self.fnInputOldMd)
+
+            streamClosed = (
+                producerClosed
+                and terminalConsistent
+            )
+            inputSize = inPartsSet.getSize()
+        finally:
+            inPartsSet.close()
 
         return inputSize, streamClosed
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        self.finished = self.streamClosed and self.outputSize == self.inputSize
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        self.finished = (
+            self.streamClosed
+            and self.outputSize == self.inputSize
+        )
+        streamMode = (
+            Set.STREAM_CLOSED
+            if self.finished
+            else Set.STREAM_OPEN
+        )
 
         newData = os.path.exists(self.fnOutputMd)
-        lastToClose = self.finished and hasattr(self, 'outputParticles')
+        lastToClose = (
+            self.finished
+            and hasattr(self, 'outputParticles')
+        )
+
         if newData or lastToClose:
-            outSet = self._loadOutputSet(SetOfParticles, 'outputParticles.sqlite')
-            batchIds = []
+            firstTime = not hasattr(
+                self,
+                'outputParticles',
+            )
+            outSet = self._loadOutputSet(
+                SetOfParticles,
+                'outputParticles.sqlite',
+            )
+            batchIds = set()
+            acceptedBatchIds = set()
+            rejectedBatchIds = set()
 
             if newData:
-                batchIds = self._readMetadataIds(self.fnInputMd)
+                batchIds = set(
+                    self._readMetadataIds(
+                        self.fnInputMd,
+                    )
+                )
                 partsSet = self._createSetOfParticles()
-                readSetOfParticles(self.fnOutputMd, partsSet)
-                self._appendNewParticles(outSet, partsSet)
-                self._recalculateSummaryValues(outSet)
-                writeSetOfParticles(outSet.iterItems(orderBy='_xmipp_zScore'), self._getPath("images.xmd"), alignType=ALIGN_NONE)
+                readSetOfParticles(
+                    self.fnOutputMd,
+                    partsSet,
+                )
 
-            self._updateOutputSet('outputParticles', outSet, streamMode)
+                acceptedBatchIds = set(
+                    partsSet.getIdSet()
+                )
+                rejectedBatchIds = (
+                    batchIds.difference(
+                        acceptedBatchIds
+                    )
+                )
+
+                self._appendNewParticles(
+                    outSet,
+                    partsSet,
+                )
+                self._recalculateSummaryValues(
+                    outSet,
+                )
+                writeSetOfParticles(
+                    outSet.iterItems(
+                        orderBy='_xmipp_zScore',
+                    ),
+                    self._getPath("images.xmd"),
+                    alignType=ALIGN_NONE,
+                )
+
+            self._updateOutputSet(
+                'outputParticles',
+                outSet,
+                streamMode,
+            )
+
+            if firstTime:
+                self._defineTransformRelation(
+                    self.inputParticles,
+                    outSet,
+                )
 
             if newData:
-                self._writeProcessedIds(batchIds)
-                self.outputSize = len(self._readProcessedIds())
+                self._markOutputIdsPersisted(
+                    'outputParticles',
+                    acceptedBatchIds,
+                )
+                self._markRejectedParticleIds(
+                    rejectedBatchIds,
+                )
+                self.outputSize = len(
+                    self._getKnownProcessedParticleIds()
+                )
                 self._store()
                 cleanPath(self.fnOutputMd)
 
-        if self.finished:  # Unlock createOutputStep if finished all jobs
+        if self.finished:
             outputStep = self._getFirstJoinStep()
+
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
 
     def _loadOutputSet(self, SetClass, baseName):
-        outputSet = (getattr(self, 'outputParticles', None)
-                     if baseName == 'outputParticles.sqlite' else None)
+        outputSet = getattr(self, 'outputParticles', None)
 
-        outputSet, isNew = loadOutputSetForAppend(
-            self, SetClass, baseName,
-            'outputParticles' if baseName == 'outputParticles.sqlite' else None
-        )
-        if isNew:
-            self._store(outputSet)
-            self._defineTransformRelation(self.inputParticles, outputSet)
+        if outputSet is not None:
+            outputSet.enableAppend()
+        else:
+            # Keep the logical output storage distinct from the temporary
+            # SetOfParticles used to import each processed Xmipp batch.
+            outputSet = self._createSetOfParticles(
+                suffix='_output',
+            )
+            outputSet.setStreamState(outputSet.STREAM_OPEN)
 
         outputSet.copyInfo(self.inputParticles.get())
 
         return outputSet
-
-    def _readProcessedIds(self):
-        if not os.path.exists(self.fnProcessedIds):
-            return set()
-        with open(self.fnProcessedIds) as inputFile:
-            return {int(line.strip()) for line in inputFile if line.strip()}
-
-    def _writeProcessedIds(self, particleIds):
-        processedIds = self._readProcessedIds()
-        newIds = [particleId for particleId in particleIds if particleId not in processedIds]
-        if not newIds:
-            return
-        with open(self.fnProcessedIds, 'a') as outputFile:
-            for particleId in newIds:
-                outputFile.write('%d\n' % particleId)
-            outputFile.flush()
-            os.fsync(outputFile.fileno())
 
     def _readMetadataIds(self, metadataFile):
         if not os.path.exists(metadataFile) or isEmpty(metadataFile):

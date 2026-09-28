@@ -4063,3 +4063,1215 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
         self.assertEqual(pointer.getCalls, 1)
         self.assertEqual(inputSet.loadCalls, 1)
         self.assertEqual(inputSet.closeCalls, 1)
+
+class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
+
+    def testScreenParticlesUsesSharedStreamingBase(self):
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        self.assertTrue(
+            issubclass(
+                XmippProtScreenParticles,
+                XmippStreamingBase,
+            )
+        )
+
+    def testScreenParticlesBuildsBatchFromIncrementalLogicalInput(self):
+        from unittest.mock import patch
+
+        import xmipp3.protocols.protocol_screen_particles as screen_particles
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Particle:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+        class _LogicalParticleSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+                self.getItemCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if field == "id" and where == "id > 1":
+                    return [2, 3]
+
+                raise AssertionError(
+                    "Unexpected incremental query: %r, %r"
+                    % (field, where)
+                )
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+
+                if field != "id":
+                    raise AssertionError(
+                        "Particles must be loaded by logical id."
+                    )
+
+                return _Particle(value)
+
+            def getSize(self):
+                return 3
+
+            def isStreamClosed(self):
+                return False
+
+            def getFileName(self):
+                raise AssertionError(
+                    "ScreenParticles discovery must not depend on "
+                    "the input Set filename."
+                )
+
+            def getIdSet(self):
+                raise AssertionError(
+                    "ScreenParticles discovery must not scan getIdSet()."
+                )
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _OutputParticles:
+            def __init__(self):
+                self.getIdSetCalls = 0
+
+            def getIdSet(self):
+                self.getIdSetCalls += 1
+                return {1}
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        inputSet = _LogicalParticleSet()
+        outputSet = _OutputParticles()
+        pointer = _Pointer(inputSet)
+        writes = []
+
+        def _captureWrite(items, filename, alignType=None):
+            writes.append(
+                (
+                    filename,
+                    [item.getObjId() for item in items],
+                    alignType,
+                )
+            )
+
+        class _Harness(XmippStreamingBase):
+            inputParticles = pointer
+            outputParticles = outputSet
+            fnInputMd = "input.xmd"
+            fnInputOldMd = "inputOld.xmd"
+            _lastInputId = 1
+
+            def _readProcessedIds(self):
+                raise AssertionError(
+                    "ScreenParticles batch discovery must use persisted "
+                    "output ids, not processed_ids.txt."
+                )
+
+            _getRejectedParticleIds = (
+                XmippProtScreenParticles._getRejectedParticleIds
+            )
+            _getKnownProcessedParticleIds = (
+                XmippProtScreenParticles._getKnownProcessedParticleIds
+            )
+
+        protocol = _Harness()
+
+        with patch.object(
+            screen_particles,
+            "writeSetOfParticles",
+            side_effect=_captureWrite,
+        ), patch.object(
+            screen_particles,
+            "cleanPath",
+        ) as cleanPath:
+            inputSize, streamClosed = (
+                XmippProtScreenParticles._loadInput(protocol)
+            )
+
+        self.assertEqual(inputSize, 3)
+        self.assertFalse(streamClosed)
+        self.assertEqual(protocol._lastInputId, 3)
+
+        self.assertEqual(
+            writes,
+            [
+                ("input.xmd", [2, 3], screen_particles.ALIGN_NONE),
+                ("inputOld.xmd", [1], screen_particles.ALIGN_NONE),
+            ],
+        )
+        cleanPath.assert_not_called()
+
+        self.assertEqual(outputSet.getIdSetCalls, 1)
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [("id", "id > 1")],
+        )
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [
+                ("id", 2),
+                ("id", 3),
+                ("id", 1),
+            ],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testScreenParticlesUsesPersistedOutputIdsForBatchResume(self):
+        from unittest.mock import patch
+
+        import xmipp3.protocols.protocol_screen_particles as screen_particles
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Particle:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+        class _LogicalParticleSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+                self.getItemCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if field == "id" and where == "id > 0":
+                    return [1, 2, 3]
+
+                raise AssertionError(
+                    "Unexpected incremental query: %r, %r"
+                    % (field, where)
+                )
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+
+                if field != "id":
+                    raise AssertionError(
+                        "Particles must be loaded by logical id."
+                    )
+
+                return _Particle(value)
+
+            def getSize(self):
+                return 3
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _OutputParticles:
+            def __init__(self):
+                self.getIdSetCalls = 0
+
+            def getIdSet(self):
+                self.getIdSetCalls += 1
+                return {1}
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        inputSet = _LogicalParticleSet()
+        outputSet = _OutputParticles()
+        pointer = _Pointer(inputSet)
+        writes = []
+
+        def _captureWrite(items, filename, alignType=None):
+            writes.append(
+                (
+                    filename,
+                    [item.getObjId() for item in items],
+                    alignType,
+                )
+            )
+
+        class _Harness(XmippStreamingBase):
+            inputParticles = pointer
+            outputParticles = outputSet
+            fnInputMd = "input.xmd"
+            fnInputOldMd = "inputOld.xmd"
+            _lastInputId = 0
+
+            def _readProcessedIds(self):
+                raise AssertionError(
+                    "ScreenParticles Resume must use persisted output "
+                    "ids, not processed_ids.txt."
+                )
+
+            _getRejectedParticleIds = (
+                XmippProtScreenParticles._getRejectedParticleIds
+            )
+            _getKnownProcessedParticleIds = (
+                XmippProtScreenParticles._getKnownProcessedParticleIds
+            )
+
+        protocol = _Harness()
+
+        with patch.object(
+            screen_particles,
+            "writeSetOfParticles",
+            side_effect=_captureWrite,
+        ), patch.object(
+            screen_particles,
+            "cleanPath",
+        ) as cleanPath:
+            inputSize, streamClosed = (
+                XmippProtScreenParticles._loadInput(protocol)
+            )
+
+        self.assertEqual(inputSize, 3)
+        self.assertFalse(streamClosed)
+        self.assertEqual(protocol._lastInputId, 3)
+
+        self.assertEqual(
+            writes,
+            [
+                ("input.xmd", [2, 3], screen_particles.ALIGN_NONE),
+                ("inputOld.xmd", [1], screen_particles.ALIGN_NONE),
+            ],
+        )
+        cleanPath.assert_not_called()
+
+        self.assertEqual(outputSet.getIdSetCalls, 1)
+        self.assertEqual(
+            protocol._getKnownPersistedOutputIds("outputParticles"),
+            {1},
+        )
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [("id", "id > 0")],
+        )
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [
+                ("id", 2),
+                ("id", 3),
+                ("id", 1),
+            ],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testScreenParticlesInitializesOutputSizeFromPersistedOutput(self):
+        from unittest.mock import patch
+
+        import xmipp3.protocols.protocol_screen_particles as screen_particles
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _OutputParticles:
+            def __init__(self):
+                self.getIdSetCalls = 0
+
+            def getIdSet(self):
+                self.getIdSetCalls += 1
+                return {4, 7}
+
+        class _Harness(XmippStreamingBase):
+            outputParticles = _OutputParticles()
+
+            def _initializeZscores(self):
+                pass
+
+            def _getExtraPath(self, name):
+                return name
+
+            def isContinued(self):
+                return True
+
+            def _readProcessedIds(self):
+                raise AssertionError(
+                    "ScreenParticles must initialize progress from "
+                    "persisted output, not processed_ids.txt."
+                )
+
+            def _loadInput(self):
+                self.loadInputCalls += 1
+                return 3, False
+
+            def _insertNewPartsSteps(self):
+                raise AssertionError(
+                    "No batch should be inserted in this focused test."
+                )
+
+            def _insertFunctionStep(
+                self,
+                funcName,
+                prerequisites=None,
+                wait=False,
+            ):
+                self.insertedSteps.append(
+                    (funcName, prerequisites, wait)
+                )
+                return len(self.insertedSteps)
+
+            _getRejectedParticleIds = (
+                XmippProtScreenParticles._getRejectedParticleIds
+            )
+            _getKnownProcessedParticleIds = (
+                XmippProtScreenParticles._getKnownProcessedParticleIds
+            )
+
+        protocol = _Harness()
+        protocol.loadInputCalls = 0
+        protocol.insertedSteps = []
+
+        with patch.object(
+            screen_particles.os.path,
+            "exists",
+            return_value=False,
+        ), patch.object(
+            screen_particles,
+            "isEmpty",
+            return_value=True,
+        ):
+            XmippProtScreenParticles._insertAllSteps(protocol)
+
+        self.assertEqual(protocol.outputSize, 2)
+        self.assertEqual(protocol.inputSize, 3)
+        self.assertFalse(protocol.streamClosed)
+        self.assertEqual(protocol.loadInputCalls, 1)
+        self.assertEqual(
+            protocol.insertedSteps,
+            [("createOutputStep", [], True)],
+        )
+        self.assertEqual(
+            protocol.outputParticles.getIdSetCalls,
+            1,
+        )
+        self.assertEqual(
+            protocol._getKnownPersistedOutputIds("outputParticles"),
+            {4, 7},
+        )
+
+    def testScreenParticlesMarksPublishedBatchAsPersistedWithoutSidecar(self):
+        from unittest.mock import patch
+
+        import xmipp3.protocols.protocol_screen_particles as screen_particles
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Particle:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+        class _OutputParticles:
+            def __init__(self):
+                self.ids = {1}
+                self.getIdSetCalls = 0
+
+            def getSize(self):
+                return len(self.ids)
+
+            def getIdSet(self):
+                self.getIdSetCalls += 1
+                return set(self.ids)
+
+            def append(self, particle):
+                self.ids.add(particle.getObjId())
+
+            def iterItems(self, orderBy=None):
+                return iter([])
+
+        outputSet = _OutputParticles()
+
+        class _Harness(XmippStreamingBase):
+            fnInputMd = "input.xmd"
+            fnOutputMd = "output.xmd"
+            streamClosed = False
+            inputSize = 3
+            outputSize = 1
+            finished = False
+            inputParticles = object()
+
+            def _loadOutputSet(self, SetClass, baseName):
+                return outputSet
+
+            def _readMetadataIds(self, metadataFile):
+                self.metadataReads.append(metadataFile)
+                return [2, 3]
+
+            _getRejectedParticleIds = (
+                XmippProtScreenParticles._getRejectedParticleIds
+            )
+            _getKnownProcessedParticleIds = (
+                XmippProtScreenParticles._getKnownProcessedParticleIds
+            )
+            _markRejectedParticleIds = (
+                XmippProtScreenParticles._markRejectedParticleIds
+            )
+
+            def _createSetOfParticles(self):
+                class _BatchSet:
+                    def getIdSet(self):
+                        return {2, 3}
+
+                return _BatchSet()
+
+            def _appendNewParticles(self, outSet, particles):
+                outSet.append(_Particle(2))
+                outSet.append(_Particle(3))
+
+            def _recalculateSummaryValues(self, outSet):
+                self.summaryCalls += 1
+
+            def _getPath(self, name):
+                return name
+
+            def _updateOutputSet(self, name, outSet, streamMode):
+                self.events.append("update")
+                self.outputParticles = outSet
+                self.updatedOutputs.append((name, streamMode))
+
+            def _defineTransformRelation(self, source, target):
+                self.events.append("relation")
+                self.relations.append((source, target))
+
+            def _store(self):
+                self.storeCalls += 1
+
+            def _getFirstJoinStep(self):
+                return None
+
+
+
+
+
+        protocol = _Harness()
+        protocol.metadataReads = []
+        protocol.summaryCalls = 0
+        protocol.updatedOutputs = []
+        protocol.storeCalls = 0
+        protocol.events = []
+        protocol.relations = []
+
+        with patch.object(
+            screen_particles.os.path,
+            "exists",
+            return_value=True,
+        ), patch.object(
+            screen_particles,
+            "readSetOfParticles",
+        ), patch.object(
+            screen_particles,
+            "writeSetOfParticles",
+        ), patch.object(
+            screen_particles,
+            "cleanPath",
+        ) as cleanPath:
+            XmippProtScreenParticles._checkNewOutput(protocol)
+
+        self.assertEqual(
+            protocol._getKnownPersistedOutputIds("outputParticles"),
+            {1, 2, 3},
+        )
+        self.assertEqual(protocol.outputSize, 3)
+        self.assertEqual(outputSet.getIdSetCalls, 1)
+        self.assertEqual(protocol.metadataReads, ["input.xmd"])
+        self.assertEqual(protocol.summaryCalls, 1)
+        self.assertEqual(protocol.storeCalls, 1)
+        self.assertEqual(protocol.events, ["update", "relation"])
+        self.assertEqual(
+            protocol.relations,
+            [(protocol.inputParticles, outputSet)],
+        )
+        cleanPath.assert_called_once_with("output.xmd")
+
+    def testScreenParticlesDoesNotCreateProcessedIdsSidecar(self):
+        from unittest.mock import patch
+
+        import xmipp3.protocols.protocol_screen_particles as screen_particles
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Harness(XmippStreamingBase):
+            def _initializeZscores(self):
+                pass
+
+            def _getExtraPath(self, name):
+                self.extraPaths.append(name)
+                return name
+
+            def isContinued(self):
+                return False
+
+            def _loadInput(self):
+                return 0, False
+
+            def _insertNewPartsSteps(self):
+                return []
+
+            def _insertFunctionStep(
+                self,
+                funcName,
+                prerequisites=None,
+                wait=False,
+            ):
+                self.insertedSteps.append(
+                    (funcName, prerequisites, wait)
+                )
+                return len(self.insertedSteps)
+
+            _getRejectedParticleIds = (
+                XmippProtScreenParticles._getRejectedParticleIds
+            )
+            _getKnownProcessedParticleIds = (
+                XmippProtScreenParticles._getKnownProcessedParticleIds
+            )
+
+        protocol = _Harness()
+        protocol.extraPaths = []
+        protocol.insertedSteps = []
+
+        with patch.object(
+            screen_particles,
+            "cleanPath",
+        ) as cleanPath, patch.object(
+            screen_particles.os.path,
+            "exists",
+            return_value=False,
+        ), patch.object(
+            screen_particles,
+            "isEmpty",
+            return_value=True,
+        ):
+            XmippProtScreenParticles._insertAllSteps(protocol)
+
+        self.assertEqual(
+            protocol.extraPaths,
+            [
+                "input.xmd",
+                "inputOld.xmd",
+                "output.xmd",
+            ],
+        )
+        self.assertFalse(
+            hasattr(protocol, "fnProcessedIds")
+        )
+        self.assertEqual(
+            [call.args[0] for call in cleanPath.call_args_list],
+            [
+                "input.xmd",
+                "inputOld.xmd",
+                "output.xmd",
+            ],
+        )
+
+    def testScreenParticlesInputStatusUsesLogicalSet(self):
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _LogicalParticleSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getSize(self):
+                return 7
+
+            def isStreamClosed(self):
+                return True
+
+            def getFileName(self):
+                raise AssertionError(
+                    "ScreenParticles input status must not depend on "
+                    "the input Set filename."
+                )
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        inputSet = _LogicalParticleSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputParticles = pointer
+
+        protocol = _Harness()
+
+        inputSize, streamClosed = (
+            XmippProtScreenParticles._getInputStatus(protocol)
+        )
+
+        self.assertEqual(inputSize, 7)
+        self.assertTrue(streamClosed)
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testScreenParticlesOutputCreationUsesProtocolFactory(self):
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _InputParticles:
+            pass
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        class _FactorySet:
+            STREAM_OPEN = "open"
+
+            def __init__(self):
+                self.streamStates = []
+                self.copyInfoCalls = []
+
+            def setStreamState(self, state):
+                self.streamStates.append(state)
+
+            def enableAppend(self):
+                raise AssertionError(
+                    "A newly created output must not be reopened."
+                )
+
+            def copyInfo(self, inputSet):
+                self.copyInfoCalls.append(inputSet)
+
+        class _LegacySetClass:
+            def __init__(self, *args, **kwargs):
+                raise AssertionError(
+                    "ScreenParticles must not construct "
+                    "SetOfParticles(filename=...)."
+                )
+
+        inputSet = _InputParticles()
+        pointer = _Pointer(inputSet)
+        outputSet = _FactorySet()
+
+        class _Harness(XmippStreamingBase):
+            inputParticles = pointer
+
+            def _getPath(self, *args):
+                raise AssertionError(
+                    "ScreenParticles output creation must not depend "
+                    "on a legacy sqlite path."
+                )
+
+            def _createSetOfParticles(self, suffix=''):
+                self.factoryCalls.append(suffix)
+                return outputSet
+
+            def _store(self, obj=None):
+                raise AssertionError(
+                    "_loadOutputSet() must not store a newly created Set "
+                    "before the first batch is appended."
+                )
+
+            def _defineTransformRelation(self, source, target):
+                raise AssertionError(
+                    "_loadOutputSet() must not define the relation before "
+                    "_updateOutputSet() publishes the first batch."
+                )
+
+        protocol = _Harness()
+        protocol.factoryCalls = []
+
+        result = XmippProtScreenParticles._loadOutputSet(
+            protocol,
+            _LegacySetClass,
+            "outputParticles.sqlite",
+        )
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(
+            protocol.factoryCalls,
+            ['_output'],
+        )
+        self.assertEqual(outputSet.streamStates, ["open"])
+        self.assertEqual(outputSet.copyInfoCalls, [inputSet])
+        self.assertEqual(pointer.getCalls, 1)
+
+    def testScreenParticlesClosedStreamRecoversLateVisibleIds(self):
+        from unittest.mock import patch
+
+        import xmipp3.protocols.protocol_screen_particles as screen_particles
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Particle:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+        class _LogicalParticleSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+                self.getItemCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if field != "id":
+                    raise AssertionError(
+                        "Unexpected field: %r" % field
+                    )
+
+                if where == "id > 2":
+                    return []
+
+                if where is None:
+                    return [1, 2, 3]
+
+                raise AssertionError(
+                    "Unexpected query: %r" % where
+                )
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Particle(value)
+
+            def getSize(self):
+                return 3
+
+            def isStreamClosed(self):
+                return True
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _OutputParticles:
+            def __init__(self):
+                self.getIdSetCalls = 0
+
+            def getIdSet(self):
+                self.getIdSetCalls += 1
+                return {1, 2}
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        inputSet = _LogicalParticleSet()
+        outputSet = _OutputParticles()
+        pointer = _Pointer(inputSet)
+        writes = []
+
+        def _captureWrite(items, filename, alignType=None):
+            writes.append(
+                (
+                    filename,
+                    [item.getObjId() for item in items],
+                    alignType,
+                )
+            )
+
+        class _Harness(XmippStreamingBase):
+            inputParticles = pointer
+            outputParticles = outputSet
+            fnInputMd = "input.xmd"
+            fnInputOldMd = "inputOld.xmd"
+            _lastInputId = 2
+
+            _getRejectedParticleIds = (
+                XmippProtScreenParticles._getRejectedParticleIds
+            )
+            _getKnownProcessedParticleIds = (
+                XmippProtScreenParticles._getKnownProcessedParticleIds
+            )
+
+        protocol = _Harness()
+
+        with patch.object(
+            screen_particles,
+            "writeSetOfParticles",
+            side_effect=_captureWrite,
+        ), patch.object(
+            screen_particles,
+            "cleanPath",
+        ) as cleanPath:
+            inputSize, streamClosed = (
+                XmippProtScreenParticles._loadInput(protocol)
+            )
+
+        self.assertEqual(inputSize, 3)
+        self.assertTrue(streamClosed)
+        self.assertEqual(protocol._lastInputId, 3)
+
+        self.assertEqual(
+            writes,
+            [
+                ("input.xmd", [3], screen_particles.ALIGN_NONE),
+                ("inputOld.xmd", [1, 2], screen_particles.ALIGN_NONE),
+            ],
+        )
+        cleanPath.assert_not_called()
+
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 2"),
+                ("id", None),
+            ],
+        )
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [
+                ("id", 3),
+                ("id", 1),
+                ("id", 2),
+            ],
+        )
+        self.assertEqual(outputSet.getIdSetCalls, 1)
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testScreenParticlesResumeSkipsPersistedRejectedIds(self):
+        from unittest.mock import patch
+
+        from pyworkflow.object import CsvList
+
+        import xmipp3.protocols.protocol_screen_particles as screen_particles
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Particle:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+        class _LogicalParticleSet:
+            def __init__(self):
+                self.uniqueCalls = []
+                self.getItemCalls = []
+
+            def loadAllProperties(self):
+                pass
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+                if field != "id":
+                    raise AssertionError(
+                        "Unexpected field: %r" % field
+                    )
+                if where == "id > 0":
+                    return [1, 2, 3]
+                if where is None:
+                    return [1, 2, 3]
+                raise AssertionError(
+                    "Unexpected query: %r" % where
+                )
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Particle(value)
+
+            def getSize(self):
+                return 3
+
+            def isStreamClosed(self):
+                return True
+
+            def close(self):
+                pass
+
+        class _OutputParticles:
+            def getIdSet(self):
+                # Particle 2 was processed in a previous batch but rejected.
+                return {1, 3}
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        inputSet = _LogicalParticleSet()
+        writes = []
+
+        def _captureWrite(items, filename, alignType=None):
+            writes.append(
+                (
+                    filename,
+                    [item.getObjId() for item in items],
+                    alignType,
+                )
+            )
+
+        class _Harness(XmippStreamingBase):
+            inputParticles = _Pointer(inputSet)
+            outputParticles = _OutputParticles()
+            fnInputMd = "input.xmd"
+            fnInputOldMd = "inputOld.xmd"
+            _lastInputId = 0
+
+            _getRejectedParticleIds = (
+                XmippProtScreenParticles._getRejectedParticleIds
+            )
+            _getKnownProcessedParticleIds = (
+                XmippProtScreenParticles._getKnownProcessedParticleIds
+            )
+
+        protocol = _Harness()
+        protocol._rejectedParticleIds = CsvList(pType=int)
+        protocol._rejectedParticleIds.set([2])
+
+        with patch.object(
+            screen_particles,
+            "writeSetOfParticles",
+            side_effect=_captureWrite,
+        ), patch.object(
+            screen_particles,
+            "cleanPath",
+        ):
+            inputSize, streamClosed = (
+                XmippProtScreenParticles._loadInput(protocol)
+            )
+
+        self.assertEqual(inputSize, 3)
+        self.assertTrue(streamClosed)
+
+        self.assertEqual(
+            writes,
+            [
+                ("input.xmd", [], screen_particles.ALIGN_NONE),
+                (
+                    "inputOld.xmd",
+                    [1, 2, 3],
+                    screen_particles.ALIGN_NONE,
+                ),
+            ],
+        )
+
+    def testScreenParticlesPersistsRejectedIdsFromPublishedBatch(self):
+        from unittest.mock import patch
+
+        from pyworkflow.object import CsvList
+
+        import xmipp3.protocols.protocol_screen_particles as screen_particles
+        from xmipp3.protocols.protocol_screen_particles import (
+            XmippProtScreenParticles,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Particle:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+        class _BatchSet:
+            def getIdSet(self):
+                # Particle 2 was rejected by Xmipp and removed by
+                # readSetOfParticles(removeDisabled=True).
+                return {3}
+
+        class _OutputParticles:
+            def __init__(self):
+                self.ids = {1}
+
+            def getIdSet(self):
+                return set(self.ids)
+
+            def getSize(self):
+                return len(self.ids)
+
+            def append(self, particle):
+                self.ids.add(particle.getObjId())
+
+            def iterItems(self, orderBy=None):
+                return iter([])
+
+        outputSet = _OutputParticles()
+        batchSet = _BatchSet()
+
+        class _Harness(XmippStreamingBase):
+            fnInputMd = "input.xmd"
+            fnOutputMd = "output.xmd"
+            streamClosed = False
+            inputSize = 3
+            outputSize = 1
+            finished = False
+            inputParticles = object()
+
+            _getRejectedParticleIds = (
+                XmippProtScreenParticles._getRejectedParticleIds
+            )
+            _getKnownProcessedParticleIds = (
+                XmippProtScreenParticles._getKnownProcessedParticleIds
+            )
+            _markRejectedParticleIds = (
+                XmippProtScreenParticles._markRejectedParticleIds
+            )
+
+            def _loadOutputSet(self, SetClass, baseName):
+                return outputSet
+
+            def _readMetadataIds(self, metadataFile):
+                return [2, 3]
+
+            def _createSetOfParticles(self):
+                return batchSet
+
+            def _appendNewParticles(self, outSet, particles):
+                outSet.append(_Particle(3))
+
+            def _recalculateSummaryValues(self, outSet):
+                pass
+
+            def _getPath(self, name):
+                return name
+
+            def _updateOutputSet(self, name, outSet, streamMode):
+                self.outputParticles = outSet
+
+            def _defineTransformRelation(self, source, target):
+                pass
+
+            def _store(self):
+                self.storeCalls += 1
+
+            def _getFirstJoinStep(self):
+                return None
+
+        protocol = _Harness()
+        protocol._rejectedParticleIds = CsvList(pType=int)
+        protocol.storeCalls = 0
+
+        with patch.object(
+            screen_particles.os.path,
+            "exists",
+            return_value=True,
+        ), patch.object(
+            screen_particles,
+            "readSetOfParticles",
+        ), patch.object(
+            screen_particles,
+            "writeSetOfParticles",
+        ), patch.object(
+            screen_particles,
+            "cleanPath",
+        ):
+            XmippProtScreenParticles._checkNewOutput(protocol)
+
+        self.assertEqual(
+            set(protocol._rejectedParticleIds),
+            {2},
+        )
+        self.assertEqual(
+            protocol._getKnownPersistedOutputIds("outputParticles"),
+            {1, 3},
+        )
+        self.assertEqual(
+            protocol._getKnownProcessedParticleIds(),
+            {1, 2, 3},
+        )
+        self.assertEqual(protocol.outputSize, 3)
+        self.assertGreaterEqual(protocol.storeCalls, 1)
