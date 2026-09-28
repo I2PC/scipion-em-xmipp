@@ -41,12 +41,13 @@ from pwem.objects import SetOfMovies
 from pwem.protocols import ProtProcessMovies
 
 from xmipp3.convert import getScipionObj
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 THRESHOLD = 2
 OUTPUT_MOVIES = "outputMovies"
 OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 
-class XmippProtMovieDoseAnalysis(ProtProcessMovies):
+class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
     """
     Analyzes the electron dose applied throughout a movie acquisition. This
     protocol helps assess dose accumulation and its effects on image quality,
@@ -387,22 +388,33 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                                  prerequisites=[], wait=True, needsGPU=False)
 
     def initializeStep(self):
-        self.samplingRate = self.inputMovies.get().getSamplingRate()
-        self.movsFn = self.inputMovies.get().getFileName()
+        inputMovies = self.inputMovies.get()
+
+        self.samplingRate = inputMovies.getSamplingRate()
+
         # Important to have both:
-        self.insertedIds = []  # Contains images that have been inserted in a Step (checkNewInput).
-        self.processedIds = []  # Contains images that have been processed in a Step (checkNewOutput).
+        # Contains images that have been inserted in a Step (checkNewInput).
+        self.insertedIds = []
+        self._lastInputId = 0
+        # Contains images that have been processed in a Step (checkNewOutput).
+        self.processedIds = []
         self._doneIds = None
         self._acceptedIds = None
         self._discardedIds = None
         self._inputSize = None
         self._lastPlotCount = 0
-        # Contains images that have been processed in a Step (checkNewOutput).
-        self.isStreamClosed = self.inputMovies.get().isStreamClosed()
-        self.framesRange = self.inputMovies.get().getFramesRange()
-        dosePerFrame = self.inputMovies.get().getFirstItem().getAcquisition().getDosePerFrame()
 
-        if dosePerFrame != 0 and dosePerFrame != None:
+        self.isStreamClosed = inputMovies.isStreamClosed()
+        self.framesRange = inputMovies.getFramesRange()
+
+        dosePerFrame = (
+            inputMovies
+            .getFirstItem()
+            .getAcquisition()
+            .getDosePerFrame()
+        )
+
+        if dosePerFrame != 0 and dosePerFrame is not None:
             self.dosePerFrame = dosePerFrame
         else:
             self.usingExperimental = True
@@ -451,21 +463,20 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     def createOutputStep(self):
         self._closeOutputSet()
 
-    def _loadInputSet(self, movsFn):
-        """Reload and return the logical input movie set."""
-        self.debug("Reloading input set: %s" % movsFn)
-        movSet = self.inputMovies.get()
-        movSet.close()
-        movSet.load()
-        movSet.loadAllProperties()
-        self.isStreamClosed = movSet.isStreamClosed()
-        return movSet
-
     def _loadMoviesByIds(self, movieIds):
         with self._lock:
-            inputMovies = self._loadInputSet(self.movsFn)
+            inputMovies = self._loadLogicalSet(
+                self.inputMovies,
+            )
+
             try:
-                return {movieId: inputMovies.getItem("id", movieId).clone() for movieId in movieIds}
+                return {
+                    movieId: inputMovies.getItem(
+                        "id",
+                        movieId,
+                    ).clone()
+                    for movieId in movieIds
+                }
             finally:
                 inputMovies.close()
 
@@ -481,32 +492,60 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         return _fileSignature(fileName), _fileSignature(fileName + '-wal')
 
     def _checkNewInput(self):
-        # Always reload the logical Set before checking for new input.
         with self._lock:
-            movSet = self._loadInputSet(self.movsFn)
+            movSet = self._loadLogicalSet(self.inputMovies)
+
             try:
-                movSetIds = movSet.getIdSet()
-                self._inputSize = len(movSetIds)
-                self.isStreamClosed = movSet.isStreamClosed()
+                newIds, self._lastInputId = self._discoverIdsAfter(
+                    movSet,
+                    self._lastInputId,
+                )
+
+                self._inputSize = movSet.getSize()
+                producerClosed = movSet.isStreamClosed()
+
+                newIds, terminalConsistent = (
+                    self._reconcileClosedStreamIds(
+                        movSet,
+                        newIds,
+                        self.insertedIds,
+                        producerClosed,
+                    )
+                )
+
+                self.isStreamClosed = (
+                    producerClosed
+                    and terminalConsistent
+                )
             finally:
                 movSet.close()
 
-        insertedIds = set(self.insertedIds)
-        newIds = [idMov for idMov in movSetIds if idMov not in insertedIds]
-
         outputStep = self._getFirstJoinStep()
 
-        if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
+        if self.isContinued() and not self.insertedIds:
             doneIds, _, _, _ = self._getAllDoneIds()
-            skipIds = list(set(newIds).intersection(set(doneIds)))
-            newIds = list(set(newIds).difference(set(doneIds)))
-            self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
-            self.insertedIds = doneIds # During the first round of "Continue" action it has to be filled
+            doneIds = list(doneIds)
+
+            skipIds = sorted(
+                set(newIds).intersection(doneIds)
+            )
+            newIds = sorted(
+                set(newIds).difference(doneIds)
+            )
+
+            self.info(
+                "Skipping Mics with ID: %s, seems to be done"
+                % skipIds
+            )
+
+            self.insertedIds = doneIds
 
         if newIds:
             fDeps = self._insertNewMoviesSteps(newIds)
+
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
+
             self.updateSteps()
 
     def _insertNewMoviesSteps(self, newIds):
@@ -592,10 +631,9 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         self.meanDoseList = [doseById[movieId] for movieId in sorted(doseById)]
 
     def _getNewDoneIds(self, doneListIds):
-        # Movies run under parallel step execution and do not necessarily
-        # finish in id order, so a still-pending id must be skipped rather
-        # than stopping the scan - otherwise it permanently blocks every
-        # higher id that already finished from ever being counted as done.
+        # Processing steps may finish out of order, but dose statistics
+        # are chronological. Publish only the contiguous acquisition-order
+        # prefix whose previous movies are already persisted or processed.
         insertedIds = sorted(set(self.insertedIds))
         processedIds = set(self.processedIds)
         doneIds = set(doneListIds)
@@ -604,8 +642,10 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
         for movieId in insertedIds:
             if movieId in doneIds:
                 continue
+
             if movieId not in processedIds:
-                continue
+                break
+
             newDone.append(movieId)
 
         return newDone
@@ -832,11 +872,15 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     def _getInputSize(self):
         if self._inputSize is None:
             with self._lock:
-                inputSet = self._loadInputSet(self.movsFn)
+                inputSet = self._loadLogicalSet(
+                    self.inputMovies,
+                )
+
                 try:
                     self._inputSize = inputSet.getSize()
                 finally:
                     inputSet.close()
+
         return self._inputSize
 
     def getLimitIntervals(self):

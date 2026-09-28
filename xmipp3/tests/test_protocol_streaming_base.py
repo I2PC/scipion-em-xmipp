@@ -1058,3 +1058,348 @@ class TestXmippMovieMaxShiftResumePersistence(unittest.TestCase):
                 ("id", "id > 5"),
             ],
         )
+
+class TestXmippMovieDoseAnalysisStreamingBase(unittest.TestCase):
+
+    def testMovieDoseAnalysisUsesSharedStreamingBase(self):
+        from xmipp3.protocols.protocol_movie_dose_analysis import (
+            XmippProtMovieDoseAnalysis,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        self.assertTrue(
+            issubclass(
+                XmippProtMovieDoseAnalysis,
+                XmippStreamingBase,
+            ),
+            "MovieDoseAnalysis must reuse the shared Xmipp "
+            "streaming helpers.",
+        )
+
+        self.assertTrue(
+            issubclass(
+                XmippProtMovieDoseAnalysis,
+                ProtProcessMovies,
+            ),
+            "MovieDoseAnalysis must keep ProtProcessMovies behavior.",
+        )
+
+class _DoseStreamingMovieSet:
+    def __init__(self):
+        self.loadCalls = 0
+        self.closeCalls = 0
+        self.uniqueCalls = []
+        self.sizeCalls = 0
+
+    def loadAllProperties(self):
+        self.loadCalls += 1
+
+    def getUniqueValues(self, field, where=None):
+        self.uniqueCalls.append((field, where))
+
+        if where == "id > 3":
+            return [4, 5]
+
+        if where == "id > 5":
+            return [6]
+
+        raise AssertionError(
+            "Unexpected discovery query: %r" % (where,)
+        )
+
+    def getSize(self):
+        self.sizeCalls += 1
+        return 6
+
+    def isStreamClosed(self):
+        return False
+
+    def close(self):
+        self.closeCalls += 1
+
+
+class TestXmippMovieDoseAnalysisStreamingInput(unittest.TestCase):
+
+    def testMovieDoseAnalysisUsesIncrementalLogicalDiscovery(self):
+        from xmipp3.protocols.protocol_movie_dose_analysis import (
+            XmippProtMovieDoseAnalysis,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        inputSet = _DoseStreamingMovieSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMovies = pointer
+            insertedIds = [1, 2, 3]
+            _lastInputId = 3
+            _inputSize = None
+            isStreamClosed = False
+
+            @property
+            def movsFn(self):
+                raise AssertionError(
+                    "MovieDoseAnalysis streaming must not depend "
+                    "on inputMovies.getFileName()."
+                )
+
+            def isContinued(self):
+                return False
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewMoviesSteps(self, newIds):
+                newIds = list(newIds)
+                self.batches.append(newIds)
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+            def info(self, message):
+                pass
+
+        from threading import Lock
+
+        protocol = _Harness()
+        protocol._lock = Lock()
+        protocol.insertedIds = [1, 2, 3]
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtMovieDoseAnalysis._checkNewInput(protocol)
+        XmippProtMovieDoseAnalysis._checkNewInput(protocol)
+
+        self.assertEqual(
+            protocol.batches,
+            [[4, 5], [6]],
+        )
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 3"),
+                ("id", "id > 5"),
+            ],
+        )
+        self.assertEqual(protocol._lastInputId, 6)
+        self.assertEqual(
+            protocol.insertedIds,
+            [1, 2, 3, 4, 5, 6],
+        )
+        self.assertEqual(protocol._inputSize, 6)
+        self.assertEqual(pointer.getCalls, 2)
+        self.assertEqual(inputSet.loadCalls, 2)
+        self.assertEqual(inputSet.closeCalls, 2)
+        self.assertEqual(inputSet.sizeCalls, 2)
+        self.assertEqual(protocol.updateCalls, 2)
+
+class TestXmippMovieDoseAnalysisLogicalInitialization(unittest.TestCase):
+
+    def testMovieDoseInitializeStepDoesNotRequireInputFilename(self):
+        from xmipp3.protocols.protocol_movie_dose_analysis import (
+            XmippProtMovieDoseAnalysis,
+        )
+
+        class _Acquisition:
+            def getDosePerFrame(self):
+                return 1.5
+
+        class _Movie:
+            def getAcquisition(self):
+                return _Acquisition()
+
+        class _LogicalMovieSet:
+            def getSamplingRate(self):
+                return 1.25
+
+            def getFileName(self):
+                raise AssertionError(
+                    "MovieDoseAnalysis initialization must not "
+                    "depend on a Set filename."
+                )
+
+            def isStreamClosed(self):
+                return False
+
+            def getFramesRange(self):
+                return (1, 40, 1)
+
+            def getFirstItem(self):
+                return _Movie()
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        class _Harness:
+            inputMovies = _Pointer(_LogicalMovieSet())
+
+            def isContinued(self):
+                return False
+
+        protocol = _Harness()
+
+        XmippProtMovieDoseAnalysis.initializeStep(protocol)
+
+        self.assertEqual(protocol.samplingRate, 1.25)
+        self.assertEqual(protocol.framesRange, (1, 40, 1))
+        self.assertEqual(protocol.dosePerFrame, 1.5)
+        self.assertEqual(protocol._lastInputId, 0)
+        self.assertEqual(protocol.insertedIds, [])
+        self.assertEqual(protocol.processedIds, [])
+        self.assertFalse(protocol.isStreamClosed)
+
+class TestXmippMovieDoseAnalysisLogicalWorkerInput(unittest.TestCase):
+
+    def testLoadMoviesByIdsUsesLogicalInputSet(self):
+        from threading import Lock
+
+        from xmipp3.protocols.protocol_movie_dose_analysis import (
+            XmippProtMovieDoseAnalysis,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Movie:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def clone(self):
+                return _Movie(self.objId)
+
+            def getObjId(self):
+                return self.objId
+
+        class _LogicalMovieSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.getItemCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Movie(value)
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        logicalSet = _LogicalMovieSet()
+        pointer = _Pointer(logicalSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMovies = pointer
+
+            @property
+            def movsFn(self):
+                raise AssertionError(
+                    "MovieDoseAnalysis workers must not depend "
+                    "on an input Set filename."
+                )
+
+        protocol = _Harness()
+        protocol._lock = Lock()
+
+        movies = XmippProtMovieDoseAnalysis._loadMoviesByIds(
+            protocol,
+            [3, 7],
+        )
+
+        self.assertEqual(sorted(movies), [3, 7])
+        self.assertEqual(movies[3].getObjId(), 3)
+        self.assertEqual(movies[7].getObjId(), 7)
+        self.assertEqual(
+            logicalSet.getItemCalls,
+            [("id", 3), ("id", 7)],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(logicalSet.loadCalls, 1)
+        self.assertEqual(logicalSet.closeCalls, 1)
+
+class TestXmippMovieDoseAnalysisLogicalInputSize(unittest.TestCase):
+
+    def testGetInputSizeUsesLogicalSetAndCachesResult(self):
+        from threading import Lock
+
+        from xmipp3.protocols.protocol_movie_dose_analysis import (
+            XmippProtMovieDoseAnalysis,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _LogicalMovieSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.sizeCalls = 0
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getSize(self):
+                self.sizeCalls += 1
+                return 11
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        logicalSet = _LogicalMovieSet()
+        pointer = _Pointer(logicalSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMovies = pointer
+            _inputSize = None
+
+            @property
+            def movsFn(self):
+                raise AssertionError(
+                    "MovieDoseAnalysis input size must not depend "
+                    "on an input Set filename."
+                )
+
+        protocol = _Harness()
+        protocol._lock = Lock()
+
+        first = XmippProtMovieDoseAnalysis._getInputSize(protocol)
+        second = XmippProtMovieDoseAnalysis._getInputSize(protocol)
+
+        self.assertEqual(first, 11)
+        self.assertEqual(second, 11)
+        self.assertEqual(protocol._inputSize, 11)
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(logicalSet.loadCalls, 1)
+        self.assertEqual(logicalSet.sizeCalls, 1)
+        self.assertEqual(logicalSet.closeCalls, 1)

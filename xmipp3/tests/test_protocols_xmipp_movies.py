@@ -762,20 +762,35 @@ class TestMovieDoseAnalysisState(BaseTest):
 
     def testClosedStreamUsesAvailableDoseSamples(self):
         class InputSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
             def getSize(self):
                 return 3
 
             def close(self):
-                pass
+                self.closeCalls += 1
 
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        inputSet = InputSet()
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=5)
+        prot.inputMovies = InputPointer(inputSet)
         prot.insertedIds = [1, 2, 3]
         prot.processedIds = [1, 2]
         prot.meanDoseById = {1: 1.0, 2: 1.1}
         prot.isStreamClosed = True
-        prot.movsFn = 'movies.sqlite'
+        prot._inputSize = None
         prot._getAllDoneIds = lambda: ([], 0, [], [])
-        prot._loadInputSet = lambda _: InputSet()
 
         self.assertFalse(prot._hasEnoughDoseSamples())
 
@@ -783,6 +798,9 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot.meanDoseById[3] = 0.9
 
         self.assertTrue(prot._hasEnoughDoseSamples())
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
 
     def testStreamingOutputAppendReusesExistingLogicalOutputWithoutLegacySqlite(self):
         from unittest.mock import patch
@@ -849,36 +867,75 @@ class TestMovieDoseAnalysisState(BaseTest):
 
     def testStreamingInputReloadsWhenPhysicalSignatureIsUnchanged(self):
         class InputSet:
-            def getIdSet(self):
-                return {1}
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.queries = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.queries.append((field, where))
+                if where == 'id > 0':
+                    return [1]
+                if where == 'id > 1':
+                    return []
+                raise AssertionError(
+                    'Unexpected discovery query: %r' % (where,)
+                )
+
+            def getSize(self):
+                return 1
 
             def isStreamClosed(self):
                 return False
 
             def close(self):
-                pass
+                self.closeCalls += 1
+
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        inputSet = InputSet()
+        pointer = InputPointer(inputSet)
+        scheduled = []
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
-        loadCalls = []
+        prot.inputMovies = pointer
         prot.insertedIds = []
-        prot.movsFn = 'movies.sqlite'
-        prot._getInputSetSignature = lambda _: ('unchanged', None)
+        prot._lastInputId = 0
+        prot._inputSize = None
         prot._getFirstJoinStep = lambda: None
-        prot._insertNewMoviesSteps = lambda newIds: []
+
+        def insertSteps(newIds):
+            newIds = list(newIds)
+            scheduled.append(newIds)
+            prot.insertedIds.extend(newIds)
+            return []
+
+        prot._insertNewMoviesSteps = insertSteps
         prot.updateSteps = lambda: None
         prot.isContinued = lambda: False
-        prot._loadInputSet = lambda _: loadCalls.append(1) or InputSet()
 
         prot._checkNewInput()
-        prot.insertedIds = [1]
         prot._checkNewInput()
 
+        self.assertEqual(scheduled, [[1]])
+        self.assertEqual(pointer.getCalls, 2)
+        self.assertEqual(inputSet.loadCalls, 2)
+        self.assertEqual(inputSet.closeCalls, 2)
         self.assertEqual(
-            2,
-            len(loadCalls),
-            "Streaming input must be refreshed from the logical Set even "
-            "when the backing file signature does not change.",
+            inputSet.queries,
+            [('id', 'id > 0'), ('id', 'id > 1')],
         )
+
 
 
     def testStreamingInputUsesLogicalSetStateInsteadOfStorageSnapshot(self):
@@ -887,39 +944,34 @@ class TestMovieDoseAnalysisState(BaseTest):
         class LogicalInputSet:
             def __init__(self):
                 self.closeCalls = 0
-                self.loadCalls = 0
                 self.loadPropertiesCalls = 0
-
-            def close(self):
-                self.closeCalls += 1
-
-            def load(self):
-                self.loadCalls += 1
+                self.queries = []
 
             def loadAllProperties(self):
                 self.loadPropertiesCalls += 1
 
-            def getIdSet(self):
-                return {1, 2}
+            def getUniqueValues(self, field, where=None):
+                self.queries.append((field, where))
+                if where == 'id > 1':
+                    return [2]
+                raise AssertionError(
+                    'Unexpected discovery query: %r' % (where,)
+                )
+
+            def getSize(self):
+                return 2
 
             def isStreamClosed(self):
                 return False
 
+            def close(self):
+                self.closeCalls += 1
+
         class StaleStorageSnapshot:
             def __init__(self, filename=None):
-                self.filename = filename
-
-            def loadAllProperties(self):
-                pass
-
-            def getIdSet(self):
-                return {1}
-
-            def isStreamClosed(self):
-                return True
-
-            def close(self):
-                pass
+                raise AssertionError(
+                    'Legacy storage snapshot must not be opened.'
+                )
 
         class InputPointer:
             def __init__(self, value):
@@ -933,10 +985,14 @@ class TestMovieDoseAnalysisState(BaseTest):
         insertedBatches = []
 
         prot.inputMovies = InputPointer(logicalInput)
-        prot.movsFn = 'movies.sqlite'
         prot.insertedIds = [1]
+        prot._lastInputId = 1
+        prot._inputSize = None
         prot._getFirstJoinStep = lambda: None
-        prot._insertNewMoviesSteps = lambda newIds: insertedBatches.append(list(newIds)) or []
+        prot._insertNewMoviesSteps = (
+            lambda newIds:
+            insertedBatches.append(list(newIds)) or []
+        )
         prot.updateSteps = lambda: None
         prot.isContinued = lambda: False
 
@@ -948,9 +1004,13 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertEqual(insertedBatches, [[2]])
         self.assertFalse(prot.isStreamClosed)
-        self.assertGreaterEqual(logicalInput.closeCalls, 1)
-        self.assertEqual(logicalInput.loadCalls, 1)
+        self.assertEqual(logicalInput.closeCalls, 1)
         self.assertEqual(logicalInput.loadPropertiesCalls, 1)
+        self.assertEqual(
+            logicalInput.queries,
+            [('id', 'id > 1')],
+        )
+
 
 
     def testParallelMovieLoadsSerializeSharedInputSetAccess(self):
@@ -973,16 +1033,7 @@ class TestMovieDoseAnalysisState(BaseTest):
                 self.firstLoaded = threading.Event()
                 self.releaseFirst = threading.Event()
 
-            def close(self):
-                current = threading.get_ident()
-                with self.guard:
-                    if self.owner is not None and self.owner != current:
-                        raise RuntimeError(
-                            'shared input set accessed concurrently'
-                        )
-                    self.owner = None
-
-            def load(self):
+            def loadAllProperties(self):
                 current = threading.get_ident()
                 with self.guard:
                     if self.owner is not None and self.owner != current:
@@ -995,14 +1046,23 @@ class TestMovieDoseAnalysisState(BaseTest):
                     self.firstLoaded.set()
                     self.releaseFirst.wait(timeout=2)
 
-            def loadAllProperties(self):
-                pass
-
-            def isStreamClosed(self):
-                return False
-
             def getItem(self, field, movieId):
+                current = threading.get_ident()
+                with self.guard:
+                    if self.owner != current:
+                        raise RuntimeError(
+                            'shared input set accessed outside owner'
+                        )
                 return Movie(movieId)
+
+            def close(self):
+                current = threading.get_ident()
+                with self.guard:
+                    if self.owner is not None and self.owner != current:
+                        raise RuntimeError(
+                            'shared input set accessed concurrently'
+                        )
+                    self.owner = None
 
         class InputPointer:
             def __init__(self, value):
@@ -1014,7 +1074,6 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         inputSet = InputSet()
         prot.inputMovies = InputPointer(inputSet)
-        prot.movsFn = 'movies.sqlite'
 
         errors = []
 
@@ -1044,6 +1103,7 @@ class TestMovieDoseAnalysisState(BaseTest):
             [],
             'Parallel workers must serialize access to the shared logical input Set.',
         )
+
 
     def testParallelCompletionKeepsAcquisitionOrder(self):
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
@@ -1166,29 +1226,58 @@ class TestMovieDoseAnalysisState(BaseTest):
 
     def testInputSizeIsCachedFromInputScan(self):
         class InputSet:
-            def getIdSet(self):
-                return {1, 2, 3}
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                if where == 'id > 0':
+                    return [1, 2, 3]
+                raise AssertionError(
+                    'Unexpected discovery query: %r' % (where,)
+                )
+
+            def getSize(self):
+                return 3
 
             def isStreamClosed(self):
                 return False
 
             def close(self):
-                pass
+                self.closeCalls += 1
+
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+                self.getCalls = 0
+
+            def get(self):
+                self.getCalls += 1
+                return self.value
+
+        inputSet = InputSet()
+        pointer = InputPointer(inputSet)
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
-        prot.movsFn = 'movies.sqlite'
+        prot.inputMovies = pointer
         prot.insertedIds = []
-        prot._getInputSetSignature = lambda _: ('signature', None)
-        prot._loadInputSet = lambda _: InputSet()
+        prot._lastInputId = 0
+        prot._inputSize = None
         prot._getFirstJoinStep = lambda: None
         prot._insertNewMoviesSteps = lambda newIds: []
         prot.updateSteps = lambda: None
         prot.isContinued = lambda: False
 
         prot._checkNewInput()
-        prot._loadInputSet = lambda _: self.fail('Input set should not be reopened for its size')
 
         self.assertEqual(prot._getInputSize(), 3)
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
 
     def testDoseAnalysisValidatesPositiveSampleAndWindowSizes(self):
         invalid = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=0, window=0)
@@ -1312,13 +1401,6 @@ class TestMovieDoseAnalysisState(BaseTest):
             def setFramesRange(self, framesRange):
                 pass
 
-        class InputSet:
-            def getItem(self, field, movieId):
-                return Movie(movieId)
-
-            def close(self):
-                pass
-
         class OutputSet:
             def __init__(self):
                 self.ids = []
@@ -1326,41 +1408,59 @@ class TestMovieDoseAnalysisState(BaseTest):
             def append(self, movie):
                 self.ids.append(movie.getObjId())
 
-        prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=1, percentage_window=101)
+        prot = self.newProtocol(
+            XmippProtMovieDoseAnalysis,
+            window=1,
+            percentage_window=101,
+        )
         prot.mu = 1.0
         prot.usingExperimental = True
         prot.meanDoseList = [2.0, 2.0]
         prot.stats = {
             1: {'mean': 2.0, 'std': 0.0, 'min': 2.0, 'max': 2.0},
-            2: {'mean': 2.0, 'std': 0.0, 'min': 2.0, 'max': 2.0}
+            2: {'mean': 2.0, 'std': 0.0, 'min': 2.0, 'max': 2.0},
         }
         prot.insertedIds = [1, 2]
         prot.processedIds = [1, 2]
         prot.medianDifferences = []
+        prot.medianDifferenceIds = []
         prot.medianDoseTemporal = []
         prot.framesRange = (1, 1, 1)
-        prot.movsFn = 'movies.sqlite'
         prot.isStreamClosed = False
         prot._doneIds = set()
         prot._hasEnoughDoseSamples = lambda: False
         prot._getAllDoneIds = lambda: ([], 0, [], [])
         prot._getInputSize = lambda: 2
-        prot._loadInputSet = lambda _: InputSet()
+        prot._loadMoviesByIds = (
+            lambda movieIds:
+            {movieId: Movie(movieId) for movieId in movieIds}
+        )
         prot._updateOutputSet = lambda *args, **kwargs: None
-        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._registerDoneIds = (
+            lambda movieIds, accepted:
+            prot._doneIds.update(movieIds)
+        )
         prot._updateDosePlots = lambda *args, **kwargs: None
         prot._store = lambda: None
 
         accepted = OutputSet()
         discarded = OutputSet()
-        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+        prot._loadOutputSet = (
+            lambda setClass, baseName:
+            accepted
+            if baseName == 'movies.sqlite'
+            else discarded
+        )
 
-        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+        with patch(
+            'xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'
+        ):
             prot._checkNewOutput()
 
         self.assertEqual(prot.mu, 2.0)
         self.assertEqual(accepted.ids, [2])
         self.assertEqual(discarded.ids, [1])
+
 
     def testWindowMedianIgnoresFutureOutOfOrderMovies(self):
         from unittest.mock import patch
@@ -1485,13 +1585,6 @@ class TestMovieDoseAnalysisState(BaseTest):
             def setFramesRange(self, framesRange):
                 pass
 
-        class InputSet:
-            def getItem(self, field, movieId):
-                return Movie(movieId)
-
-            def close(self):
-                pass
-
         class OutputSet:
             def __init__(self):
                 self.ids = []
@@ -1501,35 +1594,58 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         prot.mu = 1.0
-        prot.stats = {1: {'mean': 1.0, 'std': 0.0, 'min': 1.0, 'max': 1.0}}
+        prot.stats = {
+            1: {'mean': 1.0, 'std': 0.0, 'min': 1.0, 'max': 1.0}
+        }
         prot.meanDoseList = [1.0]
         prot.insertedIds = [1, 2]
         prot.processedIds = [1, 2]
         prot.medianDifferences = []
+        prot.medianDifferenceIds = []
         prot.medianDoseTemporal = []
         prot.framesRange = (1, 1, 1)
-        prot.movsFn = 'movies.sqlite'
         prot.isStreamClosed = False
         prot._doneIds = set()
         prot._hasEnoughDoseSamples = lambda: False
         prot._getAllDoneIds = lambda: ([], 0, [], [])
         prot._getInputSize = lambda: 2
-        prot._loadInputSet = lambda _: InputSet()
+        prot._loadMoviesByIds = (
+            lambda movieIds:
+            {movieId: Movie(movieId) for movieId in movieIds}
+        )
         prot._updateOutputSet = lambda *args, **kwargs: None
-        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._registerDoneIds = (
+            lambda movieIds, accepted:
+            prot._doneIds.update(movieIds)
+        )
         prot._updateDosePlots = lambda *args, **kwargs: None
         prot._store = lambda: None
 
         accepted = OutputSet()
         discarded = OutputSet()
-        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+        prot._loadOutputSet = (
+            lambda setClass, baseName:
+            accepted
+            if baseName == 'movies.sqlite'
+            else discarded
+        )
 
-        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute') as setAttr:
+        with patch(
+            'xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'
+        ) as setAttr:
             prot._checkNewOutput()
 
         self.assertEqual(accepted.ids, [1])
         self.assertEqual(discarded.ids, [2])
-        self.assertTrue(any(call.args[0].getObjId() == 2 and call.args[1] == '_DOSE_ANALYSIS_FAILED' and call.args[2] is True for call in setAttr.call_args_list))
+        self.assertTrue(
+            any(
+                call.args[0].getObjId() == 2
+                and call.args[1] == '_DOSE_ANALYSIS_FAILED'
+                and call.args[2] is True
+                for call in setAttr.call_args_list
+            )
+        )
+
 
     def testAllFailedDoseMoviesFinishClosedStream(self):
         from unittest.mock import patch
@@ -1547,13 +1663,6 @@ class TestMovieDoseAnalysisState(BaseTest):
             def setFramesRange(self, framesRange):
                 pass
 
-        class InputSet:
-            def getItem(self, field, movieId):
-                return Movie(movieId)
-
-            def close(self):
-                pass
-
         class OutputSet:
             def __init__(self):
                 self.ids = []
@@ -1568,21 +1677,28 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot.insertedIds = [1, 2]
         prot.processedIds = [1, 2]
         prot.framesRange = (1, 1, 1)
-        prot.movsFn = 'movies.sqlite'
         prot.isStreamClosed = True
         prot._doneIds = set()
         prot._getAllDoneIds = lambda: ([], 0, [], [])
         prot._getInputSize = lambda: 2
-        prot._loadInputSet = lambda _: InputSet()
+        prot._loadMoviesByIds = (
+            lambda movieIds:
+            {movieId: Movie(movieId) for movieId in movieIds}
+        )
         prot._updateOutputSet = lambda *args, **kwargs: None
-        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._registerDoneIds = (
+            lambda movieIds, accepted:
+            prot._doneIds.update(movieIds)
+        )
         prot._getFirstJoinStep = lambda: None
         prot._store = lambda: None
 
         discarded = OutputSet()
         prot._loadOutputSet = lambda setClass, baseName: discarded
 
-        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+        with patch(
+            'xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'
+        ):
             prot._checkNewOutput()
 
         self.assertTrue(prot.finished)
@@ -1590,41 +1706,43 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertEqual(discarded.ids, [1, 2])
         self.assertEqual(prot._doneIds, {1, 2})
 
-    def testLoadInputSetReturnsOpenSet(self):
+
+    def testLoadLogicalSetReturnsOpenSet(self):
         class InputSet:
             def __init__(self):
                 self.closed = False
                 self.closeCalls = 0
-                self.loadCalls = 0
                 self.loadPropertiesCalls = 0
+
+            def loadAllProperties(self):
+                self.closed = False
+                self.loadPropertiesCalls += 1
 
             def close(self):
                 self.closed = True
                 self.closeCalls += 1
 
-            def load(self):
-                self.closed = False
-                self.loadCalls += 1
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
 
-            def loadAllProperties(self):
-                self.loadPropertiesCalls += 1
-
-            def isStreamClosed(self):
-                return False
+            def get(self):
+                return self.value
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         logicalInput = InputSet()
-        prot.inputMovies.set(logicalInput)
+        pointer = InputPointer(logicalInput)
 
-        inputSet = prot._loadInputSet('movies.sqlite')
+        inputSet = prot._loadLogicalSet(pointer)
 
         self.assertIs(inputSet, logicalInput)
         self.assertFalse(inputSet.closed)
-        self.assertEqual(inputSet.closeCalls, 1)
-        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 0)
         self.assertEqual(inputSet.loadPropertiesCalls, 1)
 
         inputSet.close()
+        self.assertEqual(inputSet.closeCalls, 1)
+
 
     def testLoadMoviesByIdsClosesInputSetOnce(self):
         class Movie:
@@ -1639,8 +1757,12 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         class InputSet:
             def __init__(self):
+                self.loadCalls = 0
                 self.closeCalls = 0
                 self.getCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
 
             def getItem(self, field, movieId):
                 self.getCalls.append(movieId)
@@ -1649,16 +1771,27 @@ class TestMovieDoseAnalysisState(BaseTest):
             def close(self):
                 self.closeCalls += 1
 
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
         inputSet = InputSet()
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
-        prot.movsFn = 'movies.sqlite'
-        prot._loadInputSet = lambda _: inputSet
+        prot.inputMovies = InputPointer(inputSet)
 
         movies = prot._loadMoviesByIds([3, 1, 2])
 
         self.assertEqual(inputSet.getCalls, [3, 1, 2])
+        self.assertEqual(inputSet.loadCalls, 1)
         self.assertEqual(inputSet.closeCalls, 1)
-        self.assertEqual([movies[movieId].getObjId() for movieId in [3, 1, 2]], [3, 1, 2])
+        self.assertEqual(
+            [movies[movieId].getObjId() for movieId in [3, 1, 2]],
+            [3, 1, 2],
+        )
+
 
     def testNewInputDoesNotUseLinearInsertedIdLookups(self):
         class CountingList(list):
@@ -1671,8 +1804,18 @@ class TestMovieDoseAnalysisState(BaseTest):
                 return super().__contains__(value)
 
         class InputSet:
-            def getIdSet(self):
-                return {1, 2, 3, 4}
+            def loadAllProperties(self):
+                pass
+
+            def getUniqueValues(self, field, where=None):
+                if where == 'id > 3':
+                    return [4]
+                raise AssertionError(
+                    'Unexpected discovery query: %r' % (where,)
+                )
+
+            def getSize(self):
+                return 4
 
             def isStreamClosed(self):
                 return False
@@ -1680,15 +1823,26 @@ class TestMovieDoseAnalysisState(BaseTest):
             def close(self):
                 pass
 
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
         insertedIds = CountingList([1, 2, 3])
         scheduled = []
+
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
-        prot.movsFn = 'movies.sqlite'
+        prot.inputMovies = InputPointer(InputSet())
         prot.insertedIds = insertedIds
-        prot._getInputSetSignature = lambda _: ('signature', None)
-        prot._loadInputSet = lambda _: InputSet()
+        prot._lastInputId = 3
+        prot._inputSize = None
         prot._getFirstJoinStep = lambda: None
-        prot._insertNewMoviesSteps = lambda newIds: scheduled.append(list(newIds)) or []
+        prot._insertNewMoviesSteps = (
+            lambda newIds:
+            scheduled.append(list(newIds)) or []
+        )
         prot.updateSteps = lambda: None
         prot.isContinued = lambda: False
 
@@ -1696,6 +1850,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertEqual(scheduled, [[4]])
         self.assertEqual(insertedIds.containsCalls, 0)
+
 
     def testRuntimeDoseDecisionIsRestoredFromOutputs(self):
         class OutputMovie:
