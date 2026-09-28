@@ -1403,3 +1403,932 @@ class TestXmippMovieDoseAnalysisLogicalInputSize(unittest.TestCase):
         self.assertEqual(logicalSet.loadCalls, 1)
         self.assertEqual(logicalSet.sizeCalls, 1)
         self.assertEqual(logicalSet.closeCalls, 1)
+
+class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
+
+    def testTiltAnalysisUsesSharedStreamingBase(self):
+        from pwem.protocols import ProtMicrographs
+
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        self.assertTrue(
+            issubclass(
+                XmippProtTiltAnalysis,
+                XmippStreamingBase,
+            ),
+            "TiltAnalysis must reuse the shared Xmipp streaming helpers.",
+        )
+
+        self.assertTrue(
+            issubclass(
+                XmippProtTiltAnalysis,
+                ProtMicrographs,
+            ),
+            "TiltAnalysis must keep ProtMicrographs behavior.",
+        )
+
+    def testTiltAnalysisInitializeStepDoesNotRequireInputFilename(self):
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _LogicalMicrographSet:
+            def __init__(self):
+                self.samplingCalls = 0
+                self.streamCalls = 0
+
+            def getSamplingRate(self):
+                self.samplingCalls += 1
+                return 2.5
+
+            def getFileName(self):
+                raise AssertionError(
+                    "TiltAnalysis initialization must not depend "
+                    "on a Set filename."
+                )
+
+            def isStreamClosed(self):
+                self.streamCalls += 1
+                return False
+
+        inputSet = _LogicalMicrographSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness:
+            inputMicrographs = pointer
+
+            def getWindowSize(self):
+                return 256
+
+        protocol = _Harness()
+
+        XmippProtTiltAnalysis.initializeStep(protocol)
+
+        self.assertEqual(protocol.samplingRate, 2.5)
+        self.assertEqual(protocol.stats, {})
+        self.assertEqual(protocol.insertedIds, [])
+        self.assertEqual(protocol.processedIds, [])
+        self.assertEqual(protocol._lastInputId, 0)
+        self.assertFalse(protocol.isStreamClosed)
+        self.assertEqual(protocol.windowSize, 256)
+        self.assertFalse(hasattr(protocol, "micsFn"))
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.samplingCalls, 1)
+        self.assertEqual(inputSet.streamCalls, 1)
+
+    def testTiltAnalysisUsesIncrementalLogicalInputDiscovery(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _StreamingMicrographSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+                self.getIdSetCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if where == "id > 3":
+                    return [4, 5]
+
+                if where == "id > 5":
+                    return [6]
+
+                raise AssertionError(
+                    "Unexpected discovery query: %r" % (where,)
+                )
+
+            def getIdSet(self):
+                self.getIdSetCalls += 1
+                raise AssertionError(
+                    "TiltAnalysis streaming discovery must not "
+                    "scan the full input ID set."
+                )
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                self.closeCalls += 1
+
+        inputSet = _StreamingMicrographSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            insertedIds = [1, 2, 3]
+            _lastInputId = 3
+            isStreamClosed = False
+
+            @property
+            def micsFn(self):
+                raise AssertionError(
+                    "TiltAnalysis streaming must not depend on "
+                    "inputMicrographs.getFileName()."
+                )
+
+            def isContinued(self):
+                return False
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewMicrographSteps(self, newIds):
+                newIds = list(newIds)
+                self.batches.append(newIds)
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+            def info(self, message):
+                pass
+
+        protocol = _Harness()
+        protocol.insertedIds = [1, 2, 3]
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtTiltAnalysis._checkNewInput(protocol)
+        XmippProtTiltAnalysis._checkNewInput(protocol)
+
+        self.assertEqual(
+            protocol.batches,
+            [[4, 5], [6]],
+        )
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 3"),
+                ("id", "id > 5"),
+            ],
+        )
+        self.assertEqual(inputSet.getIdSetCalls, 0)
+        self.assertEqual(protocol._lastInputId, 6)
+        self.assertEqual(
+            protocol.insertedIds,
+            [1, 2, 3, 4, 5, 6],
+        )
+        self.assertFalse(protocol.isStreamClosed)
+        self.assertEqual(pointer.getCalls, 2)
+        self.assertEqual(inputSet.loadCalls, 2)
+        self.assertEqual(inputSet.closeCalls, 2)
+        self.assertEqual(protocol.updateCalls, 2)
+
+    def testTiltAnalysisRestoresPersistedOutputIdsOnlyOnce(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        accepted = _CountingOutputSet({1, 3})
+        discarded = _CountingOutputSet({2, 4})
+
+        class _Harness(XmippStreamingBase):
+            outputMicrographs = accepted
+            discardedMicrographs = discarded
+
+        protocol = _Harness()
+
+        first = XmippProtTiltAnalysis._getAllDoneIds(protocol)
+        second = XmippProtTiltAnalysis._getAllDoneIds(protocol)
+
+        self.assertEqual(set(first[0]), {1, 2, 3, 4})
+        self.assertEqual(first[1], 4)
+        self.assertEqual(set(first[2]), {1, 3})
+        self.assertEqual(set(first[3]), {2, 4})
+        self.assertEqual(second, first)
+
+        self.assertEqual(
+            accepted.getIdSetCalls,
+            1,
+            "Accepted persisted IDs must be restored once and cached.",
+        )
+        self.assertEqual(
+            discarded.getIdSetCalls,
+            1,
+            "Discarded persisted IDs must be restored once and cached.",
+        )
+
+    def testTiltAnalysisPublishingUpdatesPersistedOutputCache(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _Value:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class _Micrograph:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def clone(self):
+                return _Micrograph(self.objId)
+
+            def getObjId(self):
+                return self.objId
+
+        class _InputSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.getItemCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getSize(self):
+                return 2
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Micrograph(value)
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _OutputSet:
+            def __init__(self):
+                self.items = []
+                self.getIdSetCalls = 0
+
+            def getSize(self):
+                return len(self.items)
+
+            def getIdSet(self):
+                self.getIdSetCalls += 1
+                return {item.getObjId() for item in self.items}
+
+            def append(self, item):
+                self.items.append(item)
+
+        inputSet = _InputSet()
+        pointer = _Pointer(inputSet)
+        acceptedOutput = _OutputSet()
+        discardedOutput = _OutputSet()
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            outputMicrographs = acceptedOutput
+            discardedMicrographs = discardedOutput
+            processedIds = [7, 8]
+            isStreamClosed = False
+            micsFn = "unused"
+            meanCorr_threshold = _Value(0.5)
+            stdCorr_threshold = _Value(0.1)
+            stats = {
+                7: {
+                    "mean": 0.8,
+                    "std": 0.05,
+                    "min": 0.1,
+                    "max": 0.9,
+                },
+                8: {
+                    "mean": 0.2,
+                    "std": 0.05,
+                    "min": 0.1,
+                    "max": 0.3,
+                },
+            }
+
+            def _loadInputSet(self, micsFn):
+                return inputSet
+
+            def _getAllDoneIds(self):
+                return XmippProtTiltAnalysis._getAllDoneIds(self)
+
+            def getPSDs(self, micFolder, ID):
+                return XmippProtTiltAnalysis.getPSDs(micFolder, ID)
+
+            def _appendNewMicrographs(self, micSet, micrographs):
+                return XmippProtTiltAnalysis._appendNewMicrographs(
+                    self,
+                    micSet,
+                    micrographs,
+                )
+
+            def _loadOutputSet(self, SetClass, baseName):
+                if baseName == "micrograph.sqlite":
+                    return acceptedOutput
+
+                if baseName == "micrographDISCARDED.sqlite":
+                    return discardedOutput
+
+                raise AssertionError(
+                    "Unexpected output baseName: %s" % baseName
+                )
+
+            def _updateOutputSet(
+                    self,
+                    outputName,
+                    outputSet,
+                    streamMode,
+            ):
+                pass
+
+            def _getExtraPath(self):
+                return "/tmp"
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _store(self):
+                pass
+
+        protocol = _Harness()
+        protocol.processedIds = [7, 8]
+        protocol.stats = dict(_Harness.stats)
+
+        before = XmippProtTiltAnalysis._getAllDoneIds(protocol)
+        self.assertEqual(before[0], [])
+
+        XmippProtTiltAnalysis._checkNewOutput(protocol)
+
+        after = XmippProtTiltAnalysis._getAllDoneIds(protocol)
+
+        self.assertEqual(after[0], [7, 8])
+        self.assertEqual(after[1], 2)
+        self.assertEqual(after[2], [7])
+        self.assertEqual(after[3], [8])
+        self.assertEqual(
+            [mic.getObjId() for mic in acceptedOutput.items],
+            [7],
+        )
+        self.assertEqual(
+            [mic.getObjId() for mic in discardedOutput.items],
+            [8],
+        )
+        self.assertEqual(acceptedOutput.getIdSetCalls, 1)
+        self.assertEqual(discardedOutput.getIdSetCalls, 1)
+
+    def testTiltAnalysisCheckNewOutputUsesLogicalInputSize(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _LogicalMicrographSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.sizeCalls = 0
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getSize(self):
+                self.sizeCalls += 1
+                return 6
+
+            def close(self):
+                self.closeCalls += 1
+
+        inputSet = _LogicalMicrographSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            processedIds = []
+            isStreamClosed = False
+            finished = False
+
+            @property
+            def micsFn(self):
+                raise AssertionError(
+                    "TiltAnalysis completion must not depend on "
+                    "inputMicrographs.getFileName()."
+                )
+
+            def _getAllDoneIds(self):
+                return [], 0, [], []
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _store(self):
+                pass
+
+        protocol = _Harness()
+        protocol.processedIds = []
+
+        XmippProtTiltAnalysis._checkNewOutput(protocol)
+
+        self.assertFalse(protocol.finished)
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.sizeCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testTiltAnalysisPublishingLoadsMicrographsFromLogicalInput(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _Value:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class _Micrograph:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def clone(self):
+                return _Micrograph(self.objId)
+
+            def getObjId(self):
+                return self.objId
+
+        class _LogicalInputSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.sizeCalls = 0
+                self.getItemCalls = []
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getSize(self):
+                self.sizeCalls += 1
+                return 1
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Micrograph(value)
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _OutputSet:
+            def __init__(self):
+                self.items = []
+
+            def getSize(self):
+                return len(self.items)
+
+            def getIdSet(self):
+                return {item.getObjId() for item in self.items}
+
+            def append(self, item):
+                self.items.append(item)
+
+        inputSet = _LogicalInputSet()
+        pointer = _Pointer(inputSet)
+        acceptedOutput = _OutputSet()
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            outputMicrographs = acceptedOutput
+            processedIds = [7]
+            isStreamClosed = False
+            meanCorr_threshold = _Value(0.5)
+            stdCorr_threshold = _Value(0.1)
+            stats = {
+                7: {
+                    "mean": 0.8,
+                    "std": 0.05,
+                    "min": 0.1,
+                    "max": 0.9,
+                },
+            }
+
+            @property
+            def micsFn(self):
+                raise AssertionError(
+                    "TiltAnalysis publishing must not depend on "
+                    "inputMicrographs.getFileName()."
+                )
+
+            def _getAllDoneIds(self):
+                return [], 0, [], []
+
+            def getPSDs(self, micFolder, ID):
+                return XmippProtTiltAnalysis.getPSDs(
+                    micFolder,
+                    ID,
+                )
+
+            def _appendNewMicrographs(self, micSet, micrographs):
+                return XmippProtTiltAnalysis._appendNewMicrographs(
+                    self,
+                    micSet,
+                    micrographs,
+                )
+
+            def _loadOutputSet(self, SetClass, baseName):
+                if baseName == "micrograph.sqlite":
+                    return acceptedOutput
+
+                raise AssertionError(
+                    "Unexpected output baseName: %s" % baseName
+                )
+
+            def _updateOutputSet(
+                    self,
+                    outputName,
+                    outputSet,
+                    streamMode,
+            ):
+                pass
+
+            def _getExtraPath(self):
+                return "/tmp"
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _store(self):
+                pass
+
+        protocol = _Harness()
+        protocol.processedIds = [7]
+        protocol.stats = dict(_Harness.stats)
+
+        XmippProtTiltAnalysis._checkNewOutput(protocol)
+
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [("id", 7)],
+        )
+        self.assertEqual(
+            [mic.getObjId() for mic in acceptedOutput.items],
+            [7],
+        )
+        self.assertEqual(pointer.getCalls, 2)
+        self.assertEqual(inputSet.loadCalls, 2)
+        self.assertEqual(inputSet.sizeCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 2)
+
+    def testTiltAnalysisWorkerLoadsBatchFromLogicalInput(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _Micrograph:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def clone(self):
+                return _Micrograph(self.objId)
+
+            def getObjId(self):
+                return self.objId
+
+        class _LogicalMicrographSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.getItemCalls = []
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Micrograph(value)
+
+            def close(self):
+                self.closeCalls += 1
+
+        inputSet = _LogicalMicrographSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+
+            @property
+            def micsFn(self):
+                raise AssertionError(
+                    "TiltAnalysis workers must not depend on "
+                    "inputMicrographs.getFileName()."
+                )
+
+            def _processMicrograph(self, micrograph):
+                self.processed.append(micrograph.getObjId())
+
+        protocol = _Harness()
+        protocol.processed = []
+
+        XmippProtTiltAnalysis.processMicrographListStep(
+            protocol,
+            [4, 7],
+        )
+
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [("id", 4), ("id", 7)],
+        )
+        self.assertEqual(protocol.processed, [4, 7])
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testTiltAnalysisResumeSkipsPersistedMicrographs(self):
+        from pyworkflow.protocol.constants import MODE_RESUME
+
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _ResumeMicrographSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if where == "id > 0":
+                    return [1, 2, 3, 4, 5]
+
+                if where == "id > 5":
+                    return []
+
+                raise AssertionError(
+                    "Unexpected resume discovery query: %r" % (where,)
+                )
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _RunMode:
+            def get(self):
+                return 0
+
+        inputSet = _ResumeMicrographSet()
+        pointer = _Pointer(inputSet)
+
+        acceptedOutput = _CountingOutputSet({1, 3})
+        discardedOutput = _CountingOutputSet({2})
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            outputMicrographs = acceptedOutput
+            discardedMicrographs = discardedOutput
+
+            insertedIds = []
+            _lastInputId = 0
+            isStreamClosed = False
+            _originalRunMode = MODE_RESUME
+            runMode = _RunMode()
+
+            def isContinued(self):
+                return True
+
+            def _getAllDoneIds(self):
+                return XmippProtTiltAnalysis._getAllDoneIds(
+                    self,
+                )
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewMicrographSteps(self, newIds):
+                newIds = list(newIds)
+                self.batches.append(newIds)
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+            def info(self, message):
+                self.infoMessages.append(message)
+
+        protocol = _Harness()
+        protocol.insertedIds = []
+        protocol.batches = []
+        protocol.updateCalls = 0
+        protocol.infoMessages = []
+
+        XmippProtTiltAnalysis._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[4, 5]])
+        self.assertEqual(
+            set(protocol.insertedIds),
+            {1, 2, 3, 4, 5},
+        )
+        self.assertEqual(protocol._lastInputId, 5)
+        self.assertEqual(acceptedOutput.getIdSetCalls, 1)
+        self.assertEqual(discardedOutput.getIdSetCalls, 1)
+
+        XmippProtTiltAnalysis._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[4, 5]])
+        self.assertEqual(acceptedOutput.getIdSetCalls, 1)
+        self.assertEqual(discardedOutput.getIdSetCalls, 1)
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 0"),
+                ("id", "id > 5"),
+            ],
+        )
+        self.assertEqual(inputSet.loadCalls, 2)
+        self.assertEqual(inputSet.closeCalls, 2)
+
+    def testTiltAnalysisRecoversLateVisibleIdsAfterStreamCloses(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _LateVisibleMicrographSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.sizeCalls = 0
+                self.uniqueCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if where == "id > 0":
+                    return [9, 10]
+
+                if where is None:
+                    return list(range(1, 11))
+
+                raise AssertionError(
+                    "Unexpected discovery query: %r" % (where,)
+                )
+
+            def getSize(self):
+                self.sizeCalls += 1
+                return 10
+
+            def isStreamClosed(self):
+                return True
+
+            def close(self):
+                self.closeCalls += 1
+
+        inputSet = _LateVisibleMicrographSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            insertedIds = []
+            _lastInputId = 0
+            isStreamClosed = False
+
+            def isContinued(self):
+                return False
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewMicrographSteps(self, newIds):
+                newIds = list(newIds)
+                self.batches.append(newIds)
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+            def info(self, message):
+                pass
+
+        protocol = _Harness()
+        protocol.insertedIds = []
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtTiltAnalysis._checkNewInput(protocol)
+
+        self.assertEqual(
+            protocol.batches,
+            [list(range(1, 11))],
+        )
+        self.assertEqual(
+            protocol.insertedIds,
+            list(range(1, 11)),
+        )
+        self.assertEqual(protocol._lastInputId, 10)
+        self.assertTrue(protocol.isStreamClosed)
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 0"),
+                ("id", None),
+            ],
+        )
+        self.assertEqual(inputSet.sizeCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+        self.assertEqual(protocol.updateCalls, 1)
+
+    def testTiltAnalysisCreatesOutputThroughProtocolFactory(self):
+        from pwem.objects import SetOfMicrographs
+
+        from xmipp3.protocols.protocol_tilt_analysis import (
+            XmippProtTiltAnalysis,
+        )
+
+        class _LogicalInput:
+            pass
+
+        class _OutputSet:
+            STREAM_OPEN = 1
+
+            def __init__(self):
+                self.streamState = None
+                self.copiedFrom = None
+                self.appendEnabled = False
+
+            def setStreamState(self, state):
+                self.streamState = state
+
+            def copyInfo(self, inputSet):
+                self.copiedFrom = inputSet
+
+            def enableAppend(self):
+                self.appendEnabled = True
+
+        logicalInput = _LogicalInput()
+        pointer = _Pointer(logicalInput)
+        createdOutput = _OutputSet()
+
+        class _Harness:
+            inputMicrographs = pointer
+
+            def __init__(self):
+                self.factoryCalls = []
+
+            def _createSetOfMicrographs(self, suffix=""):
+                self.factoryCalls.append(suffix)
+                return createdOutput
+
+            def _getPath(self, *args, **kwargs):
+                raise AssertionError(
+                    "TiltAnalysis output creation must not depend "
+                    "on an output SQLite filename."
+                )
+
+        protocol = _Harness()
+
+        output = XmippProtTiltAnalysis._loadOutputSet(
+            protocol,
+            SetOfMicrographs,
+            "micrograph.sqlite",
+        )
+
+        self.assertIs(output, createdOutput)
+        self.assertEqual(protocol.factoryCalls, [""])
+        self.assertEqual(
+            createdOutput.streamState,
+            createdOutput.STREAM_OPEN,
+        )
+        self.assertIs(createdOutput.copiedFrom, logicalInput)
+        self.assertEqual(pointer.getCalls, 1)

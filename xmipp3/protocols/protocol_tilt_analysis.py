@@ -41,13 +41,14 @@ from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
 from pwem.emlib import Image
 from xmipp3.convert import getScipionObj
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 from pyworkflow import UPDATED, PROD
 
 OUTPUT_MICS = "outputMicrographs"
 OUTPUT_MICS_DISCARDED = "discardedMicrographs"
 AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
 
-class XmippProtTiltAnalysis(ProtMicrographs):
+class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
     """ Estimates the tilt angle of a micrograph by analyzing power spectral
     density correlations across different image quadrants. This helps discard
     the ones that have a tilt so high it could negatively affect the posterior
@@ -420,27 +421,19 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                                  prerequisites=[], wait=True, needsGPU=False)
 
     def initializeStep(self):
-        self.samplingRate = self.inputMicrographs.get().getSamplingRate()
-        self.micsFn = self.inputMicrographs.get().getFileName()
+        inputMicrographs = self.inputMicrographs.get()
+
+        self.samplingRate = inputMicrographs.getSamplingRate()
         self.stats = {}
         # Important to have both:
         self.insertedIds = [] # Contains images that have been inserted in a Step (checkNewInput).
         self.processedIds = [] # Contains images that have been processed in a Step (checkNewOutput).
-        self.isStreamClosed = self.inputMicrographs.get().isStreamClosed()
+        self._lastInputId = 0
+        self.isStreamClosed = inputMicrographs.isStreamClosed()
         self.windowSize = self.getWindowSize()
 
     def createOutputStep(self):
         self._closeOutputSet()
-
-    def _loadInputSet(self, micsFn):
-        """ Load the input set of mics and create a list. """
-        self.debug("Loading input db: %s" % micsFn)
-        micSet = SetOfMicrographs(filename=micsFn)
-        micSet.loadAllProperties()
-        self.isStreamClosed = micSet.isStreamClosed()
-        micSet.close()
-        self.debug("Closed db.")
-        return micSet
 
     def _stepsCheck(self):
         if getattr(self, 'finished', False):
@@ -465,23 +458,33 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         return None
 
     def _checkNewInput(self):
-        # Always inspect the input set. Streaming databases may receive new rows
-        # without changing the main SQLite file mtime.
-        micSet = self._loadInputSet(self.micsFn)
-        micSetIds = micSet.getIdSet()
-        newIds = [idMic for idMic in micSetIds if idMic not in self.insertedIds]
+        micSet = self._loadLogicalSet(self.inputMicrographs)
 
-        self.isStreamClosed = micSet.isStreamClosed()
-        micSet.close()
+        try:
+            newIds, self._lastInputId = self._discoverIdsAfter(
+                micSet,
+                self._lastInputId,
+            )
+            producerClosed = micSet.isStreamClosed()
+            newIds, terminalConsistent = self._reconcileClosedStreamIds(
+                micSet,
+                newIds,
+                set(self.insertedIds),
+                producerClosed,
+            )
+            self.isStreamClosed = producerClosed and terminalConsistent
+        finally:
+            micSet.close()
 
         outputStep = self._getFirstJoinStep()
 
         if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
             doneIds, _, _, _ = self._getAllDoneIds()
-            skipIds = list(set(newIds).intersection(set(doneIds)))
-            newIds = list(set(newIds).difference(set(doneIds)))
+            doneIdsSet = set(doneIds)
+            skipIds = [micId for micId in newIds if micId in doneIdsSet]
+            newIds = [micId for micId in newIds if micId not in doneIdsSet]
             self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
-            self.insertedIds = doneIds # During the first round of "Continue" action it has to be filled
+            self.insertedIds = list(doneIds) # During the first round of "Continue" action it has to be filled
 
         if newIds:
             fDeps = self._insertNewMicrographSteps(newIds)
@@ -494,7 +497,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         processedIds = self.processedIds
         newDone = [micId for micId in processedIds if micId not in doneListIds]
         allDone = len(doneListIds) + len(newDone)
-        maxMicSize = self._loadInputSet(self.micsFn).getSize()
+        inputMicSet = self._loadLogicalSet(self.inputMicrographs)
+        try:
+            maxMicSize = inputMicSet.getSize()
+        finally:
+            inputMicSet.close()
         # We have finished when there is not more input movies
         # (stream closed) and the number of processed movies is
         # equal to the number of inputs
@@ -512,35 +519,45 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         micsAccepted = []
         micsDiscarded = []
 
-        inputMicSet = self._loadInputSet(self.micsFn)
-
-        for micId in newDone:
-            mic = inputMicSet.getItem("id", micId).clone()
-            corr_mean = Float(self.stats[micId]['mean'])
-            corr_std = Float(self.stats[micId]['std'])
-            corr_min = Float(self.stats[micId]['min'])
-            corr_max = Float(self.stats[micId]['max'])
-            psdImage = Image(location=self.getPSDs(self._getExtraPath(), micId))
-            setAttribute(mic, '_tilt_mean_corr', corr_mean)
-            setAttribute(mic, '_tilt_std_corr', corr_std)
-            setAttribute(mic, '_tilt_min_corr', corr_min)
-            setAttribute(mic, '_tilt_max_corr', corr_max)
-            setAttribute(mic, '_tilt_psds_image', psdImage)
-            # Double threshold
-            if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():
-                micsAccepted.append(mic)
-            else:
-                micsDiscarded.append(mic)
+        inputMicSet = self._loadLogicalSet(self.inputMicrographs)
+        try:
+            for micId in newDone:
+                mic = inputMicSet.getItem("id", micId).clone()
+                corr_mean = Float(self.stats[micId]['mean'])
+                corr_std = Float(self.stats[micId]['std'])
+                corr_min = Float(self.stats[micId]['min'])
+                corr_max = Float(self.stats[micId]['max'])
+                psdImage = Image(location=self.getPSDs(self._getExtraPath(), micId))
+                setAttribute(mic, '_tilt_mean_corr', corr_mean)
+                setAttribute(mic, '_tilt_std_corr', corr_std)
+                setAttribute(mic, '_tilt_min_corr', corr_min)
+                setAttribute(mic, '_tilt_max_corr', corr_max)
+                setAttribute(mic, '_tilt_psds_image', psdImage)
+                # Double threshold
+                if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():
+                    micsAccepted.append(mic)
+                else:
+                    micsDiscarded.append(mic)
+        finally:
+            inputMicSet.close()
 
         if len(micsAccepted) > 0:
             micSet = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
             self._appendNewMicrographs(micSet, micsAccepted)
             self._updateOutputSet('outputMicrographs', micSet, streamMode)
+            self._markOutputIdsPersisted(
+                OUTPUT_MICS,
+                [mic.getObjId() for mic in micsAccepted],
+            )
 
         if len(micsDiscarded) > 0:
             micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
             self._appendNewMicrographs(micSet_discarded, micsDiscarded)
             self._updateOutputSet('discardedMicrographs', micSet_discarded, streamMode)
+            self._markOutputIdsPersisted(
+                OUTPUT_MICS_DISCARDED,
+                [mic.getObjId() for mic in micsDiscarded],
+            )
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -577,11 +594,14 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         return deps
 
     def processMicrographListStep(self, micIds):
-        inputMicSet = self._loadInputSet(self.micsFn)
+        inputMicSet = self._loadLogicalSet(self.inputMicrographs)
 
-        for micId in micIds:
-            micrograph = inputMicSet.getItem("id", micId).clone()
-            self._processMicrograph(micrograph)
+        try:
+            for micId in micIds:
+                micrograph = inputMicSet.getItem("id", micId).clone()
+                self._processMicrograph(micrograph)
+        finally:
+            inputMicSet.close()
 
     def _processMicrograph(self, micrograph):
         micFolderTmp = self._getOutputMicFolder(micrograph)
@@ -698,12 +718,18 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
     def _loadOutputSet(self, SetClass, baseName):
         """
-        Load the output set if it exists or create a new one.
+        Reuse a persisted logical output or create it through the protocol
+        factory without assuming a file-backed Set.
         """
         outputNameByBaseName = {
             'micrograph.sqlite': OUTPUT_MICS,
             'micrographDISCARDED.sqlite': OUTPUT_MICS_DISCARDED,
         }
+        suffixByBaseName = {
+            'micrograph.sqlite': '',
+            'micrographDISCARDED.sqlite': 'DISCARDED',
+        }
+
         outputName = outputNameByBaseName.get(baseName)
         outputSet = getattr(self, outputName, None) if outputName else None
 
@@ -711,20 +737,15 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             outputSet.enableAppend()
             return outputSet
 
-        setFile = self._getPath(baseName)
-        # -----------------Si no lo pones asi no funciona
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            if outputSet.__len__() == 0:
-                pwutils.path.cleanPath(setFile)
-        # ----------------
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+        if SetClass is not SetOfMicrographs or baseName not in suffixByBaseName:
+            raise ValueError(
+                "Unsupported TiltAnalysis output Set: %s" % baseName
+            )
+
+        outputSet = self._createSetOfMicrographs(
+            suffix=suffixByBaseName[baseName],
+        )
+        outputSet.setStreamState(outputSet.STREAM_OPEN)
 
         inputMicrographs = self.inputMicrographs.get()
         outputSet.copyInfo(inputMicrographs)
@@ -733,22 +754,26 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
     # ------------------------- UTILS functions --------------------------------
     def _getAllDoneIds(self):
-        doneIds = []
-        acceptedIds = []
-        discardedIds = []
-        sizeOutput = 0
+        acceptedIds = sorted(
+            self._getKnownPersistedOutputIds(
+                OUTPUT_MICS,
+            )
+        )
+        discardedIds = sorted(
+            self._getKnownPersistedOutputIds(
+                OUTPUT_MICS_DISCARDED,
+            )
+        )
 
-        if hasattr(self, OUTPUT_MICS):
-            sizeOutput += self.outputMicrographs.getSize()
-            acceptedIds.extend(list(self.outputMicrographs.getIdSet()))
-            doneIds.extend(acceptedIds)
+        doneIds = acceptedIds + discardedIds
+        sizeOutput = len(acceptedIds) + len(discardedIds)
 
-        if hasattr(self, OUTPUT_MICS_DISCARDED):
-            sizeOutput += self.discardedMicrographs.getSize()
-            discardedIds.extend(list(self.discardedMicrographs.getIdSet()))
-            doneIds.extend(discardedIds)
-
-        return doneIds, sizeOutput, acceptedIds, discardedIds
+        return (
+            doneIds,
+            sizeOutput,
+            acceptedIds,
+            discardedIds,
+        )
 
     def getWindowSize(self):
         """ Function to get the window size, automatically or the one set by the user. """
