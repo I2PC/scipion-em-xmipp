@@ -24,7 +24,6 @@
 # *
 # **************************************************************************
 
-import os
 import numpy as np
 import random
 from collections import defaultdict
@@ -35,13 +34,14 @@ from pyworkflow.object import Pointer, CsvList
 import pyworkflow.protocol.params as params
 
 from pwem.protocols import ProtCTFMicrographs
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME, MODE_RESTART
 from pyworkflow import UPDATED, NEW
 
 OUTPUT_CTF =  "outputCTF"
 OUTPUT_MICS = "outputMicrographs"
 
-class XmippProtMicDefocusSampler(ProtCTFMicrographs):
+class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
     """
     Protocol to make a balanced subsample of meaningful CTFs in basis of the
     defocus values. Both CTFs and micrographs will be output. CTFs with
@@ -312,13 +312,14 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
     def initializeParams(self):
         self.finished = False
         self.insertedIds = []
+        self._lastInputId = 0
+        self._pendingInputIds = set()
 
         if self.runMode.get() == MODE_RESTART and self.sampledIds:
             self.sampledIds.clear()
             self._store()
 
         self.sampled_images = list(self.sampledIds)
-        self.ctfFn = self.inputCTF.get().getFileName()
 
     def _getFirstJoinStepName(self):
         ''' This function will be used for streaming, to check which is
@@ -353,67 +354,122 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         if self.sampled_images:
             return
 
-        isResume = getattr(self, '_originalRunMode', self.runMode.get()) == MODE_RESUME
+        isResume = (
+            getattr(
+                self,
+                '_originalRunMode',
+                self.runMode.get(),
+            )
+            == MODE_RESUME
+        )
+
         if isResume and not self.insertedIds:
             doneIds, _ = self._getAllDoneIds()
+
             if doneIds:
                 self.sampled_images = doneIds
                 self.sampledIds.set(doneIds)
                 self._store()
-                self.info('Restoring the previously selected CTFs.')
+                self.info(
+                    'Restoring the previously selected CTFs.'
+                )
                 return
-
-        # Check if there are new CTFs to process from the input set
-        ctfsSet = self._loadInputCtfSet(self.ctfFn)
-        ctfSetIds = ctfsSet.getIdSet()
-        newIds = [idCTF for idCTF in ctfSetIds if idCTF not in self.insertedIds]
-
-        isStreamClosed = ctfsSet.isStreamClosed()
-        ctfsSet.close()
-
-        outputStep = self._getFirstJoinStep()
 
         if self.insertedIds:
             return
 
-        if newIds and (len(newIds) >= self.minImages.get() or isStreamClosed):
-            fDeps = self._insertNewCtfsSteps(newIds)
+        ctfsSet = self._loadLogicalSet(self.inputCTF)
+
+        try:
+            newIds, self._lastInputId = self._discoverIdsAfter(
+                ctfsSet,
+                self._lastInputId,
+            )
+            producerClosed = ctfsSet.isStreamClosed()
+
+            knownIds = set(self.insertedIds).union(
+                self._pendingInputIds,
+            )
+            newIds, terminalConsistent = (
+                self._reconcileClosedStreamIds(
+                    ctfsSet,
+                    newIds,
+                    knownIds,
+                    producerClosed,
+                )
+            )
+        finally:
+            ctfsSet.close()
+
+        self._pendingInputIds.update(newIds)
+
+        streamClosed = (
+            producerClosed
+            and terminalConsistent
+        )
+        outputStep = self._getFirstJoinStep()
+
+        if self._pendingInputIds and (
+            len(self._pendingInputIds) >= self.minImages.get()
+            or streamClosed
+        ):
+            pendingIds = sorted(self._pendingInputIds)
+            fDeps = self._insertNewCtfsSteps(pendingIds)
+            self._pendingInputIds.clear()
 
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
+
             self.updateSteps()
 
-        elif isStreamClosed and not self.insertedIds:
+        elif streamClosed and not self.insertedIds:
             self.finished = True
-            self.info('Input stream is closed and no CTFs are available for sampling.')
-
-    def _loadInputCtfSet(self, ctfFn):
-        self.debug("Loading input db: %s" % ctfFn)
-        ctfSet = SetOfCTF(filename=ctfFn)
-        ctfSet.loadAllProperties()
-        return ctfSet
+            self.info(
+                'Input stream is closed and no CTFs are available '
+                'for sampling.'
+            )
 
     def extractBalancedDefocus(self, ctfIds):
-        inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+        inputCtfSet = self._loadLogicalSet(self.inputCTF)
         ctfDefocus = {}
 
-        for ctfId in ctfIds:
-            ctf = inputCtfSet.getItem("id", ctfId).clone()
-            defocusU = ctf.getDefocusU()
-            ctfDefocus[ctfId] = defocusU
+        try:
+            for ctfId in ctfIds:
+                ctf = inputCtfSet.getItem("id", ctfId).clone()
+                ctfDefocus[ctfId] = ctf.getDefocusU()
+        finally:
+            inputCtfSet.close()
 
-        inputCtfSet.close()
+        self.sampled_images = balanced_sampling(
+            image_dict=ctfDefocus,
+            N=self.numImages.get(),
+            bins=10,
+        )
+        self.info(
+            'The number of CTFs selected for defocus balanced sampling '
+            'is the following: %d'
+            % len(self.sampled_images)
+        )
 
-        self.sampled_images = balanced_sampling(image_dict=ctfDefocus, N=self.numImages.get(), bins=10)
-        self.info('The number of CTFs selected for defocus balanced sampling is the following: %d'
-                  % len(self.sampled_images))
-
-        stats = compute_statistics(list(ctfDefocus.values()))
-        message = ("The defocus statistics are the following: range %d   min %d   max %d   mean %d   std %.1f"
-                   % (stats["range"], stats["min"], stats["max"], stats["mean"], stats["std"]))
+        stats = compute_statistics(
+            list(ctfDefocus.values())
+        )
+        message = (
+            "The defocus statistics are the following: "
+            "range %d   min %d   max %d   mean %d   std %.1f"
+            % (
+                stats["range"],
+                stats["min"],
+                stats["max"],
+                stats["mean"],
+                stats["std"],
+            )
+        )
         self.summaryVar.set(message)
         self.sampledIds.set(self.sampled_images)
-        # Persist the selected ids before output creation so Resume can reuse exactly the same sample.
+
+        # Persist the selected ids before output creation so Resume can reuse
+        # exactly the same sample.
         self._store()
 
     def _checkNewOutput(self):
@@ -445,21 +501,21 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         return cSet, mSet
 
     def _loadOutputSet(self, SetClass, baseName, outputName):
-        """
-        Create or reopen an output set for append.
-        """
-        if hasattr(self, outputName):
-            outputSet = getattr(self, outputName)
+        outputSet = getattr(self, outputName, None)
+
+        if outputSet is not None:
             outputSet.enableAppend()
             return outputSet
 
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
+        if issubclass(SetClass, SetOfCTF):
+            outputSet = self._createSetOfCTF()
+        elif issubclass(SetClass, SetOfMicrographs):
+            outputSet = self._createSetOfMicrographs()
         else:
-            outputSet = SetClass(filename=setFile)
+            raise TypeError(
+                "Unsupported MicDefocusSampler output Set class: %s"
+                % SetClass
+            )
 
         micSet = self.inputCTF.get().getMicrographs()
 
@@ -471,23 +527,24 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
         return outputSet
 
     def fillOutput(self, ctfSet, micSet, newDone):
-        inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+        inputCtfSet = self._loadLogicalSet(self.inputCTF)
         ctfIds = set(ctfSet.getIdSet()) if ctfSet.getSize() else set()
         micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
 
-        for ctfId in newDone:
-            ctf = inputCtfSet[ctfId].clone()
-            mic = ctf.getMicrograph().clone()
+        try:
+            for ctfId in newDone:
+                ctf = inputCtfSet.getItem("id", ctfId).clone()
+                mic = ctf.getMicrograph().clone()
 
-            if ctf.getObjId() not in ctfIds:
-                ctfSet.append(ctf)
-                ctfIds.add(ctf.getObjId())
+                if ctf.getObjId() not in ctfIds:
+                    ctfSet.append(ctf)
+                    ctfIds.add(ctf.getObjId())
 
-            if mic.getObjId() not in micIds:
-                micSet.append(mic)
-                micIds.add(mic.getObjId())
-
-        inputCtfSet.close()
+                if mic.getObjId() not in micIds:
+                    micSet.append(mic)
+                    micIds.add(mic.getObjId())
+        finally:
+            inputCtfSet.close()
 
     def updateRelations(self, cSet, mSet):
         micsAttrName = OUTPUT_MICS
@@ -516,12 +573,18 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
         elif hasattr(self, OUTPUT_MICS):
             micIds = set(self.outputMicrographs.getIdSet())
+
             if micIds:
-                inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+                inputCtfSet = self._loadLogicalSet(self.inputCTF)
+
                 try:
                     for ctf in inputCtfSet:
                         mic = ctf.getMicrograph()
-                        if mic is not None and mic.getObjId() in micIds:
+
+                        if (
+                            mic is not None
+                            and mic.getObjId() in micIds
+                        ):
                             doneIds.append(ctf.getObjId())
                 finally:
                     inputCtfSet.close()

@@ -3377,3 +3377,689 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
         self.assertEqual(prerequisites, [])
         self.assertTrue(wait)
         self.assertFalse(needsGPU)
+
+
+class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
+
+    def testMicDefocusSamplerUsesSharedStreamingBase(self):
+        from xmipp3.protocols.protocol_mics_defocus_balancer import (
+            XmippProtMicDefocusSampler,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        self.assertTrue(
+            issubclass(
+                XmippProtMicDefocusSampler,
+                XmippStreamingBase,
+            )
+        )
+
+    def testMicDefocusSamplerInitializeParamsDoesNotRequireInputFilename(self):
+        from pyworkflow.protocol.constants import MODE_RESUME
+
+        from xmipp3.protocols.protocol_mics_defocus_balancer import (
+            XmippProtMicDefocusSampler,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _LogicalCtfSet:
+            def getFileName(self):
+                raise AssertionError(
+                    "MicDefocusSampler must not require the input filename."
+                )
+
+        class _RunMode:
+            def get(self):
+                return MODE_RESUME
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+            runMode = _RunMode()
+            sampledIds = [4, 7]
+
+        protocol = _Harness()
+
+        XmippProtMicDefocusSampler.initializeParams(protocol)
+
+        self.assertFalse(protocol.finished)
+        self.assertEqual(protocol.insertedIds, [])
+        self.assertEqual(protocol.sampled_images, [4, 7])
+        self.assertFalse(hasattr(protocol, "ctfFn"))
+        self.assertEqual(pointer.getCalls, 0)
+
+    def testMicDefocusSamplerAccumulatesIncrementalIdsUntilSamplingThreshold(self):
+        from pyworkflow.protocol.constants import MODE_RESTART
+
+        from xmipp3.protocols.protocol_mics_defocus_balancer import (
+            XmippProtMicDefocusSampler,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _LogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                responses = {
+                    "id > 0": [1, 2],
+                    "id > 2": [3],
+                }
+
+                if where not in responses:
+                    raise AssertionError(
+                        "Unexpected incremental query: %r" % where
+                    )
+
+                return responses[where]
+
+            def getIdSet(self):
+                raise AssertionError(
+                    "MicDefocusSampler streaming discovery must not "
+                    "scan getIdSet()."
+                )
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _Param:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class _RunMode:
+            def get(self):
+                return MODE_RESTART
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+            minImages = _Param(3)
+            runMode = _RunMode()
+
+            @property
+            def ctfFn(self):
+                raise AssertionError(
+                    "MicDefocusSampler streaming discovery must not "
+                    "depend on ctfFn."
+                )
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewCtfsSteps(self, newIds):
+                self.batches.append(list(newIds))
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+        protocol = _Harness()
+        protocol.finished = False
+        protocol.sampled_images = []
+        protocol.insertedIds = []
+        protocol._lastInputId = 0
+        protocol._pendingInputIds = set()
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtMicDefocusSampler._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [])
+        self.assertEqual(protocol.insertedIds, [])
+        self.assertEqual(protocol._pendingInputIds, {1, 2})
+        self.assertEqual(protocol._lastInputId, 2)
+
+        XmippProtMicDefocusSampler._checkNewInput(protocol)
+
+        self.assertEqual(
+            protocol.batches,
+            [[1, 2, 3]],
+        )
+        self.assertEqual(
+            protocol.insertedIds,
+            [1, 2, 3],
+        )
+        self.assertEqual(protocol._pendingInputIds, set())
+        self.assertEqual(protocol._lastInputId, 3)
+        self.assertEqual(protocol.updateCalls, 1)
+
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 0"),
+                ("id", "id > 2"),
+            ],
+        )
+        self.assertEqual(pointer.getCalls, 2)
+        self.assertEqual(inputSet.loadCalls, 2)
+        self.assertEqual(inputSet.closeCalls, 2)
+
+    def testMicDefocusSamplerClosedStreamRecoversLateVisibleIds(self):
+        from pyworkflow.protocol.constants import MODE_RESTART
+
+        from xmipp3.protocols.protocol_mics_defocus_balancer import (
+            XmippProtMicDefocusSampler,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _LogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+                self.uniqueCalls = []
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getUniqueValues(self, field, where=None):
+                self.uniqueCalls.append((field, where))
+
+                if where == "id > 2":
+                    return []
+
+                if where is None:
+                    return [1, 2, 3]
+
+                raise AssertionError(
+                    "Unexpected query: %r" % where
+                )
+
+            def getSize(self):
+                return 3
+
+            def isStreamClosed(self):
+                return True
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _Param:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class _RunMode:
+            def get(self):
+                return MODE_RESTART
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+            minImages = _Param(10)
+            runMode = _RunMode()
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewCtfsSteps(self, newIds):
+                self.batches.append(list(newIds))
+                self.insertedIds.extend(newIds)
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+        protocol = _Harness()
+        protocol.finished = False
+        protocol.sampled_images = []
+        protocol.insertedIds = []
+        protocol._lastInputId = 2
+        protocol._pendingInputIds = {1, 2}
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtMicDefocusSampler._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[1, 2, 3]])
+        self.assertEqual(protocol.insertedIds, [1, 2, 3])
+        self.assertEqual(protocol._pendingInputIds, set())
+        self.assertEqual(protocol._lastInputId, 3)
+        self.assertEqual(protocol.updateCalls, 1)
+        self.assertFalse(protocol.finished)
+
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 2"),
+                ("id", None),
+            ],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testMicDefocusSamplerWorkerLoadsBatchFromLogicalInput(self):
+        from xmipp3.protocols.protocol_mics_defocus_balancer import (
+            XmippProtMicDefocusSampler,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Ctf:
+            def __init__(self, objId, defocusU):
+                self.objId = objId
+                self.defocusU = defocusU
+
+            def clone(self):
+                return _Ctf(self.objId, self.defocusU)
+
+            def getDefocusU(self):
+                return self.defocusU
+
+        class _LogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.getItemCalls = []
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Ctf(value, 10000 + value)
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _Param:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class _SampledIds:
+            def __init__(self):
+                self.values = None
+
+            def set(self, values):
+                self.values = list(values)
+
+        class _SummaryVar:
+            def __init__(self):
+                self.value = None
+
+            def set(self, value):
+                self.value = value
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+            numImages = _Param(2)
+
+            @property
+            def ctfFn(self):
+                raise AssertionError(
+                    "MicDefocusSampler worker must not depend on ctfFn."
+                )
+
+            def _store(self):
+                self.storeCalls += 1
+
+            def info(self, message):
+                self.messages.append(message)
+
+        protocol = _Harness()
+        protocol.sampledIds = _SampledIds()
+        protocol.summaryVar = _SummaryVar()
+        protocol.storeCalls = 0
+        protocol.messages = []
+
+        XmippProtMicDefocusSampler.extractBalancedDefocus(
+            protocol,
+            [4, 7],
+        )
+
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [
+                ("id", 4),
+                ("id", 7),
+            ],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+        self.assertEqual(
+            sorted(protocol.sampled_images),
+            sorted(protocol.sampledIds.values),
+        )
+        self.assertEqual(len(protocol.sampled_images), 2)
+        self.assertEqual(protocol.storeCalls, 1)
+        self.assertIsNotNone(protocol.summaryVar.value)
+
+    def testMicDefocusSamplerFillOutputLoadsLogicalInput(self):
+        from xmipp3.protocols.protocol_mics_defocus_balancer import (
+            XmippProtMicDefocusSampler,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Micrograph:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def clone(self):
+                return _Micrograph(self.objId)
+
+            def getObjId(self):
+                return self.objId
+
+        class _Ctf:
+            def __init__(self, objId):
+                self.objId = objId
+                self.micrograph = _Micrograph(objId)
+
+            def clone(self):
+                return _Ctf(self.objId)
+
+            def getObjId(self):
+                return self.objId
+
+            def getMicrograph(self):
+                return self.micrograph
+
+        class _LogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.getItemCalls = []
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def getItem(self, field, value):
+                self.getItemCalls.append((field, value))
+                return _Ctf(value)
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _OutputSet:
+            def __init__(self, existingIds=None):
+                self.ids = set(existingIds or [])
+                self.items = []
+
+            def getSize(self):
+                return len(self.ids)
+
+            def getIdSet(self):
+                return set(self.ids)
+
+            def append(self, item):
+                self.items.append(item)
+                self.ids.add(item.getObjId())
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+        outputCtfs = _OutputSet(existingIds=[4])
+        outputMics = _OutputSet(existingIds=[4])
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+
+            @property
+            def ctfFn(self):
+                raise AssertionError(
+                    "MicDefocusSampler fillOutput must not depend on ctfFn."
+                )
+
+        protocol = _Harness()
+
+        XmippProtMicDefocusSampler.fillOutput(
+            protocol,
+            outputCtfs,
+            outputMics,
+            [4, 7],
+        )
+
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [
+                ("id", 4),
+                ("id", 7),
+            ],
+        )
+        self.assertEqual(
+            [ctf.getObjId() for ctf in outputCtfs.items],
+            [7],
+        )
+        self.assertEqual(
+            [mic.getObjId() for mic in outputMics.items],
+            [7],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+    def testMicDefocusSamplerOutputCreationUsesProtocolFactories(self):
+        from unittest.mock import patch
+
+        import xmipp3.protocols.protocol_mics_defocus_balancer as defocus_sampler
+        from xmipp3.protocols.protocol_mics_defocus_balancer import (
+            OUTPUT_CTF,
+            OUTPUT_MICS,
+            XmippProtMicDefocusSampler,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _InputMicrographs:
+            pass
+
+        class _InputCtfSet:
+            def __init__(self, micrographs):
+                self.micrographs = micrographs
+
+            def getMicrographs(self):
+                return self.micrographs
+
+        class _FactorySet:
+            def _initialize(self):
+                self.enableAppendCalls = 0
+                self.copiedInfo = None
+                self.micrographs = None
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+            def copyInfo(self, other):
+                self.copiedInfo = other
+
+            def setMicrographs(self, micrographs):
+                self.micrographs = micrographs
+
+        class _FakeSetOfCTF(_FactorySet):
+            def __init__(self, *args, **kwargs):
+                raise AssertionError(
+                    "MicDefocusSampler must not construct "
+                    "SetOfCTF(filename=...)."
+                )
+
+        class _FakeSetOfMicrographs(_FactorySet):
+            def __init__(self, *args, **kwargs):
+                raise AssertionError(
+                    "MicDefocusSampler must not construct "
+                    "SetOfMicrographs(filename=...)."
+                )
+
+        inputMicrographs = _InputMicrographs()
+        inputCtfSet = _InputCtfSet(inputMicrographs)
+        pointer = _Pointer(inputCtfSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+
+            def _getPath(self, *args):
+                raise AssertionError(
+                    "MicDefocusSampler output creation must not depend "
+                    "on legacy sqlite paths."
+                )
+
+            def _newFactorySet(self, SetClass):
+                outputSet = object.__new__(SetClass)
+                outputSet._initialize()
+                return outputSet
+
+            def _createSetOfCTF(self, suffix=''):
+                self.factoryCalls.append(("ctf", suffix))
+                outputSet = self._newFactorySet(_FakeSetOfCTF)
+                self.createdSets.append(outputSet)
+                return outputSet
+
+            def _createSetOfMicrographs(self, suffix=''):
+                self.factoryCalls.append(("micrographs", suffix))
+                outputSet = self._newFactorySet(
+                    _FakeSetOfMicrographs,
+                )
+                self.createdSets.append(outputSet)
+                return outputSet
+
+        protocol = _Harness()
+        protocol.factoryCalls = []
+        protocol.createdSets = []
+
+        with patch.object(
+            defocus_sampler,
+            "SetOfCTF",
+            _FakeSetOfCTF,
+        ), patch.object(
+            defocus_sampler,
+            "SetOfMicrographs",
+            _FakeSetOfMicrographs,
+        ):
+            ctfOutput = XmippProtMicDefocusSampler._loadOutputSet(
+                protocol,
+                _FakeSetOfCTF,
+                "ctfs.sqlite",
+                OUTPUT_CTF,
+            )
+            micOutput = XmippProtMicDefocusSampler._loadOutputSet(
+                protocol,
+                _FakeSetOfMicrographs,
+                "micrographs.sqlite",
+                OUTPUT_MICS,
+            )
+
+        self.assertEqual(
+            protocol.factoryCalls,
+            [
+                ("ctf", ""),
+                ("micrographs", ""),
+            ],
+        )
+        self.assertIs(ctfOutput.micrographs, inputMicrographs)
+        self.assertIs(micOutput.copiedInfo, inputMicrographs)
+        self.assertEqual(pointer.getCalls, 2)
+
+    def testMicDefocusSamplerResumeFallbackUsesLogicalInput(self):
+        from xmipp3.protocols.protocol_mics_defocus_balancer import (
+            OUTPUT_MICS,
+            XmippProtMicDefocusSampler,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        class _Micrograph:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+        class _Ctf:
+            def __init__(self, objId, micId):
+                self.objId = objId
+                self.micrograph = _Micrograph(micId)
+
+            def getObjId(self):
+                return self.objId
+
+            def getMicrograph(self):
+                return self.micrograph
+
+        class _LogicalCtfSet:
+            def __init__(self):
+                self.loadCalls = 0
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
+
+            def __iter__(self):
+                return iter([
+                    _Ctf(1, 10),
+                    _Ctf(2, 20),
+                    _Ctf(3, 30),
+                ])
+
+            def close(self):
+                self.closeCalls += 1
+
+        class _OutputMicrographs:
+            def getIdSet(self):
+                return {10, 30}
+
+        inputSet = _LogicalCtfSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputCTF = pointer
+            outputMicrographs = _OutputMicrographs()
+
+            @property
+            def ctfFn(self):
+                raise AssertionError(
+                    "MicDefocusSampler Resume fallback must not depend "
+                    "on ctfFn."
+                )
+
+        protocol = _Harness()
+
+        doneIds, sizeOutput = XmippProtMicDefocusSampler._getAllDoneIds(
+            protocol,
+        )
+
+        self.assertEqual(doneIds, [1, 3])
+        self.assertEqual(sizeOutput, 2)
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
