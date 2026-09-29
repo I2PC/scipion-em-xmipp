@@ -372,7 +372,8 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         return ()
 
     def specialBehavoir(self, inSet):
-        """ To be implemented by child. Must set self.check and inSet.close() """
+        """ To be implemented by child. Must return the pending checkpoint
+        value (not commit it to self.check) and close inSet. """
         pass
 
     def _getCreationCheckpoint(self, inputSet, processedCount):
@@ -444,7 +445,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
                                 where='creation>"' + str(self.check) + '"')
 
         # special use of partSet before closing it
-        self.specialBehavoir(partsSet)
+        pendingCheck = self.specialBehavoir(partsSet)
 
         args = "-i %s -o %s -e %s -t %f" % (fnInputMd, self.fnOutputMd,
                                             self.fnElimMd, self.threshold.get())
@@ -453,6 +454,11 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         if self.useDenoising:
             args += " --useDenoising -d %f" % self.denoising.get()
         self.runJob("xmipp_image_eliminate_empty_particles", args)
+
+        # Only advance the checkpoint once the elimination job for this
+        # batch has actually completed - otherwise a failed job would
+        # leave these items permanently skipped on the next batch/Resume.
+        self.check = pendingCheck
 
     def _getFirstJoinStep(self):
         for s in self._steps:
@@ -607,11 +613,13 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         return ('outputParticles', 'eliminatedParticles')
 
     def specialBehavoir(self, partsSet):
-        """ Just setting the self.check """
+        """ Determine the pending checkpoint, without committing it. """
+        pendingCheck = self.check
         for p in partsSet.iterItems(orderBy='creation', direction='DESC'):
-            self.check = p.getObjCreation()
+            pendingCheck = p.getObjCreation()
             break
         partsSet.close()
+        return pendingCheck
 
     def createOutputs(self):
         streamMode = (Set.STREAM_CLOSED if getattr(self, 'finished', False)
@@ -715,12 +723,14 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
     def specialBehavoir(self, partSet):
         idsToCheck = []
+        pendingCheck = self.check
         for p in partSet.iterItems(orderBy='creation', direction='ASC'):
-            self.check = p.getObjCreation()
+            pendingCheck = p.getObjCreation()
             idsToCheck.append(p.getObjId())
         partSet.close()
 
         self.rejectByPopulation(idsToCheck)
+        return pendingCheck
 
     def createOutputs(self):
         streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) else Set.STREAM_OPEN

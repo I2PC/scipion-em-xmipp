@@ -12,8 +12,39 @@ from pyworkflow.tests import BaseTest, setupTestProject
 from xmipp3.protocols.protocol_eliminate_empty_images import (
     XmippProtEliminateEmptyParticles,
     XmippProtEliminateEmptyClasses,
+    ACCEPTED,
 )
 from xmipp3.tests.streaming_test_utils import LogicalOutputSetProbe, FreshOutputSetProbe
+
+
+class _FakeCreationParticle:
+    def __init__(self, objId, creation):
+        self._objId = objId
+        self._creation = creation
+
+    def getObjId(self):
+        return self._objId
+
+    def getObjCreation(self):
+        return self._creation
+
+
+class _FakePartsSet:
+    def __init__(self, items):
+        self._items = list(items)
+        self.closed = False
+
+    def __len__(self):
+        return len(self._items)
+
+    def iterItems(self, orderBy='creation', direction='ASC'):
+        items = sorted(self._items, key=lambda p: p.getObjCreation())
+        if direction == 'DESC':
+            items = list(reversed(items))
+        return iter(items)
+
+    def close(self):
+        self.closed = True
 
 
 class _FakeSet:
@@ -257,6 +288,95 @@ class TestXmippEliminateEmptyResume(BaseTest):
         self.assertEqual(15, prot._scheduledSize)
         self.assertEqual(15, prot.lenPartsSet)
         self.assertTrue(prot.streamClosed)
+
+    def testCheckpointIsNotAdvancedWhenEliminationJobFails(self):
+        from unittest.mock import patch
+
+        # Regression test: the creation-time checkpoint (self.check) must
+        # only advance past a batch once its elimination job has actually
+        # completed. Advancing it beforehand and then having the job fail
+        # would make those items silently skipped forever - they would
+        # never be re-included in a later batch, on retry or on Resume.
+        prot = self.newProtocol(XmippProtEliminateEmptyParticles)
+        prot.check = None
+        prot.fnInputMd = "/tmp/input%d.xmd"
+        prot.fnOutputMd = "/tmp/output.xmd"
+        prot.fnElimMd = "/tmp/eliminated.xmd"
+
+        partsSet = _FakePartsSet([
+            _FakeCreationParticle(1, "2026-09-01 00:00:00"),
+            _FakeCreationParticle(2, "2026-09-02 00:00:00"),
+        ])
+        prot.prepareImages = lambda: partsSet
+
+        def failingRunJob(*args, **kwargs):
+            raise RuntimeError("simulated elimination job failure")
+
+        prot.runJob = failingRunJob
+
+        with patch(
+            "xmipp3.protocols.protocol_eliminate_empty_images.writeSetOfParticles",
+        ):
+            with self.assertRaises(RuntimeError):
+                prot.eliminationStep(1)
+
+        self.assertIsNone(
+            prot.check,
+            "The checkpoint must not advance past a batch whose "
+            "elimination job never actually completed.",
+        )
+
+    def testCheckpointAdvancesAfterEliminationJobSucceeds(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtEliminateEmptyParticles)
+        prot.check = None
+        prot.fnInputMd = "/tmp/input%d.xmd"
+        prot.fnOutputMd = "/tmp/output.xmd"
+        prot.fnElimMd = "/tmp/eliminated.xmd"
+
+        partsSet = _FakePartsSet([
+            _FakeCreationParticle(1, "2026-09-01 00:00:00"),
+            _FakeCreationParticle(2, "2026-09-02 00:00:00"),
+        ])
+        prot.prepareImages = lambda: partsSet
+
+        runCalls = []
+        prot.runJob = lambda *args, **kwargs: runCalls.append(args)
+
+        with patch(
+            "xmipp3.protocols.protocol_eliminate_empty_images.writeSetOfParticles",
+        ):
+            prot.eliminationStep(1)
+
+        self.assertEqual(1, len(runCalls))
+        self.assertEqual("2026-09-02 00:00:00", prot.check)
+
+    def testClassesSpecialBehavoirReturnsPendingCheckWithoutCommitting(self):
+        # The classes variant has its own specialBehavoir (it also computes
+        # accept/reject decisions via rejectByPopulation). It must follow
+        # the same contract as the particles variant: return the pending
+        # checkpoint instead of committing it directly to self.check.
+        prot = self.newProtocol(XmippProtEliminateEmptyClasses)
+        prot.check = None
+        prot.classesDict = None
+
+        partSet = _FakePartsSet([
+            _FakeCreationParticle(5, "2026-09-01 00:00:00"),
+            _FakeCreationParticle(6, "2026-09-03 00:00:00"),
+        ])
+
+        pendingCheck = prot.specialBehavoir(partSet)
+
+        self.assertEqual("2026-09-03 00:00:00", pendingCheck)
+        self.assertIsNone(
+            prot.check,
+            "specialBehavoir must not commit the checkpoint itself - "
+            "eliminationStep only commits it after the elimination job "
+            "succeeds.",
+        )
+        self.assertTrue(partSet.closed)
+        self.assertEqual({5: ACCEPTED, 6: ACCEPTED}, prot.enableCls)
 
     def testCheckNewOutputCanFinishAfterResumeWithoutInputImages(self):
         prot = self.newProtocol(XmippProtEliminateEmptyParticles)
