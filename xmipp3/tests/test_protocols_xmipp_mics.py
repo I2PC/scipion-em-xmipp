@@ -228,42 +228,120 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
         return prot2
 
     def testStreaming(self):
-        """ Import several Particles from a given pattern.
-        """
-        kwargs = {'xDim': 1024,
-                  'yDim': 1024,
-                  'nDim': 5,
-                  'samplingRate': 3.0,
-                  'creationInterval': 3,
-                  'delay': 0,
-                  'setof': 2   # RandomMicrographs
-                  }
+        kwargs = {
+            'xDim': 1024,
+            'yDim': 1024,
+            'nDim': 5,
+            'samplingRate': 3.0,
+            'creationInterval': 3,
+            'delay': 0,
+            'setof': 2,
+        }
 
-        # create input micrographs
-        protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
-        self.proj.launchProtocol(protStream, wait=False)
+        protStream = self.newProtocol(
+            ProtCreateStreamData,
+            **kwargs
+        )
+        self.proj.launchProtocol(
+            protStream,
+            wait=False,
+        )
 
-        self._waitOutput(protStream,'outputMicrographs')
+        self._waitOutput(
+            protStream,
+            'outputMicrographs',
+        )
 
-        protDenoise = self.newProtocol(XmippProtPreprocessMicrographs,
-                                       doDenoise=True, maxIteration=50,
-                                       objLabel= 'denoise in streaming')
-        protDenoise.inputMicrographs.set(protStream)
-        protDenoise.inputMicrographs.setExtended('outputMicrographs')
-        self.proj.launchProtocol(protDenoise)
+        protDenoise = self.newProtocol(
+            XmippProtPreprocessMicrographs,
+            doDenoise=True,
+            maxIteration=50,
+            objLabel='denoise in streaming',
+        )
+        protDenoise.inputMicrographs.set(
+            protStream
+        )
+        protDenoise.inputMicrographs.setExtended(
+            'outputMicrographs'
+        )
+        self.proj.launchProtocol(
+            protDenoise,
+            wait=False,
+        )
 
+        self._waitOutput(
+            protDenoise,
+            'outputMicrographs',
+        )
 
-        micSet = SetOfMicrographs(
-            filename=protStream._getPath("micrographs.sqlite"))
-        denoiseSet = len(protDenoise._readDoneList())
-
-        while not (denoiseSet == micSet.getSize()):
+        while not protDenoise.isFinished():
             time.sleep(5)
-            print("Imported mics: %d, processed mics: %d" % (
-            micSet.getSize(), len(protDenoise._readDoneList())))
-            micSet = SetOfMicrographs(
-                filename=protStream._getPath("micrographs.sqlite"))
-            denoiseSet = len(protDenoise._readDoneList())
+
+            protStream = self._updateProtocol(
+                protStream
+            )
+            protDenoise = self._updateProtocol(
+                protDenoise
+            )
+
+            if protStream.isFailed():
+                self.fail(
+                    "Input streaming protocol failed: %s"
+                    % protStream.getError()
+                )
+
+            if protDenoise.isFailed():
+                self.fail(
+                    "Preprocess streaming protocol failed: %s"
+                    % protDenoise.getError()
+                )
+
+            inputSet = getattr(
+                protStream,
+                'outputMicrographs',
+                None,
+            )
+            outputSet = getattr(
+                protDenoise,
+                'outputMicrographs',
+                None,
+            )
+
+            imported = (
+                inputSet.getSize()
+                if inputSet is not None
+                else 0
+            )
+            processed = (
+                outputSet.getSize()
+                if outputSet is not None
+                else 0
+            )
+
+            print(
+                "Imported mics: %d, processed mics: %d"
+                % (imported, processed)
+            )
+
+        protStream = self._updateProtocol(
+            protStream
+        )
+        protDenoise = self._updateProtocol(
+            protDenoise
+        )
+
+        self.assertFalse(
+            protDenoise.isFailed(),
+            protDenoise.getError(),
+        )
+        self.assertTrue(
+            hasattr(protDenoise, 'outputMicrographs'),
+            "Streaming preprocess did not produce outputMicrographs.",
+        )
+        self.assertEqual(
+            protDenoise.outputMicrographs.getSize(),
+            protStream.outputMicrographs.getSize(),
+        )
 
 
 class TestXmippCTFEstimation(TestXmippBase):

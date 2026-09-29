@@ -92,6 +92,30 @@ class TestXmippStreamingBase(unittest.TestCase):
             "MovieMaxShift must keep its native ProtProcessMovies behavior.",
         )
 
+
+    def testPreprocessMicrographsUsesSharedStreamingBase(self):
+        from pwem.protocols import ProtPreprocessMicrographs
+
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs,
+        )
+
+        baseClass = self._getBaseClass()
+
+        self.assertTrue(
+            issubclass(XmippProtPreprocessMicrographs, baseClass),
+            "PreprocessMicrographs must reuse the shared Xmipp streaming helpers.",
+        )
+
+        self.assertTrue(
+            issubclass(
+                XmippProtPreprocessMicrographs,
+                ProtPreprocessMicrographs,
+            ),
+            "PreprocessMicrographs must keep its native "
+            "ProtPreprocessMicrographs behavior.",
+        )
+
     def testLogicalSetLoadingUsesPointerObject(self):
         baseClass = self._getBaseClass()
         logicalSet = _LogicalSet()
@@ -5211,3 +5235,500 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
         )
         self.assertEqual(protocol.outputSize, 3)
         self.assertGreaterEqual(protocol.storeCalls, 1)
+
+class _PreprocessMicrograph:
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+    def clone(self):
+        return _PreprocessMicrograph(self._objId)
+
+
+class _PreprocessMicrographSet:
+    def __init__(self, ids, streamClosed=False):
+        self._items = [_PreprocessMicrograph(objId) for objId in ids]
+        self._streamClosed = streamClosed
+        self.loadCalls = 0
+        self.closeCalls = 0
+
+    def loadAllProperties(self):
+        self.loadCalls += 1
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def isStreamClosed(self):
+        return self._streamClosed
+
+    def close(self):
+        self.closeCalls += 1
+
+    def getFileName(self):
+        raise AssertionError(
+            "PreprocessMicrographs input loading must not depend on "
+            "inputMicrographs.getFileName()."
+        )
+
+
+class TestXmippPreprocessMicrographsLogicalInput(unittest.TestCase):
+
+    def testLoadInputMicsUsesLogicalSet(self):
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        inputSet = _PreprocessMicrographSet([3, 7], streamClosed=False)
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+
+        protocol = _Harness()
+
+        inputMics, streamClosed = (
+            XmippProtPreprocessMicrographs._loadInputMics(protocol)
+        )
+
+        self.assertEqual(
+            [mic.getObjId() for mic in inputMics],
+            [3, 7],
+        )
+        self.assertFalse(streamClosed)
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+class _IncrementalPreprocessSet:
+    def __init__(self):
+        self.loadCalls = 0
+        self.closeCalls = 0
+        self.uniqueCalls = []
+        self.getItemCalls = []
+
+    def loadAllProperties(self):
+        self.loadCalls += 1
+
+    def getUniqueValues(self, field, where=None):
+        self.uniqueCalls.append((field, where))
+        if field == "id" and where == "id > 3":
+            return [4, 5]
+        raise AssertionError(
+            "Unexpected discovery query: %r, %r" % (field, where)
+        )
+
+    def getItem(self, field, value):
+        self.getItemCalls.append((field, value))
+        if field != "id" or value not in (4, 5):
+            raise AssertionError(
+                "Unexpected item lookup: %r, %r" % (field, value)
+            )
+        return _PreprocessMicrograph(value)
+
+    def isStreamClosed(self):
+        return False
+
+    def close(self):
+        self.closeCalls += 1
+
+    def __iter__(self):
+        raise AssertionError(
+            "Streaming polling must not iterate the whole input Set."
+        )
+
+
+class TestXmippPreprocessMicrographsIncrementalDiscovery(unittest.TestCase):
+
+    def testCheckNewInputQueriesOnlyIdsBeyondWatermark(self):
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        inputSet = _IncrementalPreprocessSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            insertedDict = {1: None, 2: None, 3: None}
+            _lastInputId = 3
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewMicsSteps(self, insertedDict, inputMics):
+                ids = [mic.getObjId() for mic in inputMics]
+                self.batches.append(ids)
+                for objId in ids:
+                    insertedDict[objId] = objId
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+        protocol = _Harness()
+        protocol.insertedDict = {1: None, 2: None, 3: None}
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtPreprocessMicrographs._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[4, 5]])
+        self.assertEqual(protocol._lastInputId, 5)
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [("id", "id > 3")],
+        )
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [("id", 4), ("id", 5)],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+        self.assertEqual(protocol.updateCalls, 1)
+
+class _ClosedIncrementalPreprocessSet(_IncrementalPreprocessSet):
+    def getUniqueValues(self, field, where=None):
+        self.uniqueCalls.append((field, where))
+
+        if field != "id":
+            raise AssertionError("Unexpected field: %r" % field)
+
+        if where == "id > 5":
+            return []
+
+        if where is None:
+            return [1, 2, 3, 4, 5, 6]
+
+        raise AssertionError(
+            "Unexpected discovery query: %r, %r" % (field, where)
+        )
+
+    def getItem(self, field, value):
+        self.getItemCalls.append((field, value))
+        if field != "id" or value != 6:
+            raise AssertionError(
+                "Unexpected item lookup: %r, %r" % (field, value)
+            )
+        return _PreprocessMicrograph(value)
+
+    def getSize(self):
+        return 6
+
+    def isStreamClosed(self):
+        return True
+
+
+class TestXmippPreprocessMicrographsTerminalReconciliation(unittest.TestCase):
+
+    def testClosedStreamRecoversLateVisibleMicrograph(self):
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        inputSet = _ClosedIncrementalPreprocessSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            insertedDict = {
+                1: None,
+                2: None,
+                3: None,
+                4: None,
+                5: None,
+            }
+            _lastInputId = 5
+            SetOfMicrographs = [
+                _PreprocessMicrograph(objId)
+                for objId in range(1, 6)
+            ]
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewMicsSteps(self, insertedDict, inputMics):
+                ids = [mic.getObjId() for mic in inputMics]
+                self.batches.append(ids)
+                for objId in ids:
+                    insertedDict[objId] = objId
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+        protocol = _Harness()
+        protocol.insertedDict = {
+            1: None,
+            2: None,
+            3: None,
+            4: None,
+            5: None,
+        }
+        protocol.SetOfMicrographs = [
+            _PreprocessMicrograph(objId)
+            for objId in range(1, 6)
+        ]
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtPreprocessMicrographs._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[6]])
+        self.assertEqual(protocol._lastInputId, 6)
+        self.assertTrue(protocol.streamClosed)
+        self.assertEqual(
+            [mic.getObjId() for mic in protocol.SetOfMicrographs],
+            [1, 2, 3, 4, 5, 6],
+        )
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 5"),
+                ("id", None),
+            ],
+        )
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [("id", 6)],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+        self.assertEqual(protocol.updateCalls, 1)
+
+class TestXmippPreprocessMicrographsPersistedResume(unittest.TestCase):
+
+    def testRestoreInsertedMicsUsesPersistedOutputIds(self):
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        outputSet = _PersistedOutputSet({1, 3})
+
+        class _Harness(XmippStreamingBase):
+            outputMicrographs = outputSet
+            insertedDict = {}
+
+            def _isMicPipelineDone(self, mic):
+                return False
+
+        protocol = _Harness()
+        protocol.insertedDict = {}
+
+        inputMics = [
+            _PreprocessMicrograph(1),
+            _PreprocessMicrograph(2),
+            _PreprocessMicrograph(3),
+        ]
+
+        XmippProtPreprocessMicrographs._restoreInsertedMics(
+            protocol,
+            inputMics,
+        )
+
+        self.assertEqual(
+            protocol.insertedDict,
+            {
+                1: None,
+                3: None,
+            },
+        )
+        self.assertEqual(outputSet.getIdSetCalls, 1)
+
+class TestXmippPreprocessMicrographsOutputFactory(unittest.TestCase):
+
+    def testGetOutputMicsUsesProtocolFactory(self):
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        logicalInput = _OutputInfoSource()
+        pointer = _Pointer(logicalInput)
+
+        class _Harness(XmippStreamingBase):
+            inputMicrographs = pointer
+            doDownsample = False
+
+            def _createSetOfMicrographs(self):
+                self.factoryCalls += 1
+                return _FakeOutputSet()
+
+            def _defineOutputs(self, **outputs):
+                for name, output in outputs.items():
+                    setattr(self, name, output)
+
+            def getPath(self, *args):
+                raise AssertionError(
+                    "PreprocessMicrographs output creation must use "
+                    "_createSetOfMicrographs(), not a manual sqlite path."
+                )
+
+            def info(self, message):
+                pass
+
+        protocol = _Harness()
+        protocol.factoryCalls = 0
+
+        output = XmippProtPreprocessMicrographs.getOutputMics(
+            protocol,
+        )
+
+        self.assertEqual(protocol.factoryCalls, 1)
+        self.assertIs(output.copiedFrom, logicalInput)
+        self.assertEqual(
+            output.streamState,
+            _FakeOutputSet.STREAM_OPEN,
+        )
+        self.assertIs(protocol.outputMicrographs, output)
+        self.assertEqual(pointer.getCalls, 1)
+
+class _PublishPreprocessMicrograph(_PreprocessMicrograph):
+    def clone(self):
+        return _PublishPreprocessMicrograph(self.getObjId())
+
+    def getMicName(self):
+        return "mic_%06d" % self.getObjId()
+
+
+class _PreprocessOutputSet:
+    def __init__(self, ids):
+        self.ids = set(ids)
+        self.appendedIds = []
+
+    def getIdSet(self):
+        return set(self.ids)
+
+    def getSize(self):
+        return len(self.ids)
+
+    def isEmpty(self):
+        return not self.ids
+
+    def append(self, mic):
+        micId = mic.getObjId()
+        self.ids.add(micId)
+        self.appendedIds.append(micId)
+
+
+class TestXmippPreprocessMicrographsNoDoneAllSidecar(unittest.TestCase):
+
+    def testCheckNewOutputUsesPersistedOutputInsteadOfDoneAll(self):
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs,
+        )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
+        outputSet = _PreprocessOutputSet({1})
+
+        class _Harness(XmippStreamingBase):
+            outputMicrographs = outputSet
+            SetOfMicrographs = [_PublishPreprocessMicrograph(2)]
+            streamClosed = False
+            finished = False
+            doDownsample = False
+
+            def _isMicPipelineDone(self, mic):
+                return True
+
+            def getOutputMics(self):
+                return outputSet
+
+
+            def _readDoneList(self):
+                raise AssertionError(
+                    "DONE_all.TXT must not be used as durable "
+                    "streaming publication state."
+                )
+
+            def _writeDoneList(self, micList):
+                raise AssertionError(
+                    "DONE_all.TXT must not be written after publication."
+                )
+
+            def _getOutputMicrograph(self, mic):
+                return "/tmp/mic_%06d.mrc" % mic.getObjId()
+
+            def _updateOutputSet(self, outputName, outSet, streamMode):
+                self.updatedOutputName = outputName
+                self.updatedStreamMode = streamMode
+
+            def _refreshOutputRelation(self, outSet):
+                pass
+
+            def _getFirstJoinStep(self):
+                return None
+
+        protocol = _Harness()
+
+        XmippProtPreprocessMicrographs._checkNewOutput(protocol)
+
+        self.assertEqual(outputSet.appendedIds, [2])
+        self.assertEqual(protocol.updatedOutputName, "outputMicrographs")
+
+class TestXmippPreprocessMicrographsResumeCompletion(unittest.TestCase):
+
+    def testPersistedOutputCountsAsProcessedWithoutPipelineMarker(self):
+        from pyworkflow.object import Set
+
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        outputSet = _PreprocessOutputSet({1})
+
+        class _Harness(XmippStreamingBase):
+            outputMicrographs = outputSet
+            SetOfMicrographs = [
+                _PublishPreprocessMicrograph(1),
+                _PublishPreprocessMicrograph(2),
+            ]
+            streamClosed = True
+            finished = False
+            doDownsample = False
+
+            def _isMicPipelineDone(self, mic):
+                return mic.getObjId() == 2
+
+            def getOutputMics(self):
+                return outputSet
+
+            def _getOutputMicrograph(self, mic):
+                return "/tmp/mic_%06d.mrc" % mic.getObjId()
+
+            def _updateOutputSet(self, outputName, outSet, streamMode):
+                self.updatedOutputName = outputName
+                self.updatedStreamMode = streamMode
+
+            def _refreshOutputRelation(self, outSet):
+                pass
+
+            def _getFirstJoinStep(self):
+                return None
+
+        protocol = _Harness()
+
+        XmippProtPreprocessMicrographs._checkNewOutput(protocol)
+
+        self.assertTrue(protocol.finished)
+        self.assertEqual(
+            protocol.updatedStreamMode,
+            Set.STREAM_CLOSED,
+        )
+        self.assertEqual(outputSet.appendedIds, [2])
+        self.assertEqual(
+            protocol._getKnownPersistedOutputIds(
+                "outputMicrographs",
+            ),
+            {1, 2},
+        )
