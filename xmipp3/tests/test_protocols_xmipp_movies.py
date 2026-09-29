@@ -661,6 +661,34 @@ class TestMovieAlignmentConsensus(BaseTest):
         self.assertEqual(sizeDiscarded, 2, 'Number of discarded movies must be 0 and its %d' % sizeDiscarded)
 
 
+
+
+class _DoseTestMovie:
+    """Small reusable movie double for dose-analysis unit tests."""
+
+    def __init__(self, movieId):
+        self.movieId = movieId
+
+    def clone(self):
+        return self.__class__(self.movieId)
+
+    def getObjId(self):
+        return self.movieId
+
+    def setFramesRange(self, framesRange):
+        pass
+
+
+class _OrderedOutputSet:
+    """Minimal output-set double preserving append order."""
+
+    def __init__(self):
+        self.ids = []
+
+    def append(self, movie):
+        self.ids.append(movie.getObjId())
+
+
 class TestMovieDoseAnalysisState(BaseTest):
 
     @classmethod
@@ -1016,15 +1044,7 @@ class TestMovieDoseAnalysisState(BaseTest):
     def testParallelMovieLoadsSerializeSharedInputSetAccess(self):
         import threading
 
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
-
-            def clone(self):
-                return Movie(self.movieId)
-
-            def getObjId(self):
-                return self.movieId
+        Movie = _DoseTestMovie
 
         class InputSet:
             def __init__(self):
@@ -1138,22 +1158,9 @@ class TestMovieDoseAnalysisState(BaseTest):
     def testInitialMedianUsesOnlyConfiguredOrderedSamples(self):
         from unittest.mock import patch
 
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
+        Movie = _DoseTestMovie
 
-            def getObjId(self):
-                return self.movieId
-
-            def setFramesRange(self, framesRange):
-                pass
-
-        class OutputSet:
-            def __init__(self):
-                self.ids = []
-
-            def append(self, movie):
-                self.ids.append(movie.getObjId())
+        OutputSet = _OrderedOutputSet
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=2)
         prot.usingExperimental = True
@@ -1388,25 +1395,9 @@ class TestMovieDoseAnalysisState(BaseTest):
     def testUpdatedMedianRefreshesAcceptanceLimitsWithinBatch(self):
         from unittest.mock import patch
 
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
+        Movie = _DoseTestMovie
 
-            def clone(self):
-                return Movie(self.movieId)
-
-            def getObjId(self):
-                return self.movieId
-
-            def setFramesRange(self, framesRange):
-                pass
-
-        class OutputSet:
-            def __init__(self):
-                self.ids = []
-
-            def append(self, movie):
-                self.ids.append(movie.getObjId())
+        OutputSet = _OrderedOutputSet
 
         prot = self.newProtocol(
             XmippProtMovieDoseAnalysis,
@@ -1465,22 +1456,9 @@ class TestMovieDoseAnalysisState(BaseTest):
     def testWindowMedianIgnoresFutureOutOfOrderMovies(self):
         from unittest.mock import patch
 
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
+        Movie = _DoseTestMovie
 
-            def getObjId(self):
-                return self.movieId
-
-            def setFramesRange(self, framesRange):
-                pass
-
-        class OutputSet:
-            def __init__(self):
-                self.ids = []
-
-            def append(self, movie):
-                self.ids.append(movie.getObjId())
+        OutputSet = _OrderedOutputSet
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=2, percentage_window=101)
         prot.mu = 1.0
@@ -1518,22 +1496,9 @@ class TestMovieDoseAnalysisState(BaseTest):
     def testWindowBoundaryDoseIsNotCountedAsFaulty(self):
         from unittest.mock import patch
 
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
+        Movie = _DoseTestMovie
 
-            def getObjId(self):
-                return self.movieId
-
-            def setFramesRange(self, framesRange):
-                pass
-
-        class OutputSet:
-            def __init__(self):
-                self.ids = []
-
-            def append(self, movie):
-                self.ids.append(movie.getObjId())
+        OutputSet = _OrderedOutputSet
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=1, percentage_threshold=10, percentage_window=0)
         prot.mu = 100.0
@@ -1572,25 +1537,9 @@ class TestMovieDoseAnalysisState(BaseTest):
     def testFailedDoseMovieIsPersistedAsDiscarded(self):
         from unittest.mock import patch
 
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
+        Movie = _DoseTestMovie
 
-            def clone(self):
-                return Movie(self.movieId)
-
-            def getObjId(self):
-                return self.movieId
-
-            def setFramesRange(self, framesRange):
-                pass
-
-        class OutputSet:
-            def __init__(self):
-                self.ids = []
-
-            def append(self, movie):
-                self.ids.append(movie.getObjId())
+        OutputSet = _OrderedOutputSet
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         prot.mu = 1.0
@@ -1650,25 +1599,9 @@ class TestMovieDoseAnalysisState(BaseTest):
     def testAllFailedDoseMoviesFinishClosedStream(self):
         from unittest.mock import patch
 
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
+        Movie = _DoseTestMovie
 
-            def clone(self):
-                return Movie(self.movieId)
-
-            def getObjId(self):
-                return self.movieId
-
-            def setFramesRange(self, framesRange):
-                pass
-
-        class OutputSet:
-            def __init__(self):
-                self.ids = []
-
-            def append(self, movie):
-                self.ids.append(movie.getObjId())
+        OutputSet = _OrderedOutputSet
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         prot.stats = {}
@@ -1745,15 +1678,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
 
     def testLoadMoviesByIdsClosesInputSetOnce(self):
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
-
-            def clone(self):
-                return Movie(self.movieId)
-
-            def getObjId(self):
-                return self.movieId
+        Movie = _DoseTestMovie
 
         class InputSet:
             def __init__(self):
@@ -1886,25 +1811,9 @@ class TestMovieDoseAnalysisState(BaseTest):
     def testDoseRuntimeStateIsPersistedAfterMedianUpdate(self):
         from unittest.mock import patch
 
-        class Movie:
-            def __init__(self, movieId):
-                self.movieId = movieId
+        Movie = _DoseTestMovie
 
-            def clone(self):
-                return Movie(self.movieId)
-
-            def getObjId(self):
-                return self.movieId
-
-            def setFramesRange(self, framesRange):
-                pass
-
-        class OutputSet:
-            def __init__(self):
-                self.ids = []
-
-            def append(self, movie):
-                self.ids.append(movie.getObjId())
+        OutputSet = _OrderedOutputSet
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, window=1, percentage_window=101)
         prot.mu = 1.0

@@ -1233,14 +1233,6 @@ class TestXmippMovieDoseAnalysisLogicalInitialization(unittest.TestCase):
             def getFirstItem(self):
                 return _Movie()
 
-        class _Pointer:
-            def __init__(self, value):
-                self.value = value
-                self.getCalls = 0
-
-            def get(self):
-                self.getCalls += 1
-                return self.value
 
         class _Harness:
             inputMovies = _Pointer(_LogicalMovieSet())
@@ -1298,14 +1290,6 @@ class TestXmippMovieDoseAnalysisLogicalWorkerInput(unittest.TestCase):
             def close(self):
                 self.closeCalls += 1
 
-        class _Pointer:
-            def __init__(self, value):
-                self.value = value
-                self.getCalls = 0
-
-            def get(self):
-                self.getCalls += 1
-                return self.value
 
         logicalSet = _LogicalMovieSet()
         pointer = _Pointer(logicalSet)
@@ -1367,14 +1351,6 @@ class TestXmippMovieDoseAnalysisLogicalInputSize(unittest.TestCase):
             def close(self):
                 self.closeCalls += 1
 
-        class _Pointer:
-            def __init__(self, value):
-                self.value = value
-                self.getCalls = 0
-
-            def get(self):
-                self.getCalls += 1
-                return self.value
 
         logicalSet = _LogicalMovieSet()
         pointer = _Pointer(logicalSet)
@@ -4158,14 +4134,6 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
                 self.getIdSetCalls += 1
                 return {1}
 
-        class _Pointer:
-            def __init__(self, value):
-                self.value = value
-                self.getCalls = 0
-
-            def get(self):
-                self.getCalls += 1
-                return self.value
 
         inputSet = _LogicalParticleSet()
         outputSet = _OutputParticles()
@@ -4311,14 +4279,6 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
                 self.getIdSetCalls += 1
                 return {1}
 
-        class _Pointer:
-            def __init__(self, value):
-                self.value = value
-                self.getCalls = 0
-
-            def get(self):
-                self.getCalls += 1
-                return self.value
 
         inputSet = _LogicalParticleSet()
         outputSet = _OutputParticles()
@@ -4753,14 +4713,6 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
             def close(self):
                 self.closeCalls += 1
 
-        class _Pointer:
-            def __init__(self, value):
-                self.value = value
-                self.getCalls = 0
-
-            def get(self):
-                self.getCalls += 1
-                return self.value
 
         inputSet = _LogicalParticleSet()
         pointer = _Pointer(inputSet)
@@ -4791,14 +4743,6 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
         class _InputParticles:
             pass
 
-        class _Pointer:
-            def __init__(self, value):
-                self.value = value
-                self.getCalls = 0
-
-            def get(self):
-                self.getCalls += 1
-                return self.value
 
         class _FactorySet:
             STREAM_OPEN = "open"
@@ -4939,14 +4883,6 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
                 self.getIdSetCalls += 1
                 return {1, 2}
 
-        class _Pointer:
-            def __init__(self, value):
-                self.value = value
-                self.getCalls = 0
-
-            def get(self):
-                self.getCalls += 1
-                return self.value
 
         inputSet = _LogicalParticleSet()
         outputSet = _OutputParticles()
