@@ -181,6 +181,74 @@ class TestXmippTriggerDataRegression(BaseTest):
 
         self.assertEqual([('outputParticles', outputSet, Set.STREAM_CLOSED)], updates)
 
+    def testResumeRestoresOutputCountAndSkipsPersistedIdsInSplitMode(self):
+        # Regression test: on Resume, self.outputCount (used to name the
+        # next batch, e.g. outputParticles3) must be reconstructed from
+        # how many batch outputs are actually already persisted - not left
+        # at 0, which would recreate outputParticles1 and risk mixing
+        # already-published items into a differently-named new batch.
+        prot = self._newProtocol(splitImages=True)
+        prot.getOututName = lambda: 'outputParticles'
+        prot.outputParticles1 = _FakeOutputSet()
+        prot.outputParticles1.ids = {1, 2}
+        prot.outputParticles2 = _FakeOutputSet()
+        prot.outputParticles2.ids = {3, 4}
+
+        prot._restoreStreamingState()
+
+        self.assertEqual(2, prot.outputCount)
+        self.assertEqual(
+            {1, 2, 3, 4},
+            {image.getObjId() for image in prot.images},
+        )
+        self.assertEqual([], prot.splitedImages)
+
+    def testResumeRestoresPersistedIdsInFullStreamingMode(self):
+        prot = self._newProtocol(splitImages=False)
+        prot.getOututName = lambda: 'outputParticles'
+        prot.outputParticles = _FakeOutputSet()
+        prot.outputParticles.ids = {1, 2}
+
+        prot._restoreStreamingState()
+
+        self.assertEqual(0, prot.outputCount)
+        self.assertEqual(
+            {1, 2},
+            {image.getObjId() for image in prot.images},
+        )
+
+    def testInsertAllStepsRestoresStateOnlyWhenContinued(self):
+        prot = self._newProtocol()
+        prot.getOututName = lambda: 'outputParticles'
+        prot.outputParticles = _FakeOutputSet()
+        prot.outputParticles.ids = {1, 2}
+        prot.isContinued = lambda: True
+        prot.setImagesClass = lambda: None
+        prot.setImagesType = lambda: None
+        prot._insertFunctionStep = lambda *args, **kwargs: 1
+
+        prot._insertAllSteps()
+
+        self.assertEqual(
+            {1, 2},
+            {image.getObjId() for image in prot.images},
+        )
+
+    def testInsertAllStepsDoesNotRestoreOnFreshRun(self):
+        prot = self._newProtocol()
+        prot.getOututName = lambda: 'outputParticles'
+        prot.outputParticles = _FakeOutputSet()
+        prot.outputParticles.ids = {1, 2}
+        prot.isContinued = lambda: False
+        prot.setImagesClass = lambda: None
+        prot.setImagesType = lambda: None
+        prot._insertFunctionStep = lambda *args, **kwargs: 1
+
+        prot._insertAllSteps()
+
+        self.assertEqual([], prot.images)
+        self.assertEqual(0, prot.outputCount)
+
 # Finalization regression: the executor performs one last stepsCheck callback
 # after it has already found no pending steps.
 from unittest.mock import Mock

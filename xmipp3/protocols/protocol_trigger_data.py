@@ -41,6 +41,20 @@ from xmipp3.utils import loadOutputSetForAppend
 
 SIGNAL_FILENAME = "STOP_STREAM.TXT"
 
+
+class _PersistedImagePlaceholder:
+    """ Minimal stand-in for an item already published to a real output,
+    restored on Resume. Only getObjId() is needed by the processed-id
+    filter in _checkNewInput; the item's real content already lives in
+    the persisted output. """
+
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+
 class XmippProtTriggerData(EMProtocol, Protocol):
     """
     Waits until certain number of images is prepared and then
@@ -365,16 +379,53 @@ class XmippProtTriggerData(EMProtocol, Protocol):
     def _insertAllSteps(self):
         # initializing variables
         self.finished = False
-        self.images = []
-        self.splitedImages = []
-        self.outputCount = 0
         self.setImagesClass()
         self.setImagesType()
+
+        if self.isContinued():
+            self._restoreStreamingState()
+        else:
+            self.images = []
+            self.splitedImages = []
+            self.outputCount = 0
 
         # steps
         imsSteps = self._insertFunctionStep('delayStep')
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=[imsSteps], wait=True)
+
+    def _restoreStreamingState(self):
+        """ Reconstruct durable state from the real, already-persisted
+        outputs - never from a runtime-only assumption about ordering. """
+        persistedIds, batchCount = self._getPersistedOutputIds()
+        self.outputCount = batchCount
+        # A lightweight stand-in is enough: the processed-id filter in
+        # _checkNewInput only needs getObjId(). The real content of these
+        # items already lives in the persisted output(s); nothing else
+        # needs to be reconstructed for them.
+        self.images = [_PersistedImagePlaceholder(itemId) for itemId in persistedIds]
+        self.splitedImages = []
+
+    def _getPersistedOutputIds(self):
+        """ Ids already published to the real output(s), plus - in
+        semi-streaming/batch mode - how many batches already exist. """
+        outputName = self.getOututName()
+
+        if self.allImages.get() and self.splitImages.get():
+            persistedIds = set()
+            batchCount = 0
+            while True:
+                batchOutput = getattr(self, '%s%d' % (outputName, batchCount + 1), None)
+                if batchOutput is None:
+                    break
+                persistedIds.update(batchOutput.getIdSet())
+                batchCount += 1
+            return persistedIds, batchCount
+
+        # Static output or full streaming: a single named output.
+        outputSet = getattr(self, outputName, None)
+        persistedIds = set(outputSet.getIdSet()) if outputSet is not None else set()
+        return persistedIds, 0
 
     def _stepsCheck(self):
         if getattr(self, 'finished', False):
