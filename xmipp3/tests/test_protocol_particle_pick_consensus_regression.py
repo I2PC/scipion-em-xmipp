@@ -50,6 +50,17 @@ class _FakeCoordinate:
         self.position = (x, y)
 
 
+class _FakeMic:
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+    def clone(self):
+        return _FakeMic(self._objId)
+
+
 class TestXmippParticlePickConsensusRegression(BaseTest):
     """Regression tests for Picking Consensus streaming and Continue handling."""
 
@@ -109,6 +120,44 @@ class TestXmippParticlePickConsensusRegression(BaseTest):
             prot._checkNewInput()
 
         self.assertEqual(set(), prot.checkedMics)
+
+    def testCheckNewInputUsesUnionAcrossAllInputsWhenStreamsClose(self):
+        # Regression test: once every input stream is closed, the protocol
+        # must schedule the union of mics ready in ANY input picker - the
+        # loop above already computes this correctly for N inputs. A
+        # leftover 2-input-only override then narrowed it down to just
+        # the intersection of inputCoordinates[0] and [1], silently
+        # ignoring mics only found by a 3rd+ picker.
+        prot = self._newProtocol()
+        prot.inputCoordinates = [
+            SimpleNamespace(get=lambda: object()),
+            SimpleNamespace(get=lambda: object()),
+            SimpleNamespace(get=lambda: object()),
+        ]
+        prot._restoreProcessedMics = lambda: None
+        prot.getMainInput = lambda: SimpleNamespace(
+            getMicrographs=lambda: {
+                1: _FakeMic(1), 2: _FakeMic(2), 3: _FakeMic(3),
+            }
+        )
+        prot._getFirstJoinStep = lambda: None
+        prot.updateSteps = lambda: None
+
+        scheduled = []
+        prot.insertNewCoorsSteps = (
+            lambda mics: scheduled.extend(mic.getObjId() for mic in mics) or []
+        )
+
+        with patch(
+                'xmipp3.protocols.protocol_particle_pick_consensus.getReadyMics',
+                side_effect=[
+                    ({1}, True), ({2}, True), ({3}, True),
+                    ({1}, True), ({2}, True),
+                ],
+        ):
+            prot._checkNewInput()
+
+        self.assertEqual({1, 2, 3}, set(scheduled))
 
     def testRestoreProcessedMicsIncludesPendingTmpResults(self):
         prot = self._newProtocol()
