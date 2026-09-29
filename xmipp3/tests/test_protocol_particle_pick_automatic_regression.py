@@ -77,11 +77,10 @@ class _PickHarness:
 
 
 class _OutputHarness:
-    def __init__(self, micIds, processedIds, doneIds, outputIds, streamClosed=False):
+    def __init__(self, micIds, processedIds, outputIds, streamClosed=False):
         self.events = []
         self.micDict = {mic.getMicName(): mic for mic in [_Mic(objId) for objId in micIds]}
         self.processedIds = set(processedIds)
-        self.doneIds = set(doneIds)
         self.outputCoordinates = _OutputCoords(outputIds) if outputIds is not None else None
         self.streamClosed = streamClosed
         self.finished = False
@@ -91,7 +90,10 @@ class _OutputHarness:
         return mic.getObjId() in self.processedIds
 
     def _readDoneList(self):
-        return list(self.doneIds)
+        raise AssertionError('DONE_all.TXT must not be used as durable state.')
+
+    def _writeDoneList(self, mics):
+        raise AssertionError('DONE_all.TXT must not be written.')
 
     def _getOutputMicIds(self):
         return auto_pick.XmippParticlePickingAutomatic._getOutputMicIds(self)
@@ -106,11 +108,6 @@ class _OutputHarness:
 
     def _updateStreamState(self, streamMode):
         self.events.append(('stream', streamMode))
-
-    def _writeDoneList(self, mics):
-        ids = [mic.getObjId() for mic in mics]
-        self.doneIds.update(ids)
-        self.events.append(('checkpoint', ids))
 
     def _getFirstJoinStep(self):
         return self.outputStep
@@ -134,18 +131,23 @@ class TestXmippAutomaticPickingRegression(unittest.TestCase):
         self.assertIn('--particleSize 128', protocol.jobs[0][1])
         self.assertFalse(hasattr(protocol, 'boxSize'))
 
-    def testOutputIsPersistedBeforeCheckpoint(self):
-        protocol = _OutputHarness([1, 2], [1, 2], [1], [1])
+    def testOutputIsPersistedFromRealOutputSetNotSidecar(self):
+        # Regression test: which mics still need to be flushed to the output
+        # Set must come from the real, persisted outputCoordinates
+        # (_getOutputMicIds), not from a DONE_all.TXT sidecar -
+        # _readDoneList/_writeDoneList raise in this harness to prove they
+        # are never touched.
+        protocol = _OutputHarness([1, 2], [1, 2], [1])
         auto_pick.XmippParticlePickingAutomatic._checkNewOutput(protocol)
-        self.assertEqual([('output', [2], Set.STREAM_OPEN), ('checkpoint', [2])], protocol.events)
+        self.assertEqual([('output', [2], Set.STREAM_OPEN)], protocol.events)
 
-    def testReplayRepairsCheckpointWithoutDuplicateOutput(self):
-        protocol = _OutputHarness([1], [1], [], [1])
+    def testNoActionWhenAllProcessedAlreadyPersistedButNotFinished(self):
+        protocol = _OutputHarness([1], [1], [1])
         auto_pick.XmippParticlePickingAutomatic._checkNewOutput(protocol)
-        self.assertEqual([('checkpoint', [1])], protocol.events)
+        self.assertEqual([('sleep',)], protocol.events)
 
     def testFinishedReplayClosesExistingOutput(self):
-        protocol = _OutputHarness([1], [1], [1], [1], streamClosed=True)
+        protocol = _OutputHarness([1], [1], [1], streamClosed=True)
         auto_pick.XmippParticlePickingAutomatic._checkNewOutput(protocol)
         self.assertTrue(protocol.finished)
         self.assertEqual([('stream', Set.STREAM_CLOSED)], protocol.events)

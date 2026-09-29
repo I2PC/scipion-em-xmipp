@@ -426,27 +426,21 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         if getattr(self, 'finished', False):
             return
 
-        doneIds = set(self._readDoneList())
         listOfMics = list(self.micDict.values())
         processedMics = [mic for mic in listOfMics if self._isMicDone(mic)]
         self.finished = self.streamClosed and len(processedMics) == len(listOfMics)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
         outputMicIds = self._getOutputMicIds()
-        newOutput = [mic for mic in processedMics if mic.getObjId() not in outputMicIds and mic.getObjId() not in doneIds]
-        checkpointMics = [mic for mic in processedMics if mic.getObjId() in outputMicIds and mic.getObjId() not in doneIds]
+        newOutput = [mic for mic in processedMics if mic.getObjId() not in outputMicIds]
 
         if newOutput:
-            newDone = self._updateOutputCoordSet(newOutput, streamMode)
-            checkpointMics.extend(mic for mic in newDone if mic.getObjId() not in doneIds)
+            self._updateOutputCoordSet(newOutput, streamMode)
         elif self.finished:
             self._updateStreamState(streamMode)
-        elif not checkpointMics:
+        else:
             if len(processedMics) == len(listOfMics):
                 self._streamingSleepOnWait()
             return
-
-        if checkpointMics:
-            self._writeDoneList(checkpointMics)
 
         if self.finished:
             outputStep = self._getFirstJoinStep()
