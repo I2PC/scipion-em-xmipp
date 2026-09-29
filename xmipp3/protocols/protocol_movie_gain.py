@@ -422,7 +422,8 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
             inputMovies: input movies set to be check
         """
         deps = []
-        if len(insertedDict) == 0 and self.estimateOrientation.get():
+        if (len(insertedDict) == 0 and self.estimateOrientation.get()
+                and not self._isOutputAlreadyPublished(OUTPUT_ORIENTED_GAINS)):
             # Adding a first step to orientate the input gain
             firstMovie = inputMovies.getFirstItem()
             movieDict = firstMovie.getObjDict(includeBasic=True)
@@ -432,17 +433,19 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
             # adding orientStep as dependency for all other steps
             self.convertCIStep.append(orientStepId)
 
-        if len(insertedDict) == 0 and self.normalizeGain.get():
+        if (len(insertedDict) == 0 and self.normalizeGain.get()
+                and not os.path.exists(self._getGainNormalizedMarker())):
             # Adding a step to normalize the gain (only one)
             normStepId = self._insertFunctionStep('normalizeGainStep',
                                                   prerequisites=self.convertCIStep)
             # adding normStep as dependency for all other steps
             self.convertCIStep.append(normStepId)
 
-        if not hasattr(self, 'estimatedIds'):
-            self.estimatedIds = []
-        if not hasattr(self, 'estimatedResIds'):
-            self.estimatedResIds = []
+        # On Resume, insertedDict resets to {} the same as on a fresh run,
+        # so these must be reconstructed from the real, persisted gain
+        # outputs (evidence) rather than always starting empty.
+        self._restoreEstimatedIds('estimatedIds', OUTPUT_ESTIMATED_GAINS)
+        self._restoreEstimatedIds('estimatedResIds', OUTPUT_RESIDUAL_GAINS)
 
         # For each movie insert the step to process it
         for movie in inputMovies:
@@ -499,6 +502,7 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
 
         oriGain.setData(oriArray)
         oriGain.write(self.getFinalGainPath())
+        open(self._getGainNormalizedMarker(), 'w').close()
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
@@ -608,7 +612,7 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
         if getattr(self, 'finished', False):
             return
 
-        doneIds = set(self._readDoneList())
+        doneIds = self._getAllDoneIds()
         newDone = [m.clone() for m in self.listOfMovies if int(m.getObjId()) not in doneIds and self._isMovieDone(m)]
 
         allDone = len(doneIds) + len(newDone)
@@ -650,9 +654,6 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
                 movieIds.add(movie.getObjId())
         self._updateOutputSet(OUTPUT_MOVIES, moviesSet, streamMode)
 
-        if newDone:
-            self._writeDoneList(newDone)
-
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
@@ -661,6 +662,26 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
     @staticmethod
     def _getOutputIds(outputSet):
         return set(outputSet.getIdSet()) if outputSet.getSize() else set()
+
+    def _getAllDoneIds(self):
+        outputMovies = getattr(self, OUTPUT_MOVIES, None)
+        if outputMovies is None:
+            return set()
+        return self._getOutputIds(outputMovies)
+
+    def _isOutputAlreadyPublished(self, outputName):
+        outputSet = getattr(self, outputName, None)
+        return outputSet is not None and outputSet.getSize() > 0
+
+    def _getGainNormalizedMarker(self):
+        return self._getExtraPath("GAIN_NORMALIZED.TXT")
+
+    def _restoreEstimatedIds(self, attrName, outputName):
+        if hasattr(self, attrName):
+            return
+        outputSet = getattr(self, outputName, None)
+        setattr(self, attrName,
+                list(self._getOutputIds(outputSet)) if outputSet is not None else [])
 
     def updateGainsOutput(self, movie, imgSet, imageFile):
         movieId = movie.getObjId()

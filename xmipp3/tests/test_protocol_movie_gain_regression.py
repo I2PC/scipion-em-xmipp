@@ -7,6 +7,9 @@
 # *
 # *****************************************************************************
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
@@ -15,6 +18,25 @@ from xmipp3.tests.streaming_test_utils import (
     FreshOutputSetProbe,
     LogicalOutputSetProbe,
 )
+
+
+class _FakeFirstMovie:
+    def getObjDict(self, includeBasic=True):
+        return {}
+
+
+class _FakeMoviesList:
+    """ Minimal stand-in supporting both getFirstItem() (used to seed the
+    one-time orientation step) and iteration (used for per-movie steps). """
+
+    def __init__(self, items=None):
+        self._items = items or []
+
+    def getFirstItem(self):
+        return self._items[0] if self._items else _FakeFirstMovie()
+
+    def __iter__(self):
+        return iter(self._items)
 
 
 class _FakeMovie:
@@ -110,21 +132,25 @@ class TestXmippMovieGainRegression(BaseTest):
     def testFreshOutputSetDoesNotQueryIds(self):
         self.assertEqual(set(), XmippProtMovieGain._getOutputIds(_FreshOutputSet()))
 
-    def testOutputsAreIdempotentAndCheckpointIsLast(self):
+    def testOutputsAreIdempotentWithoutDoneAllSidecar(self):
+        # Regression test: done-tracking must come from the real,
+        # persisted outputMovies Set, not from a DONE_all.TXT sidecar -
+        # the append itself is already id-deduped against the real Sets,
+        # so the sidecar was only ever a redundant checkpoint.
         prot = self._newProtocol()
         movie = _FakeMovie(1)
         prot.listOfMovies = [movie]
         prot.streamClosed = False
         prot._isMovieDone = lambda movie: True
-        prot._readDoneList = lambda: []
         prot.doGainProcess = lambda movieId: True
         prot.getEstimatedGainPath = lambda movieId: 'estimated_%d.xmp' % movieId
         prot.getResidualGainPath = lambda movieId: 'residual_%d.xmp' % movieId
         prot._getFirstJoinStep = lambda: None
+        prot.outputMovies = _FakeOutputSet()
 
         estimated = _FakeOutputSet({1})
         residual = _FakeOutputSet()
-        movies = _FakeOutputSet()
+        movies = prot.outputMovies
         events = []
 
         def loadOutputSet(SetClass, baseName, fixGain=False):
@@ -136,14 +162,123 @@ class TestXmippMovieGainRegression(BaseTest):
 
         prot._loadOutputSet = loadOutputSet
         prot._updateOutputSet = lambda outputName, outputSet, state: events.append(outputName)
-        prot._writeDoneList = lambda done: events.append('done')
+        prot._readDoneList = lambda: (_ for _ in ()).throw(
+            AssertionError('DONE_all.TXT must not be used as durable state.')
+        )
+        prot._writeDoneList = lambda done: (_ for _ in ()).throw(
+            AssertionError('DONE_all.TXT must not be written.')
+        )
 
         prot._checkNewOutput()
 
         self.assertEqual([], estimated.appended)
         self.assertEqual([1], residual.appended)
         self.assertEqual([1], movies.appended)
-        self.assertEqual(['estimatedGains', 'residualGains', 'outputMovies', 'done'], events)
+        self.assertEqual(['estimatedGains', 'residualGains', 'outputMovies'], events)
+
+    def testGetAllDoneIdsReadsRealOutputMovies(self):
+        prot = self._newProtocol()
+        prot.outputMovies = _FakeOutputSet({1, 2})
+
+        self.assertEqual({1, 2}, prot._getAllDoneIds())
+
+    def testGetAllDoneIdsIsEmptyWithoutOutputYet(self):
+        prot = self._newProtocol()
+
+        self.assertEqual(set(), prot._getAllDoneIds())
+
+    def testOrientationStepIsNotReinsertedWhenAlreadyPublished(self):
+        # Regression test: on Resume, insertedDict resets to {} just like
+        # on a fresh run, so the "insert once" gate alone cannot tell them
+        # apart. Restoring must rely on real evidence - the orientedGain
+        # output already existing - not on isContinued() (which defaults
+        # to MODE_RESUME even on a genuinely fresh launch).
+        prot = self._newProtocol()
+        prot.estimateOrientation = SimpleNamespace(get=lambda: True)
+        prot.normalizeGain = SimpleNamespace(get=lambda: False)
+        prot.convertCIStep = []
+        prot.orientedGain = _FakeOutputSet({1})
+
+        inserted = []
+        prot._insertFunctionStep = (
+            lambda name, *args, **kwargs: inserted.append(name) or len(inserted)
+        )
+
+        prot._insertNewMoviesSteps({}, _FakeMoviesList())
+
+        self.assertNotIn('estimateOrientationStep', inserted)
+
+    def testOrientationStepIsInsertedWhenNotYetPublished(self):
+        prot = self._newProtocol()
+        prot.estimateOrientation = SimpleNamespace(get=lambda: True)
+        prot.normalizeGain = SimpleNamespace(get=lambda: False)
+        prot.convertCIStep = []
+
+        inserted = []
+        prot._insertFunctionStep = (
+            lambda name, *args, **kwargs: inserted.append(name) or len(inserted)
+        )
+
+        prot._insertNewMoviesSteps({}, _FakeMoviesList())
+
+        self.assertIn('estimateOrientationStep', inserted)
+
+    def testNormalizeStepIsNotReinsertedWhenMarkerExists(self):
+        prot = self._newProtocol()
+        prot.estimateOrientation = SimpleNamespace(get=lambda: False)
+        prot.normalizeGain = SimpleNamespace(get=lambda: True)
+        prot.convertCIStep = []
+
+        inserted = []
+        prot._insertFunctionStep = (
+            lambda name, *args, **kwargs: inserted.append(name) or len(inserted)
+        )
+
+        with patch(
+                'xmipp3.protocols.protocol_movie_gain.os.path.exists',
+                return_value=True,
+        ):
+            prot._insertNewMoviesSteps({}, _FakeMoviesList())
+
+        self.assertNotIn('normalizeGainStep', inserted)
+
+    def testNormalizeStepIsInsertedWhenMarkerAbsent(self):
+        prot = self._newProtocol()
+        prot.estimateOrientation = SimpleNamespace(get=lambda: False)
+        prot.normalizeGain = SimpleNamespace(get=lambda: True)
+        prot.convertCIStep = []
+
+        inserted = []
+        prot._insertFunctionStep = (
+            lambda name, *args, **kwargs: inserted.append(name) or len(inserted)
+        )
+
+        with patch(
+                'xmipp3.protocols.protocol_movie_gain.os.path.exists',
+                return_value=False,
+        ):
+            prot._insertNewMoviesSteps({}, _FakeMoviesList())
+
+        self.assertIn('normalizeGainStep', inserted)
+
+    def testEstimatedIdsAreRestoredFromRealOutputOnResume(self):
+        # Regression test: estimatedIds/estimatedResIds must be
+        # reconstructed from the real, persisted gain outputs when
+        # missing (e.g. after a genuine Resume), not left empty - which
+        # would otherwise cause already-estimated gains to be silently
+        # recomputed.
+        prot = self._newProtocol()
+        prot.estimatedGains = _FakeOutputSet({1, 2})
+        prot.residualGains = _FakeOutputSet({1})
+        prot.convertCIStep = []
+        prot.estimateOrientation = SimpleNamespace(get=lambda: False)
+        prot.normalizeGain = SimpleNamespace(get=lambda: False)
+        prot._insertFunctionStep = lambda *args, **kwargs: 1
+
+        prot._insertNewMoviesSteps({}, _FakeMoviesList())
+
+        self.assertEqual({1, 2}, set(prot.estimatedIds))
+        self.assertEqual({1}, set(prot.estimatedResIds))
 
 # Finalization regression: the executor performs one last stepsCheck callback
 # after it has already found no pending steps.
