@@ -17,7 +17,6 @@ from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_movie_alignment_consensus import (
     ACCEPTED,
-    DISCARDED,
     XmippProtConsensusMovieAlignment,
 )
 from xmipp3.tests.streaming_test_utils import (
@@ -172,37 +171,16 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         self.assertTrue(movieSet1.closed)
         self.assertTrue(movieSet2.closed)
 
-    def testResumeRestoresPersistedOutputsAndDropsStaleSelections(self):
+    def testResumeRestoresPersistedOutputsFromRealSets(self):
+        # Regression test: Resume must reconstruct processedDict purely
+        # from the real, persisted output Sets - no sidecar DONE files.
         prot = self._newProtocol()
-
-        doneAcceptedFn = self.proj.getTmpPath('movie-consensus-done-accepted.txt')
-        doneDiscardedFn = self.proj.getTmpPath('movie-consensus-done-discarded.txt')
-        selectionAcceptedFn = self.proj.getTmpPath('movie-consensus-selection-accepted.txt')
-        selectionDiscardedFn = self.proj.getTmpPath('movie-consensus-selection-discarded.txt')
-
-        with open(doneAcceptedFn, 'w') as f:
-            f.write('1\n3\n')
-        with open(doneDiscardedFn, 'w') as f:
-            f.write('2\n')
-        with open(selectionAcceptedFn, 'w') as f:
-            f.write('1 T\n99 T\n1 T\n3 T\n')
-        with open(selectionDiscardedFn, 'w') as f:
-            f.write('2 F\n88 F\n')
-
-        prot._getCertainDone = (
-            lambda label: doneAcceptedFn if label == ACCEPTED else doneDiscardedFn
-        )
-        prot._getMovieSelecFileAccepted = lambda: selectionAcceptedFn
-        prot._getMovieSelecFileDiscarded = lambda: selectionDiscardedFn
+        prot.outputMovies = _FakeOutputSet(ids=[1, 3])
+        prot.outputMoviesDiscarded = _FakeOutputSet(ids=[2])
 
         prot._restoreStreamingState()
 
         self.assertEqual([1, 2, 3], prot.processedDict)
-
-        with open(selectionAcceptedFn) as f:
-            self.assertEqual(['1 T\n', '3 T\n'], f.readlines())
-        with open(selectionDiscardedFn) as f:
-            self.assertEqual(['2 F\n'], f.readlines())
 
     def testResumeSkipsOnlyMoviesWithPersistedOutputs(self):
         prot = self._newProtocol()
@@ -210,13 +188,13 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot.allMovies2 = {1: None}
         prot._originalRunMode = MODE_RESUME
         prot._isMovieOutputDone = lambda movieId: True
+        prot.info = Mock()
 
-        with patch(
-            'xmipp3.protocols.protocol_movie_alignment_consensus.pwutils.cleanPath'
-        ) as cleanPath:
-            prot.alignmentCorrelationMovieStep(1)
+        prot.alignmentCorrelationMovieStep(1)
 
-        cleanPath.assert_not_called()
+        prot.info.assert_called_once_with(
+            "Skipping movie with ID: 1, output already persisted"
+        )
 
     def testRestartDoesNotReusePersistedOutputCheckpoint(self):
         prot = self._newProtocol()
@@ -224,13 +202,13 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot.allMovies2 = {1: None}
         prot._originalRunMode = MODE_RESTART
         prot._isMovieOutputDone = lambda movieId: True
+        prot.info = Mock()
 
-        with patch(
-            'xmipp3.protocols.protocol_movie_alignment_consensus.pwutils.cleanPath'
-        ) as cleanPath:
-            prot.alignmentCorrelationMovieStep(1)
+        prot.alignmentCorrelationMovieStep(1)
 
-        cleanPath.assert_called_once()
+        prot.info.assert_called_once_with(
+            'AlignmentCorrelationMovieStep movie1 or movie2 are None'
+        )
 
     def testNanCorrelationIsClassifiedAsDiscarded(self):
         prot = self._newProtocol()
@@ -240,22 +218,54 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot.allMovies1 = {1: _FakeAlignedMovie(1)}
         prot.allMovies2 = {1: _FakeAlignedMovie(1)}
         prot.stats = {}
-
-        acceptedFn = self.proj.getTmpPath('movie-consensus-nan-accepted.txt')
-        discardedFn = self.proj.getTmpPath('movie-consensus-nan-discarded.txt')
-        doneFn = self.proj.getTmpPath('movie-consensus-nan-done.txt')
-
-        prot._getMovieSelecFileAccepted = lambda: acceptedFn
-        prot._getMovieSelecFileDiscarded = lambda: discardedFn
-        prot._getMovieDone = lambda movieId: doneFn
+        prot._decidedAccepted = []
+        prot._decidedDiscarded = []
         prot._store = lambda *args, **kwargs: None
 
         nanCorrelation = np.array([[1.0, np.nan], [np.nan, 1.0]])
         with patch('xmipp3.protocols.protocol_movie_alignment_consensus.np.corrcoef', return_value=nanCorrelation):
             prot.alignmentCorrelationMovieStep(1)
 
-        self.assertEqual([], prot._readtMovieId(True))
-        self.assertEqual([1], prot._readtMovieId(False))
+        self.assertEqual([], prot._decidedAccepted)
+        self.assertEqual([1], prot._decidedDiscarded)
+
+    def testHighCorrelationIsClassifiedAsAccepted(self):
+        prot = self._newProtocol()
+        prot._originalRunMode = MODE_RESTART
+        prot.minRangeShift.set(0)
+        prot.minConsCorrelation.set(0.75)
+        prot.allMovies1 = {1: _FakeAlignedMovie(1)}
+        prot.allMovies2 = {1: _FakeAlignedMovie(1)}
+        prot.stats = {}
+        prot._decidedAccepted = []
+        prot._decidedDiscarded = []
+        prot._store = lambda *args, **kwargs: None
+
+        highCorrelation = np.array([[1.0, 0.99], [0.99, 1.0]])
+        with patch('xmipp3.protocols.protocol_movie_alignment_consensus.np.corrcoef', return_value=highCorrelation):
+            prot.alignmentCorrelationMovieStep(1)
+
+        self.assertEqual([1], prot._decidedAccepted)
+        self.assertEqual([], prot._decidedDiscarded)
+
+    def testMovieWithinRangeShiftThresholdIsRecordedAsAccepted(self):
+        # The "flat trajectory, omit from consensus" branch must record
+        # its decision through the same pending-list mechanism as the
+        # normal accept/discard path.
+        prot = self._newProtocol()
+        prot._originalRunMode = MODE_RESTART
+        prot.minRangeShift.set(2)
+        prot.allMovies1 = {1: _FakeAlignedMovie(1)}
+        prot.allMovies2 = {1: _FakeAlignedMovie(1)}
+        prot.stats = {}
+        prot._decidedAccepted = []
+        prot._decidedDiscarded = []
+        prot._store = lambda *args, **kwargs: None
+
+        prot.alignmentCorrelationMovieStep(1)
+
+        self.assertEqual([1], prot._decidedAccepted)
+        self.assertEqual([], prot._decidedDiscarded)
 
     def testDirectMovieSetPointerResolvesParentMicrographs(self):
         prot = self._newProtocol()
@@ -313,59 +323,52 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
             logicalOutput.enableAppendCalls,
         )
 
-    def testOutputCheckpointIsWrittenAfterOutputSetsAreUpdated(self):
+    def testGetAllDoneIdsReflectsPublishedOutputImmediately(self):
+        # Regression test: done-tracking now reads the real output Sets
+        # directly, so there is no separate checkpoint step that could get
+        # out of order with publishing - a movie becomes "done" exactly
+        # when (and only when) it is actually persisted into the output.
         prot = self._newProtocol()
         prot.allMovies1 = {1: object()}
         prot.allMovies2 = {1: object()}
         prot.isStreamClosed = True
         prot.samplingRate = 1.0
         prot.acquisition = _FakeAcquisition()
+        prot._decidedAccepted = [1]
+        prot._decidedDiscarded = []
 
-        prot._readCertainDoneList = lambda label: []
-        prot._readtMovieId = lambda accepted: [1] if accepted else []
-        prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet()
+        prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet(ids=[1])
         prot.fillOutput = lambda *args, **kwargs: None
         prot._getFirstJoinStep = lambda: None
+        prot._defineTransformRelation = lambda *args: None
 
-        events = []
-        prot._updateOutputSet = (
-            lambda name, outputSet, streamMode: events.append(('update', name))
-        )
-        prot._defineTransformRelation = (
-            lambda *args: events.append(('relation', None))
-        )
-        prot._writeCertainDoneList = (
-            lambda movieId, label: events.append(('checkpoint', label, movieId))
-        )
+        def realUpdateOutputSet(name, outputSet, streamMode):
+            setattr(prot, name, outputSet)
 
-        with patch(
-            'xmipp3.protocols.protocol_movie_alignment_consensus.os.path.exists',
-            return_value=False
-        ):
-            prot._checkNewOutput()
+        prot._updateOutputSet = realUpdateOutputSet
 
-        updateIndexes = [
-            index for index, event in enumerate(events) if event[0] == 'update'
-        ]
-        checkpointIndex = next(
-            index for index, event in enumerate(events) if event[0] == 'checkpoint'
-        )
+        self.assertEqual(([], []), prot._getAllDoneIds())
 
-        self.assertEqual(2, len(updateIndexes))
-        self.assertGreater(checkpointIndex, max(updateIndexes))
+        prot._checkNewOutput()
 
-    def testExistingOutputRebuildsRelationBeforeCheckpoint(self):
+        doneAccepted, doneDiscarded = prot._getAllDoneIds()
+        self.assertEqual([1], doneAccepted)
+        self.assertEqual([], doneDiscarded)
+
+    def testExistingOutputRebuildsRelation(self):
         prot = self._newProtocol()
         prot.allMovies1 = {1: object()}
         prot.allMovies2 = {1: object()}
         prot.isStreamClosed = True
         prot.samplingRate = 1.0
         prot.acquisition = _FakeAcquisition()
-        prot.outputMovies = _FakeOutputSet(ids=[1])
-        prot.outputMicrographs = _FakeOutputSet(ids=[1])
+        # These attributes already exist (e.g. from a prior movie) but do
+        # not yet contain movie 1 - it is still a pending decision.
+        prot.outputMovies = _FakeOutputSet(ids=[])
+        prot.outputMicrographs = _FakeOutputSet(ids=[])
+        prot._decidedAccepted = [1]
+        prot._decidedDiscarded = []
 
-        prot._readCertainDoneList = lambda label: []
-        prot._readtMovieId = lambda accepted: [1] if accepted else []
         prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet(ids=[1])
         prot.fillOutput = lambda *args, **kwargs: None
         prot._getFirstJoinStep = lambda: None
@@ -377,16 +380,12 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         )
         prot._updateOutputSet = lambda name, outputSet, streamMode: events.append(('update', name))
         prot._defineTransformRelation = lambda *args: events.append(('relation', None))
-        prot._writeCertainDoneList = lambda movieId, label: events.append(('checkpoint', label, movieId))
 
         prot._checkNewOutput()
 
-        relationIndex = next(index for index, event in enumerate(events) if event[0] == 'relation')
-        checkpointIndex = next(index for index, event in enumerate(events) if event[0] == 'checkpoint')
-
-        self.assertLess(relationIndex, checkpointIndex)
         self.assertIn(('delete-relations', None), events)
         self.assertIn(('commit-relations', None), events)
+        self.assertIn(('relation', None), events)
 
     def testFillOutputIsIdempotentAfterPartialPersistence(self):
         prot = self._newProtocol()
@@ -405,11 +404,6 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot._loadInputMovieSet = lambda fn: inputMovies
         prot._loadInputMicrographSet = lambda fn: inputMics
         prot._getEnable = lambda movieId: True
-        prot._writeCertainDoneList = (
-            lambda *args: (_ for _ in ()).throw(
-                AssertionError('Output checkpoint must not be written from fillOutput.')
-            )
-        )
 
         movieOutput = _FakeOutputSet(ids=[1])
         micOutput = _FakeOutputSet()
@@ -451,18 +445,6 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         self.assertEqual([1], movieOutput.appended)
         self.assertEqual([1], micOutput.appended)
 
-    def testSelectionReaderDeduplicatesMovieIds(self):
-        prot = self._newProtocol()
-        selectionFn = self.proj.getTmpPath('movie-consensus-selection-duplicates.txt')
-
-        with open(selectionFn, 'w') as f:
-            f.write('1 T\n2 T\n1 T\n2 T\n')
-
-        prot._getMovieSelecFileAccepted = lambda: selectionFn
-
-        self.assertEqual([1, 2], prot._readtMovieId(True))
-
-
     def testFinishedCheckDoesNotReloadOutputsWithoutNewMovies(self):
         """The final streaming check must not reopen already persisted outputs."""
         prot = self._newProtocol()
@@ -471,11 +453,10 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot.isStreamClosed = True
         prot.samplingRate = 1.0
         prot.acquisition = _FakeAcquisition()
+        prot.outputMovies = _FakeOutputSet(ids=[1])
+        prot._decidedAccepted = [1]
+        prot._decidedDiscarded = []
 
-        prot._readCertainDoneList = (
-            lambda label: [1] if label == ACCEPTED else []
-        )
-        prot._readtMovieId = lambda accepted: [1] if accepted else []
         prot._loadOutputSet = Mock(return_value=_FakeOutputSet(ids=[1]))
         prot.fillOutput = Mock()
         prot._updateOutputSet = Mock()

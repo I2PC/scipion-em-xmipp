@@ -37,7 +37,6 @@ from pwem.objects import SetOfMovies, SetOfMicrographs, MovieAlignment, Image
 from pyworkflow.object import Set
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL, Protocol
-import pyworkflow.utils as pwutils
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME
 from xmipp3.convert import getScipionObj
@@ -381,6 +380,11 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             raise RuntimeError('Could not resolve the micrographs produced by the reference movie alignment.')
 
         self.stats = {}
+        # Decisions computed by worker steps, pending publication into the
+        # real output Sets. Snapshotted (never drained) in _checkNewOutput,
+        # so a decision is never lost even if a poll's publish step fails.
+        self._decidedAccepted = []
+        self._decidedDiscarded = []
         self.isStreamClosed = self.inputMovies1.get().isStreamClosed() and \
                               self.inputMovies2.get().isStreamClosed()
         self.samplingRate = self.inputMovies1.get().getSamplingRate()
@@ -389,49 +393,35 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                            in self._loadInputMovieSet(self.movieFn1).iterItems()}
         self.allMovies2 = {movie.getObjId(): movie.clone() for movie
                            in self._loadInputMovieSet(self.movieFn2).iterItems()}
-        pwutils.makePath(self._getExtraPath('DONE'))
 
         if self.runMode.get() == MODE_RESUME:
             self._restoreStreamingState()
 
     def _restoreStreamingState(self):
-        doneAccepted = set(self._readCertainDoneList(ACCEPTED))
-        doneDiscarded = set(self._readCertainDoneList(DISCARDED))
+        # The real output Sets are the durable source of truth for what
+        # was already processed - no sidecar file needed. Pending
+        # decisions (_decidedAccepted/_decidedDiscarded) start empty on
+        # every fresh process, so there is nothing stale to prune here:
+        # any movie not yet reflected in the outputs is simply not in
+        # processedDict, and _checkNewInput will naturally re-schedule it.
+        doneAccepted, doneDiscarded = self._getAllDoneIds()
+        self.processedDict = sorted(set(doneAccepted) | set(doneDiscarded))
 
-        self.processedDict = sorted(doneAccepted | doneDiscarded)
-
-        self._filterSelectionFile(self._getMovieSelecFileAccepted(), doneAccepted)
-        self._filterSelectionFile(self._getMovieSelecFileDiscarded(), doneDiscarded)
-
-    def _filterSelectionFile(self, fn, doneIds):
-        if not os.path.exists(fn):
-            return
-
-        doneIds = set(doneIds)
-        keptLines = []
-        seen = set()
-
-        with open(fn) as f:
-            for line in f:
-                parts = line.strip().split()
-                if not parts:
-                    continue
-
-                try:
-                    movieId = int(parts[0])
-                except ValueError:
-                    continue
-
-                if movieId in doneIds and movieId not in seen:
-                    keptLines.append(line if line.endswith('\n') else line + '\n')
-                    seen.add(movieId)
-
-        with open(fn, 'w') as f:
-            f.writelines(keptLines)
+    def _getAllDoneIds(self):
+        """ Movie ids already reflected in the real, persisted outputs. """
+        acceptedIds = (
+            list(self.outputMovies.getIdSet())
+            if hasattr(self, 'outputMovies') else []
+        )
+        discardedIds = (
+            list(self.outputMoviesDiscarded.getIdSet())
+            if hasattr(self, 'outputMoviesDiscarded') else []
+        )
+        return acceptedIds, discardedIds
 
     def _isMovieOutputDone(self, movieId):
-        return movieId in self._readCertainDoneList(ACCEPTED) or \
-               movieId in self._readCertainDoneList(DISCARDED)
+        acceptedIds, discardedIds = self._getAllDoneIds()
+        return movieId in acceptedIds or movieId in discardedIds
 
     def _getFirstJoinStepName(self):
         # This function will be used for streaming, to check which is
@@ -498,15 +488,11 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     def alignmentCorrelationMovieStep(self, movieId):
         movie1 = self.allMovies1.get(movieId)
         movie2 = self.allMovies2.get(movieId)
-        doneFn = self._getMovieDone(movieId)
 
         if getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME and \
            self._isMovieOutputDone(movieId):
             self.info("Skipping movie with ID: %s, output already persisted" % movieId)
             return
-
-        # Clean old finished files
-        pwutils.cleanPath(doneFn)
 
         if (movie1 is None) or (movie2 is None):
             self.info('AlignmentCorrelationMovieStep movie1 or movie2 are None')
@@ -547,9 +533,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             self.info('Root Mean Squared Error %f' % rmse_cart)
             self.info('General Corr min(corrX, corrY) %f' % corr_cart)
 
-            fn = self._getMovieSelecFileAccepted()
-            with open(fn, 'a') as f:
-                f.write('%d T\n' % movieId)
+            with self._lock:
+                self._decidedAccepted.append(movieId)
 
             stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
                          'max_error': maxe_cart, 'rmse_error': rmse_cart, 'S1_cart': S1_cart, 'S2_p_cart': S2_p_cart}
@@ -596,31 +581,29 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
             if accepted:
                 self.info('Movie with id %d has a correlated alignment shift trajectory' % movieId)
-                fn = self._getMovieSelecFileAccepted()
-                with open(fn, 'a') as f:
-                    f.write('%d T\n' % movieId)
+                with self._lock:
+                    self._decidedAccepted.append(movieId)
             else:
                 self.info('Movie with id %d has discrepancy in the alignment with correlation %f' % (movieId, corr_cart))
-                fn = self._getMovieSelecFileDiscarded()
-                with open(fn, 'a') as f:
-                    f.write('%d F\n' % movieId)
+                with self._lock:
+                    self._decidedDiscarded.append(movieId)
 
             stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
                          'max_error': maxe_cart, 'rmse_error': rmse_cart, 'S1_cart': S1_cart, 'S2_p_cart': S2_p_cart}
 
             self.stats[movieId] = stats_loc
             self._store()
-        # Mark this movie as finished
-        open(doneFn, 'w').close()
 
     def _checkNewOutput(self):
         """ Check for already selected movies and update the output set. """
-        # Load previously done items (from text file)
-        doneListDiscarded = self._readCertainDoneList(DISCARDED)
-        doneListAccepted = self._readCertainDoneList(ACCEPTED)
-        # Check for newly done items
-        movieListIdAccepted = self._readtMovieId(True)
-        movieListIdDiscarded = self._readtMovieId(False)
+        # The real output Sets are the durable source of truth for what's
+        # already published.
+        doneListAccepted, doneListDiscarded = self._getAllDoneIds()
+        # Snapshot (not drain) the pending worker decisions, so a decision
+        # is retried on the next poll if this one fails before publishing.
+        with self._lock:
+            movieListIdAccepted = list(self._decidedAccepted)
+            movieListIdDiscarded = list(self._decidedDiscarded)
 
         newDoneAccepted = [movieId for movieId in movieListIdAccepted
                            if movieId not in doneListAccepted]
@@ -678,14 +661,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
         if acceptedUpdated or discardedUpdated:
             self._refreshOutputRelations()
-
-        if acceptedUpdated:
-            for movieId in newDoneAccepted:
-                self._writeCertainDoneList(movieId, ACCEPTED)
-
-        if discardedUpdated:
-            for movieId in newDoneDiscarded:
-                self._writeCertainDoneList(movieId, DISCARDED)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -845,33 +820,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
 
 
     # ------------------------------------ Utils functions ------------------------------------
-    def _isMovieDone(self, id):
-        """ A movie is done if the marker file exists. """
-        return os.path.exists(self._getMovieDone(id))
-
-    def _getMovieDone(self, id):
-        """ Return the file that is used as a flag of termination. """
-        return self._getExtraPath('DONE', 'movie_%06d.TXT' % id)
-
-    def _readDoneList(self):
-        """ Read from a file the id's of the items that have been done. """
-        doneFile = self._getAllDone()
-        doneList = []
-        # Check what items have been previously done
-        if os.path.exists(doneFile):
-            with open(doneFile) as f:
-                doneList += [int(line.strip()) for line in f]
-        return doneList
-
-    def _getAllDone(self):
-        return self._getExtraPath('DONE_all.TXT')
-
-    def _writeDoneList(self, partList):
-        """ Write to a text file the items that have been done. """
-        with open(self._getAllDone(), 'a') as f:
-            for part in partList:
-                f.write('%d\n' % part.getObjId())
-
     def _getReferenceAlignmentProtocol(self):
         prot1 = self.inputMovies1.getObjValue()
         if isinstance(prot1, Protocol):
@@ -901,23 +849,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                 return micSet.getFileName()
 
         return None
-
-    def _readCertainDoneList(self, label):
-        """ Read from a text file the id's of the items
-        that have been done. """
-        doneFile = self._getCertainDone(label)
-        doneList = []
-        # Check what items have been previously done
-        if os.path.exists(doneFile):
-            with open(doneFile) as f:
-                doneList += [int(line.strip()) for line in f]
-        return doneList
-
-    def _writeCertainDoneList(self, movieId, label):
-        """ Write to a text file the items that have been done. """
-        doneFile = self._getCertainDone(label)
-        with open(doneFile, 'a') as f:
-            f.write('%d\n' % movieId)
 
     def _createAndSaveTrajectoriesPlot(self, movieId, first, pixSize):
         """ Write to a text file the items that have been done. """
@@ -997,49 +928,15 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         """ Write to a text file the items that have been done. """
         return self._getExtraPath('global_trajectories_%d' %movieId+'_plot_cart.png')
 
-    def _getCertainDone(self, label):
-        return self._getExtraPath('DONE_'+label+'.TXT')
-
-    def _getMovieSelecFileAccepted(self):
-        return self._getExtraPath('selection-movie-accepted.txt')
-
-    def _getMovieSelecFileDiscarded(self):
-        return self._getExtraPath('selection-movie-discarded.txt')
-
-    def _readtMovieId(self, accepted):
-        if accepted:
-            fn = self._getMovieSelecFileAccepted()
-        else:
-            fn = self._getMovieSelecFileDiscarded()
-
-        moviesList = []
-        seen = set()
-
-        if os.path.exists(fn):
-            with open(fn) as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if not parts:
-                        continue
-
-                    movieId = int(parts[0])
-                    if movieId not in seen:
-                        moviesList.append(movieId)
-                        seen.add(movieId)
-
-        return moviesList
-
     def _getEnable(self, movieId):
-        fn = self._getMovieSelecFileAccepted()
-        # Check what items have been previously done
-        if os.path.exists(fn):
-            with open(fn) as f:
-                for line in f:
-                    if movieId == int(line.strip().split()[0]):
-                        if line.strip().split()[1] == 'T':
-                            return True
-                        else:
-                            return False
+        # Preserves the pre-existing contract: True when the worker
+        # decided this movie was accepted, None otherwise (callers only
+        # ever query this for a movie already known to be decided one
+        # way or the other).
+        with self._lock:
+            if movieId in self._decidedAccepted:
+                return True
+        return None
 
 def setAttribute(obj, label, value):
     if value is None:
