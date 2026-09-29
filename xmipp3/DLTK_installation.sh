@@ -69,4 +69,20 @@ for env in $ENV_LIST; do
   conda env export -n "$env" > "${DLTK_DIR}/${env}-1.yml"
 done
 
-echo "✔ All environments processed successfully"
+echo "======================================"
+echo " DeepLearningToolkit installation finished"
+echo "======================================"
+echo
+echo "Installed Conda environments:"
+for env in $ENV_LIST; do
+  echo "  - $env"
+done
+
+echo
+echo "Environment YAML files exported to:"
+echo "  ${DLTK_DIR}"
+echo
+echo "If the Xmipp Deep Learning models have not been downloaded yet,"
+echo "run the following command:"
+echo
+echo "${SCIPION_DIR}scipion3 run ${XMIPP_DIR}/xmipp getModels"

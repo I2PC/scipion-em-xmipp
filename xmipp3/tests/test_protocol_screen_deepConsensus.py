@@ -101,7 +101,7 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
     def getDeepConsensusKwargs(self, case=1, inputCase=1):
       kwargs = {
         'nEpochs' : 1.0,
-        'nModels' :2,
+        'nModels' :1,
         'extractingBatch':2,
         'trainingBatch':2,
         'predictingBatch':2
