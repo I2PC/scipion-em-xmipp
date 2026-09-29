@@ -28,7 +28,6 @@
 # *
 # **************************************************************************
 
-import os
 from os.path import exists
 
 import pwem.emlib.metadata as md
@@ -467,23 +466,6 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 self._getNormalizeArgs(),
                 self.doBorders.get()]
 
-    def _getInputSignature(self):
-        inputFiles = [self.inputCoordinates.get().getFileName(), self.getInputMicrographs().getFileName()]
-        if self._useCTF():
-            inputFiles.append(self.ctfRelations.get().getFileName())
-
-        signature = []
-        for fileName in dict.fromkeys(inputFiles):
-            for suffix in ('', '-wal'):
-                path = fileName + suffix
-                if exists(path):
-                    try:
-                        stat = os.stat(path)
-                        signature.append((path, stat.st_mtime_ns, stat.st_size))
-                    except OSError:
-                        pass
-        return tuple(signature)
-
     def _stepsCheck(self):
         if getattr(self, 'finished', False):
             return
@@ -552,8 +534,8 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         if getattr(self, 'finished', False):
             return
 
-        doneIds = set(self._readDoneList())
-        processedMics = [mic for mic in self.micDict.values() if mic.getObjId() in doneIds or self._isMicDone(mic)]
+        outputMicIds = self._getOutputMicIds()
+        processedMics = [mic for mic in self.micDict.values() if mic.getObjId() in outputMicIds or self._isMicDone(mic)]
         inputLen = len(self.micDict)
         streamClosed = self._isStreamClosed()
         allKnownProcessed = len(processedMics) == inputLen
@@ -561,22 +543,17 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         self.finished = streamClosed and allKnownProcessed and allMicsProcessed
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-        outputMicIds = self._getOutputMicIds()
         newOutput = [mic for mic in processedMics if mic.getObjId() not in outputMicIds]
-        pendingDone = [mic for mic in processedMics if mic.getObjId() not in doneIds]
 
         if newOutput:
             self._updateOutputPartSet(newOutput, streamMode)
             outputMicIds.update(mic.getObjId() for mic in newOutput)
         elif self.finished:
             self._updateOutputPartSet([], Set.STREAM_CLOSED)
-        elif not pendingDone:
+        else:
             if allKnownProcessed:
                 self._streamingSleepOnWait()
             return
-
-        if pendingDone:
-            self._writeDoneList(pendingDone)
 
         if self.finished:
             outputStep = self._getFirstJoinStep()

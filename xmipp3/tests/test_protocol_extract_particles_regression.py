@@ -96,10 +96,6 @@ class _InputHarness:
         self.outputStep = _OutputStep()
         self.updated = 0
         self.loadCalls = 0
-        self.signature = ('initial',)
-
-    def _getInputSignature(self):
-        return self.signature
 
     def _loadInputList(self):
         self.loadCalls += 1
@@ -116,11 +112,10 @@ class _InputHarness:
 
 
 class _OutputHarness:
-    def __init__(self, micIds, processedIds, doneIds, outputIds, streamClosed=False, allMicsProcessed=True):
+    def __init__(self, micIds, processedIds, outputIds, streamClosed=False, allMicsProcessed=True):
         self.events = []
         self.micDict = {mic.getMicName(): mic for mic in [_Mic(objId) for objId in micIds]}
         self.processedIds = set(processedIds)
-        self.doneIds = set(doneIds)
         self.outputParticles = _OutputParts(outputIds) if outputIds is not None else None
         self.streamClosed = streamClosed
         self.allMicsProcessed = allMicsProcessed
@@ -132,7 +127,10 @@ class _OutputHarness:
         return mic.getObjId() in self.processedIds
 
     def _readDoneList(self):
-        return list(self.doneIds)
+        raise AssertionError('DONE_all.TXT must not be used as durable state.')
+
+    def _writeDoneList(self, mics):
+        raise AssertionError('DONE_all.TXT must not be written.')
 
     def _isStreamClosed(self):
         return self.streamClosed
@@ -150,11 +148,6 @@ class _OutputHarness:
         if self.outputParticles is None:
             self.outputParticles = _OutputParts()
         self.outputParticles.micIds.update(ids)
-
-    def _writeDoneList(self, mics):
-        ids = [mic.getObjId() for mic in mics]
-        self.doneIds.update(ids)
-        self.events.append(('checkpoint', ids))
 
     def _getFirstJoinStep(self):
         return self.outputStep
@@ -184,7 +177,7 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
         self.assertEqual(3, coordSet.indexedQueries)
         self.assertEqual(3, len(protocol.coordDict))
 
-    def testCheckNewInputReloadsFreshSnapshotWhenFileSignatureIsUnchanged(self):
+    def testCheckNewInputAlwaysReloadsFreshSnapshot(self):
         protocol = _InputHarness()
 
         extract_particles.XmippProtExtractParticles._checkNewInput(protocol)
@@ -193,40 +186,50 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
         self.assertEqual(
             2,
             protocol.loadCalls,
-            "Streaming input must be refreshed from the logical Set even "
-            "when the backing file signature does not change.",
+            "Streaming input must be refreshed from the logical Set on "
+            "every check, not cached across calls.",
         )
         self.assertEqual(2, protocol.updated)
 
     def testOutputMicIdsAreLoadedOnce(self):
-        protocol = _OutputHarness([1], [1], [1], [1])
+        protocol = _OutputHarness([1], [1], [1])
         self.assertEqual({1}, extract_particles.XmippProtExtractParticles._getOutputMicIds(protocol))
         self.assertEqual({1}, extract_particles.XmippProtExtractParticles._getOutputMicIds(protocol))
         self.assertEqual(1, protocol.outputParticles.uniqueCalls)
 
     def testOpenStreamDoesNotScanAllPickedMicrographs(self):
-        protocol = _OutputHarness([1], [1], [1], [1], streamClosed=False)
+        protocol = _OutputHarness([1], [1], [1], streamClosed=False)
         extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
         self.assertEqual(0, protocol.allMicsProcessedCalls)
 
-    def testOutputIsPersistedBeforeCheckpoint(self):
-        protocol = _OutputHarness([1, 2], [1, 2], [1], [1])
+    def testOutputIsPersistedFromRealOutputSetNotSidecar(self):
+        # Regression test: which mics still need to be flushed to the output
+        # Set must come from the real, persisted outputParticles
+        # (_getOutputMicIds), not from a DONE_all.TXT sidecar -
+        # _readDoneList/_writeDoneList raise in this harness to prove they
+        # are never touched.
+        protocol = _OutputHarness([1, 2], [1, 2], [1])
         extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
-        self.assertEqual([('output', [2], Set.STREAM_OPEN), ('checkpoint', [2])], protocol.events)
+        self.assertEqual([('output', [2], Set.STREAM_OPEN)], protocol.events)
 
-    def testReplayRepairsCheckpointWithoutDuplicateOutput(self):
-        protocol = _OutputHarness([1], [1], [], [1])
+    def testProcessedMicsIncludeMicsAlreadyInPersistedOutputEvenWithoutMarker(self):
+        # Regression test: a mic already reflected in the persisted output
+        # Set must still count as processed even if its worker DONE marker
+        # file is missing - the real output Set is authoritative, exactly
+        # what the DONE_all.TXT sidecar used to (redundantly) guarantee.
+        protocol = _OutputHarness([1], [], [1], streamClosed=True, allMicsProcessed=True)
         extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
-        self.assertEqual([('checkpoint', [1])], protocol.events)
+        self.assertTrue(protocol.finished)
+        self.assertEqual([('output', [], Set.STREAM_CLOSED)], protocol.events)
 
     def testFinishedReplayClosesExistingOutput(self):
-        protocol = _OutputHarness([1], [1], [1], [1], streamClosed=True)
+        protocol = _OutputHarness([1], [1], [1], streamClosed=True)
         extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
         self.assertTrue(protocol.finished)
         self.assertEqual([('output', [], Set.STREAM_CLOSED)], protocol.events)
 
     def testFinishedRequiresAllPickedMicrographs(self):
-        protocol = _OutputHarness([1], [1], [1], [1], streamClosed=True, allMicsProcessed=False)
+        protocol = _OutputHarness([1], [1], [1], streamClosed=True, allMicsProcessed=False)
         extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
         self.assertFalse(protocol.finished)
         self.assertEqual([('sleep',)], protocol.events)

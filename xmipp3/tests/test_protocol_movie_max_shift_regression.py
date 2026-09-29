@@ -8,9 +8,6 @@ from unittest.mock import Mock
 # *
 # *****************************************************************************
 
-import os
-from datetime import datetime
-
 from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
 from pyworkflow.tests import BaseTest, setupTestProject
 
@@ -34,6 +31,15 @@ class _FakeInputSet:
         self._items = items or {}
         self.closed = False
 
+    def loadAllProperties(self):
+        pass
+
+    def getUniqueValues(self, attr, where=None):
+        if where is None:
+            return sorted(self._ids)
+        threshold = int(where.split('>')[1].strip())
+        return sorted(itemId for itemId in self._ids if itemId > threshold)
+
     def getIdSet(self):
         return set(self._ids)
 
@@ -44,10 +50,18 @@ class _FakeInputSet:
         return self._streamClosed
 
     def getItem(self, _, itemId):
-        return self._items[itemId]
+        return self._items.get(itemId)
 
     def close(self):
         self.closed = True
+
+
+class _FakePointer:
+    def __init__(self, obj):
+        self._obj = obj
+
+    def get(self):
+        return self._obj
 
 
 class _FakeItem:
@@ -94,12 +108,12 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
 
     def _newProtocol(self):
         prot = self.newProtocol(XmippProtMovieMaxShift)
-        prot.movsFn = 'unused.sqlite'
         prot.insertedIds = []
         prot.acceptedIds = []
         prot.discardedIds = []
         prot.isStreamClosed = False
         prot.alreadyLoad = True
+        prot._lastInputId = 0
         return prot
 
     def _prepareInputCheck(self, prot, ids, streamClosed=False):
@@ -107,7 +121,7 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         scheduled = []
         updates = []
 
-        prot._loadInputSet = lambda _: fakeSet
+        prot.inputMovies = _FakePointer(fakeSet)
         prot._getFirstJoinStep = lambda: None
 
         def insertSteps(newIds):
@@ -121,19 +135,14 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
 
         return fakeSet, scheduled, updates
 
-    def testStreamingInputDoesNotDependOnSqliteMtime(self):
+    def testCheckNewInputUsesWatermarkNotSqliteMtime(self):
+        # Regression test: new-id discovery must come from the id watermark
+        # (_lastInputId / getUniqueValues('id', where=...)), not from any
+        # SQLite file mtime - a PostgreSQL-backed Set can change without its
+        # compatibility file's mtime changing.
         prot = self._newProtocol()
-
-        fnMovies = self.proj.getTmpPath('movie_max_shift_stream.sqlite')
-        with open(fnMovies, 'w'):
-            pass
-
-        originalMtime = os.path.getmtime(fnMovies)
-        prot.movsFn = fnMovies
         prot.insertedIds = [1]
-
-        # This reproduced the old early-return condition.
-        prot.lastCheck = datetime.fromtimestamp(originalMtime + 60)
+        prot._lastInputId = 1
 
         _, scheduled, updates = self._prepareInputCheck(
             prot,
@@ -212,10 +221,7 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         logicalOutput = LogicalOutputSetProbe()
         prot.outputMovies = logicalOutput
         prot.inputMics = None
-        prot._loadInputSet = (
-            lambda _:
-            _FakeInputSet(ids=[1])
-        )
+        prot.inputMovies = _FakePointer(_FakeInputSet(ids=[1]))
         prot._getPath = (
             lambda baseName:
             '/tmp/' + baseName
@@ -246,6 +252,9 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         prot.acceptedIds = [1]
         prot.inputMics = None
         prot.outMicName = None
+        # Simulate the sibling-micrograph discovery genuinely finding none,
+        # without touching the real mapper/parent-protocol lookup.
+        prot.setInputMics = lambda: None
         prot._getAllDoneIds = lambda: ([], 0, [], [])
         prot._getFirstJoinStep = lambda: None
         prot._store = lambda: None
@@ -253,14 +262,11 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
 
         movie = _FakeItem(1)
 
-        def loadInputSet(_):
-            return _FakeInputSet(
-                ids=[1],
-                streamClosed=False,
-                items={1: movie}
-            )
-
-        prot._loadInputSet = loadInputSet
+        prot.inputMovies = _FakePointer(_FakeInputSet(
+            ids=[1],
+            streamClosed=False,
+            items={1: movie}
+        ))
 
         movieOutput = _FakeOutputSet()
 
@@ -388,9 +394,9 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         movie = _FakeItem(1)
         mic = _FakeItem(1)
 
-        prot._loadInputSet = lambda _: _FakeInputSet(
+        prot.inputMovies = _FakePointer(_FakeInputSet(
             ids=[1], streamClosed=False, items={1: movie}
-        )
+        ))
         prot._loadMicAssociatedInputSet = lambda: _FakeInputSet(
             ids=[1], streamClosed=False, items={1: mic}
         )
@@ -430,6 +436,55 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         self.assertTrue(
             any(name == 'outputMicrographs' for name, _, _ in updatedOutputs),
             'The backfilled micrograph Set must be published as outputMicrographs.',
+        )
+
+    def testDoesNotFinishWhilePendingMicrographBackfillRemains(self):
+        # Regression test: self.finished must not latch True purely from
+        # movie counts while a sibling micrograph is still missing for an
+        # already-evaluated movie. _stepsCheck's "if finished: return" makes
+        # `finished` permanent - once set, this micrograph would never be
+        # retried and would be silently lost forever. This matches the
+        # reported "movie_max_shift finishing prematurely" symptom.
+        prot = self._newProtocol()
+        prot.acceptedIds = [1]
+        prot.isStreamClosed = True
+        prot.inputMics = object()
+        prot.outMicName = 'outputMicrographs'
+        prot._getAllDoneIds = lambda: ([1], 1, [1], [])
+        prot._getFirstJoinStep = lambda: None
+        prot._store = lambda: None
+        prot._defineTransformRelation = lambda *args, **kwargs: None
+
+        movie = _FakeItem(1)
+        prot.inputMovies = _FakePointer(_FakeInputSet(
+            ids=[1], streamClosed=True, items={1: movie}
+        ))
+        # The sibling micrograph is still not visible for this movie.
+        prot._loadMicAssociatedInputSet = lambda: _FakeInputSet(
+            ids=[], streamClosed=True, items={}
+        )
+
+        movieOutput = _FakeOutputSet()
+        movieOutput.append(movie.clone())
+        micOutput = _FakeOutputSet()
+
+        def loadOutputSet(SetClass, baseName):
+            if SetClass is SetOfMovies:
+                return movieOutput
+            if SetClass is SetOfMicrographs:
+                return micOutput
+            raise AssertionError('Unexpected output Set class.')
+
+        prot._loadOutputSet = loadOutputSet
+        prot._updateOutputSet = lambda *args, **kwargs: None
+
+        prot._checkNewOutput()
+
+        self.assertFalse(
+            prot.finished,
+            'A pending sibling micrograph must prevent the protocol from '
+            'latching finished=True, or the micrograph would never be '
+            'retried and would be permanently lost.',
         )
 
     def testFinishedStepsCheckIsNoOp(self):

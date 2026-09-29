@@ -600,9 +600,16 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
                   len(newDoneAccepted) + len(newDoneDiscarded)
         maxMicSize = self.inputMovies.get().getSize()
         # We have finished when there is not more input movies
-        # (stream closed) and the number of processed movies is
-        # equal to the number of inputs
-        self.finished = self.isStreamClosed and allDone == maxMicSize
+        # (stream closed), the number of processed movies is equal
+        # to the number of inputs, and no sibling micrograph is still
+        # awaiting backfill - otherwise it would never be retried once
+        # finished latches True and polling stops for good.
+        self.finished = (
+            self.isStreamClosed
+            and allDone == maxMicSize
+            and not backfillAccepted
+            and not backfillDiscarded
+        )
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         # Some checks to debug
