@@ -382,20 +382,11 @@ class XmippProtMovieResize(ProtProcessMovies):
             imageSet.close()
             return
 
-        newSamplingRate = self._getNewSamplingRate()
-
-        for movie in newDone:
-            imgOut = Movie()
-            imgOut.setObjId(movie.getObjId())
-            imgOut.setFileName(self._getPath("movie_%06d_resize.mrcs" % movie.getObjId()))
-            imgOut.setAcquisition(movie.getAcquisition())
-            imgOut.setSamplingRate(newSamplingRate)
-            imgOut.setFramesRange(self.inputMovies.get().getFramesRange())
-
-            if imageSet.isEmpty():
-                imageSet.setDim(imgOut.getDim())
-
-            imageSet.append(imgOut)
+        self._appendNewMovies(
+            imageSet,
+            newDone,
+            self._getNewSamplingRate(),
+        )
 
         if newDone or self.finished:
             self._updateOutputSet('outputMovies', imageSet, streamMode)
@@ -409,6 +400,26 @@ class XmippProtMovieResize(ProtProcessMovies):
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
+
+    def _appendNewMovies(self, imageSet, movies, samplingRate):
+        framesRange = self.inputMovies.get().getFramesRange()
+
+        for movie in movies:
+            imgOut = Movie()
+            imgOut.setObjId(movie.getObjId())
+            imgOut.setFileName(
+                self._getPath(
+                    "movie_%06d_resize.mrcs" % movie.getObjId()
+                )
+            )
+            imgOut.setAcquisition(movie.getAcquisition())
+            imgOut.setSamplingRate(samplingRate)
+            imgOut.setFramesRange(framesRange)
+
+            if imageSet.isEmpty():
+                imageSet.setDim(imgOut.getDim())
+
+            imageSet.append(imgOut)
 
     # --------------------------- UTILS functions ------------------------------
     def _getNewSamplingRate(self):

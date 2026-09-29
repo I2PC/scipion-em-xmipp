@@ -644,7 +644,6 @@ There are different merit values to be calculated:
                 SetOfParticles,
                 'outputParticles.sqlite',
             )
-            batchIds = set()
             acceptedBatchIds = set()
             rejectedBatchIds = set()
 

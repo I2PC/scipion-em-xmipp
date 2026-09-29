@@ -492,9 +492,6 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             self._defineTransformRelation(inCorrds, outputSet)
 
     def _loadOutputSet(self, SetClass, baseName):
-        outputSet = (getattr(self, self.outputName, None)
-                     if baseName == 'coordinates.sqlite' else None)
-
         outputSet, isNew = loadOutputSetForAppend(
             self, SetClass, baseName,
             self.outputName if baseName == 'coordinates.sqlite' else None

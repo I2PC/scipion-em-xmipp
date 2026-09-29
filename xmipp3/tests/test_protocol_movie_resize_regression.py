@@ -111,6 +111,8 @@ class _OutputSet:
 
 
 class _Harness:
+    _appendNewMovies = movie_resize.XmippProtMovieResize._appendNewMovies
+
     def __init__(self, movie_ids, processed_ids, done_ids, output_ids, stream_closed):
         self.events = []
         self.listOfMovies = [_Movie(obj_id) for obj_id in movie_ids]

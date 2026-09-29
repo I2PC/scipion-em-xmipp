@@ -129,7 +129,7 @@ class XmippStreamingBase:
         return set(cache[outputName])
 
     def _markOutputIdsPersisted(self, outputName, itemIds):
-        persistedIds = self._restorePersistedOutputIds(
+        self._restorePersistedOutputIds(
             outputName,
         )
 

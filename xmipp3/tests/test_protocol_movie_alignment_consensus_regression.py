@@ -416,7 +416,7 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         with patch(
             'xmipp3.protocols.protocol_movie_alignment_consensus.setAttribute',
-            lambda *args, **kwargs: None
+            return_value=None,
         ):
             prot.fillOutput(movieOutput, micOutput, [1], ACCEPTED)
 
@@ -442,7 +442,10 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         movieOutput = _FreshOutputSet()
         micOutput = _FreshOutputSet()
 
-        with patch('xmipp3.protocols.protocol_movie_alignment_consensus.setAttribute', lambda *args, **kwargs: None):
+        with patch(
+            'xmipp3.protocols.protocol_movie_alignment_consensus.setAttribute',
+            return_value=None,
+        ):
             prot.fillOutput(movieOutput, micOutput, [1], ACCEPTED)
 
         self.assertEqual([1], movieOutput.appended)

@@ -534,7 +534,6 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
             'eliminatedAverages.sqlite': 'eliminatedAverages',
         }
         outputName = outputNameByBaseName.get(baseName)
-        outputSet = getattr(self, outputName, None) if outputName else None
 
         outputSet, _ = loadOutputSetForAppend(
             self, SetClass, baseName, outputName

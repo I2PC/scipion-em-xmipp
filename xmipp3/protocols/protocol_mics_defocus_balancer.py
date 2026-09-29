@@ -641,39 +641,77 @@ def balanced_sampling(image_dict, N, bins=10):
     )
 
     if target <= len(non_empty_bins):
-        if target == 1:
-            selected_positions = [len(non_empty_bins) // 2]
-        else:
-            selected_positions = [
-                round(i * (len(non_empty_bins) - 1) / (target - 1))
-                for i in range(target)
-            ]
+        return _sampleAcrossBins(
+            binned_images,
+            non_empty_bins,
+            target,
+        )
 
-        return [
-            random.choice(binned_images[non_empty_bins[position]])
-            for position in selected_positions
+    return _sampleRoundRobin(
+        binned_images,
+        non_empty_bins,
+        target,
+    )
+
+
+def _sampleAcrossBins(binned_images, non_empty_bins, target):
+    if target == 1:
+        selected_positions = [len(non_empty_bins) // 2]
+    else:
+        selected_positions = [
+            round(i * (len(non_empty_bins) - 1) / (target - 1))
+            for i in range(target)
         ]
 
+    return [
+        random.choice(binned_images[non_empty_bins[position]])
+        for position in selected_positions
+    ]
+
+
+def _sampleRoundRobin(binned_images, non_empty_bins, target):
     available_by_bin = {}
+
     for bin_index in non_empty_bins:
         available = list(binned_images[bin_index])
         random.shuffle(available)
         available_by_bin[bin_index] = available
 
     sampled_images = []
+
     while len(sampled_images) < target:
-        added = False
-        for bin_index in non_empty_bins:
-            available = available_by_bin[bin_index]
-            if available:
-                sampled_images.append(available.pop())
-                added = True
-                if len(sampled_images) == target:
-                    break
+        added = _appendRoundRobinPass(
+            sampled_images,
+            available_by_bin,
+            non_empty_bins,
+            target,
+        )
         if not added:
             break
 
     return sampled_images
+
+
+def _appendRoundRobinPass(
+    sampled_images,
+    available_by_bin,
+    non_empty_bins,
+    target,
+):
+    added = False
+
+    for bin_index in non_empty_bins:
+        available = available_by_bin[bin_index]
+        if not available:
+            continue
+
+        sampled_images.append(available.pop())
+        added = True
+
+        if len(sampled_images) == target:
+            break
+
+    return added
 
 
 def compute_statistics(values):

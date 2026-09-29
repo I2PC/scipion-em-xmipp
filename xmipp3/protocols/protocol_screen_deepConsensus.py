@@ -1343,68 +1343,89 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
               return
 
     def loadCoords(self, posCoorsPath, mode, micSet=[]):
-        # Upload coords sqlite.
         trainedParams = self.loadTrainedParams()
-        if trainedParams['trainingPass'] != '' or mode != 'AND':
-            if len(micSet):
-                batchSetOfCoordinates = self._createSetOfCoordinates(micSet)
-                batchSetOfCoordinates.setBoxSize(self._getBoxSize())
-                readSetOfCoordinates(
-                    posCoorsPath,
-                    micSet=micSet,
-                    coordSet=batchSetOfCoordinates,
-                )
-                if mode in self.coordinatesDict:
-                    for newCoord in batchSetOfCoordinates:
-                        apCoord = Coordinate()
-                        apCoord.copy(newCoord, copyId=False)
-                        self.coordinatesDict[mode].append(apCoord)
-                else:
-                    self.coordinatesDict[mode] = batchSetOfCoordinates
-            else:
-                sqliteName = (
-                    self._getExtraPath(
-                        self.CONSENSUS_COOR_PATH_TEMPLATE % mode
-                    )
-                    + ".sqlite"
-                )
-                if os.path.isfile(self._getExtraPath(sqliteName)):
-                    cleanPath(self._getExtraPath(sqliteName))
 
-                self.waitFreeInputCoords()
-                inputCoords = None
-                try:
-                    inputCoords = self._loadFreshInputCoordinates(
-                        self.inputCoordinates[0]
-                    )
-                    totalSetOfCoordinates = readSetOfCoordsFromPosFnames(
-                        posCoorsPath,
-                        setOfInputCoords=inputCoords,
-                        sqliteOutName=sqliteName,
-                        write=True,
-                    )
-                finally:
-                    if inputCoords is not None:
-                        inputCoords.close()
-                    self.USING_INPUT_COORDS = False
+        if trainedParams['trainingPass'] == '' and mode == 'AND':
+            return
 
-                print(
-                    "Coordinates %s size: %d"
-                    % (mode, totalSetOfCoordinates.getSize())
-                )
-                assert (
-                    totalSetOfCoordinates.getSize()
-                    > MIN_NUM_CONSENSUS_COORDS
-                ), (
-                    "Error, the consensus (%s) of your input coordinates "
-                    "was too small (%s). It must be > %s. "
-                    "Try a different input..."
-                ) % (
-                    mode,
-                    str(totalSetOfCoordinates.getSize()),
-                    str(MIN_NUM_CONSENSUS_COORDS),
-                )
-                self.coordinatesDict[mode] = totalSetOfCoordinates
+        if len(micSet):
+            self._loadBatchCoords(
+                posCoorsPath,
+                mode,
+                micSet,
+            )
+            return
+
+        self._loadConsensusCoords(
+            posCoorsPath,
+            mode,
+        )
+
+    def _loadBatchCoords(self, posCoorsPath, mode, micSet):
+        batchSetOfCoordinates = self._createSetOfCoordinates(micSet)
+        batchSetOfCoordinates.setBoxSize(self._getBoxSize())
+        readSetOfCoordinates(
+            posCoorsPath,
+            micSet=micSet,
+            coordSet=batchSetOfCoordinates,
+        )
+
+        if mode not in self.coordinatesDict:
+            self.coordinatesDict[mode] = batchSetOfCoordinates
+            return
+
+        for newCoord in batchSetOfCoordinates:
+            apCoord = Coordinate()
+            apCoord.copy(newCoord, copyId=False)
+            self.coordinatesDict[mode].append(apCoord)
+
+    def _loadConsensusCoords(self, posCoorsPath, mode):
+        sqliteName = (
+            self._getExtraPath(
+                self.CONSENSUS_COOR_PATH_TEMPLATE % mode
+            )
+            + ".sqlite"
+        )
+
+        if os.path.isfile(self._getExtraPath(sqliteName)):
+            cleanPath(self._getExtraPath(sqliteName))
+
+        self.waitFreeInputCoords()
+        inputCoords = None
+
+        try:
+            inputCoords = self._loadFreshInputCoordinates(
+                self.inputCoordinates[0]
+            )
+            totalSetOfCoordinates = readSetOfCoordsFromPosFnames(
+                posCoorsPath,
+                setOfInputCoords=inputCoords,
+                sqliteOutName=sqliteName,
+                write=True,
+            )
+        finally:
+            if inputCoords is not None:
+                inputCoords.close()
+            self.USING_INPUT_COORDS = False
+
+        print(
+            "Coordinates %s size: %d"
+            % (mode, totalSetOfCoordinates.getSize())
+        )
+        assert (
+            totalSetOfCoordinates.getSize()
+            > MIN_NUM_CONSENSUS_COORDS
+        ), (
+            "Error, the consensus (%s) of your input coordinates "
+            "was too small (%s). It must be > %s. "
+            "Try a different input..."
+        ) % (
+            mode,
+            str(totalSetOfCoordinates.getSize()),
+            str(MIN_NUM_CONSENSUS_COORDS),
+        )
+
+        self.coordinatesDict[mode] = totalSetOfCoordinates
 
     def insertExtractPartSteps(self, mode, prerequisites):
         '''Inserts the steps necessary for extracting the particles from the micrographs'''
@@ -2258,53 +2279,88 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                     self._loadFreshInputCoordinates(coordPointer)
                 )
 
-            samplingRates = []
-            for coordSet in freshCoordSets:
-                mics = coordSet.getMicrographs()
-                if hasattr(mics, "loadAllProperties"):
-                    mics.loadAllProperties()
-                samplingRates.append(mics.getSamplingRate())
-                if hasattr(mics, "close"):
-                    mics.close()
-
-            nCoordsSets = len(samplingRates)
+            samplingRates = self._getCoordSamplingRates(
+                freshCoordSets,
+            )
             inputCoordsFnames = {}
 
             for coordNum, coordSet in enumerate(freshCoordSets):
-                tmpPosDir = self._getTmpPath(
-                    "input_coords_%d_%s" % (coordNum, mode)
-                )
-                if not os.path.exists(tmpPosDir):
-                    makePath(tmpPosDir)
-
-                writeSetOfCoordinates(
-                    tmpPosDir,
+                self._collectInputCoordFiles(
+                    mode,
+                    coordNum,
                     coordSet,
-                    scale=float(samplingRates[coordNum])
-                    / float(samplingRates[0]),
+                    samplingRates,
+                    extractedSetOfCoordsFns,
+                    inputCoordsFnames,
                 )
-
-                for posFname in os.listdir(tmpPosDir):
-                    baseName, extension = os.path.splitext(
-                        os.path.basename(posFname)
-                    )
-                    if (
-                        extension == ".pos"
-                        and posFname not in extractedSetOfCoordsFns
-                    ):
-                        if baseName not in inputCoordsFnames:
-                            inputCoordsFnames[baseName] = (
-                                ["None"] * nCoordsSets
-                            )
-                        inputCoordsFnames[baseName][coordNum] = os.path.join(
-                            tmpPosDir,
-                            posFname,
-                        )
 
             return inputCoordsFnames
         finally:
             for coordSet in freshCoordSets:
                 coordSet.close()
+
+    def _getCoordSamplingRates(self, coordSets):
+        samplingRates = []
+
+        for coordSet in coordSets:
+            mics = coordSet.getMicrographs()
+            if hasattr(mics, "loadAllProperties"):
+                mics.loadAllProperties()
+
+            samplingRates.append(
+                mics.getSamplingRate()
+            )
+
+            if hasattr(mics, "close"):
+                mics.close()
+
+        return samplingRates
+
+    def _collectInputCoordFiles(
+        self,
+        mode,
+        coordNum,
+        coordSet,
+        samplingRates,
+        extractedSetOfCoordsFns,
+        inputCoordsFnames,
+    ):
+        tmpPosDir = self._getTmpPath(
+            "input_coords_%d_%s" % (coordNum, mode)
+        )
+
+        if not os.path.exists(tmpPosDir):
+            makePath(tmpPosDir)
+
+        writeSetOfCoordinates(
+            tmpPosDir,
+            coordSet,
+            scale=float(samplingRates[coordNum])
+            / float(samplingRates[0]),
+        )
+
+        nCoordsSets = len(samplingRates)
+
+        for posFname in os.listdir(tmpPosDir):
+            baseName, extension = os.path.splitext(
+                os.path.basename(posFname)
+            )
+
+            if (
+                extension != ".pos"
+                or posFname in extractedSetOfCoordsFns
+            ):
+                continue
+
+            if baseName not in inputCoordsFnames:
+                inputCoordsFnames[baseName] = (
+                    ["None"] * nCoordsSets
+                )
+
+            inputCoordsFnames[baseName][coordNum] = os.path.join(
+                tmpPosDir,
+                posFname,
+            )
 
     #Training params utils
     def loadTrainedParams(self):
