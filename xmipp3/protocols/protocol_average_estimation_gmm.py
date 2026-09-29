@@ -24,7 +24,7 @@
 # *
 # ******************************************************************************
 from pathlib import Path
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Literal, get_args
 
 
 from pwem.protocols import ProtClassify2D
@@ -36,14 +36,16 @@ from pwem.objects import SetOfClasses2D
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam, EnumParam
+from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam, EnumParam, FloatParam
 from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
 
 from xmipp3.convert import particleToRow
 
-ESTIMATORS = {
+
+EstimatorType = Literal["irls", "fourier_irls", "fourier_masked", "admm"]
+ESTIMATORS: Dict[int, EstimatorType] = {
     0: "irls",
     1: "fourier_irls",
     2: "fourier_masked",
@@ -91,13 +93,25 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             help="If you set to *Yes*, the CTF of the experimental particles will be corrected",
         )
         form.addParam(
-            "useGpu",
-            BooleanParam,
-            default=True,
-            label="Use GPU?",
-            help="If you set to *Yes*, the estimation process will try to use the GPU "
-            "for hardware acceleration. This might speed up the process if CUDA is available.",
+            "classId",
+            IntParam,
+            default=-1,
+            label="Class ID",
+            help="Class to select for average estimation. "
+            "Zero or any negative value means the estimation "
+            "will be applied to all classes",
+            expertLevel=LEVEL_ADVANCED,
         )
+        form.addParam(
+            "saveGmmFits",
+            BooleanParam,
+            default=False,
+            help="Save extra files with information about GMM fits.",
+            label="Save GMM fits?",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        
+        form.addSection(label="Estimator")
         form.addParam(
             "estimatorType",
             EnumParam,
@@ -118,19 +132,49 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             ),
             label="GMM Reweighting",
         )
+        estimator_condition: Dict[EstimatorType, str] = {
+            estimator_type: f"bool(estimatorType == '{estimator_type}')" 
+            for estimator_type in get_args(EstimatorType)
+        }
+        gmm_condition = "bool(gmmReweighting)"
+
         form.addParam(
-            "classId",
+            "estimatorIterations",
             IntParam,
-            default=-1,
-            label="Class ID",
-            help="Class to select for average estimation. "
-            "Zero or any negative value means the estimation "
-            "will be applied to all classes",
-            expertLevel=LEVEL_ADVANCED,
+            condition="not(" + gmm_condition + ")",
+            default=30,
+            help="Number of estimator iterations",
+            label="Estimator iterations"
+        )
+        form.addParam(
+            "lowpassCutoff",
+            FloatParam,
+            condition=estimator_condition["fourier_masked"],
+            default=0.25,
+            help="Normalized frequency cutoff for the estimator's low pass mask",
+            label="Lowpass Cutoff",
+        )
+
+        form.addParam(
+            "internalEstimatorIterations",
+            IntParam,
+            condition=gmm_condition,
+            default=1,
+            help="Number of iterations for the internal estimator",
+            label="Internal iterations",
+        )
+        form.addParam(
+            "gmmIterations",
+            IntParam,
+            condition=gmm_condition,
+            default=10,
+            help="Number of GMM iterations",
+            label="GMM iterations",
         )
         form.addParam(
             "checkDegenerateGmm",
             BooleanParam,
+            condition=gmm_condition,
             default=True,
             help=(
                 "If using a GMM-type estimator, this option makes sure the GMM model "
@@ -143,12 +187,54 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             expertLevel=LEVEL_ADVANCED,
         )
         form.addParam(
-            "saveGmmFits",
-            BooleanParam,
-            default=False,
-            help="Save extra files with information about GMM fits.",
-            label="Save GMM fits?",
+            "gmmMinSep",
+            FloatParam,
+            condition=gmm_condition,
+            default=0.05,
+            help="Minimum relative separation between GMM components.",
+            label="Minimum GMM separation",
             expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "gmmMinWeight",
+            FloatParam,
+            condition=gmm_condition,
+            default=0.6,
+            help="Minimum weight for the good component of the GMM.",
+            label="Minimum GMM good weight",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "gmmInitialBadWeight",
+            FloatParam,
+            condition=gmm_condition,
+            default=0.05,
+            help="Initial weight for the GMM component with a lower mean weight",
+            expertLevel=LEVEL_ADVANCED,
+            label="Initial bad component weight"
+        )
+        form.addParam(
+            "gmmInitialBadQuantile",
+            FloatParam,
+            condition=gmm_condition,
+            default=0.05,
+            help=(
+                "Quantile used to calculate the mean for the GMM component with a "
+                "lower mean weight. Because this is the component with a lower mean, "
+                "the provided quantile should be between 0 and 0.5."
+            ),
+            expertLevel=LEVEL_ADVANCED,
+            label="Initial bad component mean"
+        )
+
+        form.addSection(label="Compute")
+        form.addParam(
+            "useGpu",
+            BooleanParam,
+            default=True,
+            label="Use GPU?",
+            help="If you set to *Yes*, the estimation process will try to use the GPU "
+            "for hardware acceleration. This might speed up the process if CUDA is available.",
         )
 
         form.addParallelSection(threads=0, mpi=4)
@@ -322,7 +408,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getGmmDiagnosticsPath(self):
         return self._getExtraPath("gmmDiagnostics")
 
-    def _getEstimatorType(self):
+    def _getEstimatorType(self) -> EstimatorType:
         return ESTIMATORS[self.estimatorType.get()]
 
     def _getEstimatorWeightColumns(self):
@@ -399,23 +485,31 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         if self.gmmReweighting.get():
             scriptArgs += "--gmm "
-            scriptArgs += "--estimator-max-iter 1 "
+            scriptArgs += f"--estimator-max-iter {self.internalEstimatorIterations.get()} "
+            scriptArgs += f"--gmm-external-max-iter {self.gmmIterations.get()} "
 
-            if self.saveGmmFits.get():
-                scriptArgs += f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
+            scriptArgs += f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()} "
+            scriptArgs += f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()} "
 
             if self.checkDegenerateGmm.get():
                 scriptArgs += "--gmm-check-degenerate "
+                scriptArgs += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
+                scriptArgs += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
             else:
                 scriptArgs += "--no-gmm-check-degenerate "
+
+            if self.saveGmmFits.get():
+                scriptArgs += f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
         else:
             scriptArgs += "--no-gmm "
+            scriptArgs += "--estimator-max-iter {self.estimatorIterations.get()} "
 
         estimatorType = self._getEstimatorType()
         if estimatorType == "fourier_masked":
             scriptArgs += "fourier_irls "
             scriptArgs += "--weight-approach per-image "
             scriptArgs += "--lowpass-mask "
+            scriptArgs += f"--lowpass-mask-cutoff {self.lowpassCutoff.get()} "
         else:
             scriptArgs += f"{estimatorType} "
 

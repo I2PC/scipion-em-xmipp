@@ -38,9 +38,7 @@ from pyworkflow.protocol.params import (
     PointerParam,
     IntParam,
     BooleanParam,
-    EnumParam,
     StringParam,
-    FloatParam,
 )
 from pyworkflow.constants import BETA
 
@@ -48,11 +46,12 @@ from xmipp3.base import XmippProtocol
 from xmipp3.convert import writeSetOfParticles
 
 from .protocol_average_estimation_gmm import (
-    ESTIMATORS,
     ROBUST_WEIGHT_COL,
     STD_ROBUST_WEIGHT_COL,
     GMM_WEIGHT_COL,
     WEIGHT_COLUMN_TO_ATTRIBUTE,
+    EstimatorType,
+    add_estimator_section,
 )
 
 
@@ -81,15 +80,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             help="If you set to *Yes*, the CTF of the experimental particles will be corrected",
         )
         form.addParam(
-            "useGpu",
-            BooleanParam,
-            default=True,
-            # expertLevel=LEVEL_ADVANCED,
-            label="Use GPU?",
-            help="If you set to *Yes*, the estimation process will try to use the GPU "
-            "for hardware acceleration. This might speed up the process if CUDA is available.",
-        )
-        form.addParam(
             "symmetryGroup",
             StringParam,
             default="c1",
@@ -100,25 +90,16 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             ),
         )
         form.addParam(
-            "estimatorType",
-            EnumParam,
-            default=0,
-            # ESTIMATORS is dict[int, str], this ensures the list keeps correct order
-            choices=[ESTIMATORS[i] for i in range(len(ESTIMATORS))],
-            help=("Type of robust estimator to use to compute the new class averages."),
-            label="Estimator type",
-        )
-        form.addParam(
-            "gmmReweighting",
-            BooleanParam,
-            default=True,
+            "numberOfGroups",
+            IntParam,
+            label="Number of groups",
             help=(
-                "Apply GMM reweighting to the results of the estimator."
-                "GMM reweighting makes the estimator more aggressive in "
-                "rejecting possibly misaligned or corrupted particles. This means "
-                "it can slightly improve performance on more contaminated datasets."
+                "The particles will be split into groups according to their "
+                "orientations, grouping together those with similar viewing "
+                "directions. This parameter determines the number of such groups "
+                "that will be created."
             ),
-            label="GMM Reweighting",
+            default=100,
         )
         form.addParam(
             "deduplicateReferences",
@@ -133,43 +114,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 "than initially requested."
             ),
             label="Deduplicate references?",
-        )
-        form.addParam(
-            "numberOfGroups",
-            IntParam,
-            label="Number of groups",
-            help=(
-                "The particles will be split into groups according to their "
-                "orientations, grouping together those with similar viewing "
-                "directions. This parameter determines the number of such groups "
-                "that will be created."
-            ),
-            default=100,
-            expertLevel=LEVEL_ADVANCED,
-        )
-        form.addParam(
-            "groupingBatchSize",
-            IntParam,
-            label="Grouping Batch Size",
-            help=(
-                "Batch size used to process the particles when grouping them "
-                "by viewing direction."
-            ),
-            default=1024,
-            expertLevel=LEVEL_ADVANCED,
-        )
-        form.addParam(
-            "checkDegenerateGmm",
-            BooleanParam,
-            default=True,
-            help=(
-                "If using a GMM-type estimator, this option makes sure the GMM model "
-                "is checked for degeneracy after the last iteration in each class. "
-                "The model is considered degenerate if the two GMM components are too "
-                "close together, or if the component associated with good particles "
-                "has too little weight."
-            ),
-            label="Check GMM degeneracy?",
             expertLevel=LEVEL_ADVANCED,
         )
         form.addParam(
@@ -180,20 +124,27 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             label="Save GMM fits?",
             expertLevel=LEVEL_ADVANCED,
         )
+
+        add_estimator_section(form)
+        
+        form.addSection(label="Compute")
         form.addParam(
-            "gmmMinSep",
-            FloatParam,
-            default=0.05,
-            help="Minimum relative separation between GMM components.",
-            label="Minimum GMM separation",
-            expertLevel=LEVEL_ADVANCED,
+            "useGpu",
+            BooleanParam,
+            default=True,
+            label="Use GPU?",
+            help="If you set to *Yes*, the estimation process will try to use the GPU "
+            "for hardware acceleration. This might speed up the process if CUDA is available.",
         )
         form.addParam(
-            "gmmMinWeight",
-            FloatParam,
-            default=0.6,
-            help="Minimum weight for the good component of the GMM.",
-            label="Minimum GMM good weight",
+            "groupingBatchSize",
+            IntParam,
+            label="Grouping Batch Size",
+            help=(
+                "Batch size used to process the particles when grouping them "
+                "by viewing direction."
+            ),
+            default=1024,
             expertLevel=LEVEL_ADVANCED,
         )
 
@@ -245,7 +196,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         return self._getExtraPath("gmmDiagnostics")
 
     def _getEstimatorType(self):
-        return ESTIMATORS[self.estimatorType.get()]
+        return EstimatorType(self.estimatorType.get())
 
     def _getEstimatorWeightColumns(self):
         base_weight_columns = [ROBUST_WEIGHT_COL, STD_ROBUST_WEIGHT_COL]
@@ -328,7 +279,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         env = self.getCondaEnv()
         device = "cuda" if self.useGpu.get() else "cpu"
 
-        estimationArgs = (
+        args = (
             f"--input-xmd '{self._getParticleMdPath()}' "
             f"--base-xmd '{self._getInputMdPath()}' "
             f"--out-star '{self._getAveragingOutputStarPath()}' "
@@ -339,32 +290,40 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         )
 
         if self.gmmReweighting.get():
-            estimationArgs += "--gmm "
+            args += "--gmm "
+            args += f"--estimator-max-iter {self.internalEstimatorIterations.get()} "
+            args += f"--gmm-external-max-iter {self.gmmIterations.get()} "
+            
+            args += f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()} "
+            args += f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()} "
+
+            if self.checkDegenerateGmm.get():
+                args += "--gmm-check-degenerate "
+                args += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
+                args += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
+            else:
+                args += "--no-gmm-check-degenerate "
 
             if self.saveGmmFits.get():
-                estimationArgs += (
+                args += (
                     f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
                 )
         else:
-            estimationArgs += "--no-gmm "
+            args += "--no-gmm "
+            args += f"--estimator-max-iter {self.estimatorIterations.get()} "
 
-        if self.checkDegenerateGmm.get():
-            estimationArgs += "--gmm-check-degenerate "
-            estimationArgs += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
-            estimationArgs += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
-        else:
-            estimationArgs += "--no-gmm-check-degenerate "
 
         estimatorType = self._getEstimatorType()
         if estimatorType == "fourier_masked":
-            estimationArgs += "fourier_irls "
-            estimationArgs += "--weight-approach per-image "
-            estimationArgs += "--lowpass-mask "
+            args += "fourier_irls "
+            args += "--weight-approach per-image "
+            args += "--lowpass-mask "
+            args += f"--lowpass-mask-cutoff {self.lowpassCutoff.get()} "
         else:
-            estimationArgs += f"{estimatorType} "
+            args += f"{estimatorType} "
 
         self.runJob(
-            "xmipp_gmm_average_estimation", estimationArgs, env=env, numberOfMpi=1
+            "xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1
         )
 
     def createOutputStep(self):
