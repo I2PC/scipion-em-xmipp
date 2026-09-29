@@ -40,11 +40,10 @@ class _OutputCoords:
 
 
 class _Harness:
-    def __init__(self, micIds, processedIds, doneIds, outputIds, streamClosed=False, allMicsProcessed=True):
+    def __init__(self, micIds, processedIds, outputIds, streamClosed=False, allMicsProcessed=True):
         self.events = []
         self.micDict = {str(objId): _Mic(objId) for objId in micIds}
         self.processedIds = set(processedIds)
-        self.doneIds = set(doneIds)
         self.outputCoords = _OutputCoords(outputIds) if outputIds is not None else None
         self.streamClosed = streamClosed
         self.allMicsProcessed = allMicsProcessed
@@ -55,7 +54,10 @@ class _Harness:
         return mic.getObjId() in self.processedIds
 
     def _readDoneList(self):
-        return list(self.doneIds)
+        raise AssertionError('DONE_all.TXT must not be used as durable state.')
+
+    def _writeDoneList(self, mics):
+        raise AssertionError('DONE_all.TXT must not be written.')
 
     def _isStreamClosed(self):
         return self.streamClosed
@@ -84,11 +86,6 @@ class _Harness:
 
     def getOutputName(self):
         return 'outputCoordinates_Full'
-
-    def _writeDoneList(self, mics):
-        ids = [mic.getObjId() for mic in mics]
-        self.doneIds.update(ids)
-        self.events.append(('checkpoint', ids))
 
     def _getFirstJoinStep(self):
         return self.outputStep
@@ -132,13 +129,17 @@ class TestXmippDeepMicrographScreenRegression(unittest.TestCase):
         self.assertEqual(1, protocol.updated)
 
     def testFinishedRequiresAllPickedMicrographs(self):
-        protocol = _Harness([1], [1], [1], [1], streamClosed=True, allMicsProcessed=False)
+        protocol = _Harness([1], [1], [1], streamClosed=True, allMicsProcessed=False)
         deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
         self.assertFalse(protocol.finished)
         self.assertEqual([('sleep',)], protocol.events)
 
-    def testOutputIsPersistedBeforeCheckpoint(self):
-        protocol = _Harness([1, 2], [1, 2], [1], [1])
+    def testOutputIsPersistedFromRealOutputSetNotSidecar(self):
+        # Regression test: which mics still need to be flushed to the output
+        # Set must come from the real, persisted outputCoords (_getOutputMicIds),
+        # not from a DONE_all.TXT sidecar - _readDoneList/_writeDoneList raise
+        # in this harness to prove they are never touched.
+        protocol = _Harness([1, 2], [1, 2], [1])
         def fakeRead(outputDir, mics, outputCoords, scale=1):
             protocol.events.append(('read', [mic.getObjId() for mic in mics]))
             outputCoords.micIds.update(mic.getObjId() for mic in mics)
@@ -146,15 +147,15 @@ class TestXmippDeepMicrographScreenRegression(unittest.TestCase):
         with patch.object(deep_screen, 'readSetOfCoordinates', fakeRead):
             deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
 
-        self.assertEqual([('read', [2]), ('output', Set.STREAM_OPEN), ('checkpoint', [2])], protocol.events)
+        self.assertEqual([('read', [2]), ('output', Set.STREAM_OPEN)], protocol.events)
 
-    def testReplayRepairsCheckpointWithoutDuplicateOutput(self):
-        protocol = _Harness([1], [1], [], [1])
+    def testNoActionWhenAllProcessedAlreadyPersistedButNotFinished(self):
+        protocol = _Harness([1], [1], [1], streamClosed=False)
         deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
-        self.assertEqual([('checkpoint', [1])], protocol.events)
+        self.assertEqual([('sleep',)], protocol.events)
 
     def testFinishedReplayClosesExistingOutput(self):
-        protocol = _Harness([1], [1], [1], [1], streamClosed=True, allMicsProcessed=True)
+        protocol = _Harness([1], [1], [1], streamClosed=True, allMicsProcessed=True)
         deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
         self.assertTrue(protocol.finished)
         self.assertEqual([('output', Set.STREAM_CLOSED)], protocol.events)

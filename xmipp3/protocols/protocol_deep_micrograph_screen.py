@@ -502,7 +502,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         if getattr(self, 'finished', False):
             return
 
-        doneIds = set(self._readDoneList())
         processedMics = [m for m in self.micDict.values() if self._isMicDone(m)]
         inputLen = len(self.micDict)
         streamClosed = self._isStreamClosed()
@@ -512,10 +511,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         outputMicIds = self._getOutputMicIds()
         newOutput = [m for m in processedMics if m.getObjId() not in outputMicIds]
-        pendingDone = [m for m in processedMics if m.getObjId() not in doneIds]
 
-        self.debug('_checkNewOutput: input=%s, processed=%s, output=%s, checkpoint=%s'
-                   % (inputLen, len(processedMics), len(outputMicIds), len(doneIds)))
+        self.debug('_checkNewOutput: input=%s, processed=%s, output=%s'
+                   % (inputLen, len(processedMics), len(outputMicIds)))
         self.debug(' is finished? %s ' % self.finished)
         self.debug(' is stream closed? %s ' % streamClosed)
         self.debug(' are all mics processed? %s ' % allMicsProcessed)
@@ -524,13 +522,10 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             self._updateOutputCoordSet(newOutput, streamMode)
         elif self.finished:
             self._updateOutputCoordSet([], Set.STREAM_CLOSED)
-        elif not pendingDone:
+        else:
             if len(processedMics) == inputLen:
                 self._streamingSleepOnWait()
             return
-
-        if pendingDone:
-            self._writeDoneList(pendingDone)
 
         if self.finished:
             outputStep = self._getFirstJoinStep()
