@@ -663,6 +663,15 @@ class TestMovieAlignmentConsensus(BaseTest):
 
 
 
+
+class _InputPointer:
+    def __init__(self, value):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+
 class _DoseTestMovie:
     """Small reusable movie double for dose-analysis unit tests."""
 
@@ -803,16 +812,10 @@ class TestMovieDoseAnalysisState(BaseTest):
             def close(self):
                 self.closeCalls += 1
 
-        class InputPointer:
-            def __init__(self, value):
-                self.value = value
-
-            def get(self):
-                return self.value
 
         inputSet = InputSet()
         prot = self.newProtocol(XmippProtMovieDoseAnalysis, n_samples=5)
-        prot.inputMovies = InputPointer(inputSet)
+        prot.inputMovies = _InputPointer(inputSet)
         prot.insertedIds = [1, 2, 3]
         prot.processedIds = [1, 2]
         prot.meanDoseById = {1: 1.0, 2: 1.1}
@@ -1001,18 +1004,12 @@ class TestMovieDoseAnalysisState(BaseTest):
                     'Legacy storage snapshot must not be opened.'
                 )
 
-        class InputPointer:
-            def __init__(self, value):
-                self.value = value
-
-            def get(self):
-                return self.value
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         logicalInput = LogicalInputSet()
         insertedBatches = []
 
-        prot.inputMovies = InputPointer(logicalInput)
+        prot.inputMovies = _InputPointer(logicalInput)
         prot.insertedIds = [1]
         prot._lastInputId = 1
         prot._inputSize = None
@@ -1084,16 +1081,10 @@ class TestMovieDoseAnalysisState(BaseTest):
                         )
                     self.owner = None
 
-        class InputPointer:
-            def __init__(self, value):
-                self.value = value
-
-            def get(self):
-                return self.value
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         inputSet = InputSet()
-        prot.inputMovies = InputPointer(inputSet)
+        prot.inputMovies = _InputPointer(inputSet)
 
         errors = []
 
@@ -1655,16 +1646,10 @@ class TestMovieDoseAnalysisState(BaseTest):
                 self.closed = True
                 self.closeCalls += 1
 
-        class InputPointer:
-            def __init__(self, value):
-                self.value = value
-
-            def get(self):
-                return self.value
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
         logicalInput = InputSet()
-        pointer = InputPointer(logicalInput)
+        pointer = _InputPointer(logicalInput)
 
         inputSet = prot._loadLogicalSet(pointer)
 
@@ -1696,16 +1681,10 @@ class TestMovieDoseAnalysisState(BaseTest):
             def close(self):
                 self.closeCalls += 1
 
-        class InputPointer:
-            def __init__(self, value):
-                self.value = value
-
-            def get(self):
-                return self.value
 
         inputSet = InputSet()
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
-        prot.inputMovies = InputPointer(inputSet)
+        prot.inputMovies = _InputPointer(inputSet)
 
         movies = prot._loadMoviesByIds([3, 1, 2])
 
@@ -1748,18 +1727,12 @@ class TestMovieDoseAnalysisState(BaseTest):
             def close(self):
                 pass
 
-        class InputPointer:
-            def __init__(self, value):
-                self.value = value
-
-            def get(self):
-                return self.value
 
         insertedIds = CountingList([1, 2, 3])
         scheduled = []
 
         prot = self.newProtocol(XmippProtMovieDoseAnalysis)
-        prot.inputMovies = InputPointer(InputSet())
+        prot.inputMovies = _InputPointer(InputSet())
         prot.insertedIds = insertedIds
         prot._lastInputId = 3
         prot._inputSize = None
