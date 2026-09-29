@@ -403,13 +403,13 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
             if self.saveGmmFits.get():
                 scriptArgs += f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
-        else:
-            scriptArgs += "--no-gmm"
 
-        if self.checkDegenerateGmm.get():
-            scriptArgs += "--gmm-check-degenerate "
+            if self.checkDegenerateGmm.get():
+                scriptArgs += "--gmm-check-degenerate "
+            else:
+                scriptArgs += "--no-gmm-check-degenerate "
         else:
-            scriptArgs += "--no-gmm-check-degenerate "
+            scriptArgs += "--no-gmm "
 
         estimatorType = self._getEstimatorType()
         if estimatorType == "fourier_masked":
