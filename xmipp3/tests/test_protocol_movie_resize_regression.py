@@ -113,11 +113,10 @@ class _OutputSet:
 class _Harness:
     _appendNewMovies = movie_resize.XmippProtMovieResize._appendNewMovies
 
-    def __init__(self, movie_ids, processed_ids, done_ids, output_ids, stream_closed):
+    def __init__(self, movie_ids, processed_ids, output_ids, stream_closed):
         self.events = []
         self.listOfMovies = [_Movie(obj_id) for obj_id in movie_ids]
         self.processedIds = set(processed_ids)
-        self.doneIds = set(done_ids)
         self.streamClosed = stream_closed
         self.finished = False
         self.outputSet = _OutputSet(output_ids, self.events)
@@ -127,10 +126,38 @@ class _Harness:
         return movie.getObjId() in self.processedIds
 
     def _readDoneList(self):
-        return list(self.doneIds)
+        raise AssertionError(
+            "MovieResize replay must not use DONE_all.TXT."
+        )
+
+    def _writeDoneList(self, movies):
+        raise AssertionError(
+            "MovieResize replay must not write DONE_all.TXT."
+        )
 
     def _loadOutputSet(self, SetClass, baseName):
+        raise AssertionError(
+            "MovieResize must not reopen a manual movies.sqlite output."
+        )
+
+    def _getKnownPersistedOutputIds(self, outputName):
+        self._assertOutputName(outputName)
+        return set(self.outputSet.ids)
+
+    def _markOutputIdsPersisted(self, outputName, itemIds):
+        self._assertOutputName(outputName)
+        ids = list(itemIds)
+        self.events.append(('persisted', ids))
+        return set(self.outputSet.ids)
+
+    def getOutputMovies(self):
         return self.outputSet
+
+    def _assertOutputName(self, outputName):
+        if outputName != 'outputMovies':
+            raise AssertionError(
+                "Unexpected output name: %s" % outputName
+            )
 
     def _getNewSamplingRate(self):
         return 3.0
@@ -139,13 +166,9 @@ class _Harness:
         return '/tmp/' + name
 
     def _updateOutputSet(self, outputName, outputSet, state):
+        self._assertOutputName(outputName)
         self.events.append(('output', state))
         outputSet.close()
-
-    def _writeDoneList(self, movies):
-        ids = [movie.getObjId() for movie in movies]
-        self.doneIds.update(ids)
-        self.events.append(('checkpoint', ids))
 
     def _getFirstJoinStep(self):
         return None
@@ -154,6 +177,9 @@ class _Harness:
 class _InsertHarness:
     def __init__(self):
         self.inserted = []
+
+    def isContinued(self):
+        return False
 
     def _insertMovieStep(self, movie):
         self.inserted.append(movie.getObjId())
@@ -169,25 +195,56 @@ class TestXmippMovieResizeRegression(unittest.TestCase):
         self.assertEqual([102, 103], deps)
         self.assertEqual([2, 3], protocol.inserted)
 
-    def testOutputIsPersistedBeforeDoneCheckpoint(self):
-        protocol = _Harness(movie_ids=[1, 2], processed_ids=[1, 2], done_ids=[1], output_ids=[1], stream_closed=False)
-        with patch.object(movie_resize, 'Movie', _OutputMovie):
-            movie_resize.XmippProtMovieResize._checkNewOutput(protocol)
-        self.assertEqual([('append', 2), ('output', Set.STREAM_OPEN), ('checkpoint', [2])], protocol.events)
+    def testOutputIsPersistedBeforePersistedIdCache(self):
+        protocol = _Harness(
+            movie_ids=[1, 2],
+            processed_ids=[1, 2],
+            output_ids=[1],
+            stream_closed=False,
+        )
 
-    def testReplayRepairsCheckpointWithoutDuplicateAppend(self):
-        protocol = _Harness(movie_ids=[1], processed_ids=[1], done_ids=[], output_ids=[1], stream_closed=False)
         with patch.object(movie_resize, 'Movie', _OutputMovie):
             movie_resize.XmippProtMovieResize._checkNewOutput(protocol)
-        self.assertEqual([('checkpoint', [1])], protocol.events)
+
+        self.assertEqual(
+            [
+                ('append', 2),
+                ('output', Set.STREAM_OPEN),
+                ('persisted', [2]),
+            ],
+            protocol.events,
+        )
+
+    def testReplayDoesNotDuplicatePersistedOutput(self):
+        protocol = _Harness(
+            movie_ids=[1],
+            processed_ids=[1],
+            output_ids=[1],
+            stream_closed=False,
+        )
+
+        with patch.object(movie_resize, 'Movie', _OutputMovie):
+            movie_resize.XmippProtMovieResize._checkNewOutput(protocol)
+
+        self.assertEqual([], protocol.events)
         self.assertEqual({1}, protocol.outputSet.ids)
 
     def testFinishedReplayClosesOutputStream(self):
-        protocol = _Harness(movie_ids=[1], processed_ids=[1], done_ids=[1], output_ids=[1], stream_closed=True)
+        protocol = _Harness(
+            movie_ids=[1],
+            processed_ids=[1],
+            output_ids=[1],
+            stream_closed=True,
+        )
+
         with patch.object(movie_resize, 'Movie', _OutputMovie):
             movie_resize.XmippProtMovieResize._checkNewOutput(protocol)
+
         self.assertTrue(protocol.finished)
-        self.assertEqual([('output', Set.STREAM_CLOSED)], protocol.events)
+        self.assertEqual(
+            [('output', Set.STREAM_CLOSED)],
+            protocol.events,
+        )
 
     def testNewSamplingRateIsReconstructedFromParameters(self):
         protocol = type('SamplingHarness', (), {})()

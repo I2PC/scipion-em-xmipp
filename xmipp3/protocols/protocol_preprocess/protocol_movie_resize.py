@@ -24,7 +24,6 @@
 # *
 # **************************************************************************
 
-from os.path import exists
 
 from pyworkflow import VERSION_1_2
 from pyworkflow.utils.properties import Message
@@ -35,7 +34,9 @@ import pyworkflow.protocol.constants as cons
 from pyworkflow.protocol.constants import STEPS_PARALLEL
 
 from pwem.protocols import EMProtocol, ProtProcessMovies
-from pwem.objects import SetOfMovies, Movie
+from pwem.objects import Movie
+
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 
 RESIZE_SAMPLINGRATE = 0
@@ -43,7 +44,7 @@ RESIZE_DIMENSIONS = 1
 RESIZE_FACTOR = 2
 
 
-class XmippProtMovieResize(ProtProcessMovies):
+class XmippProtMovieResize(XmippStreamingBase, ProtProcessMovies):
     """
     Resize a set of movies. Only downsampling is allowed.
 
@@ -297,12 +298,36 @@ class XmippProtMovieResize(ProtProcessMovies):
 
     # ------------------------ INSERT STEPS functions --------------------------
 
+    def _restoreInsertedMovies(self, inputMovies):
+        persistedIds = self._restorePersistedOutputIds(
+            'outputMovies',
+        )
+
+        for movie in inputMovies:
+            movieId = movie.getObjId()
+            if (
+                movieId in persistedIds
+                or self._isMovieDone(movie)
+            ):
+                self.insertedDict[movieId] = None
+
     def _insertNewMoviesSteps(self, insertedDict, inputMovies):
         """ Insert steps to process new movies (from streaming)
         Params:
             insertedDict: contains already processed movies
             inputMovies: input movies set to be check
         """
+        if (
+            self.isContinued()
+            and not getattr(
+                self,
+                '_streamingStateRestored',
+                False,
+            )
+        ):
+            self._restoreInsertedMovies(inputMovies)
+            self._streamingStateRestored = True
+
         deps = []
         # For each movie insert the step to process it
         for movie in inputMovies:
@@ -318,15 +343,89 @@ class XmippProtMovieResize(ProtProcessMovies):
         self._checkNewInput()
         self._checkNewOutput()
 
+    def _loadInputList(self):
+        movieSet = self._loadLogicalSet(self.inputMovies)
+        try:
+            self.listOfMovies = [m.clone() for m in movieSet]
+            self.streamClosed = movieSet.isStreamClosed()
+        finally:
+            movieSet.close()
+
     def _checkNewInput(self):
-        self._loadInputList()
-        newMovies = any(m.getObjId() not in self.insertedDict for m in self.listOfMovies)
+        inputSet = self._loadLogicalSet(self.inputMovies)
+
+        try:
+            if not hasattr(self, '_lastInputId'):
+                self._lastInputId = max(
+                    self.insertedDict,
+                    default=0,
+                )
+
+            knownMovies = getattr(
+                self,
+                'listOfMovies',
+                None,
+            )
+            if knownMovies is None:
+                knownMovies = []
+                for movieId in sorted(self.insertedDict):
+                    movie = inputSet.getItem("id", movieId)
+                    if movie is not None:
+                        knownMovies.append(movie.clone())
+
+            newIds, self._lastInputId = self._discoverIdsAfter(
+                inputSet,
+                self._lastInputId,
+            )
+            producerClosed = inputSet.isStreamClosed()
+
+            newIds, terminalConsistent = (
+                self._reconcileClosedStreamIds(
+                    inputSet,
+                    newIds,
+                    self.insertedDict,
+                    producerClosed,
+                )
+            )
+
+            self.streamClosed = (
+                producerClosed
+                and terminalConsistent
+            )
+
+            newMovies = []
+            for movieId in newIds:
+                movie = inputSet.getItem("id", movieId)
+                if movie is not None:
+                    newMovies.append(movie.clone())
+        finally:
+            inputSet.close()
+
+        knownIds = {
+            movie.getObjId()
+            for movie in knownMovies
+        }
+        knownMovies.extend(
+            movie
+            for movie in newMovies
+            if movie.getObjId() not in knownIds
+        )
+        self.listOfMovies = knownMovies
+
+        if not newMovies:
+            return
+
         outputStep = self._getFirstJoinStep()
-        if newMovies:
-            fDeps = self._insertNewMoviesSteps(self.insertedDict, self.listOfMovies)
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-            self.updateSteps()
+        fDeps = self._insertNewMoviesSteps(
+            self.insertedDict,
+            newMovies,
+        )
+        if outputStep is not None:
+            outputStep.addPrerequisites(*fDeps)
+
+        self.updateSteps()
+
+
 
 
     # --------------------------- STEPS functions ------------------------------
@@ -362,25 +461,67 @@ class XmippProtMovieResize(ProtProcessMovies):
         # Do nothing now, the output should be ready.
         pass
 
+    def getOutputMovies(self):
+        outputSet = getattr(self, 'outputMovies', None)
+
+        if outputSet is None:
+            outputSet = self._createSetOfMovies()
+            outputSet.setStreamState(outputSet.STREAM_OPEN)
+            outputSet.copyInfo(self.inputMovies.get())
+            outputSet.setSamplingRate(
+                self._getNewSamplingRate()
+            )
+            self._defineOutputs(
+                outputMovies=outputSet,
+            )
+        else:
+            outputSet.enableAppend()
+
+        return outputSet
+
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
 
-        processedMovies = [m.clone() for m in self.listOfMovies if self._isMovieDone(m)]
-        self.finished = self.streamClosed and len(processedMovies) == len(self.listOfMovies)
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        persistedIds = self._getKnownPersistedOutputIds(
+            'outputMovies',
+        )
 
-        if not processedMovies and not self.finished:
+        processedMovies = [
+            movie.clone()
+            for movie in self.listOfMovies
+            if self._isMovieDone(movie)
+        ]
+        processedIds = {
+            movie.getObjId()
+            for movie in processedMovies
+        }
+        completedIds = persistedIds | processedIds
+        inputIds = {
+            movie.getObjId()
+            for movie in self.listOfMovies
+        }
+
+        self.finished = (
+            self.streamClosed
+            and inputIds.issubset(completedIds)
+        )
+        streamMode = (
+            Set.STREAM_CLOSED
+            if self.finished
+            else Set.STREAM_OPEN
+        )
+
+        newDone = [
+            movie
+            for movie in processedMovies
+            if movie.getObjId() not in persistedIds
+        ]
+
+        if not newDone and not self.finished:
             return
 
-        imageSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
-        outputIds = set(imageSet.getIdSet()) if imageSet.getSize() else set()
-        doneIds = set(self._readDoneList())
-        newDone = [m for m in processedMovies if int(m.getObjId()) not in outputIds]
-        pendingDone = [m for m in processedMovies if int(m.getObjId()) not in doneIds]
-        if not newDone and not pendingDone and not self.finished:
-            imageSet.close()
-            return
+        imageSet = self.getOutputMovies()
 
         self._appendNewMovies(
             imageSet,
@@ -389,17 +530,28 @@ class XmippProtMovieResize(ProtProcessMovies):
         )
 
         if newDone or self.finished:
-            self._updateOutputSet('outputMovies', imageSet, streamMode)
+            self._updateOutputSet(
+                'outputMovies',
+                imageSet,
+                streamMode,
+            )
+            if newDone:
+                self._markOutputIdsPersisted(
+                    'outputMovies',
+                    [
+                        movie.getObjId()
+                        for movie in newDone
+                    ],
+                )
         else:
             imageSet.close()
 
-        if pendingDone:
-            self._writeDoneList(pendingDone)
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
+        if self.finished:
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
+
+
 
     def _appendNewMovies(self, imageSet, movies, samplingRate):
         framesRange = self.inputMovies.get().getFramesRange()
@@ -431,24 +583,6 @@ class XmippProtMovieResize(ProtProcessMovies):
             return float(samplingRate) * (float(dim) / float(self.resizeDim.get()))
         return self.resizeSamplingRate.get()
 
-
-    def _loadOutputSet(self, SetClass, baseName):
-        """
-        Load the output set if it exists or create a new one.
-        """
-        setFile = self._getPath(baseName)
-        if exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            inputMovies = self.inputMovies.get()
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-            outputSet.copyInfo(inputMovies)
-            outputSet.setSamplingRate(self._getNewSamplingRate())
-
-        return outputSet
 
     def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
         outputSet.setStreamState(state)

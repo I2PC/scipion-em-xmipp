@@ -577,6 +577,7 @@ class _FakeOutputSet:
         self.streamState = None
         self.copiedFrom = None
         self.appendEnabled = False
+        self.samplingRate = None
 
     def setStreamState(self, state):
         self.streamState = state
@@ -592,6 +593,9 @@ class _FakeOutputSet:
 
     def __len__(self):
         return 0
+
+    def setSamplingRate(self, samplingRate):
+        self.samplingRate = samplingRate
 
 
 class TestXmippMovieMaxShiftLogicalOutputCreation(unittest.TestCase):
@@ -5729,6 +5733,434 @@ class TestXmippPreprocessMicrographsResumeCompletion(unittest.TestCase):
         self.assertEqual(
             protocol._getKnownPersistedOutputIds(
                 "outputMicrographs",
+            ),
+            {1, 2},
+        )
+
+class TestXmippMovieResizeStreamingBase(unittest.TestCase):
+
+    def testMovieResizeUsesSharedStreamingBase(self):
+        from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+            XmippProtMovieResize,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        self.assertTrue(
+            issubclass(XmippProtMovieResize, XmippStreamingBase)
+        )
+
+class TestXmippMovieResizeLogicalInput(unittest.TestCase):
+
+    def testLoadInputListUsesLogicalSet(self):
+        from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+            XmippProtMovieResize,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        inputSet = _PreprocessMicrographSet(
+            [2, 4],
+            streamClosed=False,
+        )
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMovies = pointer
+
+        protocol = _Harness()
+
+        XmippProtMovieResize._loadInputList(protocol)
+
+        self.assertEqual(
+            [movie.getObjId() for movie in protocol.listOfMovies],
+            [2, 4],
+        )
+        self.assertFalse(protocol.streamClosed)
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+
+class TestXmippMovieResizeIncrementalDiscovery(unittest.TestCase):
+
+    def testCheckNewInputQueriesOnlyIdsBeyondWatermark(self):
+        from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+            XmippProtMovieResize,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        inputSet = _IncrementalPreprocessSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMovies = pointer
+            insertedDict = {1: None, 2: None, 3: None}
+            _lastInputId = 3
+            listOfMovies = [
+                _PreprocessMicrograph(1),
+                _PreprocessMicrograph(2),
+                _PreprocessMicrograph(3),
+            ]
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewMoviesSteps(self, insertedDict, inputMovies):
+                ids = [movie.getObjId() for movie in inputMovies]
+                self.batches.append(ids)
+                for objId in ids:
+                    insertedDict[objId] = objId
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+        protocol = _Harness()
+        protocol.insertedDict = {1: None, 2: None, 3: None}
+        protocol.listOfMovies = [
+            _PreprocessMicrograph(1),
+            _PreprocessMicrograph(2),
+            _PreprocessMicrograph(3),
+        ]
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtMovieResize._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[4, 5]])
+        self.assertEqual(protocol._lastInputId, 5)
+        self.assertEqual(
+            [movie.getObjId() for movie in protocol.listOfMovies],
+            [1, 2, 3, 4, 5],
+        )
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [("id", "id > 3")],
+        )
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [("id", 4), ("id", 5)],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+        self.assertEqual(protocol.updateCalls, 1)
+        self.assertFalse(protocol.streamClosed)
+
+class TestXmippMovieResizeTerminalReconciliation(unittest.TestCase):
+
+    def testClosedStreamRecoversLateVisibleMovie(self):
+        from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+            XmippProtMovieResize,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        inputSet = _ClosedIncrementalPreprocessSet()
+        pointer = _Pointer(inputSet)
+
+        class _Harness(XmippStreamingBase):
+            inputMovies = pointer
+            insertedDict = {
+                1: None,
+                2: None,
+                3: None,
+                4: None,
+                5: None,
+            }
+            _lastInputId = 5
+            listOfMovies = [
+                _PreprocessMicrograph(objId)
+                for objId in range(1, 6)
+            ]
+
+            def _getFirstJoinStep(self):
+                return None
+
+            def _insertNewMoviesSteps(self, insertedDict, inputMovies):
+                ids = [movie.getObjId() for movie in inputMovies]
+                self.batches.append(ids)
+                for objId in ids:
+                    insertedDict[objId] = objId
+                return []
+
+            def updateSteps(self):
+                self.updateCalls += 1
+
+        protocol = _Harness()
+        protocol.insertedDict = {
+            1: None,
+            2: None,
+            3: None,
+            4: None,
+            5: None,
+        }
+        protocol.listOfMovies = [
+            _PreprocessMicrograph(objId)
+            for objId in range(1, 6)
+        ]
+        protocol.batches = []
+        protocol.updateCalls = 0
+
+        XmippProtMovieResize._checkNewInput(protocol)
+
+        self.assertEqual(protocol.batches, [[6]])
+        self.assertEqual(protocol._lastInputId, 6)
+        self.assertTrue(protocol.streamClosed)
+        self.assertEqual(
+            [movie.getObjId() for movie in protocol.listOfMovies],
+            [1, 2, 3, 4, 5, 6],
+        )
+        self.assertEqual(
+            inputSet.uniqueCalls,
+            [
+                ("id", "id > 5"),
+                ("id", None),
+            ],
+        )
+        self.assertEqual(
+            inputSet.getItemCalls,
+            [("id", 6)],
+        )
+        self.assertEqual(pointer.getCalls, 1)
+        self.assertEqual(inputSet.loadCalls, 1)
+        self.assertEqual(inputSet.closeCalls, 1)
+        self.assertEqual(protocol.updateCalls, 1)
+
+class TestXmippMovieResizePersistedResume(unittest.TestCase):
+
+    def testRestoreInsertedMoviesUsesPersistedOutputIds(self):
+        from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+            XmippProtMovieResize,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        outputSet = _PersistedOutputSet({1, 3})
+
+        class _Harness(XmippStreamingBase):
+            outputMovies = outputSet
+            insertedDict = {}
+
+            def _isMovieDone(self, movie):
+                return False
+
+        protocol = _Harness()
+        protocol.insertedDict = {}
+
+        inputMovies = [
+            _PreprocessMicrograph(1),
+            _PreprocessMicrograph(2),
+            _PreprocessMicrograph(3),
+        ]
+
+        XmippProtMovieResize._restoreInsertedMovies(
+            protocol,
+            inputMovies,
+        )
+
+        self.assertEqual(
+            protocol.insertedDict,
+            {
+                1: None,
+                3: None,
+            },
+        )
+        self.assertEqual(outputSet.getIdSetCalls, 1)
+
+class TestXmippMovieResizeOutputFactory(unittest.TestCase):
+
+    def testGetOutputMoviesUsesProtocolFactory(self):
+        from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+            XmippProtMovieResize,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        logicalInput = _OutputInfoSource()
+        pointer = _Pointer(logicalInput)
+
+        class _Harness(XmippStreamingBase):
+            inputMovies = pointer
+
+            def _createSetOfMovies(self):
+                self.factoryCalls += 1
+                return _FakeOutputSet()
+
+            def _getNewSamplingRate(self):
+                return 4.5
+
+            def _defineOutputs(self, **outputs):
+                for name, output in outputs.items():
+                    setattr(self, name, output)
+
+            def _getPath(self, *args):
+                raise AssertionError(
+                    "MovieResize output creation must use "
+                    "_createSetOfMovies(), not a manual sqlite path."
+                )
+
+        protocol = _Harness()
+        protocol.factoryCalls = 0
+
+        output = XmippProtMovieResize.getOutputMovies(
+            protocol,
+        )
+
+        self.assertEqual(protocol.factoryCalls, 1)
+        self.assertIs(output.copiedFrom, logicalInput)
+        self.assertEqual(
+            output.streamState,
+            _FakeOutputSet.STREAM_OPEN,
+        )
+        self.assertEqual(
+            output.samplingRate,
+            4.5,
+        )
+        self.assertIs(protocol.outputMovies, output)
+        self.assertEqual(pointer.getCalls, 1)
+
+class TestXmippMovieResizeNoDoneAllSidecar(unittest.TestCase):
+
+    def testCheckNewOutputUsesPersistedOutputInsteadOfDoneAll(self):
+        from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+            XmippProtMovieResize,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        outputSet = _PreprocessOutputSet({1})
+
+        class _Harness(XmippStreamingBase):
+            outputMovies = outputSet
+            listOfMovies = [
+                _PreprocessMicrograph(1),
+                _PreprocessMicrograph(2),
+            ]
+            streamClosed = False
+            finished = False
+
+            def _isMovieDone(self, movie):
+                return movie.getObjId() == 2
+
+            def getOutputMovies(self):
+                return outputSet
+
+            def _appendNewMovies(
+                self,
+                imageSet,
+                movies,
+                samplingRate,
+            ):
+                for movie in movies:
+                    imageSet.append(movie)
+
+            def _getNewSamplingRate(self):
+                return 4.5
+
+            def _readDoneList(self):
+                raise AssertionError(
+                    "DONE_all.TXT must not be used as durable "
+                    "MovieResize publication state."
+                )
+
+            def _writeDoneList(self, movieList):
+                raise AssertionError(
+                    "DONE_all.TXT must not be written after publication."
+                )
+
+            def _loadOutputSet(self, SetClass, baseName):
+                raise AssertionError(
+                    "MovieResize publication must use getOutputMovies(), "
+                    "not a manual movies.sqlite output."
+                )
+
+            def _updateOutputSet(
+                self,
+                outputName,
+                outSet,
+                streamMode,
+            ):
+                self.updatedOutputName = outputName
+                self.updatedStreamMode = streamMode
+
+            def _getFirstJoinStep(self):
+                return None
+
+        protocol = _Harness()
+
+        XmippProtMovieResize._checkNewOutput(protocol)
+
+        self.assertEqual(outputSet.appendedIds, [2])
+        self.assertEqual(
+            protocol.updatedOutputName,
+            "outputMovies",
+        )
+        self.assertEqual(
+            protocol._getKnownPersistedOutputIds(
+                "outputMovies",
+            ),
+            {1, 2},
+        )
+
+class TestXmippMovieResizeResumeCompletion(unittest.TestCase):
+
+    def testPersistedOutputCountsAsProcessedWithoutMovieMarker(self):
+        from pyworkflow.object import Set
+
+        from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import (
+            XmippProtMovieResize,
+        )
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        outputSet = _PreprocessOutputSet({1})
+
+        class _Harness(XmippStreamingBase):
+            outputMovies = outputSet
+            listOfMovies = [
+                _PreprocessMicrograph(1),
+                _PreprocessMicrograph(2),
+            ]
+            streamClosed = True
+            finished = False
+
+            def _isMovieDone(self, movie):
+                return movie.getObjId() == 2
+
+            def getOutputMovies(self):
+                return outputSet
+
+            def _appendNewMovies(
+                self,
+                imageSet,
+                movies,
+                samplingRate,
+            ):
+                for movie in movies:
+                    imageSet.append(movie)
+
+            def _getNewSamplingRate(self):
+                return 4.5
+
+            def _updateOutputSet(
+                self,
+                outputName,
+                outSet,
+                streamMode,
+            ):
+                self.updatedOutputName = outputName
+                self.updatedStreamMode = streamMode
+
+            def _getFirstJoinStep(self):
+                return None
+
+        protocol = _Harness()
+
+        XmippProtMovieResize._checkNewOutput(protocol)
+
+        self.assertTrue(protocol.finished)
+        self.assertEqual(
+            protocol.updatedStreamMode,
+            Set.STREAM_CLOSED,
+        )
+        self.assertEqual(outputSet.appendedIds, [2])
+        self.assertEqual(
+            protocol._getKnownPersistedOutputIds(
+                'outputMovies',
             ),
             {1, 2},
         )
