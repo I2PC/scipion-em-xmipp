@@ -8,7 +8,7 @@
 # *****************************************************************************
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from pyworkflow.tests import BaseTest, setupTestProject
 
@@ -98,6 +98,24 @@ class TestXmippMovieGainRegression(BaseTest):
         prot._checkNewInput()
 
         self.assertEqual([2], scheduled)
+
+    def testProcessMovieSkipsMovieWithCorruptedGainDataAndKeepsProtocolAlive(self):
+        # Regression test: a single movie with corrupted/unreadable gain
+        # data must not crash the whole step (and hence the whole
+        # protocol via pyworkflow's fail-on-any-exception step boundary).
+        # It must be logged clearly and _processMovie must return
+        # normally so the rest of the movies keep being processed.
+        prot = self._newProtocol()
+        prot.estimatedIds = []
+        prot.estimatedResIds = []
+        prot.doGainProcess = lambda movieId: True
+        prot.getInputGain = Mock(side_effect=ValueError("corrupted gain header"))
+        prot.error = Mock()
+
+        prot._processMovie(_FakeMovie(7))  # must not raise
+
+        prot.error.assert_called_once()
+        self.assertIn("7", prot.error.call_args[0][0])
 
     def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
         from unittest.mock import patch

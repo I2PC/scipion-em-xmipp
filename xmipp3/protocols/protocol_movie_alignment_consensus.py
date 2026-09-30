@@ -610,16 +610,13 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         newDoneDiscarded = [movieId for movieId in movieListIdDiscarded
                             if movieId not in doneListDiscarded]
 
-        allDone = len(doneListAccepted) + len(doneListDiscarded) +\
-                  len(newDoneAccepted) + len(newDoneDiscarded)
-
-        # We have finished when there is not more input movies (stream closed)
-        # and the number of processed movies is equal to the number of inputs
         maxMovieSize = len(set(self.allMovies1).intersection(set(self.allMovies2)))
-        self.finished = (self.isStreamClosed and allDone == maxMovieSize)
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         if not newDoneDiscarded and not newDoneAccepted:
+            # Nothing decided since last check - done counts are exactly
+            # what's already published.
+            allDone = len(doneListAccepted) + len(doneListDiscarded)
+            self.finished = (self.isStreamClosed and allDone == maxMovieSize)
             if self.finished:
                 outputStep = self._getFirstJoinStep()
                 if outputStep and outputStep.isWaiting():
@@ -632,17 +629,26 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                     movSet = self._loadOutputSet(SetOfMovies, 'movies'+label+'.sqlite')
                     micSet = self._loadOutputSet(SetOfMicrographs, 'micrographs'+label+'.sqlite')
                     label = ACCEPTED if label == '' else DISCARDED
-                    self.fillOutput(movSet, micSet, newDone, label)
+                    publishedIds = self.fillOutput(movSet, micSet, newDone, label)
                     movSet.setSamplingRate(self.samplingRate)
                     micSet.setSamplingRate(self.samplingRate)
                     micSet.setAcquisition(self.acquisition.clone())
                     movSet.setAcquisition(self.acquisition.clone())
 
-                return movSet, micSet
-            return None, None
+                return movSet, micSet, publishedIds
+            return None, None, []
 
-        movieSet, micSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
-        movieSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded, newDoneDiscarded, DISCARDED)
+        movieSet, micSet, publishedAccepted = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
+        movieSetDiscarded, micSetDiscarded, publishedDiscarded = readOrCreateOutputs(doneListDiscarded, newDoneDiscarded, DISCARDED)
+
+        # A movie whose micrograph isn't visible yet (fillOutput skipped
+        # it) must not count as done, or this poll could reach
+        # allDone == maxMovieSize and finish prematurely while that
+        # movie is still waiting to be published on a later poll.
+        allDone = (len(doneListAccepted) + len(publishedAccepted)
+                   + len(doneListDiscarded) + len(publishedDiscarded))
+        self.finished = (self.isStreamClosed and allDone == maxMovieSize)
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         def updateOutputsAndClose(movieSet, micSet, label=''):
             if movieSet is None or micSet is None:
@@ -687,6 +693,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             self.mapper.commit()
 
     def fillOutput(self, movieSet, micSet, newDone, label):
+        publishedIds = []
+
         if newDone:
             inputMovieSet = self._loadInputMovieSet(self.movieFn1)
             inputMicSet = self._loadInputMicrographSet(self.micsFn)
@@ -694,6 +702,21 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
 
             for movieId in newDone:
+                # Set.__getitem__(int) returns None (not a raise) for a
+                # missing row, but indexing straight into .clone() would
+                # still crash. The micrograph Set in particular is the
+                # output of a different, independently-paced protocol, so
+                # a decided movieId may not have a visible micrograph row
+                # yet - skip it for now and retry on the next poll rather
+                # than crashing the whole protocol.
+                if movieId not in inputMovieSet or movieId not in inputMicSet:
+                    self.info(
+                        "Movie with id %d is not yet visible in the input "
+                        "movie/micrograph Set(s); deferring it to the "
+                        "next check." % movieId
+                    )
+                    continue
+
                 movie = inputMovieSet[movieId].clone()
                 mic = inputMicSet[movieId].clone()
 
@@ -721,8 +744,12 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                     micSet.append(mic)
                     micIds.add(movieId)
 
+                publishedIds.append(movieId)
+
             inputMovieSet.close()
             inputMicSet.close()
+
+        return publishedIds
 
     def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
         """

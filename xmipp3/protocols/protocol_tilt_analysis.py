@@ -28,6 +28,7 @@ import numpy as np
 from itertools import combinations
 import os
 import math
+import time
 from datetime import datetime
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol import STEPS_PARALLEL
@@ -368,6 +369,8 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
                         OUTPUT_MICS_DISCARDED: SetOfMicrographs
                         }
     PARALLEL_BATCH_SIZE = 8
+    MIC_VISIBILITY_MAX_ATTEMPTS = 3
+    MIC_VISIBILITY_RETRY_DELAY = 1  # seconds
 
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)
@@ -522,6 +525,25 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
         inputMicSet = self._loadLogicalSet(self.inputMicrographs)
         try:
             for micId in newDone:
+                # Set.getItem raises rather than returning None for a row
+                # it cannot find, so check membership first - and a mic
+                # marked processed without stats (its worker step gave up
+                # on visibility) has nothing to report here either.
+                if micId not in inputMicSet:
+                    self.info(
+                        "Micrograph with id %d is not visible in the "
+                        "input Set right now; will retry on the next "
+                        "check." % micId
+                    )
+                    continue
+
+                if micId not in self.stats:
+                    self.error(
+                        "Micrograph with id %d has no computed statistics; "
+                        "excluding it from the output." % micId
+                    )
+                    continue
+
                 mic = inputMicSet.getItem("id", micId).clone()
                 corr_mean = Float(self.stats[micId]['mean'])
                 corr_std = Float(self.stats[micId]['std'])
@@ -598,8 +620,45 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
 
         try:
             for micId in micIds:
+                # Set.getItem raises rather than returning None for a row
+                # it cannot find, so check membership first - a micId just
+                # discovered via the id watermark may not be selectable yet
+                # under a PostgreSQL-backed compatibility bridge.
+                for attempt in range(self.MIC_VISIBILITY_MAX_ATTEMPTS):
+                    if attempt > 0:
+                        time.sleep(self.MIC_VISIBILITY_RETRY_DELAY)
+                        inputMicSet.close()
+                        inputMicSet = self._loadLogicalSet(self.inputMicrographs)
+
+                    if micId in inputMicSet:
+                        break
+                else:
+                    self.error(
+                        "Micrograph with id %d never became visible in "
+                        "the input Set after %d attempts; marking it "
+                        "processed with no statistics."
+                        % (micId, self.MIC_VISIBILITY_MAX_ATTEMPTS)
+                    )
+                    self.processedIds.append(micId)
+                    continue
+
                 micrograph = inputMicSet.getItem("id", micId).clone()
-                self._processMicrograph(micrograph)
+                try:
+                    self._processMicrograph(micrograph)
+                except Exception as e:
+                    # A single micrograph with a corrupted/unreadable image
+                    # or degenerate statistics must not crash the whole
+                    # batch step (and hence the whole protocol) - mark it
+                    # processed with no statistics and keep processing the
+                    # rest of the batch.
+                    self.error(
+                        "Micrograph with id %d failed while computing its "
+                        "tilt correlation statistics (%s); marking it "
+                        "processed with no statistics."
+                        % (micId, e)
+                    )
+                    if micId not in self.processedIds:
+                        self.processedIds.append(micId)
         finally:
             inputMicSet.close()
 

@@ -444,7 +444,18 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         for mic in micList:
             if self.saveMicThumbnailWithMask.get():
                 if thumbnailCounter <= NUM_THUMBNAILS:
-                    self._generateThumbnail(mic)
+                    try:
+                        self._generateThumbnail(mic)
+                    except Exception as e:
+                        # A single corrupted/degenerate micrograph (e.g.
+                        # a flat or saturated image) must not crash the
+                        # whole batch step (and hence the whole
+                        # protocol) - skip just its thumbnail.
+                        self.error(
+                            "Micrograph %s failed while generating its "
+                            "thumbnail (%s); skipping the thumbnail "
+                            "for it." % (mic.getMicName(), e)
+                        )
                     thumbnailCounter += 1
             # Mark this mic as finished
             open(self._getMicDone(mic), 'w').close()
@@ -520,6 +531,12 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         if newOutput:
             self._updateOutputCoordSet(newOutput, streamMode)
+            # A mic can be fully processed but contribute zero
+            # coordinates (all filtered out by the model threshold), so
+            # it never appears in outputCoords' _micId values - without
+            # this, it would be recomputed as "new" and reprocessed on
+            # every subsequent poll forever.
+            outputMicIds.update(mic.getObjId() for mic in newOutput)
         elif self.finished:
             self._updateOutputCoordSet([], Set.STREAM_CLOSED)
         else:
@@ -539,10 +556,13 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         scale=(1./self.getBoxScale())
       return scale
     def _getOutputMicIds(self):
-        outputCoords = self.getOutput()
-        if outputCoords is None or outputCoords.getSize() == 0:
-            return set()
-        return {int(micId) for micId in outputCoords.getUniqueValues('_micId')}
+        if not hasattr(self, '_outputMicIds'):
+            outputCoords = self.getOutput()
+            self._outputMicIds = (
+                set() if outputCoords is None or outputCoords.getSize() == 0
+                else {int(micId) for micId in outputCoords.getUniqueValues('_micId')}
+            )
+        return self._outputMicIds
 
 
     def _updateOutputCoordSet(self, micList, streamMode):

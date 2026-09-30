@@ -4,6 +4,7 @@
 # *
 # **************************************************************************
 
+import os
 import unittest
 from unittest.mock import Mock, patch
 
@@ -22,6 +23,12 @@ class _Mic:
 
     def strId(self):
         return str(self.objId)
+
+    def getFileName(self):
+        return 'mic_%03d.mrc' % self.objId
+
+    def getMicName(self):
+        return 'mic_%03d' % self.objId
 
 
 class _OutputCoords:
@@ -170,6 +177,95 @@ class TestXmippDeepMicrographScreenRegression(unittest.TestCase):
 
         protocol._checkNewInput.assert_not_called()
         protocol._checkNewOutput.assert_not_called()
+
+    def testZeroCoordinateMicrographIsNotReprocessedOnEveryPoll(self):
+        # Regression test: a mic that is fully processed (DONE marker
+        # exists) but contributes zero coordinates (all filtered out by
+        # the model threshold) never appears in outputCoords' _micId
+        # values. Without a persisted "known output mic ids" cache, it
+        # would be treated as "new" and reprocessed on every subsequent
+        # poll forever.
+        protocol = _Harness([1], [1], outputIds=[])  # mic 1 processed, 0 coords published
+
+        def fakeUpdate(micList, streamMode):
+            protocol.events.append(('update', [mic.getObjId() for mic in micList]))
+
+        protocol._updateOutputCoordSet = fakeUpdate
+
+        deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
+        deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
+
+        updateCalls = [e for e in protocol.events if e[0] == 'update']
+        self.assertEqual(
+            1,
+            len(updateCalls),
+            "A processed mic with zero output coordinates must only be "
+            "(attempted to be) published once, not reprocessed on "
+            "every poll.",
+        )
+
+
+class TestXmippDeepMicrographScreenThumbnailIsolation(unittest.TestCase):
+    def testExtractMicrographListStepOwnSkipsFailingThumbnailAndKeepsProcessingOthers(self):
+        # Regression test: a single micrograph whose thumbnail
+        # generation fails (e.g. a flat/saturated image) must not crash
+        # the whole batch step (and hence the whole protocol) - it
+        # should be skipped, logged, and the rest of the batch (and its
+        # own DONE marker) must still be processed normally.
+        import shutil
+        import tempfile
+
+        tmpDir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(tmpDir, ignore_errors=True))
+
+        class _BoolValue:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class _ThumbnailHarness:
+            def __init__(self):
+                self.micDict = {'mic1': _Mic(1), 'mic2': _Mic(2)}
+                self.coordDict = {1: [], 2: []}
+                self.saveMicThumbnailWithMask = _BoolValue(True)
+                self.errors = []
+                self.thumbnailCalls = []
+
+            def _convertCoordinates(self, mic, coordList):
+                pass
+
+            def isContinued(self):
+                return False
+
+            def _getMicDone(self, mic):
+                return os.path.join(tmpDir, 'done_%d' % mic.getObjId())
+
+            def _computeMaskForMicrographList(self, micList, *args):
+                pass
+
+            def _generateThumbnail(self, mic):
+                self.thumbnailCalls.append(mic.getObjId())
+                if mic.getObjId() == 1:
+                    raise ValueError("corrupted thumbnail")
+
+            def error(self, msg):
+                self.errors.append(msg)
+
+            def info(self, msg):
+                pass
+
+        harness = _ThumbnailHarness()
+
+        deep_screen.XmippProtDeepMicrographScreen.extractMicrographListStepOwn(
+            harness, ['mic1', 'mic2'],
+        )
+
+        self.assertEqual([1, 2], harness.thumbnailCalls)
+        self.assertEqual(1, len(harness.errors))
+        self.assertTrue(os.path.exists(os.path.join(tmpDir, 'done_1')))
+        self.assertTrue(os.path.exists(os.path.join(tmpDir, 'done_2')))
 
 
 if __name__ == '__main__':

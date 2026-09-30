@@ -23,7 +23,7 @@
 
 import os
 import time
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from datetime import datetime
 
 from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
@@ -39,6 +39,7 @@ from pwem.protocols.protocol_create_stream_data import SET_OF_MICROGRAPHS
 
 from pwem import emlib
 from xmipp3.protocols import XmippProtCTFConsensus, XmippProtCTFMicrographs
+from xmipp3.protocols.protocol_ctf_consensus import OUTPUT_CTF
 
 
 class TestXmippCTFConsensusBase(BaseTest):
@@ -456,4 +457,146 @@ class TestXmippCTFConsensusBase(BaseTest):
         self.assertTrue(prot.finished)
         prot._loadOutputSet.assert_not_called()
         prot.fillOutput.assert_not_called()
-        prot._updateOutputSet.assert_not_called()
+
+    def testCheckNewOutputDoesNotCountCtfSkippedByFillOutput(self):
+        # Regression test: fillOutput may skip a ctfId that is momentarily
+        # not visible in the input Set (Set.getItem raises rather than
+        # returning None for a missing row). self.finished must only count
+        # ids fillOutput actually published, or it could latch True while
+        # a ctf is silently never persisted.
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.isStreamClosed = True
+        prot.insertedIds = [1, 2]
+        prot.acceptedIds = {1: 'T', 2: 'T'}
+        prot.discardedIds = {}
+        prot.inputCTF = Mock()
+
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._loadOutputSet = Mock(return_value=Mock())
+        # ctf 2 is still not visible; fillOutput only publishes ctf 1.
+        prot.fillOutput = Mock(return_value=[1])
+        prot._updateOutputSet = Mock()
+        prot._defineTransformRelation = Mock()
+        prot._defineCtfRelation = Mock()
+        prot._getFirstJoinStep = lambda: None
+        prot._store = Mock()
+        prot._markOutputIdsPersisted = Mock()
+
+        prot._checkNewOutput()
+
+        self.assertFalse(
+            prot.finished,
+            "A ctf skipped by fillOutput must prevent finished from "
+            "latching True, or it would never be retried.",
+        )
+        prot._markOutputIdsPersisted.assert_called_once_with(
+            OUTPUT_CTF, [1],
+        )
+
+    def testSelectCtfStepDiscardsCtfThatNeverBecomesVisible(self):
+        # Regression test: Set.getItem raises (UnboundLocalError) rather
+        # than returning None for a row it cannot find. A ctfId that never
+        # becomes visible must be recorded as discarded (not silently
+        # skipped), or it would never contribute to the "done" accounting
+        # and the protocol would never reach finished=True.
+        fnCtfSet = self._createCtfSet("ctf_visibility_missing.sqlite", [99])
+
+        class _LogicalInputPointer:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def get(self):
+                return SetOfCTF(filename=self.filename)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.inputCTF = _LogicalInputPointer(fnCtfSet)
+        prot.acceptedIds = {}
+        prot.discardedIds = {}
+        prot.initializeRejDict()
+
+        with patch(
+                'xmipp3.protocols.protocol_ctf_consensus.time.sleep',
+                return_value=None,
+        ):
+            prot.selectCtfStep([1])
+
+        self.assertEqual('F', prot.discardedIds.get(1))
+        self.assertNotIn(1, prot.acceptedIds)
+
+    def testSelectCtfStepRetriesUntilCtfBecomesVisible(self):
+        fnCtfSet = self._createCtfSet("ctf_visibility_retry.sqlite", [99])
+
+        class _LogicalInputPointer:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def get(self):
+                return SetOfCTF(filename=self.filename)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.inputCTF = _LogicalInputPointer(fnCtfSet)
+        prot.acceptedIds = {}
+        prot.discardedIds = {}
+        prot.initializeRejDict()
+
+        def appendCtfOnSleep(_delay):
+            ctfSet = SetOfCTF(filename=fnCtfSet)
+            ctfSet.loadAllProperties()
+            ctfSet.enableAppend()
+            ctf = self._getCTFModel(15000, 15000, 0, 5.0, '')
+            ctf.setObjId(1)
+            ctfSet.append(ctf)
+            ctfSet.write()
+            ctfSet.close()
+
+        with patch(
+                'xmipp3.protocols.protocol_ctf_consensus.time.sleep',
+                side_effect=appendCtfOnSleep,
+        ):
+            prot.selectCtfStep([1])
+
+        self.assertIn(1, prot.acceptedIds)
+
+    def testSelectCtfStepDiscardsCtfWithCorruptedDataAndKeepsProcessingOthers(self):
+        # Regression test: a genuine processing failure while evaluating
+        # one CTF's consensus criteria (e.g. missing/corrupted defocus
+        # values) must not crash the whole batch step - and hence the
+        # whole protocol via pyworkflow's fail-on-any-exception step
+        # boundary. It must be discarded with a clear message while the
+        # rest of the batch is still evaluated.
+        fnCtfSet = self.proj.getTmpPath("ctf_corrupted_and_good.sqlite")
+        ctfSet = SetOfCTF(filename=fnCtfSet)
+
+        corruptedCtf = CTFModel()  # no defocus values set -> None
+        corruptedCtf.setObjId(1)
+        ctfSet.append(corruptedCtf)
+
+        goodCtf = self._getCTFModel(15000, 15000, 0, 5.0, '')
+        goodCtf.setObjId(2)
+        ctfSet.append(goodCtf)
+
+        ctfSet.write()
+        ctfSet.close()
+
+        class _LogicalInputPointer:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def get(self):
+                return SetOfCTF(filename=self.filename)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.inputCTF = _LogicalInputPointer(fnCtfSet)
+        prot.acceptedIds = {}
+        prot.discardedIds = {}
+        prot.initializeRejDict()
+
+        prot.selectCtfStep([1, 2])
+
+        self.assertEqual('F', prot.discardedIds.get(1))
+        self.assertNotIn(1, prot.acceptedIds)
+        self.assertIn(2, prot.acceptedIds)

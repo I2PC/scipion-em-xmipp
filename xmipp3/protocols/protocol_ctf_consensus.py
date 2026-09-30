@@ -31,6 +31,7 @@
 from datetime import datetime
 from cmath import rect, phase
 from math import radians, degrees
+import time
 
 from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
@@ -276,6 +277,9 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
                         OUTPUT_CTF: SetOfCTF,
                         OUTPUT_CTF_DISCARDED: SetOfCTF
                         }
+
+    CTF_VISIBILITY_MAX_ATTEMPTS = 3
+    CTF_VISIBILITY_RETRY_DELAY = 1  # seconds
 
 
     def __init__(self, **args):
@@ -591,18 +595,15 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
 
         firstTimeAccepted = len(doneListAccepted) == 0
         firstTimeDiscarded = len(doneListDiscarded) == 0
-        allDone = len(doneListAccepted) + len(doneListDiscarded) +\
-                  len(newDoneAccepted) + len(newDoneDiscarded)
-        # We have finished when the producer stream is closed and every
-        # CTF scheduled by this protocol has been persisted in an output.
-        self.finished = (
-            self.isStreamClosed
-            and allDone == len(self.insertedIds)
-        )
-
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         if not newDoneDiscarded and not newDoneAccepted:
+            allDone = len(doneListAccepted) + len(doneListDiscarded)
+            # We have finished when the producer stream is closed and every
+            # CTF scheduled by this protocol has been persisted in an output.
+            self.finished = (
+                self.isStreamClosed
+                and allDone == len(self.insertedIds)
+            )
             if self.finished:
                 outputStep = self._getFirstJoinStep()
                 if outputStep and outputStep.isWaiting():
@@ -616,15 +617,29 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
                 mSet = self._loadOutputSet(SetOfMicrographs,
                                              'micrographs'+label+'.sqlite')
                 label = ACCEPTED if label == '' else DISCARDED
-                self.fillOutput(cSet, mSet, newDone, label)
+                publishedIds = self.fillOutput(cSet, mSet, newDone, label)
 
-                return cSet, mSet
-            return None, None
+                return cSet, mSet, publishedIds
+            return None, None, []
 
-        ctfSet, micSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
-        ctfSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded,
-                                                               newDoneDiscarded,
-                                                               DISCARDED)
+        ctfSet, micSet, publishedAccepted = readOrCreateOutputs(
+            doneListAccepted, newDoneAccepted)
+        ctfSetDiscarded, micSetDiscarded, publishedDiscarded = readOrCreateOutputs(
+            doneListDiscarded, newDoneDiscarded, DISCARDED)
+
+        # Only ids actually appended to an output Set this round may count
+        # as done - a ctfId skipped by fillOutput (still not visible in the
+        # input) must not be counted, or self.finished could latch True
+        # while that ctfId is silently never published.
+        allDone = (
+            len(doneListAccepted) + len(publishedAccepted)
+            + len(doneListDiscarded) + len(publishedDiscarded)
+        )
+        self.finished = (
+            self.isStreamClosed
+            and allDone == len(self.insertedIds)
+        )
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         def updateRelationsAndClose(cSet, mSet, first, label=''):
 
@@ -648,18 +663,18 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
                 cSet.close()
 
         updateRelationsAndClose(ctfSet, micSet, firstTimeAccepted)
-        if newDoneAccepted:
+        if publishedAccepted:
             self._markOutputIdsPersisted(
                 OUTPUT_CTF,
-                newDoneAccepted,
+                publishedAccepted,
             )
 
         updateRelationsAndClose(ctfSetDiscarded, micSetDiscarded,
                                 firstTimeDiscarded, DISCARDED)
-        if newDoneDiscarded:
+        if publishedDiscarded:
             self._markOutputIdsPersisted(
                 OUTPUT_CTF_DISCARDED,
-                newDoneDiscarded,
+                publishedDiscarded,
             )
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
@@ -672,7 +687,7 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
 
     def fillOutput(self, ctfSet, micSet, newDone, label):
         if not newDone:
-            return
+            return []
 
         inputCtfSet = self._loadLogicalSet(self.inputCTF)
         inputCtfSet2 = None
@@ -680,8 +695,23 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
         if self.calculateConsensus:
             inputCtfSet2 = self._loadLogicalSet(self.inputCTF2)
 
+        publishedIds = []
         try:
             for ctfId in newDone:
+                # Set.getItem raises rather than returning None for a row
+                # it cannot find, so check membership first - these ids
+                # were already read successfully once by selectCtfStep, but
+                # a momentary re-open lag is still possible.
+                if ctfId not in inputCtfSet or (
+                    self.calculateConsensus
+                    and ctfId not in inputCtfSet2
+                ):
+                    self.info(
+                        "CTF with id %d is not visible in the input Set "
+                        "right now; will retry on the next check." % ctfId
+                    )
+                    continue
+
                 ctf = inputCtfSet.getItem("id", ctfId).clone()
                 mic = ctf.getMicrograph().clone()
 
@@ -835,11 +865,14 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
 
                 ctfSet.append(ctf)
                 micSet.append(mic)
+                publishedIds.append(ctfId)
         finally:
             inputCtfSet.close()
 
             if inputCtfSet2 is not None:
                 inputCtfSet2.close()
+
+        return publishedIds
 
     def setSecondaryAttributes(self):
         if self.calculateConsensus and self.includeSecondary:
@@ -965,140 +998,181 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
 
         try:
             for ctfId in ctfIds:
+                # Set.getItem raises rather than returning None for a row
+                # it cannot find, so check membership first - a ctfId just
+                # discovered via the id watermark may not be selectable yet
+                # under a PostgreSQL-backed compatibility bridge.
+                for attempt in range(self.CTF_VISIBILITY_MAX_ATTEMPTS):
+                    if attempt > 0:
+                        time.sleep(self.CTF_VISIBILITY_RETRY_DELAY)
+                        inputCtfSet.close()
+                        inputCtfSet = self._loadLogicalSet(self.inputCTF)
+                        if inputCtfSet2 is not None:
+                            inputCtfSet2.close()
+                            inputCtfSet2 = self._loadLogicalSet(self.inputCTF2)
+
+                    ctfReady = ctfId in inputCtfSet
+                    ctf2Ready = (
+                        not self.calculateConsensus
+                        or ctfId in inputCtfSet2
+                    )
+                    if ctfReady and ctf2Ready:
+                        break
+                else:
+                    self.error(
+                        "CTF with id %d never became visible in the input "
+                        "Set(s) after %d attempts; marking it discarded."
+                        % (ctfId, self.CTF_VISIBILITY_MAX_ATTEMPTS)
+                    )
+                    self.discardedIds[ctfId] = 'F'
+                    continue
+
                 ctf = inputCtfSet.getItem("id", ctfId).clone()
 
-                defocusU = ctf.getDefocusU()
-                defocusV = ctf.getDefocusV()
-                astigm = abs(defocusU - defocusV)
-                astigmPer = abs(defocusU - defocusV) / (
-                    (defocusU + defocusV) / 2
-                )
-                resol = self._getCtfResol(ctf)
-
-                defRangeCrit = (
-                    defocusU < minDef
-                    or defocusU > maxDef
-                    or defocusV < minDef
-                    or defocusV > maxDef
-                )
-                if defRangeCrit:
-                    self.discDict['defocus'] += 1
-
-                astigCrit = astigm > maxAstig
-                if astigCrit:
-                    self.discDict['astigmatism'] += 1
-
-                astigPer = astigmPer > maxAstigPer
-                if astigPer:
-                    self.discDict['astigmatismPer'] += 1
-
-                singleResolCrit = resol > minResol
-                if singleResolCrit:
-                    self.discDict['singleResolution'] += 1
-
-                firstCondition = (
-                    defRangeCrit
-                    or astigCrit
-                    or singleResolCrit
-                    or astigPer
-                )
-
-                consResolCrit = False
-
-                if self.calculateConsensus:
-                    ctf2 = inputCtfSet2.getItem("id", ctfId)
-                    freqResolConsensus = self.calculateConsensusResolution(
-                        ctfId,
-                        ctf,
-                        ctf2,
+                try:
+                    defocusU = ctf.getDefocusU()
+                    defocusV = ctf.getDefocusV()
+                    astigm = abs(defocusU - defocusV)
+                    astigmPer = abs(defocusU - defocusV) / (
+                        (defocusU + defocusV) / 2
                     )
-                    consResolCrit = self.minConsResol < freqResolConsensus
+                    resol = self._getCtfResol(ctf)
 
-                    if consResolCrit:
-                        self.discDict['consensusResolution'] += 1
-
-                    self._freqResol[ctfId] = freqResolConsensus
-
-                secondCondition = False
-
-                if self.useCritXmipp:
-                    firstZero = self._getCritFirstZero()
-                    minFirstZero, maxFirstZero = (
-                        self._getCritFirstZeroRatio()
+                    defRangeCrit = (
+                        defocusU < minDef
+                        or defocusU > maxDef
+                        or defocusV < minDef
+                        or defocusV > maxDef
                     )
-                    corr = self._getCritCorr()
-                    iceness = self._getIceness()
-                    ctfMargin = self._getCritCtfMargin()
-                    minNonAstigmatic, maxNonAstigmatic = (
-                        self._getCritNonAstigmaticValidity()
+                    if defRangeCrit:
+                        self.discDict['defocus'] += 1
+
+                    astigCrit = astigm > maxAstig
+                    if astigCrit:
+                        self.discDict['astigmatism'] += 1
+
+                    astigPer = astigmPer > maxAstigPer
+                    if astigPer:
+                        self.discDict['astigmatismPer'] += 1
+
+                    singleResolCrit = resol > minResol
+                    if singleResolCrit:
+                        self.discDict['singleResolution'] += 1
+
+                    firstCondition = (
+                        defRangeCrit
+                        or astigCrit
+                        or singleResolCrit
+                        or astigPer
                     )
 
-                    if self.xmippCTF == INPUT1:
-                        ctfX = ctf
+                    consResolCrit = False
+
+                    if self.calculateConsensus:
+                        ctf2 = inputCtfSet2.getItem("id", ctfId)
+                        freqResolConsensus = self.calculateConsensusResolution(
+                            ctfId,
+                            ctf,
+                            ctf2,
+                        )
+                        consResolCrit = self.minConsResol < freqResolConsensus
+
+                        if consResolCrit:
+                            self.discDict['consensusResolution'] += 1
+
+                        self._freqResol[ctfId] = freqResolConsensus
+
+                    secondCondition = False
+
+                    if self.useCritXmipp:
+                        firstZero = self._getCritFirstZero()
+                        minFirstZero, maxFirstZero = (
+                            self._getCritFirstZeroRatio()
+                        )
+                        corr = self._getCritCorr()
+                        iceness = self._getIceness()
+                        ctfMargin = self._getCritCtfMargin()
+                        minNonAstigmatic, maxNonAstigmatic = (
+                            self._getCritNonAstigmaticValidity()
+                        )
+
+                        if self.xmippCTF == INPUT1:
+                            ctfX = ctf
+                        else:
+                            ctfX = ctf2
+
+                        secondCondition = (
+                            compareValue(
+                                ctfX,
+                                '_xmipp_ctfCritFirstZero',
+                                'lt',
+                                firstZero,
+                            )
+                            or compareValue(
+                                ctfX,
+                                '_xmipp_ctfCritfirstZeroRatio',
+                                'lt',
+                                minFirstZero,
+                            )
+                            or compareValue(
+                                ctfX,
+                                '_xmipp_ctfCritfirstZeroRatio',
+                                'bt',
+                                maxFirstZero,
+                            )
+                            or compareValue(
+                                ctfX,
+                                '_xmipp_ctfCritCorr13',
+                                'lt',
+                                corr,
+                            )
+                            or compareValue(
+                                ctfX,
+                                '_xmipp_ctfCritIceness',
+                                'bt',
+                                iceness,
+                            )
+                            or compareValue(
+                                ctfX,
+                                '_xmipp_ctfCritCtfMargin',
+                                'lt',
+                                ctfMargin,
+                            )
+                            or compareValue(
+                                ctfX,
+                                '_xmipp_ctfCritNonAstigmaticValidty',
+                                'lt',
+                                minNonAstigmatic,
+                            )
+                            or compareValue(
+                                ctfX,
+                                '_xmipp_ctfCritNonAstigmaticValidty',
+                                'bt',
+                                maxNonAstigmatic,
+                            )
+                        )
+
+                    if firstCondition or consResolCrit or secondCondition:
+                        self.discardedIds[ctfId] = 'F'
                     else:
-                        ctfX = ctf2
+                        if ctf.isEnabled():
+                            self.acceptedIds[ctfId] = 'T'
+                        else:
+                            self.acceptedIds[ctfId] = 'F'
 
-                    secondCondition = (
-                        compareValue(
-                            ctfX,
-                            '_xmipp_ctfCritFirstZero',
-                            'lt',
-                            firstZero,
-                        )
-                        or compareValue(
-                            ctfX,
-                            '_xmipp_ctfCritfirstZeroRatio',
-                            'lt',
-                            minFirstZero,
-                        )
-                        or compareValue(
-                            ctfX,
-                            '_xmipp_ctfCritfirstZeroRatio',
-                            'bt',
-                            maxFirstZero,
-                        )
-                        or compareValue(
-                            ctfX,
-                            '_xmipp_ctfCritCorr13',
-                            'lt',
-                            corr,
-                        )
-                        or compareValue(
-                            ctfX,
-                            '_xmipp_ctfCritIceness',
-                            'bt',
-                            iceness,
-                        )
-                        or compareValue(
-                            ctfX,
-                            '_xmipp_ctfCritCtfMargin',
-                            'lt',
-                            ctfMargin,
-                        )
-                        or compareValue(
-                            ctfX,
-                            '_xmipp_ctfCritNonAstigmaticValidty',
-                            'lt',
-                            minNonAstigmatic,
-                        )
-                        or compareValue(
-                            ctfX,
-                            '_xmipp_ctfCritNonAstigmaticValidty',
-                            'bt',
-                            maxNonAstigmatic,
-                        )
+                    for k, v in self.discDict.items():
+                        setattr(self, "rejBy" + k, Integer(v))
+                except Exception as e:
+                    # A single CTF with corrupted/unexpected values must
+                    # not crash the whole batch step (and hence the whole
+                    # protocol) - discard just this CTF and keep
+                    # evaluating the rest.
+                    self.error(
+                        "CTF with id %d failed while evaluating consensus "
+                        "criteria (%s); marking it discarded."
+                        % (ctfId, e)
                     )
-
-                if firstCondition or consResolCrit or secondCondition:
                     self.discardedIds[ctfId] = 'F'
-                else:
-                    if ctf.isEnabled():
-                        self.acceptedIds[ctfId] = 'T'
-                    else:
-                        self.acceptedIds[ctfId] = 'F'
-
-                for k, v in self.discDict.items():
-                    setattr(self, "rejBy" + k, Integer(v))
         finally:
             inputCtfSet.close()
 

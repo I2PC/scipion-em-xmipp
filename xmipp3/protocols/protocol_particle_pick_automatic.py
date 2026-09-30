@@ -359,6 +359,20 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         mdInfo = emlib.MetaData("properties@"+self._getExtraPath("config.xmd"))
         return mdInfo.getValue(emlib.MDL_PICKING_PARTICLE_SIZE, mdInfo.firstObject())
 
+    def _pickMicrographList(self, micList, *args):
+        """ Pick micrographs one at a time, isolating a corrupted/failing
+        micrograph so it does not crash the whole batch (and hence the
+        whole protocol). Only relevant when streamingBatchSize > 1.
+        """
+        for mic in micList:
+            try:
+                self._pickMicrograph(mic, *args)
+            except Exception as e:
+                self.error(
+                    "Micrograph %s failed during automatic picking "
+                    "(%s); skipping it." % (mic.getMicName(), e)
+                )
+
     def _pickMicrograph(self, mic, *args):
         micPath = mic.getFileName()
         # Get particle picking boxsize from the previous run

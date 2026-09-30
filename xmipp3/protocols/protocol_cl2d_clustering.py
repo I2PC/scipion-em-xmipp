@@ -340,22 +340,54 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
         for cluster, classesRef in result_dict.items():
             self.info('For cluster %d' % cluster)
             self.info('We have the following ref classes: %s' % classesRef)
-            firstTime = True
+            rep = None
+            chosenRef = None
             for classRef in classesRef:
-                if firstTime: # Just want to get the first ref
+                if classRef not in inputSet2D:
+                    self.warning('Cluster %d: reference id %s is not present '
+                                 'in the input set, skipping it as centroid '
+                                 'candidate' % (cluster, classRef))
+                    continue
+                try:
                     if isinstance(inputSet2D, SetOfClasses2D):
                         classTmp = inputSet2D.getItem("id", classRef).clone()
                         rep = classTmp.getRepresentative().clone()
                     else:
                         rep = inputSet2D.getItem("id", classRef).clone()
                         self.samplingRate = inputSet2D.getSamplingRate()
-                    self.info('Using centroid to create new Average %s' % classRef)
-                    newAvg = Particle()
-                    newAvg.copyInfo(rep)
-                    newAvg.setObjId(int(classRef))
-                    newAvg.setClassId(int(classRef))
-                    outputRefs.append(newAvg)
-                    firstTime = False
+                except Exception as e:
+                    # A single corrupted/unreadable reference must not
+                    # crash the whole createOutputStep - try the next
+                    # candidate reference of this cluster instead.
+                    self.error('Cluster %d: reference id %s failed while '
+                               'resolving its representative (%s); trying '
+                               'the next reference.' % (cluster, classRef, e))
+                    rep = None
+                    continue
+                chosenRef = classRef
+                break
+
+            if rep is None:
+                self.error('Cluster %d: none of its reference ids (%s) could '
+                            'be found in the input set, skipping this '
+                            'cluster' % (cluster, classesRef))
+                continue
+
+            try:
+                self.info('Using centroid to create new Average %s' % chosenRef)
+                newAvg = Particle()
+                newAvg.copyInfo(rep)
+                newAvg.setObjId(int(chosenRef))
+                newAvg.setClassId(int(chosenRef))
+                outputRefs.append(newAvg)
+            except Exception as e:
+                # A single cluster whose average cannot be built must not
+                # crash the whole createOutputStep and lose every other
+                # cluster's result.
+                self.error('Cluster %d: failed while building its average '
+                            'from reference id %s (%s); skipping this '
+                            'cluster.' % (cluster, chosenRef, e))
+                continue
 
         outputRefs.setSamplingRate(self.samplingRate)
         output_dict[OUTPUT_AVERAGES] = outputRefs
@@ -370,22 +402,45 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
         for cluster, classesRef in result_dict.items():
             self.info('For cluster %d' % cluster)
             self.info('We have the following ref classes: %s' % classesRef)
-            firstTime = True
+            newClass = None
+            newClassId = None
             newParticles = []
 
             for classRef in classesRef:
-                classTmp = inputSet2D.getItem("id", classRef)
-                if firstTime:
-                    self.info('First iter, using centroid to create new Class: %s' % classRef)
-                    newClass = Class2D()
-                    newClass.copyInfo(classTmp)
-                    newClass.setObjId(int(classRef))
-                    newClassId = newClass.getObjId()
-                    firstTime = False
+                if classRef not in inputSet2D:
+                    self.warning('Cluster %d: reference id %s is not present '
+                                 'in the input set, skipping it' % (cluster, classRef))
+                    continue
 
-                for particle in classTmp.iterItems():
-                    particle.setClassId(newClassId)
-                    newParticles.append(particle.clone())
+                try:
+                    classTmp = inputSet2D.getItem("id", classRef)
+                    if newClass is None:
+                        self.info('First resolvable ref, using centroid to '
+                                  'create new Class: %s' % classRef)
+                        candidateClass = Class2D()
+                        candidateClass.copyInfo(classTmp)
+                        candidateClass.setObjId(int(classRef))
+                        newClass = candidateClass
+                        newClassId = newClass.getObjId()
+
+                    for particle in classTmp.iterItems():
+                        particle.setClassId(newClassId)
+                        newParticles.append(particle.clone())
+                except Exception as e:
+                    # A single corrupted/unreadable cluster member must
+                    # not crash the whole createOutputStep - skip just
+                    # this member and keep processing the rest of the
+                    # cluster.
+                    self.error('Cluster %d: reference id %s failed while '
+                               'being processed (%s); skipping this '
+                               'member.' % (cluster, classRef, e))
+                    continue
+
+            if newClass is None:
+                self.error('Cluster %d: none of its reference ids (%s) could '
+                            'be found in the input set, no class created for '
+                            'it' % (cluster, classesRef))
+                continue
 
             dictClasses[newClassId] = newParticles
             self.info('Class particles size: %d' % len(newParticles))
@@ -456,7 +511,7 @@ class XmippProtCL2DClustering(ProtAnalysis2D, XmippProtocol):
                     clusters[current_cluster] = []
                 elif current_cluster is not None and line.isdigit():
                     # Append numbers to the current cluster's list
-                    clusters[current_cluster].append(line)
+                    clusters[current_cluster].append(int(line))
 
         return clusters
 

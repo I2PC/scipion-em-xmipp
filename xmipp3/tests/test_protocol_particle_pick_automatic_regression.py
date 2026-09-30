@@ -131,6 +131,34 @@ class TestXmippAutomaticPickingRegression(unittest.TestCase):
         self.assertIn('--particleSize 128', protocol.jobs[0][1])
         self.assertFalse(hasattr(protocol, 'boxSize'))
 
+    def testPickMicrographListSkipsFailingMicrographAndKeepsProcessingOthers(self):
+        # Regression test: with streamingBatchSize > 1, a single
+        # corrupted/failing micrograph must not crash the whole batch
+        # (and hence the whole protocol) - the base
+        # pwem._pickMicrographList loop has no per-mic isolation.
+        class _BatchPickHarness:
+            def __init__(self):
+                self.errors = []
+                self.picked = []
+
+            def error(self, msg):
+                self.errors.append(msg)
+
+            def _pickMicrograph(self, mic, *args):
+                self.picked.append(mic.getObjId())
+                if mic.getObjId() == 2:
+                    raise ValueError("corrupted micrograph")
+
+        protocol = _BatchPickHarness()
+        micList = [_Mic(1), _Mic(2), _Mic(3)]
+
+        auto_pick.XmippParticlePickingAutomatic._pickMicrographList(
+            protocol, micList,
+        )
+
+        self.assertEqual([1, 2, 3], protocol.picked)
+        self.assertEqual(1, len(protocol.errors))
+
     def testOutputIsPersistedFromRealOutputSetNotSidecar(self):
         # Regression test: which mics still need to be flushed to the output
         # Set must come from the real, persisted outputCoordinates

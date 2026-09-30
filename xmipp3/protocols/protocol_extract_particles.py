@@ -561,6 +561,20 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 outputStep.setStatus(STATUS_NEW)
     
     #--------------------------- STEPS functions -------------------------------
+    def _extractMicrographList(self, micList, *args):
+        """ Extract particles one micrograph at a time, isolating a
+        corrupted/failing micrograph so it does not crash the whole
+        batch (and hence the whole protocol).
+        """
+        for mic in micList:
+            try:
+                self._extractMicrograph(mic, *args)
+            except Exception as e:
+                self.error(
+                    "Micrograph %s failed during particle extraction "
+                    "(%s); skipping it." % (mic.getMicName(), e)
+                )
+
     def _extractMicrograph(self, mic, doInvert, normalizeArgs, doBorders):
         """ Extract particles from one micrograph """
         fnLast = mic.getFileName()
@@ -914,45 +928,57 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         p = Particle()
         boxScale = self.getBoxScale()
         for mic in micList:
-            # We need to make this dict because there is no ID in the .xmd file
-            coordDict = {}
-            for coord in self.coordDict[mic.getObjId()]:
-                pos = self._getPos(coord)
-                if pos in coordDict:
-                    print("WARNING: Ignoring duplicated coordinate: %s, id=%s" %
-                          (coord.getObjId(), pos))
-                coordDict[pos] = coord
+            try:
+                # We need to make this dict because there is no ID in the .xmd file
+                coordDict = {}
+                for coord in self.coordDict[mic.getObjId()]:
+                    pos = self._getPos(coord)
+                    if pos in coordDict:
+                        print("WARNING: Ignoring duplicated coordinate: %s, id=%s" %
+                              (coord.getObjId(), pos))
+                    coordDict[pos] = coord
 
-            added = set() # Keep track of added coords to avoid duplicates
-            fnMicXmd = self._getMicXmd(mic)
-            if exists(fnMicXmd):
-                for row in md.iterRows(fnMicXmd):
-                    pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
-                    coord = coordDict.get(pos, None)
-                    if coord is not None and coord.getObjId() not in added:
-                        # scale the coordinates according to particles dimension.
-                        coord.scale(boxScale)
-                        p.copyObjId(coord)
-                        p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
-                        p.setCoordinate(coord)
-                        p.setMicId(mic.getObjId())
-                        p.setCTF(mic.getCTF())
-                        # adding the variance and Gini coeff. value of the mic zone
-                        setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
-                        setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
-                        setXmippAttributes(p, row, md.MDL_LOCAL_AVERAGE)
-                        if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
-                            setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
+                added = set() # Keep track of added coords to avoid duplicates
+                fnMicXmd = self._getMicXmd(mic)
+                if exists(fnMicXmd):
+                    for row in md.iterRows(fnMicXmd):
+                        pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
+                        coord = coordDict.get(pos, None)
+                        if coord is not None and coord.getObjId() not in added:
+                            # scale the coordinates according to particles dimension.
+                            coord.scale(boxScale)
+                            p.copyObjId(coord)
+                            p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
+                            p.setCoordinate(coord)
+                            p.setMicId(mic.getObjId())
+                            p.setCTF(mic.getCTF())
+                            # adding the variance and Gini coeff. value of the mic zone
+                            setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
+                            setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                            setXmippAttributes(p, row, md.MDL_LOCAL_AVERAGE)
+                            if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
+                                setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
-                        # disabled particles (in metadata) should not add to the
-                        # final set
-                        if row.getValue(md.MDL_ENABLED) > 0:
-                            outputParts.append(p)
-                            added.add(coord.getObjId())
-
-            # Release the list of coordinates for this micrograph since it
-            # will not be longer needed
-            del self.coordDict[mic.getObjId()]
+                            # disabled particles (in metadata) should not add to the
+                            # final set
+                            if row.getValue(md.MDL_ENABLED) > 0:
+                                outputParts.append(p)
+                                added.add(coord.getObjId())
+            except Exception as e:
+                # A single micrograph with a corrupted/truncated .xmd
+                # must not crash the whole batch (and hence the whole
+                # protocol) - skip just its particles and keep
+                # processing the rest.
+                self.error(
+                    "Micrograph with id %d failed while reading its "
+                    "extracted particles (%s); skipping it."
+                    % (mic.getObjId(), e)
+                )
+            finally:
+                # Release the list of coordinates for this micrograph
+                # since it will not be needed again, whether or not it
+                # succeeded.
+                del self.coordDict[mic.getObjId()]
 
     def _getMicPos(self, mic):
         """ Return the corresponding .pos file for a given micrograph. """

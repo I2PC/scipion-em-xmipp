@@ -34,9 +34,44 @@ class _FakeMicrograph:
         return _FakeMicrograph(self._objId, self._fileName, self._micName)
 
 
-class _FreshOutputSet(_FakeOutputSet):
-    def getIdSet(self):
-        raise AssertionError('Fresh output Set must not query IDs before its first append.')
+class _FakePointer:
+    def __init__(self, obj):
+        self._obj = obj
+
+    def get(self):
+        return self._obj
+
+
+class _FakeInputMicSet:
+    def __init__(self, ids, streamClosed=False, items=None):
+        self._ids = set(ids)
+        self._streamClosed = streamClosed
+        self._items = items or {}
+        self.closed = False
+
+    def loadAllProperties(self):
+        pass
+
+    def isStreamClosed(self):
+        return self._streamClosed
+
+    def getSize(self):
+        return len(self._ids)
+
+    def __contains__(self, itemId):
+        return itemId in self._items
+
+    def getUniqueValues(self, attr, where=None):
+        if where is None:
+            return sorted(self._ids)
+        threshold = int(where.split('>')[1].strip())
+        return sorted(itemId for itemId in self._ids if itemId > threshold)
+
+    def getItem(self, field, value):
+        return self._items[value]
+
+    def close(self):
+        self.closed = True
 
 
 class _FakeMapper:
@@ -88,9 +123,13 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
 
     def testNewInputUsesFreshReloadedSnapshot(self):
         prot = self._newProtocol()
-        prot.inputMics = [_FakeMicrograph(1)]
         prot.insertedDict = {1: 10}
-        prot._loadInputMics = lambda: ([_FakeMicrograph(1), _FakeMicrograph(2)], False)
+        prot._lastInputId = 1
+        mic1 = _FakeMicrograph(1)
+        mic2 = _FakeMicrograph(2)
+        prot.inputMicrographs = _FakePointer(_FakeInputMicSet(
+            ids=[1, 2], items={1: mic1, 2: mic2},
+        ))
         prot._getFirstJoinStep = lambda: None
         scheduled = []
         prot._insertNewMicsSteps = lambda inserted, mics: scheduled.extend(m.getObjId() for m in mics) or []
@@ -98,45 +137,69 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
         prot._checkNewInput()
         self.assertEqual([2], scheduled)
 
-    def testFreshOutputSetDoesNotQueryIds(self):
+    def testCheckNewInputRetriesMicNotYetVisibleWithoutPermanentLoss(self):
+        # Regression test: Set.getItem raises (UnboundLocalError) rather
+        # than returning None for a row it cannot find, and _discoverIdsAfter
+        # already advances the id watermark past a discovered id regardless
+        # of whether it is actually selectable yet. A momentarily-invisible
+        # mic must therefore be kept pending and retried on a later check,
+        # not dropped - dropping it would lose it forever, since the
+        # watermark never revisits an id once passed.
         prot = self._newProtocol()
-        self.assertEqual(set(), prot._getOutputMicIds(_FreshOutputSet()))
-
-    def testOutputAndRelationsArePersistedBeforeDoneCheckpoint(self):
-        prot = self._newProtocol()
-        prot.SetOfMicrographs = [_FakeMicrograph(1)]
-        prot.streamClosed = False
-        prot._isMicPipelineDone = lambda mic: True
-        prot._readDoneList = lambda: []
-        prot._getOutputMicrograph = lambda mic: 'mic_%06d.mrc' % mic.getObjId()
-        outputSet = _FakeOutputSet([99])
-        prot.getOutputMics = lambda: outputSet
-        events = []
-        prot._updateOutputSet = lambda *args: events.append('output')
-        prot._refreshOutputRelation = lambda *args: events.append('relations')
-        prot._writeDoneList = lambda *args: events.append('done')
+        prot.insertedDict = {}
+        prot._lastInputId = 0
+        inputSet = _FakeInputMicSet(ids=[2], items={})
+        prot.inputMicrographs = _FakePointer(inputSet)
         prot._getFirstJoinStep = lambda: None
-        prot._checkNewOutput()
-        self.assertEqual([1], outputSet.appended)
-        self.assertEqual(['output', 'relations', 'done'], events)
+        scheduled = []
+        prot._insertNewMicsSteps = lambda inserted, mics: scheduled.extend(m.getObjId() for m in mics) or []
+        prot.updateSteps = lambda: None
 
-    def testCheckpointedMicIsRepublishedWhenOutputIsMissing(self):
+        prot._checkNewInput()  # must not raise
+
+        self.assertEqual([], scheduled)
+        self.assertEqual({2}, prot._pendingMicIds)
+
+        # The mic becomes visible on a later check.
+        inputSet._items[2] = _FakeMicrograph(2)
+        prot._checkNewInput()
+
+        self.assertEqual([2], scheduled)
+        self.assertEqual(set(), prot._pendingMicIds)
+
+    def testOutputAndRelationsArePersistedBeforeCheckpoint(self):
         prot = self._newProtocol()
         prot.SetOfMicrographs = [_FakeMicrograph(1)]
         prot.streamClosed = False
         prot._isMicPipelineDone = lambda mic: True
-        prot._readDoneList = lambda: [1]
         prot._getOutputMicrograph = lambda mic: 'mic_%06d.mrc' % mic.getObjId()
         outputSet = _FakeOutputSet([99])
         prot.getOutputMics = lambda: outputSet
         events = []
         prot._updateOutputSet = lambda *args: events.append('output')
         prot._refreshOutputRelation = lambda *args: events.append('relations')
-        prot._writeDoneList = lambda *args: events.append('done')
         prot._getFirstJoinStep = lambda: None
         prot._checkNewOutput()
         self.assertEqual([1], outputSet.appended)
         self.assertEqual(['output', 'relations'], events)
+
+    def testAlreadyPersistedMicIsNotRepublished(self):
+        # Regression test: done-tracking must come from the real, persisted
+        # outputMicrographs Set (via _getKnownPersistedOutputIds), not a
+        # DONE_all.TXT-style sidecar - a mic already reflected there must
+        # not trigger a redundant append/output rewrite.
+        prot = self._newProtocol()
+        prot.SetOfMicrographs = [_FakeMicrograph(1)]
+        prot.streamClosed = False
+        prot._isMicPipelineDone = lambda mic: True
+        prot.outputMicrographs = _FakeOutputSet([1])
+        prot._getOutputMicrograph = lambda mic: 'mic_%06d.mrc' % mic.getObjId()
+        events = []
+        prot._updateOutputSet = lambda *args: events.append('output')
+        prot._refreshOutputRelation = lambda *args: events.append('relations')
+        prot._getFirstJoinStep = lambda: None
+        prot._checkNewOutput()
+        self.assertEqual([], events)
 
     def testRefreshOutputRelationRebuildsAndCommits(self):
         prot = self._newProtocol()

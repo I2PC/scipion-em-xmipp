@@ -1732,21 +1732,30 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       particleKeys = self._getOutputCoordinateKeys(self.outputParticles, particles=True)
       downFactor = self._getDownFactor()
       for part in partSet:
-        coord = part.getCoordinate().clone()
-        coord.scale(downFactor)
-        deepZscoreLabel = '_xmipp_%s' % emlib.label2Str(md.MDL_ZSCORE_DEEPLEARNING1)
-        setattr(coord, deepZscoreLabel, getattr(part, deepZscoreLabel))
-        newPart = Particle()
-        newPart.copy(part, copyId=False)
-        newPart.scaleCoordinate(downFactor)
-        coordKey = self._coordinateKey(coord)
-        if self.threshold.get() < 0 or getattr(newPart, deepZscoreLabel) > self.threshold.get():
-          if coordKey not in coordKeys:
-            self.outputCoordinates.append(coord)
-            coordKeys.add(coordKey)
-          if coordKey not in particleKeys:
-            self.outputParticles.append(newPart)
-            particleKeys.add(coordKey)
+        try:
+          coord = part.getCoordinate().clone()
+          coord.scale(downFactor)
+          deepZscoreLabel = '_xmipp_%s' % emlib.label2Str(md.MDL_ZSCORE_DEEPLEARNING1)
+          setattr(coord, deepZscoreLabel, getattr(part, deepZscoreLabel))
+          newPart = Particle()
+          newPart.copy(part, copyId=False)
+          newPart.scaleCoordinate(downFactor)
+          coordKey = self._coordinateKey(coord)
+          if self.threshold.get() < 0 or getattr(newPart, deepZscoreLabel) > self.threshold.get():
+            if coordKey not in coordKeys:
+              self.outputCoordinates.append(coord)
+              coordKeys.add(coordKey)
+            if coordKey not in particleKeys:
+              self.outputParticles.append(newPart)
+              particleKeys.add(coordKey)
+        except Exception as e:
+          # A single corrupted particle (e.g. missing coordinate or
+          # zscore label) must not crash the whole output-creation step
+          # (and hence the whole protocol) - skip just this particle.
+          self.error(
+              "Particle with id %d failed while being written to the "
+              "output (%s); skipping it." % (part.getObjId(), e)
+          )
 
       cleanPattern(self._getPath(self.PARTICLES_TEMPLATE.format(predExten)))
       cleanPattern(self._getPath("*outputParts_tmp{}.sqlite".format(predExten)))
@@ -1763,17 +1772,26 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       self.preliminarOutputCoordinates = self.getPreCoordinatesOutput()
 
       downFactor = self._getDownFactor()
-      for part in partSet:
-        coord = part.getCoordinate().clone()
-        coord.scale(downFactor)
-        deepZscoreLabel = '_xmipp_%s' % emlib.label2Str(md.MDL_ZSCORE_DEEPLEARNING1)
-        setattr(coord, deepZscoreLabel, getattr(part, deepZscoreLabel))
-        part = part.clone()
-        part.scaleCoordinate(downFactor)
-        if (self.threshold.get() < 0 or
-                getattr(part, deepZscoreLabel) > self.threshold.get()):
-          self.preliminarOutputCoordinates.append(coord)
-          self.preliminarOutputParticles.append(part)
+      for origPart in partSet:
+        try:
+          coord = origPart.getCoordinate().clone()
+          coord.scale(downFactor)
+          deepZscoreLabel = '_xmipp_%s' % emlib.label2Str(md.MDL_ZSCORE_DEEPLEARNING1)
+          setattr(coord, deepZscoreLabel, getattr(origPart, deepZscoreLabel))
+          part = origPart.clone()
+          part.scaleCoordinate(downFactor)
+          if (self.threshold.get() < 0 or
+                  getattr(part, deepZscoreLabel) > self.threshold.get()):
+            self.preliminarOutputCoordinates.append(coord)
+            self.preliminarOutputParticles.append(part)
+        except Exception as e:
+          # A single corrupted particle (e.g. missing coordinate or
+          # zscore label) must not crash the whole output-creation step
+          # (and hence the whole protocol) - skip just this particle.
+          self.error(
+              "Particle with id %d failed while being written to the "
+              "output (%s); skipping it." % (origPart.getObjId(), e)
+          )
 
       cleanPattern(self._getPath(self.PARTICLES_TEMPLATE.format(trPass)))
       cleanPattern(self._getPath("*outputParts_tmp{}.sqlite".format(trPass)))

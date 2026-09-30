@@ -234,6 +234,70 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
         self.assertFalse(protocol.finished)
         self.assertEqual([('sleep',)], protocol.events)
 
+    def testExtractMicrographListSkipsFailingMicrographAndKeepsProcessingOthers(self):
+        # Regression test: a single corrupted micrograph must not crash
+        # the whole batch (and hence the whole protocol) - the base
+        # pwem._extractMicrographList loop has no per-mic isolation.
+        class _ExtractHarness:
+            def __init__(self):
+                self.errors = []
+                self.extracted = []
+
+            def error(self, msg):
+                self.errors.append(msg)
+
+            def _extractMicrograph(self, mic, *args):
+                self.extracted.append(mic.getObjId())
+                if mic.getObjId() == 2:
+                    raise ValueError("corrupted micrograph")
+
+        harness = _ExtractHarness()
+        micList = [_Mic(1), _Mic(2), _Mic(3)]
+
+        extract_particles.XmippProtExtractParticles._extractMicrographList(
+            harness, micList,
+        )
+
+        self.assertEqual([1, 2, 3], harness.extracted)
+        self.assertEqual(1, len(harness.errors))
+
+    def testReadPartsFromMicsSkipsMicrographWhoseCoordinatesFailToParseAndKeepsProcessingOthers(self):
+        # Regression test: a single micrograph whose coordinate data
+        # fails to parse must not crash readPartsFromMics for the whole
+        # batch, and its coordDict entry must still be released so it
+        # doesn't linger and leak memory/cause stale re-processing.
+        class _ReadPartsHarness:
+            def __init__(self, coordDict):
+                self.coordDict = coordDict
+                self.errors = []
+
+            def getBoxScale(self):
+                return 1.0
+
+            def _getPos(self, coord):
+                if coord.micId == 2:
+                    raise ValueError("corrupted coordinate")
+                return (0, 0)
+
+            def _getMicXmd(self, mic):
+                return '/nonexistent/%d.xmd' % mic.getObjId()
+
+            def error(self, msg):
+                self.errors.append(msg)
+
+        harness = _ReadPartsHarness({
+            1: [_Coord(1)], 2: [_Coord(2)], 3: [_Coord(3)],
+        })
+        outputParts = _OutputParts()
+        micList = [_Mic(1), _Mic(2), _Mic(3)]
+
+        extract_particles.XmippProtExtractParticles.readPartsFromMics(
+            harness, micList, outputParts,
+        )
+
+        self.assertEqual(1, len(harness.errors))
+        self.assertEqual({}, harness.coordDict)
+
 
 if __name__ == '__main__':
     unittest.main()

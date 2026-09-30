@@ -28,6 +28,7 @@ import os
 from os.path import exists
 import numpy as np
 import copy
+import time
 
 from pyworkflow import VERSION_3_0
 from pyworkflow import UPDATED, PROD
@@ -300,6 +301,9 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
     REJ_AND = 2
     REJ_OR = 3
 
+    MOVIE_VISIBILITY_MAX_ATTEMPTS = 3
+    MOVIE_VISIBILITY_RETRY_DELAY = 1  # seconds
+
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
         #self.stepsExecutionMode = STEPS_PARALLEL
@@ -471,67 +475,103 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
 
     def _evaluateMovieAlign(self, movIds):
         """Fill the accepted or rejected lists for the given movies."""
-        inputMovies = self._loadLogicalSet(self.inputMovies)
         sampling = self.samplingRate
+        inputMovies = self._loadLogicalSet(self.inputMovies)
 
         try:
             for movieId in movIds:
-                movie = inputMovies.getItem("id", movieId).clone()
-                alignment = movie.getAlignment()
-                # getShifts() returns the absolute shifts from a reference.
-                shiftListX, shiftListY = alignment.getShifts()
+                movie = None
+                for attempt in range(self.MOVIE_VISIBILITY_MAX_ATTEMPTS):
+                    if attempt > 0:
+                        time.sleep(self.MOVIE_VISIBILITY_RETRY_DELAY)
+                        inputMovies.close()
+                        inputMovies = self._loadLogicalSet(self.inputMovies)
 
-                rejectedByMovie = False
-                rejectedByFrame = False
+                    # Set.getItem raises rather than returning None for a
+                    # row it cannot find, so check membership first - a
+                    # movie just discovered via the id watermark may not
+                    # be selectable yet under a PostgreSQL-backed
+                    # compatibility bridge.
+                    if movieId in inputMovies:
+                        movie = inputMovies.getItem("id", movieId).clone()
+                        break
 
-                if any(shiftListX) or any(shiftListY):
-                    shiftArrayX = np.asarray(shiftListX)
-                    shiftArrayY = np.asarray(shiftListY)
-
-                    evalBoth = (
-                        self.rejType == self.REJ_AND
-                        or self.rejType == self.REJ_OR
+                if movie is None:
+                    self.error(
+                        "Movie with id %d never became visible in the "
+                        "input Set after %d attempts; discarding it."
+                        % (movieId, self.MOVIE_VISIBILITY_MAX_ATTEMPTS)
                     )
+                    self.discardedIds.append(movieId)
+                    continue
 
-                    if self.rejType == self.REJ_MOVIE or evalBoth:
-                        deltaX = np.diff(shiftArrayX)
-                        deltaY = np.diff(shiftArrayY)
-                        stepDistances = np.sqrt(
-                            deltaX ** 2 + deltaY ** 2
-                        )
-                        totalPath = (
-                            np.sum(stepDistances) * sampling
-                        )
-                        rejectedByMovie = (
-                            totalPath > self.maxMovieShift.get()
-                        )
+                try:
+                    alignment = movie.getAlignment()
+                    # getShifts() returns the absolute shifts from a reference.
+                    shiftListX, shiftListY = alignment.getShifts()
 
-                    if self.rejType == self.REJ_FRAME or evalBoth:
-                        frameShiftX = np.diff(shiftArrayX)
-                        frameShiftY = np.diff(shiftArrayY)
-                        frameShifts = np.sqrt(
-                            frameShiftX ** 2
-                            + frameShiftY ** 2
-                        )
-                        maxShiftM = (
-                            np.max(frameShifts) * sampling
-                        )
-                        rejectedByFrame = (
-                            maxShiftM > self.maxFrameShift.get()
+                    rejectedByMovie = False
+                    rejectedByFrame = False
+
+                    if any(shiftListX) or any(shiftListY):
+                        shiftArrayX = np.asarray(shiftListX)
+                        shiftArrayY = np.asarray(shiftListY)
+
+                        evalBoth = (
+                            self.rejType == self.REJ_AND
+                            or self.rejType == self.REJ_OR
                         )
 
-                    if self.rejType == self.REJ_AND:
-                        if rejectedByFrame and rejectedByMovie:
-                            self.discardedIds.append(movieId)
+                        if self.rejType == self.REJ_MOVIE or evalBoth:
+                            deltaX = np.diff(shiftArrayX)
+                            deltaY = np.diff(shiftArrayY)
+                            stepDistances = np.sqrt(
+                                deltaX ** 2 + deltaY ** 2
+                            )
+                            totalPath = (
+                                np.sum(stepDistances) * sampling
+                            )
+                            rejectedByMovie = (
+                                totalPath > self.maxMovieShift.get()
+                            )
+
+                        if self.rejType == self.REJ_FRAME or evalBoth:
+                            frameShiftX = np.diff(shiftArrayX)
+                            frameShiftY = np.diff(shiftArrayY)
+                            frameShifts = np.sqrt(
+                                frameShiftX ** 2
+                                + frameShiftY ** 2
+                            )
+                            maxShiftM = (
+                                np.max(frameShifts) * sampling
+                            )
+                            rejectedByFrame = (
+                                maxShiftM > self.maxFrameShift.get()
+                            )
+
+                        if self.rejType == self.REJ_AND:
+                            if rejectedByFrame and rejectedByMovie:
+                                self.discardedIds.append(movieId)
+                            else:
+                                self.acceptedIds.append(movieId)
                         else:
-                            self.acceptedIds.append(movieId)
+                            if rejectedByFrame or rejectedByMovie:
+                                self.discardedIds.append(movieId)
+                            else:
+                                self.acceptedIds.append(movieId)
                     else:
-                        if rejectedByFrame or rejectedByMovie:
-                            self.discardedIds.append(movieId)
-                        else:
-                            self.acceptedIds.append(movieId)
-                else:
-                    self.acceptedIds.append(movieId)
+                        self.acceptedIds.append(movieId)
+                except Exception as e:
+                    # A single movie with corrupted/missing alignment data
+                    # must not fail the whole batch step (and hence the
+                    # whole protocol) - discard just this movie and keep
+                    # evaluating the rest.
+                    self.error(
+                        "Movie with id %d failed while evaluating its "
+                        "alignment shifts (%s); discarding it."
+                        % (movieId, e)
+                    )
+                    self.discardedIds.append(movieId)
         finally:
             inputMovies.close()
 
@@ -683,12 +723,15 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
 
             for movieId in newDoneList:
                 if movieId not in movieSetIds:
-                    movie = inputMovies.getItem(
-                        "id",
-                        movieId,
-                    )
-
-                    if movie is not None:
+                    # Set.getItem raises rather than returning None for a
+                    # row it cannot find, so check membership first - a
+                    # movie just marked done may not be selectable yet
+                    # under a PostgreSQL-backed compatibility bridge.
+                    if movieId in inputMovies:
+                        movie = inputMovies.getItem(
+                            "id",
+                            movieId,
+                        )
                         tryToAppend(
                             movieSet,
                             movie.clone(),
@@ -703,18 +746,18 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
                     pendingMicIds.discard(movieId)
                     continue
 
-                mic = inputMics.getItem(
-                    "id",
-                    movieId,
-                )
-
-                if mic is None:
+                if movieId not in inputMics:
                     pendingMicIds.add(movieId)
                     self.info(
                         "Movie with id %d has not a micrograph "
                         "associated yet" % movieId
                     )
                     continue
+
+                mic = inputMics.getItem(
+                    "id",
+                    movieId,
+                )
 
                 tryToAppend(
                     micsSet,

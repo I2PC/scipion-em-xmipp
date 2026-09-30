@@ -7,6 +7,8 @@
 # *
 # *****************************************************************************
 
+from unittest.mock import patch
+
 from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
 from pyworkflow.tests import BaseTest, setupTestProject
 
@@ -23,14 +25,37 @@ class _FakeCtfSet:
         self._streamClosed = streamClosed
         self.closed = False
 
+    def loadAllProperties(self):
+        pass
+
+    def __contains__(self, itemId):
+        return itemId in self._ids
+
+    def getUniqueValues(self, attr, where=None):
+        if where is None:
+            return sorted(self._ids)
+        threshold = int(where.split('>')[1].strip())
+        return sorted(itemId for itemId in self._ids if itemId > threshold)
+
     def getIdSet(self):
         return set(self._ids)
+
+    def getSize(self):
+        return len(self._ids)
 
     def isStreamClosed(self):
         return self._streamClosed
 
     def close(self):
         self.closed = True
+
+
+class _FakePointer:
+    def __init__(self, obj):
+        self._obj = obj
+
+    def get(self):
+        return self._obj
 
 
 class _FakeItem:
@@ -49,16 +74,44 @@ class _FakeItem:
         return self._micrograph
 
 
+class _FakeCtfItem:
+    def __init__(self, objId, defocusU=15000.0, micrograph=None):
+        self._objId = objId
+        self._defocusU = defocusU
+        self._micrograph = micrograph
+
+    def getObjId(self):
+        return self._objId
+
+    def clone(self):
+        return _FakeCtfItem(self._objId, self._defocusU, self._micrograph)
+
+    def getDefocusU(self):
+        return self._defocusU
+
+    def getMicrograph(self):
+        return self._micrograph
+
+
 class _FakeItemSet:
     def __init__(self, items=None):
         self._items = {item.getObjId(): item for item in (items or [])}
         self.closed = False
+
+    def loadAllProperties(self):
+        pass
+
+    def __contains__(self, itemId):
+        return itemId in self._items
 
     def __getitem__(self, itemId):
         return self._items[itemId]
 
     def __iter__(self):
         return iter(self._items.values())
+
+    def getItem(self, field, value):
+        return self._items[value]
 
     def getIdSet(self):
         return set(self._items)
@@ -86,10 +139,11 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
             minImages=minImages,
             numImages=numImages
         )
-        prot.ctfFn = 'unused.sqlite'
         prot.insertedIds = []
         prot.sampled_images = []
         prot.finished = False
+        prot._lastInputId = 0
+        prot._pendingInputIds = set()
         return prot
 
     def _prepareCheck(self, prot, ids, streamClosed=False):
@@ -97,7 +151,7 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
         scheduled = []
         updates = []
 
-        prot._loadInputCtfSet = lambda _: fakeSet
+        prot.inputCTF = _FakePointer(fakeSet)
         prot._getFirstJoinStep = lambda: None
         prot._insertNewCtfsSteps = lambda newIds: scheduled.append(list(newIds)) or []
         prot.updateSteps = lambda: updates.append(True)
@@ -219,7 +273,12 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
         prot._originalRunMode = MODE_RESUME
         prot.sampledIds.set([2, 3])
         prot.sampled_images = list(prot.sampledIds)
-        prot._loadInputCtfSet = lambda _: self.fail('Input should not be reopened when sampled ids are persisted.')
+
+        class _FailPointer:
+            def get(_self):
+                self.fail('Input should not be reopened when sampled ids are persisted.')
+
+        prot.inputCTF = _FailPointer()
 
         prot._checkNewInput()
 
@@ -234,7 +293,7 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
         inputSet = _FakeItemSet([ctf1, ctf2])
         ctfOutput = _FakeItemSet([ctf1.clone()])
         micOutput = _FakeItemSet([mic1.clone()])
-        prot._loadInputCtfSet = lambda _: inputSet
+        prot.inputCTF = _FakePointer(inputSet)
 
         prot.fillOutput(ctfOutput, micOutput, [1, 2])
 
@@ -247,7 +306,7 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
         mic1 = _FakeItem(101)
         ctf1 = _FakeItem(1, mic1)
         inputSet = _FakeItemSet([ctf1])
-        prot._loadInputCtfSet = lambda _: inputSet
+        prot.inputCTF = _FakePointer(inputSet)
 
         class _FreshItemSet(_FakeItemSet):
             def getIdSet(self):
@@ -270,13 +329,66 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
         mic2 = _FakeItem(102)
         inputSet = _FakeItemSet([_FakeItem(1, mic1), _FakeItem(2, mic2)])
         prot.outputMicrographs = _FakeItemSet([mic2.clone()])
-        prot._loadInputCtfSet = lambda _: inputSet
+        prot.inputCTF = _FakePointer(inputSet)
 
         doneIds, sizeOutput = prot._getAllDoneIds()
 
         self.assertEqual([2], doneIds)
         self.assertEqual(1, sizeOutput)
         self.assertTrue(inputSet.closed)
+
+    def testExtractBalancedDefocusExcludesCtfThatNeverBecomesVisible(self):
+        # Regression test: Set.getItem raises (UnboundLocalError) rather
+        # than returning None for a row it cannot find. A ctfId that never
+        # becomes visible must be excluded from the defocus sampling pool
+        # instead of crashing the whole one-shot worker step.
+        prot = self._newProtocol(minImages=3, numImages=2)
+        inputSet = _FakeItemSet([_FakeCtfItem(1, 15000.0)])
+        prot.inputCTF = _FakePointer(inputSet)
+
+        with patch(
+                'xmipp3.protocols.protocol_mics_defocus_balancer.time.sleep',
+                return_value=None,
+        ):
+            prot.extractBalancedDefocus([1, 2])
+
+        self.assertEqual([1], prot.sampled_images)
+
+    def testExtractBalancedDefocusExcludesCtfWithCorruptedDefocusAndKeepsSamplingOthers(self):
+        # Regression test: a genuine processing failure while reading one
+        # CTF's defocus value (missing/corrupted data) must not crash the
+        # whole batch step - and hence the whole protocol via pyworkflow's
+        # fail-on-any-exception step boundary. It must be excluded from
+        # the sampling pool with a clear message while the rest of the
+        # batch is still sampled.
+        prot = self._newProtocol(minImages=1, numImages=2)
+        inputSet = _FakeItemSet([
+            _FakeCtfItem(1, defocusU=None),  # corrupted/missing defocus
+            _FakeCtfItem(2, 15000.0),
+        ])
+        prot.inputCTF = _FakePointer(inputSet)
+
+        prot.extractBalancedDefocus([1, 2])
+
+        self.assertEqual([2], prot.sampled_images)
+
+    def testFillOutputSkipsCtfNotYetVisibleAndDoesNotCrash(self):
+        # Regression test: a ctfId not yet visible in the input Set must be
+        # skipped (and the rest of the batch still published), instead of
+        # raising and crashing the whole protocol.
+        prot = self._newProtocol()
+        mic1 = _FakeItem(101)
+        ctf1 = _FakeItem(1, mic1)
+        inputSet = _FakeItemSet([ctf1])  # ctf 2 is not present
+        prot.inputCTF = _FakePointer(inputSet)
+
+        ctfOutput = _FakeItemSet()
+        micOutput = _FakeItemSet()
+
+        prot.fillOutput(ctfOutput, micOutput, [1, 2])
+
+        self.assertEqual({1}, ctfOutput.getIdSet())
+        self.assertEqual({101}, micOutput.getIdSet())
 
 import unittest
 from unittest.mock import Mock

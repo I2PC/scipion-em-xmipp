@@ -61,6 +61,14 @@ class _FakeMic:
         return _FakeMic(self._objId)
 
 
+class _FakeMicsDict(dict):
+    """Stands in for a SetOfMicrographs: supports __contains__/__getitem__
+    like a dict already does, plus the loadAllProperties() refresh call."""
+
+    def loadAllProperties(self):
+        pass
+
+
 class TestXmippParticlePickConsensusRegression(BaseTest):
     """Regression tests for Picking Consensus streaming and Continue handling."""
 
@@ -136,9 +144,9 @@ class TestXmippParticlePickConsensusRegression(BaseTest):
         ]
         prot._restoreProcessedMics = lambda: None
         prot.getMainInput = lambda: SimpleNamespace(
-            getMicrographs=lambda: {
+            getMicrographs=lambda: _FakeMicsDict({
                 1: _FakeMic(1), 2: _FakeMic(2), 3: _FakeMic(3),
-            }
+            })
         )
         prot._getFirstJoinStep = lambda: None
         prot.updateSteps = lambda: None
@@ -158,6 +166,65 @@ class TestXmippParticlePickConsensusRegression(BaseTest):
             prot._checkNewInput()
 
         self.assertEqual({1, 2, 3}, set(scheduled))
+
+    def testCheckNewInputDefersMicrographNotYetVisibleWithoutPermanentLoss(self):
+        # Regression test: getMainInput().getMicrographs() resolves a
+        # Pointer whose cached value is never refreshed. A micId that
+        # getReadyMics() (which does reopen fresh) already reports as
+        # ready may still be invisible in that cached micrographs Set -
+        # it must be deferred (kept out of checkedMics) so it is retried
+        # on the next check, not crash or get permanently skipped.
+        prot = self._newProtocol()
+        prot.inputCoordinates = [SimpleNamespace(get=lambda: object())]
+        prot._restoreProcessedMics = lambda: None
+        prot.getMainInput = lambda: SimpleNamespace(
+            getMicrographs=lambda: _FakeMicsDict({2: _FakeMic(2)})  # mic 1 missing
+        )
+        prot._getFirstJoinStep = lambda: None
+        prot.updateSteps = lambda: None
+
+        scheduled = []
+        prot.insertNewCoorsSteps = (
+            lambda mics: scheduled.extend(mic.getObjId() for mic in mics) or []
+        )
+
+        with patch(
+                'xmipp3.protocols.protocol_particle_pick_consensus.getReadyMics',
+                return_value=({1, 2}, True),
+        ):
+            prot._checkNewInput()
+
+        self.assertEqual([2], scheduled)
+        self.assertEqual({2}, prot.checkedMics)
+
+    def testCheckNewOutputDefersConsensusResultWhenMicrographNotYetVisible(self):
+        # Regression test: a consensus result marker for a micrograph
+        # that is not yet visible in the (staleness-prone) micrographs
+        # Pointer must not crash and must not be moved out of _tmp -
+        # otherwise it would never be retried and that micrograph's
+        # coordinates would be silently lost forever. finished must also
+        # not latch True while a result is still deferred.
+        prot = self._newProtocol()
+        prot.checkedMics = {1}
+        prot.processedMics = {1}
+        prot.streamClosed = True
+        outputSet = _FakeOutputSet()
+        events = []
+
+        prot._loadOutputSet = lambda *args: outputSet
+        prot._updateOutputSet = lambda *args: events.append('output')
+        prot._refreshOutputRelations = lambda *args: events.append('relations')
+        prot._getTmpPath = lambda *args: 'tmp'
+        prot._getExtraPath = lambda *args: 'extra'
+        prot._getFirstJoinStep = lambda: None
+        prot.getMainInput = lambda: SimpleNamespace(getMicrographs=lambda: _FakeMicsDict({}))
+
+        with patch('xmipp3.protocols.protocol_particle_pick_consensus.getFiles', return_value=['/run/tmp/consensusCoords_1.txt']), patch('xmipp3.protocols.protocol_particle_pick_consensus.os.path.getsize', return_value=10), patch('xmipp3.protocols.protocol_particle_pick_consensus.np.loadtxt', side_effect=AssertionError('Must not be loaded before checking micrograph visibility.')), patch('xmipp3.protocols.protocol_particle_pick_consensus.moveFile', side_effect=lambda *args: events.append('marker')):
+            prot._checkNewOutput()
+
+        self.assertEqual([], outputSet.appended)
+        self.assertNotIn('marker', events)
+        self.assertFalse(prot.finished)
 
     def testRestoreProcessedMicsIncludesPendingTmpResults(self):
         prot = self._newProtocol()
@@ -263,7 +330,7 @@ class TestXmippParticlePickConsensusRegression(BaseTest):
         prot._refreshOutputRelations = lambda *args: events.append('relations')
         prot._getTmpPath = lambda *args: 'tmp'
         prot._getExtraPath = lambda *args: 'extra'
-        prot.getMainInput = lambda: SimpleNamespace(getMicrographs=lambda: {2: object()})
+        prot.getMainInput = lambda: SimpleNamespace(getMicrographs=lambda: _FakeMicsDict({2: object()}))
 
         with patch('xmipp3.protocols.protocol_particle_pick_consensus.getFiles', return_value=['/run/tmp/consensusCoords_2.txt']), patch('xmipp3.protocols.protocol_particle_pick_consensus.os.path.getsize', return_value=10), patch('xmipp3.protocols.protocol_particle_pick_consensus.np.loadtxt', return_value=np.array([10.0, 20.0])), patch('xmipp3.protocols.protocol_particle_pick_consensus.Coordinate', _FakeCoordinate), patch('xmipp3.protocols.protocol_particle_pick_consensus.moveFile', side_effect=lambda *args: events.append('marker')):
             prot._checkNewOutput()

@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import copy
+import time
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
@@ -333,6 +334,8 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
 
     PARALLEL_BATCH_SIZE = 8
     PLOT_UPDATE_INTERVAL = 50
+    MOVIE_VISIBILITY_MAX_ATTEMPTS = 3
+    MOVIE_VISIBILITY_RETRY_DELAY = 1  # seconds
 
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
@@ -464,32 +467,51 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
         self._closeOutputSet()
 
     def _loadMoviesByIds(self, movieIds):
-        with self._lock:
-            inputMovies = self._loadLogicalSet(
-                self.inputMovies,
+        """ Load the requested movies from the input Set, tolerating a
+        transient visibility lag for a row that was just discovered (e.g.
+        via the id watermark scan) but is not yet selectable - Set.getItem
+        raises rather than returning None for a row it cannot find, so a
+        single momentarily-invisible id must not crash the whole batch.
+        A movie still missing after a few retries is left out of the
+        returned dict instead of blocking the caller forever.
+        """
+        pendingIds = set(movieIds)
+        movies = {}
+
+        for attempt in range(self.MOVIE_VISIBILITY_MAX_ATTEMPTS):
+            if not pendingIds:
+                break
+
+            if attempt > 0:
+                time.sleep(self.MOVIE_VISIBILITY_RETRY_DELAY)
+
+            with self._lock:
+                inputMovies = self._loadLogicalSet(
+                    self.inputMovies,
+                )
+
+                try:
+                    stillPending = set()
+                    for movieId in pendingIds:
+                        if movieId in inputMovies:
+                            movies[movieId] = inputMovies.getItem(
+                                "id",
+                                movieId,
+                            ).clone()
+                        else:
+                            stillPending.add(movieId)
+                    pendingIds = stillPending
+                finally:
+                    inputMovies.close()
+
+        if pendingIds:
+            self.error(
+                "Movie(s) with id %s never became visible in the input "
+                "Set after %d attempts; they will be reported as failed."
+                % (sorted(pendingIds), self.MOVIE_VISIBILITY_MAX_ATTEMPTS)
             )
 
-            try:
-                return {
-                    movieId: inputMovies.getItem(
-                        "id",
-                        movieId,
-                    ).clone()
-                    for movieId in movieIds
-                }
-            finally:
-                inputMovies.close()
-
-    @staticmethod
-    def _getInputSetSignature(fileName):
-        def _fileSignature(path):
-            try:
-                fileStat = os.stat(path)
-                return fileStat.st_mtime_ns, fileStat.st_size
-            except FileNotFoundError:
-                return None
-
-        return _fileSignature(fileName), _fileSignature(fileName + '-wal')
+        return movies
 
     def _checkNewInput(self):
         with self._lock:
@@ -522,7 +544,11 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
 
         outputStep = self._getFirstJoinStep()
 
-        if self.isContinued() and not self.insertedIds:
+        if (
+            getattr(self, '_originalRunMode', self.runMode.get())
+            == cons.MODE_RESUME
+            and not self.insertedIds
+        ):
             doneIds, _, _, _ = self._getAllDoneIds()
             doneIds = list(doneIds)
 
@@ -567,7 +593,14 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
     def _processMovies(self, movieIds):
         inputMovies = self._loadMoviesByIds(movieIds)
         for movieId in movieIds:
-            movie = inputMovies[movieId]
+            movie = inputMovies.get(movieId)
+            if movie is None:
+                # Never became visible even after _loadMoviesByIds' own
+                # retries. Still mark it processed (with no stats, same as
+                # a failed estimatePoissonCount) so it is not permanently
+                # left out of processedIds.
+                self.processedIds.append(movieId)
+                continue
             movieId = movie.getObjId()
             stats = self.estimatePoissonCount(movie)
             if stats:
@@ -631,9 +664,12 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
         self.meanDoseList = [doseById[movieId] for movieId in sorted(doseById)]
 
     def _getNewDoneIds(self, doneListIds):
-        # Processing steps may finish out of order, but dose statistics
-        # are chronological. Publish only the contiguous acquisition-order
-        # prefix whose previous movies are already persisted or processed.
+        # Processing steps run in parallel batches and may finish out of
+        # order (or, rarely, never - e.g. a movie whose row remains
+        # unreachable). A still-pending movie must not block every other,
+        # already-processed, higher-id movie from being counted done: skip
+        # it for this round instead of stopping there, and it will be
+        # picked up on its own once it is actually processed.
         insertedIds = sorted(set(self.insertedIds))
         processedIds = set(self.processedIds)
         doneIds = set(doneListIds)
@@ -644,7 +680,7 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
                 continue
 
             if movieId not in processedIds:
-                break
+                continue
 
             newDone.append(movieId)
 
@@ -732,7 +768,14 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
             inputMovies = self._loadMoviesByIds(newDone)
 
             for movieId in newDone:
-                newMovie = inputMovies[movieId]
+                newMovie = inputMovies.get(movieId)
+                if newMovie is None:
+                    self.error(
+                        'Movie with id %d could not be loaded from the '
+                        'input Set; will retry on the next check.'
+                        % movieId
+                    )
+                    continue
                 newMovie.setFramesRange(self.framesRange)
                 movieId = newMovie.getObjId()
                 if movieId in self.stats:
@@ -819,7 +862,13 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
         inputMovies = self._loadMoviesByIds(movieIds)
         failedMovies = []
         for movieId in movieIds:
-            movie = inputMovies[movieId]
+            movie = inputMovies.get(movieId)
+            if movie is None:
+                self.error(
+                    'Movie with id %d could not be loaded from the input '
+                    'Set while publishing failed movies.' % movieId
+                )
+                continue
             movie.setFramesRange(self.framesRange)
             setAttribute(movie, '_DOSE_ANALYSIS_FAILED', True)
             failedMovies.append(movie)

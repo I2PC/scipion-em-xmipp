@@ -1,5 +1,7 @@
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
+
+from pyworkflow.object import Set
 
 from xmipp3.protocols.protocol_alignPCA_2D import XmippProtClassifyPcaStreaming
 
@@ -78,4 +80,66 @@ class TestXmippPcaStreamingSafety(TestCase):
             ctfCalls[0].get("numberOfMpi"),
             "The CTF correction must use numberOfMpi, because that is "
             "the MPI resource Scipion reserves for the protocol.",
+        )
+
+    def test_DoClassificationRefusesNewRoundWhileOneIsInFlight(self):
+        # Regression test: a classification round writes to fixed
+        # (non round-versioned) external files (classes_classes.star,
+        # classes_images.star). This protocol runs under STEPS_PARALLEL
+        # with no prerequisite chaining between rounds, so only this
+        # flag prevents a second round's runClassificationSteps from
+        # overwriting those files while a previous round's
+        # updateOutputSetOfClasses is still reading them.
+        protocol = _PcaStreamingHarness()
+        protocol.classificationBatch = _Value(100)
+        protocol.classificationLaunch = True
+
+        self.assertFalse(
+            protocol._doClassification([object()] * 500),
+            "A new classification round must not be launched while a "
+            "previous round's external files may still be in use.",
+        )
+
+    def test_InsertClassificationStepsMarksClassificationAsLaunched(self):
+        protocol = _PcaStreamingHarness()
+        protocol.imgsOrigXmd = '/tmp/imagesInput_.xmd'
+        protocol.imgsXmd = '/tmp/images_.xmd'
+        protocol.imgsFn = '/tmp/images_.mrc'
+        protocol.classificationRound = 0
+        protocol.newDeps = []
+        protocol.info = Mock()
+        protocol._insertFunctionStep = Mock(side_effect=lambda *a, **k: object())
+
+        protocol._insertClassificationSteps(
+            newParticlesSet=[object()],
+            lastInputId=7,
+        )
+
+        self.assertTrue(
+            protocol.classificationLaunch,
+            "Inserting a classification round's steps must mark a "
+            "round as in-flight, so no other round is launched while "
+            "its external files are still being written/read.",
+        )
+
+    def test_UpdateOutputSetOfClassesClearsClassificationLaunchAfterReadingExternalFiles(self):
+        protocol = _PcaStreamingHarness()
+        protocol.classificationLaunch = True
+        protocol.classificationRound = 0
+        protocol.info = Mock()
+        protocol._loadOutputSet = Mock(return_value=(MagicMock(), False))
+        protocol._fillClassesFromLevel = Mock()
+        protocol._updateOutputSet = Mock()
+        protocol._defineSourceRelation = Mock()
+        protocol._getInputPointer = Mock(return_value=object())
+        protocol._setClassificationDone = Mock()
+        protocol._writeLastDone = Mock()
+        protocol._writeLastClassificationRound = Mock()
+
+        protocol.updateOutputSetOfClasses(7, Set.STREAM_OPEN)
+
+        self.assertFalse(
+            protocol.classificationLaunch,
+            "Once a round's external files have been fully read, the "
+            "next round must be allowed to launch.",
         )

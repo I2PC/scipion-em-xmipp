@@ -500,6 +500,7 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
             default=0,
         )
         self.insertedDict = {}
+        self._pendingMicIds = set()
         self._restoreInsertedMics(inputMics)
         preprocessSteps = self._insertNewMicsSteps(self.insertedDict, inputMics)
         self._insertFunctionStep(
@@ -589,11 +590,23 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
                 and terminalConsistent
             )
 
+            # Set.getItem raises rather than returning None for a row it
+            # cannot find, and _discoverIdsAfter already advanced the id
+            # watermark past these ids regardless of whether they are
+            # actually selectable yet. A momentarily-invisible mic must be
+            # kept pending and retried on a later check - dropping it here
+            # would lose it forever, since the watermark never revisits it.
+            pendingMicIds = getattr(self, '_pendingMicIds', set())
+            pendingMicIds.update(newIds)
+
             newMics = []
-            for micId in newIds:
-                mic = inputSet.getItem("id", micId)
-                if mic is not None:
-                    newMics.append(mic.clone())
+            stillPendingMicIds = set()
+            for micId in pendingMicIds:
+                if micId in inputSet:
+                    newMics.append(inputSet.getItem("id", micId).clone())
+                else:
+                    stillPendingMicIds.add(micId)
+            self._pendingMicIds = stillPendingMicIds
         finally:
             inputSet.close()
 
@@ -644,6 +657,7 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
         self.finished = (
             self.streamClosed
             and inputIds.issubset(processedIds)
+            and not getattr(self, '_pendingMicIds', None)
         )
         streamMode = (
             Set.STREAM_CLOSED

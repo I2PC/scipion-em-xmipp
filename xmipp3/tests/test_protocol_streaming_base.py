@@ -340,6 +340,9 @@ class _WorkerMovieSet(_LogicalSet):
         self.closeCalls = 0
         self.getItemCalls = []
 
+    def __contains__(self, itemId):
+        return True
+
     def getItem(self, field, value):
         self.getItemCalls.append((field, value))
         return _Movie()
@@ -358,6 +361,8 @@ class TestXmippMovieMaxShiftLogicalWorkerInput(unittest.TestCase):
         inputSet = _WorkerMovieSet()
         pointer = _Pointer(inputSet)
 
+        from threading import Lock
+
         class _Harness:
             inputMovies = pointer
             samplingRate = 1.0
@@ -366,6 +371,12 @@ class TestXmippMovieMaxShiftLogicalWorkerInput(unittest.TestCase):
             REJ_MOVIE = XmippProtMovieMaxShift.REJ_MOVIE
             REJ_AND = XmippProtMovieMaxShift.REJ_AND
             REJ_OR = XmippProtMovieMaxShift.REJ_OR
+            MOVIE_VISIBILITY_MAX_ATTEMPTS = (
+                XmippProtMovieMaxShift.MOVIE_VISIBILITY_MAX_ATTEMPTS
+            )
+            MOVIE_VISIBILITY_RETRY_DELAY = (
+                XmippProtMovieMaxShift.MOVIE_VISIBILITY_RETRY_DELAY
+            )
 
             acceptedIds = []
             discardedIds = []
@@ -383,9 +394,16 @@ class TestXmippMovieMaxShiftLogicalWorkerInput(unittest.TestCase):
                     inputPointer,
                 )
 
+            def _loadMovieForEvaluation(self, movieId):
+                return XmippProtMovieMaxShift._loadMovieForEvaluation(
+                    self,
+                    movieId,
+                )
+
         protocol = _Harness()
         protocol.acceptedIds = []
         protocol.discardedIds = []
+        protocol._lock = Lock()
 
         XmippProtMovieMaxShift._evaluateMovieAlign(
             protocol,
@@ -701,6 +719,9 @@ class _PublishInputMovies:
     def getSize(self):
         return len(self.ids)
 
+    def __contains__(self, itemId):
+        return itemId in self.ids
+
     def getItem(self, field, value):
         self.getItemCalls.append((field, value))
         return _PublishMovie(value)
@@ -837,6 +858,9 @@ class _LateSiblingMicInput:
         raise AssertionError(
             "Late sibling discovery must not scan all input mic IDs."
         )
+
+    def __contains__(self, itemId):
+        return self.visible and itemId == self.objId
 
     def getItem(self, field, value):
         self.getItemCalls.append((field, value))
@@ -976,9 +1000,13 @@ class TestXmippMovieMaxShiftLateSiblingMicrograph(unittest.TestCase):
         self.assertEqual(inputMics.getIdSetCalls, 0)
         self.assertLessEqual(movieOutput.getIdSetCalls, 1)
         self.assertLessEqual(micOutput.getIdSetCalls, 1)
+        # Set.getItem raises rather than returning None for a row it
+        # cannot find, so fillOutput now checks membership first and only
+        # calls getItem once the mic is actually visible - the first,
+        # not-yet-visible pass must not call getItem at all.
         self.assertEqual(
             inputMics.getItemCalls,
-            [("id", 7), ("id", 7)],
+            [("id", 7)],
         )
 
 class _ResumeMovieSet:
@@ -1163,6 +1191,7 @@ class TestXmippMovieDoseAnalysisStreamingInput(unittest.TestCase):
 
         class _Harness(XmippStreamingBase):
             inputMovies = pointer
+            runMode = _RunMode()
             insertedIds = [1, 2, 3]
             _lastInputId = 3
             _inputSize = None
@@ -1311,6 +1340,9 @@ class TestXmippMovieDoseAnalysisLogicalWorkerInput(unittest.TestCase):
             def loadAllProperties(self):
                 self.loadCalls += 1
 
+            def __contains__(self, movieId):
+                return True
+
             def getItem(self, field, value):
                 self.getItemCalls.append((field, value))
                 return _Movie(value)
@@ -1324,6 +1356,12 @@ class TestXmippMovieDoseAnalysisLogicalWorkerInput(unittest.TestCase):
 
         class _Harness(XmippStreamingBase):
             inputMovies = pointer
+            MOVIE_VISIBILITY_MAX_ATTEMPTS = (
+                XmippProtMovieDoseAnalysis.MOVIE_VISIBILITY_MAX_ATTEMPTS
+            )
+            MOVIE_VISIBILITY_RETRY_DELAY = (
+                XmippProtMovieDoseAnalysis.MOVIE_VISIBILITY_RETRY_DELAY
+            )
 
             @property
             def movsFn(self):
@@ -1665,6 +1703,9 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
             def loadAllProperties(self):
                 self.loadCalls += 1
 
+            def __contains__(self, itemId):
+                return True
+
             def getSize(self):
                 return 2
 
@@ -1884,6 +1925,9 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
             def loadAllProperties(self):
                 self.loadCalls += 1
 
+            def __contains__(self, itemId):
+                return True
+
             def getSize(self):
                 self.sizeCalls += 1
                 return 1
@@ -2022,6 +2066,9 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
             def loadAllProperties(self):
                 self.loadCalls += 1
 
+            def __contains__(self, itemId):
+                return True
+
             def getItem(self, field, value):
                 self.getItemCalls.append((field, value))
                 return _Micrograph(value)
@@ -2034,6 +2081,12 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
 
         class _Harness(XmippStreamingBase):
             inputMicrographs = pointer
+            MIC_VISIBILITY_MAX_ATTEMPTS = (
+                XmippProtTiltAnalysis.MIC_VISIBILITY_MAX_ATTEMPTS
+            )
+            MIC_VISIBILITY_RETRY_DELAY = (
+                XmippProtTiltAnalysis.MIC_VISIBILITY_RETRY_DELAY
+            )
 
             @property
             def micsFn(self):
@@ -2737,7 +2790,7 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
                 return outputs[baseName]
 
             def fillOutput(self, ctfSet, micSet, newDone, label):
-                pass
+                return list(newDone)
 
             def _updateOutputSet(self, outputName, outputSet, streamMode):
                 self.updatedOutputs.append(outputName)
@@ -2874,6 +2927,9 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
             def loadAllProperties(self):
                 self.loadCalls += 1
 
+            def __contains__(self, itemId):
+                return True
+
             def getItem(self, field, value):
                 self.getItemCalls.append((field, value))
                 return _Ctf(value)
@@ -2890,6 +2946,12 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
             useCritXmipp = False
             acceptedIds = {}
             discardedIds = {}
+            CTF_VISIBILITY_MAX_ATTEMPTS = (
+                XmippProtCTFConsensus.CTF_VISIBILITY_MAX_ATTEMPTS
+            )
+            CTF_VISIBILITY_RETRY_DELAY = (
+                XmippProtCTFConsensus.CTF_VISIBILITY_RETRY_DELAY
+            )
             discDict = {
                 'defocus': 0,
                 'astigmatism': 0,
@@ -3003,6 +3065,9 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
 
             def loadAllProperties(self):
                 self.loadCalls += 1
+
+            def __contains__(self, itemId):
+                return True
 
             def getItem(self, field, value):
                 self.getItemCalls.append((field, value))
@@ -3690,6 +3755,9 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
             def loadAllProperties(self):
                 self.loadCalls += 1
 
+            def __contains__(self, itemId):
+                return True
+
             def getItem(self, field, value):
                 self.getItemCalls.append((field, value))
                 return _Ctf(value, 10000 + value)
@@ -3724,6 +3792,12 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
         class _Harness(XmippStreamingBase):
             inputCTF = pointer
             numImages = _Param(2)
+            CTF_VISIBILITY_MAX_ATTEMPTS = (
+                XmippProtMicDefocusSampler.CTF_VISIBILITY_MAX_ATTEMPTS
+            )
+            CTF_VISIBILITY_RETRY_DELAY = (
+                XmippProtMicDefocusSampler.CTF_VISIBILITY_RETRY_DELAY
+            )
 
             @property
             def ctfFn(self):
@@ -3807,6 +3881,9 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
 
             def loadAllProperties(self):
                 self.loadCalls += 1
+
+            def __contains__(self, itemId):
+                return True
 
             def getItem(self, field, value):
                 self.getItemCalls.append((field, value))
@@ -4113,6 +4190,9 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
             def loadAllProperties(self):
                 self.loadCalls += 1
 
+            def __contains__(self, itemId):
+                return True
+
             def getUniqueValues(self, field, where=None):
                 self.uniqueCalls.append((field, where))
 
@@ -4268,6 +4348,9 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
 
             def loadAllProperties(self):
                 self.loadCalls += 1
+
+            def __contains__(self, itemId):
+                return True
 
             def getUniqueValues(self, field, where=None):
                 self.uniqueCalls.append((field, where))
@@ -4872,6 +4955,9 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
             def loadAllProperties(self):
                 self.loadCalls += 1
 
+            def __contains__(self, itemId):
+                return True
+
             def getUniqueValues(self, field, where=None):
                 self.uniqueCalls.append((field, where))
 
@@ -5014,6 +5100,9 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
 
             def loadAllProperties(self):
                 pass
+
+            def __contains__(self, itemId):
+                return True
 
             def getUniqueValues(self, field, where=None):
                 self.uniqueCalls.append((field, where))
@@ -5315,6 +5404,9 @@ class _IncrementalPreprocessSet:
 
     def loadAllProperties(self):
         self.loadCalls += 1
+
+    def __contains__(self, itemId):
+        return True
 
     def getUniqueValues(self, field, where=None):
         self.uniqueCalls.append((field, where))

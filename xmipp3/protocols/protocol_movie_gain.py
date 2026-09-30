@@ -508,50 +508,64 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
         movieId = movie.getObjId()
         if not self.doGainProcess(movieId):
             return
-        inputGain = self.getInputGain()
 
-        if self.estimateGain.get() and not movieId in self.estimatedIds:
-                self.estimatedIds.append(movieId)
-                self.estimateGainFun(movie)
+        try:
+            inputGain = self.getInputGain()
 
-        if self.estimateResidualGain.get() and not movieId in self.estimatedResIds:
-            self.info('\nEstimating residual gain')
-            self.estimatedResIds.append(movieId)
-            self.estimateGainFun(movie, residual=True)
+            if self.estimateGain.get() and not movieId in self.estimatedIds:
+                    self.estimatedIds.append(movieId)
+                    self.estimateGainFun(movie)
 
-        # If the gain hasn't been oriented or normalized, we still need orientedGain
-        if not os.path.exists(self.getOrientedGainPath()):
-            # No previous gain: orientedGain is the estimated
-            if not inputGain is None:
+            if self.estimateResidualGain.get() and not movieId in self.estimatedResIds:
+                self.info('\nEstimating residual gain')
+                self.estimatedResIds.append(movieId)
+                self.estimateGainFun(movie, residual=True)
+
+            # If the gain hasn't been oriented or normalized, we still need
+            # orientedGain. Several movies may reach this concurrently
+            # under STEPS_PARALLEL, all writing the same fixed path - guard
+            # with the lock and re-check inside it to avoid a torn write.
+            if not os.path.exists(self.getOrientedGainPath()):
+                with self._lock:
+                    # No previous gain: orientedGain is the estimated
+                    if inputGain is not None and not os.path.exists(self.getOrientedGainPath()):
+                        G = emlib.Image()
+                        G.read(inputGain)
+                        G.write(self.getOrientedGainPath())
+
+            fnSummary = self._getPath("summary.txt")
+            fnMonitorSummary = self._getPath("summaryForMonitor.txt")
+            if not os.path.exists(fnSummary):
+                fhSummary = open(fnSummary, "w")
+                fnMonitorSummary = open(fnMonitorSummary, "w")
+            else:
+                fhSummary = open(fnSummary, "a")
+                fnMonitorSummary = open(fnMonitorSummary, "a")
+
+            resid_gain = self.getResidualGainPath(movieId)
+            if os.path.exists(resid_gain):
                 G = emlib.Image()
-                G.read(inputGain)
-                G.write(self.getOrientedGainPath())
-
-        fnSummary = self._getPath("summary.txt")
-        fnMonitorSummary = self._getPath("summaryForMonitor.txt")
-        if not os.path.exists(fnSummary):
-            fhSummary = open(fnSummary, "w")
-            fnMonitorSummary = open(fnMonitorSummary, "w")
-        else:
-            fhSummary = open(fnSummary, "a")
-            fnMonitorSummary = open(fnMonitorSummary, "a")
-
-        resid_gain = self.getResidualGainPath(movieId)
-        if os.path.exists(resid_gain):
-            G = emlib.Image()
-            G.read(resid_gain)
-            mean, dev, min, max = G.computeStats()
-            Gnp = G.getData()
-            p = np.percentile(Gnp, [2.5, 25, 50, 75, 97.5])
-            fhSummary.write("movie_%06d_residual: mean=%f std=%f [min=%f,max=%f]\n" %
-                            (movieId, mean, dev, min, max))
-            fhSummary.write(
-                "            2.5%%=%f 25%%=%f 50%%=%f 75%%=%f 97.5%%=%f\n" %
-                (p[0], p[1], p[2], p[3], p[4]))
-            fhSummary.close()
-            fnMonitorSummary.write("movie_%06d_residual: %f %f %f %f\n" %
-                                   (movieId, dev, p[0], p[4], max))
-        fnMonitorSummary.close()
+                G.read(resid_gain)
+                mean, dev, min, max = G.computeStats()
+                Gnp = G.getData()
+                p = np.percentile(Gnp, [2.5, 25, 50, 75, 97.5])
+                fhSummary.write("movie_%06d_residual: mean=%f std=%f [min=%f,max=%f]\n" %
+                                (movieId, mean, dev, min, max))
+                fhSummary.write(
+                    "            2.5%%=%f 25%%=%f 50%%=%f 75%%=%f 97.5%%=%f\n" %
+                    (p[0], p[1], p[2], p[3], p[4]))
+                fhSummary.close()
+                fnMonitorSummary.write("movie_%06d_residual: %f %f %f %f\n" %
+                                       (movieId, dev, p[0], p[4], max))
+            fnMonitorSummary.close()
+        except Exception as e:
+            # A single movie with corrupted/unreadable gain data must
+            # not crash the whole step (and hence the whole protocol) -
+            # log it clearly and move on.
+            self.error(
+                "Movie with id %d failed while processing its gain "
+                "(%s); skipping it." % (movieId, e)
+            )
 
     def _loadOutputSet(self, SetClass, baseName, fixGain=False):
         """

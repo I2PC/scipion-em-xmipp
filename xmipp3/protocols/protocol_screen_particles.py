@@ -428,6 +428,7 @@ There are different merit values to be calculated:
     def _insertAllSteps(self):
         self._initializeZscores()
         self.inputSize = 0
+        self._pendingParticleIds = set()
         self.fnInputMd = self._getExtraPath("input.xmd")
         self.fnInputOldMd = self._getExtraPath("inputOld.xmd")
         self.fnOutputMd = self._getExtraPath("output.xmd")
@@ -582,9 +583,28 @@ There are different merit values to be calculated:
                 if particleId not in processedIds
             ]
 
+            # Set.getItem raises rather than returning None for a row it
+            # cannot find, and _discoverIdsAfter already advanced the id
+            # watermark past these ids regardless of whether they are
+            # actually selectable yet. A momentarily-invisible particle
+            # must be kept pending and retried on a later check - dropping
+            # it here would lose it forever, since the watermark never
+            # revisits an id once passed.
+            pendingParticleIds = getattr(self, '_pendingParticleIds', set())
+            pendingParticleIds.update(newIds)
+
+            visibleIds = []
+            stillPendingIds = set()
+            for particleId in sorted(pendingParticleIds):
+                if particleId in inPartsSet:
+                    visibleIds.append(particleId)
+                else:
+                    stillPendingIds.add(particleId)
+            self._pendingParticleIds = stillPendingIds
+
             newParticles = (
                 inPartsSet.getItem('id', particleId)
-                for particleId in newIds
+                for particleId in visibleIds
             )
             writeSetOfParticles(
                 newParticles,
@@ -593,9 +613,14 @@ There are different merit values to be calculated:
             )
 
             if processedIds:
+                oldIds = [
+                    particleId
+                    for particleId in sorted(processedIds)
+                    if particleId in inPartsSet
+                ]
                 oldParticles = (
                     inPartsSet.getItem('id', particleId)
-                    for particleId in sorted(processedIds)
+                    for particleId in oldIds
                 )
                 writeSetOfParticles(
                     oldParticles,

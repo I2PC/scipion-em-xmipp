@@ -20,10 +20,27 @@ from xmipp3.tests.streaming_test_utils import (
 
 
 class _FakeInputSet:
-    def __init__(self, ids, streamClosed=False):
+    def __init__(self, ids, streamClosed=False, gettableIds=None):
         self._ids = set(ids)
         self._streamClosed = streamClosed
+        self._gettableIds = set(ids) if gettableIds is None else set(gettableIds)
         self.closed = False
+        self.loadCalls = 0
+
+    def loadAllProperties(self):
+        self.loadCalls += 1
+
+    def __contains__(self, itemId):
+        return itemId in self._gettableIds
+
+    def getUniqueValues(self, attr, where=None):
+        if where is None:
+            return sorted(self._ids)
+        threshold = int(where.split('>')[1].strip())
+        return sorted(itemId for itemId in self._ids if itemId > threshold)
+
+    def getItem(self, field, value):
+        return _FakeMicrograph(value)
 
     def getIdSet(self):
         return set(self._ids)
@@ -38,12 +55,23 @@ class _FakeInputSet:
         self.closed = True
 
 
+class _FakePointer:
+    def __init__(self, obj):
+        self._obj = obj
+
+    def get(self):
+        return self._obj
+
+
 class _FakeMicrograph:
     def __init__(self, objId):
         self._objId = objId
 
     def getObjId(self):
         return self._objId
+
+    def clone(self):
+        return _FakeMicrograph(self._objId)
 
 
 class TestXmippTiltAnalysisRegression(BaseTest):
@@ -64,10 +92,11 @@ class TestXmippTiltAnalysisRegression(BaseTest):
     def testNewInputDoesNotDependOnSqliteMtime(self):
         prot = self._newProtocol()
         prot.insertedIds = [1]
+        prot._lastInputId = 1
         inputSet = _FakeInputSet([1, 2])
         scheduled = []
 
-        prot._loadInputSet = lambda _: inputSet
+        prot.inputMicrographs = _FakePointer(inputSet)
         prot._getFirstJoinStep = lambda: None
         prot.isContinued = lambda: False
         prot._insertNewMicrographSteps = lambda ids: scheduled.append(sorted(ids)) or []
@@ -132,6 +161,91 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         self.assertEqual({1}, outputSet.ids)
         self.assertEqual([1], outputSet.appended)
 
+    def testProcessMicrographListStepDiscardsMicThatNeverBecomesVisible(self):
+        # Regression test: Set.getItem raises (UnboundLocalError) rather
+        # than returning None for a row it cannot find. A micId that never
+        # becomes visible must still be recorded in processedIds (with no
+        # stats), or it would never contribute to the "done" accounting
+        # and the protocol would never reach finished=True.
+        prot = self._newProtocol()
+        inputSet = _FakeInputSet([1], gettableIds=set())
+        prot.inputMicrographs = _FakePointer(inputSet)
+        prot._processMicrograph = Mock()
+
+        with patch(
+                'xmipp3.protocols.protocol_tilt_analysis.time.sleep',
+                return_value=None,
+        ):
+            prot.processMicrographListStep([1])
+
+        self.assertEqual([1], prot.processedIds)
+        self.assertNotIn(1, prot.stats)
+        prot._processMicrograph.assert_not_called()
+
+    def testProcessMicrographListStepMarksProcessedOnComputationFailureAndKeepsProcessingOthers(self):
+        # Regression test: a genuine processing failure (e.g. a corrupted
+        # or unreadable micrograph image) must not crash the whole batch
+        # step - and hence the whole protocol via pyworkflow's
+        # fail-on-any-exception step boundary. It must be marked processed
+        # with no statistics while the rest of the batch is still
+        # evaluated.
+        prot = self._newProtocol()
+        inputSet = _FakeInputSet([1, 2])
+        prot.inputMicrographs = _FakePointer(inputSet)
+
+        def fakeProcessMicrograph(micrograph):
+            if micrograph.getObjId() == 1:
+                raise ValueError("corrupted micrograph image")
+            prot.stats[micrograph.getObjId()] = {'mean': 0, 'std': 0, 'min': 0, 'max': 0}
+            prot.processedIds.append(micrograph.getObjId())
+
+        prot._processMicrograph = Mock(side_effect=fakeProcessMicrograph)
+
+        prot.processMicrographListStep([1, 2])
+
+        self.assertEqual([1, 2], sorted(prot.processedIds))
+        self.assertNotIn(1, prot.stats)
+        self.assertIn(2, prot.stats)
+
+    def testProcessMicrographListStepRetriesUntilMicBecomesVisible(self):
+        prot = self._newProtocol()
+        inputSet = _FakeInputSet([1], gettableIds=set())
+        prot.inputMicrographs = _FakePointer(inputSet)
+        prot._processMicrograph = Mock()
+
+        def becomeVisibleOnSleep(_delay):
+            inputSet._gettableIds = {1}
+
+        with patch(
+                'xmipp3.protocols.protocol_tilt_analysis.time.sleep',
+                side_effect=becomeVisibleOnSleep,
+        ):
+            prot.processMicrographListStep([1])
+
+        prot._processMicrograph.assert_called_once()
+        self.assertEqual(
+            1,
+            prot._processMicrograph.call_args[0][0].getObjId(),
+        )
+
+    def testCheckNewOutputSkipsMicWithMissingStatsWithoutCrashing(self):
+        # Regression test: a mic recorded as processed but with no computed
+        # statistics (because processMicrographListStep exhausted its
+        # visibility retries) must be skipped gracefully in _checkNewOutput,
+        # not crash with a KeyError on self.stats[micId].
+        prot = self._newProtocol()
+        prot.processedIds = [1]
+        prot.isStreamClosed = False
+        prot.stats = {}
+        inputSet = _FakeInputSet([1])
+        prot.inputMicrographs = _FakePointer(inputSet)
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getFirstJoinStep = lambda: None
+        prot._store = Mock()
+
+        prot._checkNewOutput()  # must not raise
+
+        self.assertFalse(prot.finished)
 
     def testFinishedCheckDoesNotReloadInputWithoutNewMicrographs(self):
         """A terminal output check must not reload input items when none are new."""
@@ -140,7 +254,7 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         prot.isStreamClosed = True
 
         inputSet = _FakeInputSet([1], streamClosed=True)
-        prot._loadInputSet = Mock(return_value=inputSet)
+        prot.inputMicrographs = _FakePointer(inputSet)
         prot._getAllDoneIds = lambda: ([1], 1, [1], [])
         prot._getFirstJoinStep = lambda: None
         prot._loadOutputSet = Mock()
@@ -152,7 +266,7 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         self.assertTrue(prot.finished)
         self.assertEqual(
             1,
-            prot._loadInputSet.call_count,
+            inputSet.loadCalls,
             "The terminal check may read input size once, but must not "
             "reload the Set again when newDone is empty.",
         )

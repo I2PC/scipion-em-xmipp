@@ -231,16 +231,37 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
         newMicsIds = readyMics.difference(self.checkedMics)
 
         if newMicsIds:
-            self.checkedMics.update(newMicsIds)
-
+            # getMainInput().getMicrographs() resolves a Pointer whose
+            # cached value is not automatically refreshed - reload its
+            # properties so newly-committed micrographs become visible
+            # before checking membership.
             inMics = self.getMainInput().getMicrographs()
-            newMics = [inMics[micId].clone() for micId in newMicsIds]
+            inMics.loadAllProperties()
 
-            fDeps = self.insertNewCoorsSteps(newMics)
-            outputStep = self._getFirstJoinStep()
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-            self.updateSteps()
+            newMics = []
+            visibleMicIds = set()
+            for micId in newMicsIds:
+                if micId not in inMics:
+                    self.warning(
+                        "Micrograph with id %d is not yet visible in "
+                        "the input micrographs Set; deferring it to a "
+                        "later check." % micId
+                    )
+                    continue
+                newMics.append(inMics[micId].clone())
+                visibleMicIds.add(micId)
+
+            # Only mark ids actually resolved as checked - an id skipped
+            # above must be retried on the next check (it stays ready,
+            # so it will reappear in newMicsIds).
+            self.checkedMics.update(visibleMicIds)
+
+            if newMics:
+                fDeps = self.insertNewCoorsSteps(newMics)
+                outputStep = self._getFirstJoinStep()
+                if outputStep is not None:
+                    outputStep.addPrerequisites(*fDeps)
+                self.updateSteps()
 
     def getMainInput(self):
         return self.inputCoordinates.get()

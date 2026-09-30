@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 # *****************************************************************************
 # *
 # * This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,9 @@ class _FakeInputSet:
     def loadAllProperties(self):
         pass
 
+    def __contains__(self, itemId):
+        return itemId in self._items
+
     def getUniqueValues(self, attr, where=None):
         if where is None:
             return sorted(self._ids)
@@ -54,6 +57,20 @@ class _FakeInputSet:
 
     def close(self):
         self.closed = True
+
+
+class _StrictFakeInputSet(_FakeInputSet):
+    """Mimics the real Set.getItem contract: it raises rather than
+    returning None for a row it cannot find (see
+    pyworkflow.object.Set.__getitem__), so a caller must check membership
+    (`in`) before calling getItem, not after."""
+
+    def getItem(self, _, itemId):
+        if itemId not in self._items:
+            raise UnboundLocalError(
+                "local variable 'item' referenced before assignment"
+            )
+        return self._items[itemId]
 
 
 class _FakePointer:
@@ -498,3 +515,148 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
 
         prot._checkNewInput.assert_not_called()
         prot._checkNewOutput.assert_not_called()
+
+    def testFillOutputChecksMembershipBeforeGetItem(self):
+        # Regression test: Set.getItem raises (UnboundLocalError) rather
+        # than returning None for a row it cannot find, so fillOutput must
+        # check membership (`in`) BEFORE calling getItem for both the
+        # movie and its sibling micrograph - a lenient fake that tolerates
+        # getItem(missing) -> None would hide this bug, so this test uses
+        # _StrictFakeInputSet to mimic the real contract.
+        prot = self._newProtocol()
+        prot.acceptedIds = [1]
+        prot.isStreamClosed = True
+        prot.inputMics = object()
+        prot.outMicName = 'outputMicrographs'
+        prot._getAllDoneIds = lambda: ([1], 1, [1], [])
+        prot._getFirstJoinStep = lambda: None
+        prot._store = lambda: None
+        prot._defineTransformRelation = lambda *args, **kwargs: None
+
+        movie = _FakeItem(1)
+        prot.inputMovies = _FakePointer(_StrictFakeInputSet(
+            ids=[1], streamClosed=True, items={1: movie}
+        ))
+        # The sibling micrograph is genuinely not visible yet.
+        prot._loadMicAssociatedInputSet = lambda: _StrictFakeInputSet(
+            ids=[], streamClosed=True, items={}
+        )
+
+        movieOutput = _FakeOutputSet()
+        micOutput = _FakeOutputSet()
+
+        def loadOutputSet(SetClass, baseName):
+            if SetClass is SetOfMovies:
+                return movieOutput
+            if SetClass is SetOfMicrographs:
+                return micOutput
+            raise AssertionError('Unexpected output Set class.')
+
+        prot._loadOutputSet = loadOutputSet
+        prot._updateOutputSet = lambda *args, **kwargs: None
+
+        prot._checkNewOutput()  # must not raise
+
+        self.assertEqual({1}, movieOutput.getIdSet())
+        self.assertEqual(set(), micOutput.getIdSet())
+        self.assertFalse(prot.finished)
+
+    def testEvaluateMovieAlignRetriesTransientlyMissingMovie(self):
+        # Regression test: a movie just discovered via the id watermark
+        # may still momentarily fail a getItem lookup. _evaluateMovieAlign
+        # (a one-shot worker step with no natural retry from the polling
+        # loop) must retry via _loadMovieForEvaluation rather than
+        # crashing the whole batch.
+        prot = self._newProtocol()
+        prot.samplingRate = 1.0
+        prot.rejType = XmippProtMovieMaxShift.REJ_OR
+        prot.maxMovieShift = Mock(get=Mock(return_value=45))
+        prot.maxFrameShift = Mock(get=Mock(return_value=10))
+
+        class _NoShiftAlignment:
+            def getShifts(self):
+                return [], []
+
+        class _FlakyMovie(_FakeItem):
+            def getAlignment(self):
+                return _NoShiftAlignment()
+
+            def clone(self):
+                return _FlakyMovie(self.itemId)
+
+        attempts = {'count': 0}
+
+        class _FlakyInputSet(_StrictFakeInputSet):
+            def __contains__(self, itemId):
+                attempts['count'] += 1
+                return attempts['count'] >= 2
+
+        movie = _FlakyMovie(1)
+        prot.inputMovies = _FakePointer(_FlakyInputSet(
+            ids=[1], streamClosed=True, items={1: movie}
+        ))
+
+        with patch(
+                'xmipp3.protocols.protocol_movie_max_shift.time.sleep',
+                return_value=None,
+        ):
+            prot._evaluateMovieAlign([1])
+
+        self.assertEqual([1], prot.acceptedIds)
+        self.assertEqual([], prot.discardedIds)
+
+    def testEvaluateMovieAlignDiscardsMovieThatNeverBecomesVisible(self):
+        prot = self._newProtocol()
+        prot.samplingRate = 1.0
+        prot.inputMovies = _FakePointer(_StrictFakeInputSet(
+            ids=[], streamClosed=True, items={}
+        ))
+
+        with patch(
+                'xmipp3.protocols.protocol_movie_max_shift.time.sleep',
+                return_value=None,
+        ):
+            prot._evaluateMovieAlign([1])
+
+        self.assertEqual([], prot.acceptedIds)
+        self.assertEqual([1], prot.discardedIds)
+
+    def testEvaluateMovieAlignDiscardsMovieWithCorruptedAlignmentAndKeepsProcessingOthers(self):
+        # Regression test: a genuine processing failure on one movie (e.g.
+        # corrupted/missing alignment data) must not crash the whole batch
+        # step - and hence the whole protocol via pyworkflow's
+        # fail-on-any-exception step boundary. It must be discarded with a
+        # clear message while the rest of the batch is still evaluated.
+        prot = self._newProtocol()
+        prot.samplingRate = 1.0
+        prot.rejType = XmippProtMovieMaxShift.REJ_OR
+        prot.maxMovieShift = Mock(get=Mock(return_value=45))
+        prot.maxFrameShift = Mock(get=Mock(return_value=10))
+
+        class _NoShiftAlignment:
+            def getShifts(self):
+                return [], []
+
+        class _GoodMovie(_FakeItem):
+            def getAlignment(self):
+                return _NoShiftAlignment()
+
+            def clone(self):
+                return _GoodMovie(self.itemId)
+
+        class _CorruptedMovie(_FakeItem):
+            def getAlignment(self):
+                return None  # simulates missing/corrupted alignment data
+
+            def clone(self):
+                return _CorruptedMovie(self.itemId)
+
+        prot.inputMovies = _FakePointer(_StrictFakeInputSet(
+            ids=[1, 2], streamClosed=True,
+            items={1: _CorruptedMovie(1), 2: _GoodMovie(2)},
+        ))
+
+        prot._evaluateMovieAlign([1, 2])
+
+        self.assertEqual([1], prot.discardedIds)
+        self.assertEqual([2], prot.acceptedIds)

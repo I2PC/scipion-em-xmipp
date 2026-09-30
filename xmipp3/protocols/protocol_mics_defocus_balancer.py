@@ -26,6 +26,7 @@
 
 import numpy as np
 import random
+import time
 from collections import defaultdict
 
 from pyworkflow import VERSION_3_0
@@ -273,6 +274,9 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
     _possibleOutputs = {OUTPUT_MICS: SetOfMicrographs,
                         OUTPUT_CTF: SetOfCTF}
 
+    CTF_VISIBILITY_MAX_ATTEMPTS = 3
+    CTF_VISIBILITY_RETRY_DELAY = 1  # seconds
+
 
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
@@ -435,8 +439,45 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
 
         try:
             for ctfId in ctfIds:
+                # Set.getItem raises rather than returning None for a row
+                # it cannot find, so check membership first - a ctfId just
+                # discovered via the id watermark may not be selectable yet
+                # under a PostgreSQL-backed compatibility bridge.
+                for attempt in range(self.CTF_VISIBILITY_MAX_ATTEMPTS):
+                    if attempt > 0:
+                        time.sleep(self.CTF_VISIBILITY_RETRY_DELAY)
+                        inputCtfSet.close()
+                        inputCtfSet = self._loadLogicalSet(self.inputCTF)
+
+                    if ctfId in inputCtfSet:
+                        break
+                else:
+                    self.error(
+                        "CTF with id %d never became visible in the input "
+                        "Set after %d attempts; excluding it from the "
+                        "defocus sampling pool."
+                        % (ctfId, self.CTF_VISIBILITY_MAX_ATTEMPTS)
+                    )
+                    continue
+
                 ctf = inputCtfSet.getItem("id", ctfId).clone()
-                ctfDefocus[ctfId] = ctf.getDefocusU()
+                try:
+                    defocusU = ctf.getDefocusU()
+                    if defocusU is None:
+                        raise ValueError("CTF has no defocusU value")
+                except Exception as e:
+                    # A single CTF with corrupted/missing defocus data must
+                    # not crash the whole batch step (and hence the whole
+                    # protocol) - exclude just this CTF and keep sampling
+                    # the rest.
+                    self.error(
+                        "CTF with id %d failed while reading its defocus "
+                        "value (%s); excluding it from the defocus "
+                        "sampling pool."
+                        % (ctfId, e)
+                    )
+                    continue
+                ctfDefocus[ctfId] = defocusU
         finally:
             inputCtfSet.close()
 
@@ -533,6 +574,13 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
 
         try:
             for ctfId in newDone:
+                if ctfId not in inputCtfSet:
+                    self.error(
+                        "CTF with id %d is not visible in the input Set; "
+                        "excluding it from the output." % ctfId
+                    )
+                    continue
+
                 ctf = inputCtfSet.getItem("id", ctfId).clone()
                 mic = ctf.getMicrograph().clone()
 

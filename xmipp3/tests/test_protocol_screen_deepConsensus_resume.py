@@ -9,9 +9,14 @@
 
 import os
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+from pwem import emlib
+import pwem.emlib.metadata as md
 
 from pyworkflow.tests import BaseTest, setupTestProject
 
+from xmipp3.protocols import protocol_screen_deepConsensus as deep_consensus
 from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
 
 
@@ -53,6 +58,39 @@ class _FakeSet:
 
     def __iter__(self):
         return iter(self.items)
+
+    def setSamplingRate(self, value):
+        pass
+
+
+_ZSCORE_LABEL = '_xmipp_%s' % emlib.label2Str(md.MDL_ZSCORE_DEEPLEARNING1)
+
+
+class _CloneableCoord(_FakeCoord):
+    def clone(self):
+        return _CloneableCoord(self.micId, self.x, self.y)
+
+    def scale(self, factor):
+        pass
+
+
+class _CloneablePart:
+    def __init__(self, objId, coord, zscore=5.0):
+        self._objId = objId
+        self._coord = coord
+        setattr(self, _ZSCORE_LABEL, zscore)
+
+    def getObjId(self):
+        return self._objId
+
+    def getCoordinate(self):
+        return self._coord
+
+    def clone(self):
+        return _CloneablePart(self._objId, self._coord, getattr(self, _ZSCORE_LABEL))
+
+    def scaleCoordinate(self, factor):
+        pass
 
 
 class TestXmippDeepConsensusResume(BaseTest):
@@ -294,3 +332,35 @@ class TestXmippDeepConsensusResume(BaseTest):
         self.assertEqual('', state['trainingPass'])
         self.assertEqual(['model', 'predict', 'output', 'predict', 'output', 'close'], events)
         self.assertTrue(prot.ENDED)
+
+    def testCreatePreliminarOutputSkipsCorruptedParticleAndKeepsProcessingOthers(self):
+        # Regression test: a single corrupted particle (e.g. missing
+        # coordinate) must not crash the whole output-creation step (and
+        # hence the whole protocol) - it must be skipped with a clear
+        # error while the rest of the batch is still written to output.
+        prot = self._newProtocol()
+        prot.inSamplingRate = 1.0
+        prot.threshold = SimpleNamespace(get=lambda: -1)  # always accept
+        prot._getDownFactor = lambda: 1
+        prot._getPath = lambda name: '/tmp/' + name
+        prot.updatePreOutput = lambda closeStream=True: None
+        prot._commitPrediction = lambda trPass=None: None
+        prot.error = Mock()
+
+        goodCoord = _CloneableCoord(1, 10.0, 20.0)
+        goodPart = _CloneablePart(1, goodCoord)
+        badPart = _CloneablePart(2, None)  # getCoordinate() is None -> .clone() crashes
+
+        partSet = _FakeSet([badPart, goodPart])
+        prot._createSetOfParticles = lambda suffix: partSet
+        prot.getPreParticlesOutput = lambda partSet: []
+        prot.getPreCoordinatesOutput = lambda: []
+
+        with patch.object(deep_consensus, 'readSetOfParticles', lambda *a, **k: None), \
+             patch.object(deep_consensus, 'cleanPattern', lambda *a, **k: None), \
+             patch.object(deep_consensus, 'writeSetOfParticles', lambda *a, **k: None):
+            prot.createPreliminarOutput(1)
+
+        prot.error.assert_called_once()
+        self.assertEqual(1, len(prot.preliminarOutputParticles))
+        self.assertEqual(1, prot.preliminarOutputParticles[0].getObjId())

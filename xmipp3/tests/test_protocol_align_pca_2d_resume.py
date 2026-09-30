@@ -69,14 +69,14 @@ class _BatchSizeParam:
 
 
 class _BatchParticle:
-    def __init__(self, creation):
-        self._creation = creation
+    def __init__(self, objId):
+        self._objId = objId
 
-    def getObjCreation(self):
-        return self._creation
+    def getObjId(self):
+        return self._objId
 
     def clone(self):
-        return _BatchParticle(self._creation)
+        return _BatchParticle(self._objId)
 
 
 class _ClosedLogicalParticles:
@@ -96,17 +96,15 @@ class _ClosedLogicalParticles:
             where=None,
             limit=None,
     ):
-        lastCreation = 0
+        lastId = 0
 
         if where:
-            lastCreation = int(
-                where.split('>"', 1)[1].rstrip('"')
-            )
+            lastId = int(where.split('>')[1].strip())
 
         particles = [
             particle
             for particle in self._particles
-            if particle.getObjCreation() > lastCreation
+            if particle.getObjId() > lastId
         ]
 
         if limit is not None and limit >= 0:
@@ -145,7 +143,7 @@ class _ClosedInputBatchHarness:
 
         self._originalRunMode = MODE_RESTART
         self.finish = False
-        self.lastCreationTime = 0
+        self.lastInputId = 0
         self.streamState = Set.STREAM_OPEN
         self.lastRound = False
         self.classificationLaunch = False
@@ -157,7 +155,7 @@ class _ClosedInputBatchHarness:
 
     def _initialStep(self):
         self.finish = False
-        self.lastCreationTime = 0
+        self.lastInputId = 0
         self.streamState = Set.STREAM_OPEN
         self.lastRound = False
         self.classificationLaunch = False
@@ -183,7 +181,7 @@ class _ClosedInputBatchHarness:
     def _insertClassificationSteps(
             self,
             newParticlesSet,
-            lastCreationTime,
+            lastInputId,
     ):
         self.recordedBatchSizes.append(
             len(newParticlesSet)
@@ -232,9 +230,7 @@ class _SyncImages:
         minimum = 0
 
         if where:
-            minimum = int(
-                where.split('>"', 1)[1].rstrip('"')
-            )
+            minimum = int(where.split('>')[1].strip())
 
         for objId in self._ids:
             if objId > minimum:
@@ -370,7 +366,7 @@ class TestXmippClassifyPcaResume(BaseTest):
 
     def testClassUpdateSynchronizesCumulativeMetadataWithFilteredInput(self):
         prot = self._newPcaProtocol()
-        prot.lastCreationTimeProcessed = 2
+        prot.lastInputIdProcessed = 2
         prot._lock = __import__("threading").RLock()
         prot._createModelFile = lambda: None
         prot._loadClassesInfo = lambda _filename: None
@@ -468,24 +464,24 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot = self._newPcaProtocol()
 
         prot._hasStreamingCheckpoint = lambda: True
-        prot._getLastDone = lambda: "2026-09-16 10:11:12.123456"
+        prot._getLastDone = lambda: "42"
         prot._getLastClassificationRound = lambda: 4
 
         prot._updateVarsToContinue()
 
-        self.assertEqual("2026-09-16 10:11:12.123456", prot.lastCreationTime)
+        self.assertEqual(42, prot.lastInputId)
         self.assertEqual(5, prot.classificationRound)
 
     def testResumeWithoutCheckpointStartsFromInitialState(self):
         prot = self._newPcaProtocol()
 
-        prot.lastCreationTime = "stale-value"
+        prot.lastInputId = 999
         prot.classificationRound = 99
         prot._hasStreamingCheckpoint = lambda: False
 
         prot._updateVarsToContinue()
 
-        self.assertEqual("", prot.lastCreationTime)
+        self.assertEqual(0, prot.lastInputId)
         self.assertEqual(1, prot.classificationRound)
 
     def testResumeUpdateClassesPreservesUpdatedReferences(self):
@@ -494,7 +490,7 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot.mode.set(prot.UPDATE_CLASSES)
         prot.firstTimeDone = False
         prot._hasStreamingCheckpoint = lambda: True
-        prot._getLastDone = lambda: "2026-09-16 10:11:12.123456"
+        prot._getLastDone = lambda: "42"
         prot._getLastClassificationRound = lambda: 4
 
         prot._updateVarsToContinue()

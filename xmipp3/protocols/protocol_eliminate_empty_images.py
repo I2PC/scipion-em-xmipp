@@ -376,29 +376,24 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         value (not commit it to self.check) and close inSet. """
         pass
 
-    def _getCreationCheckpoint(self, inputSet, processedCount):
+    def _getIdCheckpoint(self, inputSet, processedCount):
         if processedCount <= 0:
             return None
 
         if isinstance(inputSet, SetOfImages):
             for index, item in enumerate(
-                    inputSet.iterItems(orderBy='creation', direction='ASC'),
+                    inputSet.iterItems(orderBy='id', direction='ASC'),
                     start=1):
                 if index == processedCount:
-                    return item.getObjCreation()
+                    return item.getObjId()
         else:
-            creationTimes = [
-                item.getRepresentative().getObjCreation()
+            ids = sorted(
+                item.getRepresentative().getObjId()
                 for item in inputSet
-            ]
-            creationTimes = sorted(
-                creationTime
-                for creationTime in creationTimes
-                if creationTime is not None
             )
 
-            if processedCount <= len(creationTimes):
-                return creationTimes[processedCount - 1]
+            if processedCount <= len(ids):
+                return ids[processedCount - 1]
 
         return None
 
@@ -418,7 +413,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
         self.lenPartsSet = len(inputSet)
         self.streamClosed = inputSet.isStreamClosed()
-        self.check = self._getCreationCheckpoint(inputSet, self.outputSize)
+        self.check = self._getIdCheckpoint(inputSet, self.outputSize)
 
         inputSet.close()
 
@@ -436,13 +431,13 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
         self._scheduledSize = max(getattr(self, '_scheduledSize', 0), len(partsSet))
 
-        if self.check == None:  # if no previous, get all
+        if self.check is None:  # if no previous, get all
             writeSetOfParticles(partsSet, fnInputMd,
-                                alignType=ALIGN_NONE, orderBy='creation')
+                                alignType=ALIGN_NONE, orderBy='id')
         else:  # if previous, take the last ones
             writeSetOfParticles(partsSet, fnInputMd,
-                                alignType=ALIGN_NONE, orderBy='creation',
-                                where='creation>"' + str(self.check) + '"')
+                                alignType=ALIGN_NONE, orderBy='id',
+                                where='id > %d' % self.check)
 
         # special use of partSet before closing it
         pendingCheck = self.specialBehavoir(partsSet)
@@ -615,8 +610,8 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
     def specialBehavoir(self, partsSet):
         """ Determine the pending checkpoint, without committing it. """
         pendingCheck = self.check
-        for p in partsSet.iterItems(orderBy='creation', direction='DESC'):
-            pendingCheck = p.getObjCreation()
+        for p in partsSet.iterItems(orderBy='id', direction='DESC'):
+            pendingCheck = p.getObjId()
             break
         partsSet.close()
         return pendingCheck
@@ -724,8 +719,8 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
     def specialBehavoir(self, partSet):
         idsToCheck = []
         pendingCheck = self.check
-        for p in partSet.iterItems(orderBy='creation', direction='ASC'):
-            pendingCheck = p.getObjCreation()
+        for p in partSet.iterItems(orderBy='id', direction='ASC'):
+            pendingCheck = p.getObjId()
             idsToCheck.append(p.getObjId())
         partSet.close()
 

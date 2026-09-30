@@ -406,50 +406,105 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                 newMicIds = readyMics.difference(self.checkedMics)
 
         if newMicIds:
-            self.checkedMics.update(newMicIds)
-
+            # getMainInput().getMicrographs() resolves a Pointer whose
+            # cached value is not automatically refreshed - reload its
+            # properties so newly-committed micrographs become visible
+            # before checking membership.
             inMics = self.getMainInput().getMicrographs()
-            newMics = [inMics[micId].clone() for micId in newMicIds]
+            inMics.loadAllProperties()
 
-            fDeps = self.insertNewCoorsSteps(newMics)
-            outputStep = self._getFirstJoinStep()
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-            self.updateSteps()
+            newMics = []
+            visibleMicIds = set()
+            for micId in newMicIds:
+                if micId not in inMics:
+                    self.warning(
+                        "Micrograph with id %d is not yet visible in "
+                        "the input micrographs Set; deferring it to a "
+                        "later check." % micId
+                    )
+                    continue
+                newMics.append(inMics[micId].clone())
+                visibleMicIds.add(micId)
+
+            # Only mark ids actually resolved as checked - an id skipped
+            # above must be retried on the next check (it stays in
+            # readyMics/allMics, so it will reappear in newMicIds).
+            self.checkedMics.update(visibleMicIds)
+
+            if newMics:
+                fDeps = self.insertNewCoorsSteps(newMics)
+                outputStep = self._getFirstJoinStep()
+                if outputStep is not None:
+                    outputStep.addPrerequisites(*fDeps)
+                self.updateSteps()
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        self.finished = self.streamClosed and self.checkedMics == self.processedMics
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        workDone = self.streamClosed and self.checkedMics == self.processedMics
+        deferredMicIds = set()
 
         newFiles = [fn for fn in getFiles(self._getTmpPath()) if self._isConsensusResultFile(fn)]
-        if newFiles or self.finished:  # when finished to close the output set
+        if newFiles or workDone:  # when finished to close the output set
             outSet = self._loadOutputSet(SetOfCoordinates, 'coordinates.sqlite')
             outputMicIds = self._getOutputMicIds(outSet)
+
+            micrographs = None
+            processedFiles = []
 
             for fnTmp in newFiles:
                 micId = self.getMicId(fnTmp)
                 if micId not in outputMicIds and os.path.getsize(fnTmp):
+                    if micrographs is None:
+                        # See the comment in _checkNewInput: this
+                        # Pointer's cached value is not automatically
+                        # refreshed.
+                        micrographs = self.getMainInput().getMicrographs()
+                        micrographs.loadAllProperties()
+
+                    if micId not in micrographs:
+                        self.warning(
+                            "Micrograph with id %d is not yet visible "
+                            "in the input micrographs Set; deferring "
+                            "its consensus result to a later check."
+                            % micId
+                        )
+                        deferredMicIds.add(micId)
+                        continue
+
                     coords = np.loadtxt(fnTmp)
                     if coords.size == 2:  # special case with only one coordinate
                         coords = [coords]
-                    micrographs = self.getMainInput().getMicrographs()
+                    mic = micrographs[micId]
                     for coord in coords:
                         newCoord = Coordinate()
-                        newCoord.setMicrograph(micrographs[micId])
+                        newCoord.setMicrograph(mic)
                         newCoord.setPosition(coord[0], coord[1])
                         outSet.append(newCoord)
                     outputMicIds.add(micId)
 
+                processedFiles.append(fnTmp)
+
+            # Finished only if every worker step is done AND nothing was
+            # deferred this round - otherwise this method would latch
+            # finished=True (see the early return above) while a
+            # consensus result is still waiting to be published.
+            self.finished = workDone and not deferredMicIds
+            streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
             self._updateOutputSet(self.outputName, outSet, streamMode)
             self._refreshOutputRelations(outSet)
 
-            # Move result markers only after output and relations are persisted.
-            for fnTmp in newFiles:
+            # Move result markers only after output and relations are
+            # persisted, and only for files actually processed - a
+            # deferred micrograph's marker stays in _tmp so it is picked
+            # up again on the next check.
+            for fnTmp in processedFiles:
                 moveFile(fnTmp, self._getExtraPath())
 
             outSet.close()
+        else:
+            self.finished = workDone
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()

@@ -37,8 +37,8 @@ class _FakePartsSet:
     def __len__(self):
         return len(self._items)
 
-    def iterItems(self, orderBy='creation', direction='ASC'):
-        items = sorted(self._items, key=lambda p: p.getObjCreation())
+    def iterItems(self, orderBy='id', direction='ASC'):
+        items = sorted(self._items, key=lambda p: p.getObjId())
         if direction == 'DESC':
             items = list(reversed(items))
         return iter(items)
@@ -145,7 +145,7 @@ class TestXmippEliminateEmptyResume(BaseTest):
         prot.outputParticles = accepted
         prot.eliminatedParticles = eliminated
         prot.getInput = lambda: inputSet
-        prot._getCreationCheckpoint = (
+        prot._getIdCheckpoint = (
             lambda inputSet, processedCount: 'checkpoint-%d' % processedCount
         )
         prot.info = lambda *args, **kwargs: None
@@ -245,7 +245,7 @@ class TestXmippEliminateEmptyResume(BaseTest):
         prot.eliminatedClasses = _FakeSet(2)
 
         prot.getInput = lambda: inputSet
-        prot._getCreationCheckpoint = (
+        prot._getIdCheckpoint = (
             lambda inputSet, processedCount: 'checkpoint-%d' % processedCount
         )
         prot.info = lambda *args, **kwargs: None
@@ -350,7 +350,37 @@ class TestXmippEliminateEmptyResume(BaseTest):
             prot.eliminationStep(1)
 
         self.assertEqual(1, len(runCalls))
-        self.assertEqual("2026-09-02 00:00:00", prot.check)
+        self.assertEqual(2, prot.check)
+
+    def testEliminationStepFiltersInputByIdNotCreationTime(self):
+        from unittest.mock import patch
+
+        # Regression test: the previous creation-timestamp watermark had
+        # only second-level precision under SQLite (no microseconds), so
+        # two particles created within the same second could be silently
+        # and permanently skipped once the strict '>' comparison moved
+        # past that second. Filtering by id instead is immune to this,
+        # since ids are always unique.
+        prot = self.newProtocol(XmippProtEliminateEmptyParticles)
+        prot.check = 5
+        prot.fnInputMd = "/tmp/input%d.xmd"
+        prot.fnOutputMd = "/tmp/output.xmd"
+        prot.fnElimMd = "/tmp/eliminated.xmd"
+
+        partsSet = _FakePartsSet([
+            _FakeCreationParticle(6, "2026-09-01 00:00:00"),
+        ])
+        prot.prepareImages = lambda: partsSet
+        prot.runJob = lambda *args, **kwargs: None
+
+        with patch(
+            "xmipp3.protocols.protocol_eliminate_empty_images.writeSetOfParticles",
+        ) as mockWrite:
+            prot.eliminationStep(1)
+
+        _, kwargs = mockWrite.call_args
+        self.assertEqual('id > 5', kwargs.get('where'))
+        self.assertEqual('id', kwargs.get('orderBy'))
 
     def testClassesSpecialBehavoirReturnsPendingCheckWithoutCommitting(self):
         # The classes variant has its own specialBehavoir (it also computes
@@ -368,7 +398,7 @@ class TestXmippEliminateEmptyResume(BaseTest):
 
         pendingCheck = prot.specialBehavoir(partSet)
 
-        self.assertEqual("2026-09-03 00:00:00", pendingCheck)
+        self.assertEqual(6, pendingCheck)
         self.assertIsNone(
             prot.check,
             "specialBehavoir must not commit the checkpoint itself - "

@@ -29,7 +29,6 @@ import enum
 import sys
 import emtable
 import os
-from datetime import datetime
 import time
 import numpy as np
 
@@ -429,17 +428,17 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             self.streamState = particlesSet.getStreamState()
 
             where = None
-            if self.lastCreationTime:
-                where = 'creation>"' + str(self.lastCreationTime) + '"'
+            if self.lastInputId:
+                where = 'id > %d' % self.lastInputId
             tmp = None
             newCount = 0
             batchRemaining = self.classificationBatch.get() - len(newParticlesSet)
 
-            for particle in particlesSet.iterItems(orderBy='creation',
+            for particle in particlesSet.iterItems(orderBy='id',
                                                    direction='ASC',
                                                    where=where,
                                                    limit=batchRemaining):
-                tmp = particle.getObjCreation()
+                tmp = particle.getObjId()
                 newParticlesSet.append(particle.clone())
                 newCount += 1
 
@@ -447,16 +446,16 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             particlesSet.close()
 
             if tmp is not None:
-                self.lastCreationTime = tmp
+                self.lastInputId = tmp
 
             if newCount == 0:
                 self.info('No new particles')
             else:
                 self.info('%d new particles in batch' % len(newParticlesSet))
-                self.info('Last creation time REGISTER %s' % self.lastCreationTime)
+                self.info('Last input id REGISTER %s' % self.lastInputId)
 
                 if self._doClassification(newParticlesSet):
-                    self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
+                    self._insertClassificationSteps(newParticlesSet, self.lastInputId)
                     newParticlesSet = self._loadEmptyParticleSet()
 
             if self.streamState == Set.STREAM_CLOSED:
@@ -467,7 +466,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
                     # Force one more iteration to flush last batch
                     if self._doClassification(newParticlesSet):
-                        self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
+                        self._insertClassificationSteps(newParticlesSet, self.lastInputId)
                         newParticlesSet = self._loadEmptyParticleSet()
                 elif inputExhausted:
                     self._insertFunctionStep(self.closeOutputStep,
@@ -486,8 +485,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
     # --------------------------- STEPS functions -------------------------------
     def _initialStep(self):
         self.finish = False
-        self.lastCreationTime = 0
-        self.lastCreationTimeProcessed = 0
+        self.lastInputId = 0
+        self.lastInputIdProcessed = 0
         self.streamState = Set.STREAM_OPEN
         self.lastRound = False
         self.pcaLaunch = False
@@ -521,7 +520,17 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         else:
             self.numberClasses = self.numberOfClasses.get()
 
-    def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
+    def _insertClassificationSteps(self, newParticlesSet, lastInputId):
+        # A classification round writes to fixed (non round-versioned)
+        # external files (classes_classes.star, classes_images.star, and
+        # in UPDATE_CLASSES mode also refXmd/ref). This protocol runs
+        # under STEPS_PARALLEL with no prerequisite chaining between
+        # rounds, so this flag is the only thing preventing a second
+        # round's runClassificationSteps from overwriting those files
+        # while the previous round's updateOutputSetOfClasses is still
+        # reading them. It is cleared once that read completes (see
+        # updateOutputSetOfClasses).
+        self.classificationLaunch = True
         self._updateFnClassification()
         imgsOrigXmd = self.imgsOrigXmd
         imgsFn = self.imgsFn
@@ -530,7 +539,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                                              prerequisites=[],
                                              needsGPU=True)
         updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
-                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep,
+                                              lastInputId, Set.STREAM_OPEN, prerequisites=classStep,
                                               needsGPU=False)
         self.newDeps.append(updateStep)
 
@@ -541,7 +550,6 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         numTrain = min(len(newParticlesSet), self.training.get())
         self.classification(imgsFn, self.numberClasses, imgsOrigXmd,
                             self.mask.get(), self.sigmaProt, numTrain, self.resolutionPca)
-        # self.classificationLaunch = False
 
     def convertInputStep(self, input, outputOrig, outputMRC):
         writeSetOfParticles(input, outputOrig)
@@ -591,7 +599,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
         self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
 
-    def updateOutputSetOfClasses(self, lastCreationTime, streamMode):
+    def updateOutputSetOfClasses(self, lastInputId, streamMode):
         outputName = OUTPUT_CLASSES
         outputClasses, update = self._loadOutputSet(outputName)
 
@@ -604,13 +612,19 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             self._setClassificationDone()
             self.numberClasses = len(outputClasses)  # In case the original number of classes is not reached
 
-        self.lastCreationTimeProcessed = lastCreationTime
-        self.info(r'Last creation time processed UPDATED is %s' % str(self.lastCreationTimeProcessed))
-        self._writeLastDone(str(self.lastCreationTimeProcessed))
+        self.lastInputIdProcessed = lastInputId
+        self.info(r'Last input id processed UPDATED is %s' % str(self.lastInputIdProcessed))
+        self._writeLastDone(str(self.lastInputIdProcessed))
         self._writeLastClassificationRound(self.classificationRound)
 
         self.info(r'Last classification round processed is %d' % self.classificationRound)
         self.classificationRound += 1
+
+        # This round's external files (classes_classes.star,
+        # classes_images.star) have now been fully read - it is safe for
+        # stepsGeneratorStep to launch the next round, which will
+        # overwrite those same fixed filenames.
+        self.classificationLaunch = False
 
     def closeOutputStep(self):
         self._closeOutputSet()
@@ -658,8 +672,8 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
         params = {}
         if update:
-            self.info(r'Last creation time processed is %s' % str(self.lastCreationTimeProcessed))
-            params = {"where": 'creation>"' + str(self.lastCreationTimeProcessed) + '"'}
+            self.info(r'Last input id processed is %s' % str(self.lastInputIdProcessed))
+            params = {"where": 'id > %d' % self.lastInputIdProcessed}
 
         mdRows = emtable.Table.iterRows(
             'particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE)
@@ -793,17 +807,15 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         """ Method to if needed and the protocol is set to continue then it will see in which state it was stopped """
 
         if self._hasStreamingCheckpoint():
-            self.lastCreationTime = self._getLastDone()
+            self.lastInputId = int(self._getLastDone())
             self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
             if self.mode.get() == self.UPDATE_CLASSES:
                 self.firstTimeDone = True
         else:
-            self.lastCreationTime = ''
+            self.lastInputId = 0
             self.classificationRound = 1
 
-        self.lastCreationTimeProcessed = self.lastCreationTime
-        # Convert the string to a datetime object
-        self.lastCheck = datetime.fromisoformat(str(self.lastCreationTime)) if self.lastCreationTime else datetime.now()
+        self.lastInputIdProcessed = self.lastInputId
 
     def _validate(self):
         """ Check if the installation of this protocol is correct.

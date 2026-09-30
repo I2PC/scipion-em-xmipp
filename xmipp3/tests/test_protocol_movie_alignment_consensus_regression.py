@@ -122,6 +122,9 @@ class _FakeIndexedSet:
     def __getitem__(self, objId):
         return self.items[objId]
 
+    def __contains__(self, objId):
+        return objId in self.items
+
     def close(self):
         self.closed = True
 
@@ -338,7 +341,7 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot._decidedDiscarded = []
 
         prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet(ids=[1])
-        prot.fillOutput = lambda *args, **kwargs: None
+        prot.fillOutput = lambda *args, **kwargs: [1]
         prot._getFirstJoinStep = lambda: None
         prot._defineTransformRelation = lambda *args: None
 
@@ -370,7 +373,7 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot._decidedDiscarded = []
 
         prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet(ids=[1])
-        prot.fillOutput = lambda *args, **kwargs: None
+        prot.fillOutput = lambda *args, **kwargs: [1]
         prot._getFirstJoinStep = lambda: None
 
         events = []
@@ -444,6 +447,73 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         self.assertEqual([1], movieOutput.appended)
         self.assertEqual([1], micOutput.appended)
+
+    def testFillOutputDefersMovieWhoseMicrographIsNotYetVisible(self):
+        # Regression test: Set.__getitem__(int) returns None (not a
+        # raise) for a missing row, but indexing straight into .clone()
+        # would still crash. The micrograph Set is the output of a
+        # different, independently-paced protocol, so a decided movieId
+        # may not have a visible micrograph row yet - it must be
+        # deferred to a later check, not crash the whole protocol.
+        prot = self._newProtocol()
+        prot.movieFn1 = 'movies.sqlite'
+        prot.micsFn = 'micrographs.sqlite'
+        prot.stats = {
+            1: {'shift_corr': 1.0, 'rmse_error': 0.0, 'max_error': 0.0},
+            2: {'shift_corr': 1.0, 'rmse_error': 0.0, 'max_error': 0.0},
+        }
+
+        inputMovies = _FakeIndexedSet({
+            1: _FakeAlignedMovie(1),
+            2: _FakeAlignedMovie(2),
+        })
+        inputMics = _FakeIndexedSet({2: _FakeMicrograph(2)})  # mic 1 missing
+        prot._loadInputMovieSet = lambda fn: inputMovies
+        prot._loadInputMicrographSet = lambda fn: inputMics
+        prot._getEnable = lambda movieId: True
+        prot.info = Mock()
+
+        movieOutput = _FakeOutputSet()
+        micOutput = _FakeOutputSet()
+
+        with patch(
+            'xmipp3.protocols.protocol_movie_alignment_consensus.setAttribute',
+            return_value=None,
+        ):
+            publishedIds = prot.fillOutput(movieOutput, micOutput, [1, 2], ACCEPTED)
+
+        self.assertEqual([2], publishedIds)
+        self.assertEqual([2], movieOutput.appended)
+        self.assertEqual([2], micOutput.appended)
+
+    def testCheckNewOutputDoesNotFinishPrematurelyWhenAMicrographIsPending(self):
+        # Regression test: self.finished must be computed from what
+        # fillOutput actually published, not from the originally-decided
+        # newDone list - otherwise a movie deferred because its
+        # micrograph isn't visible yet would still count as "done" and
+        # could make the protocol finish while that movie is still
+        # pending.
+        prot = self._newProtocol()
+        prot.allMovies1 = {1: object()}
+        prot.allMovies2 = {1: object()}
+        prot.isStreamClosed = True
+        prot.samplingRate = 1.0
+        prot.acquisition = _FakeAcquisition()
+        prot._decidedAccepted = [1]
+        prot._decidedDiscarded = []
+
+        prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet()
+        prot.fillOutput = lambda *args, **kwargs: []  # movie 1 stayed pending
+        prot._getFirstJoinStep = lambda: None
+        prot._updateOutputSet = lambda *args, **kwargs: None
+
+        prot._checkNewOutput()
+
+        self.assertFalse(
+            prot.finished,
+            "A movie that fillOutput deferred (not actually published) "
+            "must not be counted as done.",
+        )
 
     def testFinishedCheckDoesNotReloadOutputsWithoutNewMovies(self):
         """The final streaming check must not reopen already persisted outputs."""
