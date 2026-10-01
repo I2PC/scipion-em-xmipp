@@ -24,7 +24,8 @@
 # *
 # ******************************************************************************
 from pathlib import Path
-from typing import Union, Dict, List, Literal, get_args
+from typing import Union, Dict, List
+from enum import IntEnum
 
 
 from pwem.protocols import ProtClassify2D
@@ -44,13 +45,16 @@ from xmipp3.base import XmippProtocol
 from xmipp3.convert import particleToRow
 
 
-EstimatorType = Literal["irls", "fourier_irls", "fourier_masked", "admm"]
-ESTIMATORS: Dict[int, EstimatorType] = {
-    0: "irls",
-    1: "fourier_irls",
-    2: "fourier_masked",
-    3: "admm",
-}
+class EstimatorType(IntEnum):
+    IRLS = 0
+    FOURIER_IRLS = 1
+    FOURIER_MASKED = 2
+    ADMM = 3
+
+    @property
+    def label(self) -> str:
+        """String representation used for CLI flags and protocol form choices"""
+        return self.name.lower()
 
 ROBUST_WEIGHT_COL = "wRobust"
 STD_ROBUST_WEIGHT_COL = "wRobustStd"
@@ -61,6 +65,124 @@ WEIGHT_COLUMN_TO_ATTRIBUTE = {
     STD_ROBUST_WEIGHT_COL: "_xmippRobustWeightStandardized",
     GMM_WEIGHT_COL: "_xmippRobustWeightGmm",
 }
+
+
+def add_estimator_section(form):
+    form.addSection(label="Estimator")
+    form.addParam(
+        "estimatorType",
+        EnumParam,
+        default=EstimatorType.IRLS.value,
+        choices=[e.label for e in EstimatorType],
+        help=("Type of robust estimator to use to compute the new class averages."),
+        label="Estimator type",
+    )
+    form.addParam(
+        "gmmReweighting",
+        BooleanParam,
+        default=True,
+        help=(
+            "Apply GMM reweighting to the results of the estimator."
+            "GMM reweighting makes the estimator more aggressive in "
+            "rejecting possibly misaligned or corrupted particles. This means "
+            "it can slightly improve performance on more contaminated datasets."
+        ),
+        label="GMM Reweighting",
+    )
+    estimator_condition: Dict[EstimatorType, str] = {
+        estimator_type: f"bool(estimatorType == '{estimator_type.value}')" 
+        for estimator_type in EstimatorType
+    }
+    gmm_condition = "bool(gmmReweighting)"
+    
+    form.addParam(
+        "estimatorIterations",
+        IntParam,
+        condition="not(" + gmm_condition + ")",
+        default=30,
+        help="Number of estimator iterations",
+        label="Estimator iterations"
+    )
+    form.addParam(
+        "lowpassCutoff",
+        FloatParam,
+        condition=estimator_condition[EstimatorType.FOURIER_MASKED],
+        default=0.25,
+        help="Normalized frequency cutoff for the estimator's low pass mask",
+        label="Lowpass Cutoff",
+    )
+    
+    form.addParam(
+        "internalEstimatorIterations",
+        IntParam,
+        condition=gmm_condition,
+        default=1,
+        help="Number of iterations for the internal estimator",
+        label="Internal iterations",
+    )
+    form.addParam(
+        "gmmIterations",
+        IntParam,
+        condition=gmm_condition,
+        default=10,
+        help="Number of GMM iterations",
+        label="GMM iterations",
+    )
+    form.addParam(
+        "checkDegenerateGmm",
+        BooleanParam,
+        condition=gmm_condition,
+        default=True,
+        help=(
+            "If using a GMM-type estimator, this option makes sure the GMM model "
+            "is checked for degeneracy after the last iteration in each class. "
+            "The model is considered degenerate if the two GMM components are too "
+            "close together, or if the component associated with good particles "
+            "has too little weight."
+        ),
+        label="Check GMM degeneracy?",
+        expertLevel=LEVEL_ADVANCED,
+    )
+    form.addParam(
+        "gmmMinSep",
+        FloatParam,
+        condition=gmm_condition,
+        default=0.05,
+        help="Minimum relative separation between GMM components.",
+        label="Minimum GMM separation",
+        expertLevel=LEVEL_ADVANCED,
+    )
+    form.addParam(
+        "gmmMinWeight",
+        FloatParam,
+        condition=gmm_condition,
+        default=0.6,
+        help="Minimum weight for the good component of the GMM.",
+        label="Minimum GMM good weight",
+        expertLevel=LEVEL_ADVANCED,
+    )
+    form.addParam(
+        "gmmInitialBadWeight",
+        FloatParam,
+        condition=gmm_condition,
+        default=0.05,
+        help="Initial weight for the GMM component with a lower mean weight",
+        expertLevel=LEVEL_ADVANCED,
+        label="Initial bad component weight"
+    )
+    form.addParam(
+        "gmmInitialBadQuantile",
+        FloatParam,
+        condition=gmm_condition,
+        default=0.05,
+        help=(
+            "Quantile used to calculate the mean for the GMM component with a "
+            "lower mean weight. Because this is the component with a lower mean, "
+            "the provided quantile should be between 0 and 0.5."
+        ),
+        expertLevel=LEVEL_ADVANCED,
+        label="Initial bad component mean"
+    )
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -110,122 +232,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             label="Save GMM fits?",
             expertLevel=LEVEL_ADVANCED,
         )
-        
-        form.addSection(label="Estimator")
-        form.addParam(
-            "estimatorType",
-            EnumParam,
-            default=0,
-            choices=[ESTIMATORS[i] for i in range(len(ESTIMATORS))],
-            help=("Type of robust estimator to use to compute the new class averages."),
-            label="Estimator type",
-        )
-        form.addParam(
-            "gmmReweighting",
-            BooleanParam,
-            default=True,
-            help=(
-                "Apply GMM reweighting to the results of the estimator."
-                "GMM reweighting makes the estimator more aggressive in "
-                "rejecting possibly misaligned or corrupted particles. This means "
-                "it can slightly improve performance on more contaminated datasets."
-            ),
-            label="GMM Reweighting",
-        )
-        estimator_condition: Dict[EstimatorType, str] = {
-            estimator_type: f"bool(estimatorType == '{estimator_type}')" 
-            for estimator_type in get_args(EstimatorType)
-        }
-        gmm_condition = "bool(gmmReweighting)"
 
-        form.addParam(
-            "estimatorIterations",
-            IntParam,
-            condition="not(" + gmm_condition + ")",
-            default=30,
-            help="Number of estimator iterations",
-            label="Estimator iterations"
-        )
-        form.addParam(
-            "lowpassCutoff",
-            FloatParam,
-            condition=estimator_condition["fourier_masked"],
-            default=0.25,
-            help="Normalized frequency cutoff for the estimator's low pass mask",
-            label="Lowpass Cutoff",
-        )
-
-        form.addParam(
-            "internalEstimatorIterations",
-            IntParam,
-            condition=gmm_condition,
-            default=1,
-            help="Number of iterations for the internal estimator",
-            label="Internal iterations",
-        )
-        form.addParam(
-            "gmmIterations",
-            IntParam,
-            condition=gmm_condition,
-            default=10,
-            help="Number of GMM iterations",
-            label="GMM iterations",
-        )
-        form.addParam(
-            "checkDegenerateGmm",
-            BooleanParam,
-            condition=gmm_condition,
-            default=True,
-            help=(
-                "If using a GMM-type estimator, this option makes sure the GMM model "
-                "is checked for degeneracy after the last iteration in each class. "
-                "The model is considered degenerate if the two GMM components are too "
-                "close together, or if the component associated with good particles "
-                "has too little weight."
-            ),
-            label="Check GMM degeneracy?",
-            expertLevel=LEVEL_ADVANCED,
-        )
-        form.addParam(
-            "gmmMinSep",
-            FloatParam,
-            condition=gmm_condition,
-            default=0.05,
-            help="Minimum relative separation between GMM components.",
-            label="Minimum GMM separation",
-            expertLevel=LEVEL_ADVANCED,
-        )
-        form.addParam(
-            "gmmMinWeight",
-            FloatParam,
-            condition=gmm_condition,
-            default=0.6,
-            help="Minimum weight for the good component of the GMM.",
-            label="Minimum GMM good weight",
-            expertLevel=LEVEL_ADVANCED,
-        )
-        form.addParam(
-            "gmmInitialBadWeight",
-            FloatParam,
-            condition=gmm_condition,
-            default=0.05,
-            help="Initial weight for the GMM component with a lower mean weight",
-            expertLevel=LEVEL_ADVANCED,
-            label="Initial bad component weight"
-        )
-        form.addParam(
-            "gmmInitialBadQuantile",
-            FloatParam,
-            condition=gmm_condition,
-            default=0.05,
-            help=(
-                "Quantile used to calculate the mean for the GMM component with a "
-                "lower mean weight. Because this is the component with a lower mean, "
-                "the provided quantile should be between 0 and 0.5."
-            ),
-            expertLevel=LEVEL_ADVANCED,
-            label="Initial bad component mean"
-        )
+        add_estimator_section(form)
 
         form.addSection(label="Compute")
         form.addParam(
@@ -409,7 +417,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         return self._getExtraPath("gmmDiagnostics")
 
     def _getEstimatorType(self) -> EstimatorType:
-        return ESTIMATORS[self.estimatorType.get()]
+        return EstimatorType(self.estimatorType.get())
 
     def _getEstimatorWeightColumns(self):
         base_weight_columns = [ROBUST_WEIGHT_COL, STD_ROBUST_WEIGHT_COL]
@@ -474,7 +482,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         originalAveragePath = self._getExtraPath("original_avgs.mrcs")
 
         # Run the GMM average estimation script for all classes
-        scriptArgs = (
+        args = (
             f"--input-xmd {self._getPreprocessedMetadataPath()} "
             f"--base-xmd {self._getInputParticlesPath()} "
             f"--out-star {outputStarPath} "
@@ -484,36 +492,36 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
         if self.gmmReweighting.get():
-            scriptArgs += "--gmm "
-            scriptArgs += f"--estimator-max-iter {self.internalEstimatorIterations.get()} "
-            scriptArgs += f"--gmm-external-max-iter {self.gmmIterations.get()} "
+            args += "--gmm "
+            args += f"--estimator-max-iter {self.internalEstimatorIterations.get()} "
+            args += f"--gmm-external-max-iter {self.gmmIterations.get()} "
 
-            scriptArgs += f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()} "
-            scriptArgs += f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()} "
+            args += f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()} "
+            args += f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()} "
 
             if self.checkDegenerateGmm.get():
-                scriptArgs += "--gmm-check-degenerate "
-                scriptArgs += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
-                scriptArgs += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
+                args += "--gmm-check-degenerate "
+                args += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
+                args += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
             else:
-                scriptArgs += "--no-gmm-check-degenerate "
+                args += "--no-gmm-check-degenerate "
 
             if self.saveGmmFits.get():
-                scriptArgs += f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
+                args += f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
         else:
-            scriptArgs += "--no-gmm "
-            scriptArgs += "--estimator-max-iter {self.estimatorIterations.get()} "
+            args += "--no-gmm "
+            args += f"--estimator-max-iter {self.estimatorIterations.get()} "
 
         estimatorType = self._getEstimatorType()
-        if estimatorType == "fourier_masked":
-            scriptArgs += "fourier_irls "
-            scriptArgs += "--weight-approach per-image "
-            scriptArgs += "--lowpass-mask "
-            scriptArgs += f"--lowpass-mask-cutoff {self.lowpassCutoff.get()} "
+        if estimatorType == EstimatorType.FOURIER_MASKED:
+            args += "fourier_irls "
+            args += "--weight-approach per-image "
+            args += "--lowpass-mask "
+            args += f"--lowpass-mask-cutoff {self.lowpassCutoff.get()} "
         else:
-            scriptArgs += f"{estimatorType} "
+            args += f"{estimatorType.label} "
 
-        self.runJob("xmipp_gmm_average_estimation", scriptArgs, env=env, numberOfMpi=1)
+        self.runJob("xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1)
 
     def createOutputStep(self):
         """
