@@ -90,7 +90,7 @@ def add_estimator_section(form):
         label="GMM Reweighting",
     )
     estimator_condition: Dict[EstimatorType, str] = {
-        estimator_type: f"bool(estimatorType == '{estimator_type.value}')" 
+        estimator_type: f"bool(estimatorType == {estimator_type.value})" 
         for estimator_type in EstimatorType
     }
     gmm_condition = "bool(gmmReweighting)"
