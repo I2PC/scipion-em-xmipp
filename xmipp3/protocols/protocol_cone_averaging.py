@@ -320,7 +320,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             args += "--lowpass-mask "
             args += f"--lowpass-mask-cutoff {self.lowpassCutoff.get()} "
         else:
-            args += f"{estimatorType} "
+            args += f"{estimatorType.label} "
 
         self.runJob(
             "xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1
