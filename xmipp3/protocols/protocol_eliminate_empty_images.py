@@ -38,13 +38,14 @@ from pyworkflow.utils.properties import Message
 from pwem import ALIGN_NONE
 from pwem.protocols import ProtClassify2D
 from pwem.objects import SetOfParticles, SetOfAverages, SetOfClasses2D, Class2D, SetOfClasses, SetOfImages
+from pyworkflow.protocol import ProtStreamingBase
 
 from xmipp3.convert import (writeSetOfParticles, readSetOfParticles,
                             setXmippAttributes)
 from xmipp3.utils import loadOutputSetForAppend
 
 
-class XmippProtEliminateEmptyBase(ProtClassify2D):
+class XmippProtEliminateEmptyBase(ProtStreamingBase, ProtClassify2D):
     """ Base to eliminate images using statistical methods
     (variance of variances of sub-parts of input image) eliminates those samples,
     where there is no object/particle (only noise is presented there).
@@ -321,8 +322,11 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
                            'Higher value applies stronger denoising, '
                            'could be more precise but also slower.')
 
+        self._defineStreamingParams(form)
+        form.addParallelSection(threads=3, mpi=1)
+
     # --------------------------- INSERT steps functions ----------------------
-    def _insertAllSteps(self):
+    def _prepareStreamingGenerator(self):
         self.lenPartsSet = 0
         self.outputSize = 0
         self.check = None
@@ -337,18 +341,37 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         self.fnOutputMd = self._getExtraPath("output.xmd")
         self.fnElimMd = self._getExtraPath("eliminated.xmd")
 
-        if self.runMode.get() == cons.MODE_RESUME:
+        # _prepareStreamingGenerator runs as part of the streaming
+        # generator step, i.e. AFTER Protocol._runSteps() has already
+        # forced runMode to MODE_RESUME (unlike the old _insertAllSteps,
+        # which ran before that override) - so self.runMode.get() alone
+        # can no longer tell Restart and Continue apart here.
+        originalRunMode = getattr(self, '_originalRunMode', self.getRunMode())
+        if originalRunMode == cons.MODE_RESUME:
             self._restoreStreamingState()
         else:
             self.lenPartsSet, self.streamClosed = self._getCurrentInputState()
             self._scheduledSize = self.lenPartsSet
 
-        checkStep = self._insertNewPartsSteps()
+    def stepsGeneratorStep(self) -> None:
+        self._prepareStreamingGenerator()
+        self.newDeps = []
+
+        fDeps = self._insertNewPartsSteps()
+        self.newDeps.extend(fDeps)
         self._scheduledSize = self.lenPartsSet
 
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=checkStep,
-                                 wait=True)
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def _insertNewPartsSteps(self):
         deps = []
@@ -455,30 +478,8 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         # leave these items permanently skipped on the next batch/Resume.
         self.check = pendingCheck
 
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all particles
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
     def createOutputStep(self):
         pass
-
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
-
-        # Input particles set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
 
     def _checkNewInput(self):
         currentSize, streamClosed = self._getCurrentInputState()
@@ -489,14 +490,10 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         if currentSize <= getattr(self, '_scheduledSize', 0):
             return
 
-        outputStep = self._getFirstJoinStep()
-
         fDeps = self._insertNewPartsSteps()
         self._scheduledSize = currentSize
 
-        if outputStep is not None:
-            outputStep.addPrerequisites(*fDeps)
-
+        self.newDeps.extend(fDeps)
         self.updateSteps()
 
     def prepareImages(self):
@@ -515,12 +512,9 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
         self.createOutputs()
 
-        if self.finished:  # Unlock createOutputStep if finished all jobs
+        if self.finished:
             cleanPath(self._getPath('particlesAUX.sqlite'))
             cleanPath(self._getPath('averagesAUX.sqlite'))
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
 
     def createOutputs(self):
         """ To be implemented by child. (create, fill and close the outputSet)
@@ -561,6 +555,21 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
         # Close set databaset to avoid locking it
         outputSet.close()
+
+    def _validate(self):
+        return self._validateParallelProcessing()
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for eliminationStep.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     # --------------------------- UTILS functions -----------------------------
     def _updateParticle(self, item, row):
@@ -703,7 +712,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
     # --------------------------- INSERT steps functions ----------------------
     def _validate(self):
-        errors = []
+        errors = super()._validate()
         if (not isinstance(self.getInput(), SetOfClasses)
                 and self.usePopulation.get()):
             errors.append("Using population to reject classes is not possible "
@@ -776,26 +785,45 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
     # ------------- UTILS Fuctions ------------------------------------
     def prepareImages(self):
         inSet = self.getInput()
+        isImages = isinstance(inSet, SetOfImages)
 
-        if isinstance(inSet, SetOfImages):
-            firstRep = inSet.getFirstItem()
-            getImage = lambda item: item.clone()
-            self.classesDict = None
-        else:
-            firstRep = inSet.getFirstItem().getFirstItem()
-            getImage = lambda item: item.getRepresentative().clone()
-            self.classesDict = {cls.getObjId(): cls.getSize() for cls in inSet}
+        # self.inputImages accumulates across rounds instead of being
+        # rebuilt from a full scan of inSet every time eliminationStep
+        # runs - only the delta since the last round (the same
+        # self.check watermark eliminationStep itself uses to pick what
+        # to write to the external tool) is fetched and appended.
+        firstRound = not hasattr(self, 'inputImages') or self.inputImages is None
+        if firstRound:
+            if isImages:
+                firstRep = inSet.getFirstItem()
+                self.classesDict = None
+            else:
+                firstRep = inSet.getFirstItem().getFirstItem()
+                self.classesDict = {}
 
-        self.inputImages = self._createSetOfAverages("AUX")
-        self.inputImages.enableAppend()
-        self.inputImages.copyAttributes(firstRep, '_samplingRate')
+            self.inputImages = self._createSetOfAverages("AUX")
+            self.inputImages.enableAppend()
+            self.inputImages.copyAttributes(firstRep, '_samplingRate')
+
+        getImage = (
+            (lambda item: item.clone()) if isImages
+            else (lambda item: item.getRepresentative().clone())
+        )
+
         self.inputImages.copyAttributes(inSet, '_streamState')
         self.streamClosed = self.inputImages.isStreamClosed()
 
-        for item in inSet:
+        where = None if self.check is None else ('id > %d' % self.check)
+        newClassSizes = {}
+        for item in inSet.iterItems(orderBy='id', direction='ASC', where=where):
             self.inputImages.append(getImage(item))
+            if not isImages:
+                newClassSizes[item.getObjId()] = item.getSize()
 
         inSet.close()
+
+        if not isImages:
+            self.classesDict.update(newClassSizes)
 
         self.lenPartsSet = len(self.inputImages)
 

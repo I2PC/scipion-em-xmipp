@@ -261,6 +261,7 @@ class TestXmippEliminateEmptyResume(BaseTest):
     def testCheckNewInputDoesNotScheduleSameBatchTwice(self):
         prot = self.newProtocol(XmippProtEliminateEmptyParticles)
         prot._scheduledSize = 10
+        prot.newDeps = []
 
         inputStates = iter([
             (12, False),
@@ -272,7 +273,6 @@ class TestXmippEliminateEmptyResume(BaseTest):
 
         prot._getCurrentInputState = lambda: next(inputStates)
         prot._insertNewPartsSteps = lambda: scheduled.append(True) or []
-        prot._getFirstJoinStep = lambda: None
         prot.updateSteps = lambda: updates.append(True)
 
         prot._checkNewInput()
@@ -410,3 +410,156 @@ class TestXmippEliminateEmptyResume(BaseTest):
 
     def testCheckNewOutputCanFinishAfterResumeWithoutInputImages(self):
         prot = self.newProtocol(XmippProtEliminateEmptyParticles)
+
+
+class _FakeRep:
+    _samplingRate = 1.5
+
+    def clone(self):
+        return self
+
+
+class _FakeClassItem:
+    def __init__(self, objId, size):
+        self._objId = objId
+        self._size = size
+
+    def getObjId(self):
+        return self._objId
+
+    def getSize(self):
+        return self._size
+
+    def getRepresentative(self):
+        return _FakeRep()
+
+    def getFirstItem(self):
+        return _FakeRep()
+
+    def clone(self):
+        return self
+
+
+class _FakeClassesSet:
+    def __init__(self, items, streamClosed=False):
+        self._items = {item.getObjId(): item for item in items}
+        self._streamClosed = streamClosed
+        self.iterCalls = []
+        self.closeCalls = 0
+
+    def getFirstItem(self):
+        return sorted(self._items.values(), key=lambda i: i.getObjId())[0]
+
+    def iterItems(self, orderBy=None, direction=None, where=None):
+        self.iterCalls.append(where)
+        ids = sorted(self._items.keys())
+        if where:
+            threshold = int(where.split('>')[1].strip())
+            ids = [i for i in ids if i > threshold]
+        for i in ids:
+            yield self._items[i]
+
+    def isStreamClosed(self):
+        return self._streamClosed
+
+    def close(self):
+        self.closeCalls += 1
+
+
+class _FakeAccumulator:
+    def __init__(self):
+        self.items = []
+        self.streamClosed = False
+
+    def enableAppend(self):
+        pass
+
+    def copyAttributes(self, other, attrName):
+        pass
+
+    def isStreamClosed(self):
+        return self.streamClosed
+
+    def append(self, item):
+        self.items.append(item)
+
+    def __len__(self):
+        return len(self.items)
+
+    def write(self):
+        pass
+
+
+class TestXmippEliminateEmptyClassesPrepareImagesIncremental(BaseTest):
+    """Regression tests for the prepareImages() full-rescan fix in the
+    classes/averages variant."""
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testPrepareImagesOnlyFetchesDeltaNotFullRescan(self):
+        prot = self.newProtocol(XmippProtEliminateEmptyClasses)
+        prot._store = lambda *args, **kwargs: None
+        prot._createSetOfAverages = lambda suffix=None: _FakeAccumulator()
+
+        items = [_FakeClassItem(1, 5), _FakeClassItem(2, 7), _FakeClassItem(3, 9)]
+        fakeInSet = _FakeClassesSet(items)
+        prot.getInput = lambda: fakeInSet
+        prot.check = None
+
+        partsSet1 = prot.prepareImages()
+
+        self.assertEqual([None], fakeInSet.iterCalls)
+        self.assertEqual(3, len(partsSet1))
+        self.assertEqual({1: 5, 2: 7, 3: 9}, prot.classesDict)
+
+        # Simulate eliminationStep having advanced the checkpoint to id 3
+        # (the highest id included in round 1's write) - one more class,
+        # id 4, has also shown up in the input meanwhile.
+        prot.check = 3
+        fakeInSet2 = _FakeClassesSet(items + [_FakeClassItem(4, 11)])
+        prot.getInput = lambda: fakeInSet2
+
+        partsSet2 = prot.prepareImages()
+
+        self.assertEqual(
+            ['id > 3'],
+            fakeInSet2.iterCalls,
+            "A later round must only query the delta above the checkpoint, "
+            "not rescan the whole input again.",
+        )
+        self.assertIs(
+            partsSet1, partsSet2,
+            "inputImages must accumulate across rounds, not be rebuilt "
+            "from scratch.",
+        )
+        self.assertEqual(4, len(partsSet2))
+        self.assertEqual(
+            {1: 5, 2: 7, 3: 9, 4: 11},
+            prot.classesDict,
+            "classesDict must accumulate incrementally too, not be "
+            "rebuilt from a full scan every round.",
+        )
+
+    def testPrepareImagesOnAveragesInputNeverBuildsClassesDict(self):
+        from pwem.objects import SetOfImages
+
+        class _FakeAveragesItem(_FakeClassItem):
+            pass
+
+        class _FakeAveragesSet(_FakeClassesSet, SetOfImages):
+            def __init__(self, items):
+                _FakeClassesSet.__init__(self, items)
+
+        prot = self.newProtocol(XmippProtEliminateEmptyClasses)
+        prot._store = lambda *args, **kwargs: None
+        prot._createSetOfAverages = lambda suffix=None: _FakeAccumulator()
+
+        fakeInSet = _FakeAveragesSet([_FakeAveragesItem(1, 0)])
+        prot.getInput = lambda: fakeInSet
+        prot.check = None
+
+        prot.prepareImages()
+
+        self.assertIsNone(prot.classesDict)

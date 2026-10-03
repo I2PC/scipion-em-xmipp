@@ -9,7 +9,6 @@ import unittest
 from pyworkflow.object import Set
 
 from xmipp3.protocols import protocol_extract_particles as extract_particles
-from xmipp3.tests.streaming_test_utils import OutputStep as _OutputStep
 
 
 class _Mic:
@@ -93,19 +92,27 @@ class _OutputParts:
 
 class _InputHarness:
     def __init__(self):
-        self.outputStep = _OutputStep()
         self.updated = 0
         self.loadCalls = 0
+        self.micDict = {}
+        self.newDeps = []
+        self._pendingMicIds = set()
+        self._otherIdByCoordId = {}
+        self._pendingCtfIds = set()
+        self._ctfIdByCoordId = {}
 
     def _loadInputList(self):
         self.loadCalls += 1
         return {'mic_002': _Mic(2)}
 
-    def _getFirstJoinStep(self):
-        return self.outputStep
-
     def _insertNewMicsSteps(self, mics):
         return [mic.getObjId() + 100 for mic in mics]
+
+    def _micsOther(self):
+        return False
+
+    def _useCTF(self):
+        return False
 
     def updateSteps(self):
         self.updated += 1
@@ -121,10 +128,9 @@ class _OutputHarness:
         self.allMicsProcessed = allMicsProcessed
         self.allMicsProcessedCalls = 0
         self.finished = False
-        self.outputStep = _OutputStep()
 
-    def _isMicDone(self, mic):
-        return mic.getObjId() in self.processedIds
+    def _getFinishedProcessedMicKeys(self):
+        return {'mic_%03d' % objId for objId in self.processedIds}
 
     def _readDoneList(self):
         raise AssertionError('DONE_all.TXT must not be used as durable state.')
@@ -148,9 +154,6 @@ class _OutputHarness:
         if self.outputParticles is None:
             self.outputParticles = _OutputParts()
         self.outputParticles.micIds.update(ids)
-
-    def _getFirstJoinStep(self):
-        return self.outputStep
 
     def _streamingSleepOnWait(self):
         self.events.append(('sleep',))
@@ -229,10 +232,13 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
         self.assertEqual([('output', [], Set.STREAM_CLOSED)], protocol.events)
 
     def testFinishedRequiresAllPickedMicrographs(self):
+        # The sleep-between-polls responsibility now lives in
+        # stepsGeneratorStep's own loop, not inside _checkNewOutput - a
+        # not-yet-finished check with nothing new to publish is a no-op.
         protocol = _OutputHarness([1], [1], [1], streamClosed=True, allMicsProcessed=False)
         extract_particles.XmippProtExtractParticles._checkNewOutput(protocol)
         self.assertFalse(protocol.finished)
-        self.assertEqual([('sleep',)], protocol.events)
+        self.assertEqual([], protocol.events)
 
     def testExtractMicrographListSkipsFailingMicrographAndKeepsProcessingOthers(self):
         # Regression test: a single corrupted micrograph must not crash
@@ -353,18 +359,25 @@ from xmipp3.protocols.protocol_extract_particles import XmippProtExtractParticle
 
 class TestXmippExtractParticlesFinalizationRegression(unittest.TestCase):
 
-    def testFinishedStepsCheckIsNoOp(self):
+    def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
+        # The old _stepsCheck's own "finished -> no-op" short-circuit is
+        # now just the while-loop condition in stepsGeneratorStep.
         class _Harness:
             finished = True
+            lenPartsSet = 0
 
             def __init__(self):
                 self._checkNewInput = Mock()
                 self._checkNewOutput = Mock()
+                self._prepareStreamingGenerator = Mock()
+                self._insertFunctionStep = Mock(return_value=1)
+                self.createOutputStep = Mock()
 
         protocol = _Harness()
 
-        XmippProtExtractParticles._stepsCheck(protocol)
+        XmippProtExtractParticles.stepsGeneratorStep(protocol)
 
         protocol._checkNewInput.assert_not_called()
         protocol._checkNewOutput.assert_not_called()
+        protocol._insertFunctionStep.assert_called_once()
 

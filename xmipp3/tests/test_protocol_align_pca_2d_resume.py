@@ -80,7 +80,6 @@ class _EmptyParticles:
 class _StreamingSetContractHarness:
     def __init__(self, particles):
         self.inputParticles = _Pointer(particles)
-        self.inputFn = "/tmp/compatibility.sqlite"
         self.emptyParticles = _EmptyParticles()
 
     def debug(self, *args, **kwargs):

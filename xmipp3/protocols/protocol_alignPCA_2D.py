@@ -40,7 +40,7 @@ from pyworkflow.protocol.params import IntParam, StringParam, PointerParam, Enum
 from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED, MODE_RESUME
 from pyworkflow.constants import BETA
 
-from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
+from pwem.objects import SetOfClasses2D, SetOfAverages, Transform
 from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
 from xmipp3.base import XmippProtocol
 from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
@@ -499,7 +499,6 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
 
     def _initFnStep(self):
         updateEnviron(self.gpuList.get())
-        self.inputFn = self.inputParticles.get().getFileName()
         self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
         self.imgsXmd = self._getTmpPath('images_.xmd')  # Wiener
         self.imgsFn = self._getTmpPath('images_.mrc') # Wiener
@@ -739,19 +738,6 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
             update = True
 
         return outputSet, update
-
-    def _loadOutputAverageSet(self):
-        """
-        Load an empty output setOfAverages
-        """
-        outputRefs = self._createSetOfAverages()  # We need to create always an empty set since we need to rebuild it
-        partSet = SetOfParticles(filename=self.inputFn)
-        partSet.loadAllProperties()
-        outputRefs.copyInfo(partSet)
-        outputRefs.setSamplingRate(self.sampling)
-        outputRefs.setAlignment(ALIGN_2D)
-
-        return outputRefs
 
     def _doClassification(self, newParticlesSet):
         """ Three cases for launching Classification

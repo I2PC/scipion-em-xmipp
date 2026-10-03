@@ -28,26 +28,29 @@
 # *
 # **************************************************************************
 
+import json
 from os.path import exists
 
 import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Integer, Set, String
-from pyworkflow.protocol.constants import STEPS_PARALLEL, LEVEL_ADVANCED, STATUS_FINISHED, STATUS_NEW
+from pyworkflow.protocol import ProtStreamingBase
+from pyworkflow.protocol.constants import STEPS_PARALLEL, LEVEL_ADVANCED, STATUS_FINISHED
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
-from pwem.objects import Particle, SetOfCoordinates
+from pwem.objects import Particle
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes)
 from xmipp3.constants import OTHER
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 FACTOR_BOXSIZE = 1.5
 BULK_COORD_LOAD_MIN_MICS = 100
 
-class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
+class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtractParticles, XmippProtocol):
     """Extracts particle images from micrographs based on provided coordinates.
     This essential step prepares particle stacks for further processing such as
     classification and reconstruction.
@@ -449,8 +452,50 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                            '(it adds the ScoreGini and ScoreVar variables).')
 
         form.addParallelSection(threads=4, mpi=1)
-    
+        self._defineStreamingParams(form)
+
     #--------------------------- INSERT steps functions ------------------------
+    def _prepareStreamingGenerator(self):
+        # Reproduces ProtExtractParticles._insertAllSteps' own
+        # initialization (pwem, shared across every extraction protocol)
+        # now that ProtStreamingBase._insertAllSteps replaces it with a
+        # single resumableStepGeneratorStep.
+        self.micDict = {}
+        self.coordDict = {}
+        self.initialIds = self._insertInitialSteps()
+
+        # Watermark-based discovery state (replaces pwem's _loadInputList,
+        # which reconstructs a fresh Set from inputSet.getFileName() and
+        # does a full Python-side scan every poll). A mic/CTF/other-mic
+        # discovered via the watermark but not yet folded into
+        # self.micDict (because the batch isn't full and the stream
+        # isn't closed) stays pending and is retried every poll until it
+        # is actually scheduled.
+        self._micsWatermark = 0
+        self._pendingMicIds = set()
+        self._otherMicsWatermark = 0
+        self._pendingOtherMicIds = set()
+        self._otherIdByCoordId = {}
+        self._ctfWatermark = 0
+        self._pendingCtfIds = set()
+        self._ctfIdByCoordId = {}
+
+    def stepsGeneratorStep(self) -> None:
+        self._prepareStreamingGenerator()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
+
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
         # before the actual processing
@@ -466,22 +511,106 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 self._getNormalizeArgs(),
                 self.doBorders.get()]
 
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
+    def _insertNewMicsSteps(self, inputMics):
+        """ Own step hook (not pwem's extractMicrographStep/
+        extractMicrographListStep) so completion tracking comes from the
+        persisted step graph instead of pwem's os.path.exists(micDoneFn)
+        marker file. """
+        return self._insertNewMics(inputMics,
+                                   lambda mic: mic.getMicName(),
+                                   self._insertExtractMicrographStepOwn,
+                                   self._insertExtractMicrographListStepOwn,
+                                   *self._getExtractArgs())
 
-        self._checkNewInput()
-        self._checkNewOutput()
+    def _insertExtractMicrographStepOwn(self, mic, prerequisites, *args):
+        return self._insertFunctionStep('extractMicrographStepOwn',
+                                        mic.getMicName(), *args,
+                                        prerequisites=prerequisites)
+
+    def _insertExtractMicrographListStepOwn(self, micList, prerequisites, *args):
+        return self._insertFunctionStep('extractMicrographListStepOwn',
+                                        [mic.getMicName() for mic in micList],
+                                        *args, prerequisites=prerequisites)
+
+    def extractMicrographStepOwn(self, micKey, *args):
+        mic = self.micDict[micKey]
+        coordList = self.coordDict[mic.getObjId()]
+        self._convertCoordinates(mic, coordList)
+        self.info("Extracting micrograph: %s " % mic.getFileName())
+        self._extractMicrograph(mic, *args)
+
+    def extractMicrographListStepOwn(self, micKeyList, *args):
+        micList = []
+        for micName in micKeyList:
+            mic = self.micDict[micName]
+            coordList = self.coordDict[mic.getObjId()]
+            self._convertCoordinates(mic, coordList)
+            self.info("Extracting micrograph: %s " % mic.getFileName())
+            micList.append(mic)
+
+        self._extractMicrographList(micList, *args)
+
+    def _getFinishedProcessedMicKeys(self):
+        """ Mic keys whose own extraction step has actually FINISHED, read
+        from the persisted step graph - replaces the old
+        os.path.exists(micDoneFn) marker-file check as the durable source
+        of truth for "has this mic's extraction run". """
+        finishedKeys = set()
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName not in ('extractMicrographStepOwn',
+                                'extractMicrographListStepOwn'):
+                continue
+            if not step.isFinished():
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+            if not args:
+                continue
+
+            if funcName == 'extractMicrographListStepOwn':
+                if isinstance(args[0], list):
+                    finishedKeys.update(args[0])
+            else:
+                finishedKeys.add(args[0])
+
+        return finishedKeys
 
     def _checkNewInput(self):
         newMics = self._loadInputList()
-        outputStep = self._getFirstJoinStep()
 
         if newMics:
             fDeps = self._insertNewMicsSteps(newMics.values())
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+            self.newDeps.extend(fDeps)
             self.updateSteps()
+
+        # Only ids pwem's own batching actually folded into self.micDict
+        # this round are truly scheduled - anything else discovered stays
+        # pending and gets retried next poll (see _loadInputList).
+        scheduledIds = {mic.getObjId() for mic in self.micDict.values()}
+        self._pendingMicIds.difference_update(scheduledIds)
+        if self._micsOther():
+            consumedOtherIds = {
+                self._otherIdByCoordId.pop(coordId)
+                for coordId in scheduledIds
+                if coordId in self._otherIdByCoordId
+            }
+            self._pendingOtherMicIds.difference_update(consumedOtherIds)
+        if self._useCTF():
+            consumedCtfIds = {
+                self._ctfIdByCoordId.pop(coordId)
+                for coordId in scheduledIds
+                if coordId in self._ctfIdByCoordId
+            }
+            self._pendingCtfIds.difference_update(consumedCtfIds)
 
     def _getOutputMicIds(self):
         if not hasattr(self, '_outputMicIds'):
@@ -520,8 +649,16 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return micList
 
     def _loadInputCoords(self, micDict):
-        coordSet = SetOfCoordinates(filename=self.getCoords().getFileName())
-        coordSet._xmippMd = String()
+        # Load via the logical input's own Pointer instead of
+        # reconstructing a fresh SetOfCoordinates from a raw sqlite
+        # filename (breaks the backend-agnostic contract under a
+        # PostgreSQL-backed compatibility bridge).
+        coordSet = self.inputCoordinates.get()
+        if not hasattr(coordSet, '_xmippMd'):
+            # Mirrors pwem's own defensive patch for this xmipp-specific
+            # attribute, needed before loadAllProperties() on some
+            # SetOfCoordinates instances.
+            coordSet._xmippMd = String()
         coordSet.loadAllProperties()
         try:
             micList = self._loadCoordsForMics(coordSet, micDict)
@@ -530,12 +667,112 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             coordSet.close()
         return micList
 
+    def _loadInputList(self):
+        """ Backend-agnostic replacement for ProtExtractParticles._loadInputList
+        (pwem): discovers only mics/CTFs/other-mics above their logical id
+        watermark instead of reconstructing a fresh Set from a filename
+        and scanning it whole. """
+        coordMicsPointer = self.getCoords().getMicrographs(asPointer=True)
+        coordMicsSet = self._loadLogicalSet(coordMicsPointer)
+        try:
+            newIds, self._micsWatermark = self._discoverIdsAfter(
+                coordMicsSet, self._micsWatermark,
+            )
+            self._pendingMicIds.update(newIds)
+            candidateMics = self._loadLogicalSetItemsByIds(
+                coordMicsSet, self._pendingMicIds,
+            )
+            micDict = {mic.getMicName(): mic for mic in candidateMics}
+            self.micsClosed = coordMicsSet.isStreamClosed()
+        finally:
+            coordMicsSet.close()
+
+        if self._micsOther():
+            otherMicsSet = self._loadLogicalSet(self.inputMicrographs)
+            try:
+                newOtherIds, self._otherMicsWatermark = self._discoverIdsAfter(
+                    otherMicsSet, self._otherMicsWatermark,
+                )
+                self._pendingOtherMicIds.update(newOtherIds)
+                candidateOtherMics = self._loadLogicalSetItemsByIds(
+                    otherMicsSet, self._pendingOtherMicIds,
+                )
+                oMicDict = {mic.getMicName(): mic for mic in candidateOtherMics}
+                otherClosed = otherMicsSet.isStreamClosed()
+            finally:
+                otherMicsSet.close()
+            self.micsClosed = self.micsClosed and otherClosed
+
+            micDictNew = {}
+            for micKey, mic in micDict.items():
+                if micKey in oMicDict:
+                    oMic = oMicDict[micKey]
+                    # Track the other-set id this match consumed before
+                    # copyObjId() overwrites it, so _checkNewInput can
+                    # prune it from _pendingOtherMicIds once (and only
+                    # once) the coord side actually gets scheduled.
+                    self._otherIdByCoordId[mic.getObjId()] = oMic.getObjId()
+                    oMic.copyObjId(mic)
+                    micDictNew[micKey] = oMic
+            micDict = micDictNew
+
+        if self._useCTF():
+            ctfSet = self._loadLogicalSet(self.ctfRelations)
+            try:
+                newCtfIds, self._ctfWatermark = self._discoverIdsAfter(
+                    ctfSet, self._ctfWatermark,
+                )
+                self._pendingCtfIds.update(newCtfIds)
+                candidateCtfs = self._loadLogicalSetItemsByIds(
+                    ctfSet, self._pendingCtfIds,
+                )
+                ctfDict = {
+                    ctf.getMicrograph().getMicName(): ctf
+                    for ctf in candidateCtfs
+                }
+                ctfClosed = ctfSet.isStreamClosed()
+            finally:
+                ctfSet.close()
+
+            micDictNew = {}
+            for micKey, mic in micDict.items():
+                if micKey in ctfDict:
+                    ctf = ctfDict[micKey]
+                    self._ctfIdByCoordId[mic.getObjId()] = ctf.getObjId()
+                    mic.setCTF(ctf)
+                    micDictNew[micKey] = mic
+            micDict = micDictNew
+            self.ctfsClosed = ctfClosed
+        else:
+            self.ctfsClosed = True
+
+        micDict = self._loadInputCoords(micDict)
+
+        return micDict
+
+    def _areAllMicsProcessed(self):
+        """
+        This condition determines if the processing is complete when all the
+        micrographs associated with the input coordinates have been processed.
+        """
+        coordSet = self._loadLogicalSet(self.inputCoordinates)
+        try:
+            currentPicsMics = coordSet.getUniqueValues("_micName")
+        finally:
+            coordSet.close()
+
+        return len(self.micDict) == len(currentPicsMics)
+
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
 
         outputMicIds = self._getOutputMicIds()
-        processedMics = [mic for mic in self.micDict.values() if mic.getObjId() in outputMicIds or self._isMicDone(mic)]
+        finishedMicKeys = self._getFinishedProcessedMicKeys()
+        processedMics = [
+            mic for micKey, mic in self.micDict.items()
+            if mic.getObjId() in outputMicIds or micKey in finishedMicKeys
+        ]
         inputLen = len(self.micDict)
         streamClosed = self._isStreamClosed()
         allKnownProcessed = len(processedMics) == inputLen
@@ -551,15 +788,8 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         elif self.finished:
             self._updateOutputPartSet([], Set.STREAM_CLOSED)
         else:
-            if allKnownProcessed:
-                self._streamingSleepOnWait()
             return
 
-        if self.finished:
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
-    
     #--------------------------- STEPS functions -------------------------------
     def _extractMicrographList(self, micList, *args):
         """ Extract particles one micrograph at a time, isolating a
@@ -719,8 +949,21 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         if not self._micsOther():
             self.inputMicrographs.set(None)
 
+        errors.extend(self._validateParallelProcessing())
         return errors
-    
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for extraction.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
     def _citations(self):
         return ['Vargas2013b']
     
