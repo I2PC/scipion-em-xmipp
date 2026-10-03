@@ -27,12 +27,17 @@
 
 import json
 import os
+from collections import OrderedDict
 
 import pyworkflow.utils as pwutils
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
+import pyworkflow.object as pwobj
+from pyworkflow.protocol import ProtStreamingBase
+from pyworkflow.protocol.constants import STEPS_PARALLEL, MODE_RESUME
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
+
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 import mrcfile
 from scipy.ndimage import zoom
@@ -55,7 +60,7 @@ import matplotlib.pyplot as plt
 MAX_SIZE_THUMB=512
 NUM_THUMBNAILS=45
 
-class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
+class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtExtractParticles, XmippProtocol):
     """Removes coordinates located in carbon regions or large impurities in
     micrographs using a pre-trained deep learning model. This screening
     improves particle picking accuracy by filtering out false positives from
@@ -360,7 +365,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                        label="Choose GPU IDs",
                        help="Add a list of GPU devices that can be used.")
 
-        # form.addParallelSection(threads=4, mpi=1)
+        self._defineStreamingParams(form)
+        form.addParallelSection(threads=4, mpi=1)
 
     def getGpusList(self, separator):
         strGpus = ""
@@ -380,6 +386,31 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
 
     #--------------------------- INSERT steps functions ------------------------
+    def _prepareStreamingGenerator(self):
+        # Reproduces ProtExtractParticles._insertAllSteps' own
+        # initialization (pwem, shared across every extraction protocol)
+        # now that ProtStreamingBase._insertAllSteps replaces it with a
+        # single resumableStepGeneratorStep - self.micDict/self.coordDict
+        # must exist before the first _checkNewInput() call, and
+        # self.initialIds must exist before the first _insertNewMicsSteps()
+        # call, since pwem's own _insertNewMics() uses it as a prerequisite.
+        self.micDict = OrderedDict()
+        self.coordDict = {}
+        self.initialIds = self._insertInitialSteps()
+
+        # Watermark-based discovery state (replaces pwem's _loadInputList,
+        # which reconstructs a fresh Set from inputSet.getFileName() and
+        # does a full Python-side scan every poll). A mic discovered via
+        # the watermark but not yet folded into self.micDict (because the
+        # batch isn't full and the stream isn't closed) stays pending and
+        # is retried every poll until it is actually scheduled - mirroring
+        # pwem's own original full-rescan behavior, just without rescanning.
+        self._micsWatermark = 0
+        self._pendingMicIds = set()
+        self._otherMicsWatermark = 0
+        self._pendingOtherMicIds = set()
+        self._otherIdByCoordId = {}
+
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
         # before the actual processing
@@ -392,11 +423,123 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         return []
 
+    def stepsGeneratorStep(self) -> None:
+        self._prepareStreamingGenerator()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
+
     def _isStreamClosed(self):
         # This protocol depends on both the coordinates stream and the
         # micrographs stream. Do not flush a final partial batch until both
         # required inputs are closed.
         return self.coordsClosed and self.micsClosed
+
+    def _loadInputList(self):
+        """ Backend-agnostic replacement for ProtExtractParticles._loadInputList
+        (pwem): discovers only mics above the logical id watermark instead of
+        reconstructing a fresh Set from a filename and scanning it whole. """
+        coordMicsPointer = self.getCoords().getMicrographs(asPointer=True)
+        coordMicsSet = self._loadLogicalSet(coordMicsPointer)
+        try:
+            newIds, self._micsWatermark = self._discoverIdsAfter(
+                coordMicsSet, self._micsWatermark,
+            )
+            self._pendingMicIds.update(newIds)
+            candidateMics = self._loadLogicalSetItemsByIds(
+                coordMicsSet, self._pendingMicIds,
+            )
+            micDict = {mic.getMicName(): mic for mic in candidateMics}
+            self.micsClosed = coordMicsSet.isStreamClosed()
+        finally:
+            coordMicsSet.close()
+
+        if self._micsOther():
+            otherMicsSet = self._loadLogicalSet(self.inputMicrographs)
+            try:
+                newOtherIds, self._otherMicsWatermark = self._discoverIdsAfter(
+                    otherMicsSet, self._otherMicsWatermark,
+                )
+                self._pendingOtherMicIds.update(newOtherIds)
+                candidateOtherMics = self._loadLogicalSetItemsByIds(
+                    otherMicsSet, self._pendingOtherMicIds,
+                )
+                oMicDict = {mic.getMicName(): mic for mic in candidateOtherMics}
+                otherClosed = otherMicsSet.isStreamClosed()
+            finally:
+                otherMicsSet.close()
+            self.micsClosed = self.micsClosed and otherClosed
+
+            micDictNew = {}
+            for micKey, mic in micDict.items():
+                if micKey in oMicDict:
+                    oMic = oMicDict[micKey]
+                    # Track the other-set id this match consumed before
+                    # copyObjId() overwrites it, so _checkNewInput can
+                    # prune it from _pendingOtherMicIds once (and only
+                    # once) the coord side actually gets scheduled.
+                    self._otherIdByCoordId[mic.getObjId()] = oMic.getObjId()
+                    oMic.copyObjId(mic)
+                    micDictNew[micKey] = oMic
+            micDict = micDictNew
+
+        micDict = self._loadInputCoords(micDict)
+
+        self.streamClosed = self._isStreamClosed()
+
+        return micDict
+
+    def _loadInputCoords(self, micDict):
+        """ Load the coordinates for the given candidate mics from the
+        logical input Set (via its Pointer), instead of reconstructing a
+        fresh SetOfCoordinates from a raw sqlite filename. """
+        coordSet = self.inputCoordinates.get()
+        if not hasattr(coordSet, '_xmippMd'):
+            # Mirrors pwem's own defensive patch for this xmipp-specific
+            # attribute, needed before loadAllProperties() on some
+            # SetOfCoordinates instances.
+            coordSet._xmippMd = pwobj.String()
+        coordSet.loadAllProperties()
+
+        try:
+            micList = {}
+            for micKey, mic in micDict.items():
+                micId = mic.getObjId()
+                coordList = [
+                    coord.clone()
+                    for coord in coordSet.iterItems(where='_micId=%s' % micId)
+                ]
+                if coordList:
+                    self.coordDict[micId] = coordList
+                    micList[micKey] = mic
+            self.coordsClosed = coordSet.isStreamClosed()
+        finally:
+            coordSet.close()
+
+        return micList
+
+    def _areAllMicsProcessed(self):
+        """
+        This condition determines if the processing is complete when all the
+        micrographs associated with the input coordinates have been processed.
+        """
+        coordSet = self._loadLogicalSet(self.inputCoordinates)
+        try:
+            currentPicsMics = coordSet.getUniqueValues("_micName")
+        finally:
+            coordSet.close()
+
+        return len(self.micDict) == len(currentPicsMics)
 
     def _insertNewMicsSteps(self, inputMics):
         """ Insert steps to process new mics (from streaming)
@@ -422,21 +565,21 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
 
     def extractMicrographListStepOwn(self, micKeyList, *args):
+        # No DONE marker file to check or write any more - redundant
+        # recomputation on Continue is already guarded by each real output
+        # artifact's own idempotency check (_computeMaskForMicrographList
+        # skips mics whose .pos already exists in outputCoords via
+        # getDoneMics(), _generateThumbnail returns early if its own PNG
+        # already exists). Durable completion tracking for _checkNewOutput
+        # now comes from the persisted step graph itself (see
+        # _getFinishedProcessedMicKeys), not a filesystem sidecar.
         micList = []
         for micName in micKeyList:
             mic = self.micDict[micName]
-            micDoneFn = self._getMicDone(mic)
-            micFn = mic.getFileName()
             coordList = self.coordDict[mic.getObjId()]
             self._convertCoordinates(mic, coordList)
-            if self.isContinued() and os.path.exists(micDoneFn):
-                self.info("Skipping micrograph: %s, seems to be done" % micFn)
-
-            else:
-                # Clean old finished files
-                pwutils.cleanPath(micDoneFn)
-                self.info("Extracting micrograph: %s " % micFn)
-                micList.append(mic)
+            self.info("Extracting micrograph: %s " % mic.getFileName())
+            micList.append(mic)
 
         self._computeMaskForMicrographList(micList, *args)
 
@@ -457,8 +600,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                             "for it." % (mic.getMicName(), e)
                         )
                     thumbnailCounter += 1
-            # Mark this mic as finished
-            open(self._getMicDone(mic), 'w').close()
 
 
     def _computeMaskForMicrographList(self, micList):
@@ -492,28 +633,62 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
-
-        self._checkNewInput()
-        self._checkNewOutput()
-
     def _checkNewInput(self):
         newMics = self._loadInputList()
-        outputStep = self._getFirstJoinStep()
 
         if newMics:
             fDeps = self._insertNewMicsSteps(newMics.values())
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+            self.newDeps.extend(fDeps)
             self.updateSteps()
+
+        # Only ids pwem's own batching actually folded into self.micDict
+        # this round are truly scheduled - anything else discovered stays
+        # pending and gets retried next poll (see _loadInputList).
+        scheduledIds = {mic.getObjId() for mic in self.micDict.values()}
+        self._pendingMicIds.difference_update(scheduledIds)
+        if self._micsOther():
+            consumedOtherIds = {
+                self._otherIdByCoordId.pop(coordId)
+                for coordId in scheduledIds
+                if coordId in self._otherIdByCoordId
+            }
+            self._pendingOtherMicIds.difference_update(consumedOtherIds)
+
+    def _getFinishedProcessedMicKeys(self):
+        """ Mic keys whose extractMicrographListStepOwn batch step has
+        actually FINISHED, read from the persisted step graph - replaces
+        the old os.path.exists(micDoneFn) marker-file check as the durable
+        source of truth for "has this mic's extraction run". """
+        finishedKeys = set()
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName != 'extractMicrographListStepOwn' or not step.isFinished():
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+
+            if args and isinstance(args[0], list):
+                finishedKeys.update(args[0])
+
+        return finishedKeys
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
 
-        processedMics = [m for m in self.micDict.values() if self._isMicDone(m)]
+        finishedMicKeys = self._getFinishedProcessedMicKeys()
+        processedMics = [
+            mic for micKey, mic in self.micDict.items()
+            if micKey in finishedMicKeys
+        ]
         inputLen = len(self.micDict)
         streamClosed = self._isStreamClosed()
         allMicsProcessed = self._areAllMicsProcessed()
@@ -540,14 +715,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         elif self.finished:
             self._updateOutputCoordSet([], Set.STREAM_CLOSED)
         else:
-            if len(processedMics) == inputLen:
-                self._streamingSleepOnWait()
             return
-
-        if self.finished:
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
 
     def _getScale(self):
       if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
@@ -597,7 +765,11 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
     #--------------------------- INFO functions --------------------------------
     def _getPersistedAutomaticBatchSize(self):
-      if not self.isContinued():
+      # Protocol._runSteps() always forces runMode to MODE_RESUME while
+      # executing, even on Restart - self.isContinued() cannot tell the
+      # two apart here, only _originalRunMode can.
+      originalRunMode = getattr(self, '_originalRunMode', self.getRunMode())
+      if originalRunMode != MODE_RESUME:
         return None
 
       persistedBatchSize = None
@@ -652,14 +824,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
       return batchSize
 
     def _getNumPickedMics(self):
-      nPickMics = 0
-      lastId=None
-      for coord in self.inputCoordinates.get():
-        curId=coord.getMicId()
-        if lastId!=curId:
-          lastId=curId
-          nPickMics+=1
-      return nPickMics
+      # A backend-level distinct-values query instead of a full Python-side
+      # scan over every coordinate/particle row.
+      return len(self.inputCoordinates.get().getUniqueValues('_micId'))
 
     def _validate(self):
         errors = self.validateDLtoolkit(assertModel=True,
@@ -673,7 +840,20 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                           '(%d) in static mode. Set it to 0 to use only one batch'
                           %(batchSize, self._getNumPickedMics()))
 
+        errors.extend(self._validateParallelProcessing())
         return errors
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for extractMicrographListStepOwn.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     
     def _citations(self):

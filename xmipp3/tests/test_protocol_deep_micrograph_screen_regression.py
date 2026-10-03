@@ -4,14 +4,13 @@
 # *
 # **************************************************************************
 
-import os
+import json
 import unittest
 from unittest.mock import Mock, patch
 
 from pyworkflow.object import Set
 
 from xmipp3.protocols import protocol_deep_micrograph_screen as deep_screen
-from xmipp3.tests.streaming_test_utils import OutputStep as _OutputStep
 
 
 class _Mic:
@@ -55,10 +54,9 @@ class _Harness:
         self.streamClosed = streamClosed
         self.allMicsProcessed = allMicsProcessed
         self.finished = False
-        self.outputStep = _OutputStep()
 
-    def _isMicDone(self, mic):
-        return mic.getObjId() in self.processedIds
+    def _getFinishedProcessedMicKeys(self):
+        return {str(objId) for objId in self.processedIds}
 
     def _readDoneList(self):
         raise AssertionError('DONE_all.TXT must not be used as durable state.')
@@ -94,9 +92,6 @@ class _Harness:
     def getOutputName(self):
         return 'outputCoordinates_Full'
 
-    def _getFirstJoinStep(self):
-        return self.outputStep
-
     def _streamingSleepOnWait(self):
         self.events.append(('sleep',))
 
@@ -109,19 +104,22 @@ class _Harness:
 
 class _InputHarness:
     def __init__(self):
-        self.outputStep = _OutputStep()
+        self.newDeps = []
         self.loaded = 0
         self.updated = 0
+        self.micDict = {}
+        self._pendingMicIds = set()
+        self._otherIdByCoordId = {}
 
     def _loadInputList(self):
         self.loaded += 1
         return {'mic2': _Mic(2)}
 
-    def _getFirstJoinStep(self):
-        return self.outputStep
-
     def _insertNewMicsSteps(self, mics):
         return [mic.getObjId() + 100 for mic in mics]
+
+    def _micsOther(self):
+        return False
 
     def updateSteps(self):
         self.updated += 1
@@ -132,14 +130,17 @@ class TestXmippDeepMicrographScreenRegression(unittest.TestCase):
         protocol = _InputHarness()
         deep_screen.XmippProtDeepMicrographScreen._checkNewInput(protocol)
         self.assertEqual(1, protocol.loaded)
-        self.assertEqual([102], protocol.outputStep.prerequisites)
+        self.assertEqual([102], protocol.newDeps)
         self.assertEqual(1, protocol.updated)
 
     def testFinishedRequiresAllPickedMicrographs(self):
+        # The sleep-between-polls responsibility now lives in
+        # stepsGeneratorStep's own loop, not inside _checkNewOutput - a
+        # not-yet-finished check with nothing new to publish is a no-op.
         protocol = _Harness([1], [1], [1], streamClosed=True, allMicsProcessed=False)
         deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
         self.assertFalse(protocol.finished)
-        self.assertEqual([('sleep',)], protocol.events)
+        self.assertEqual([], protocol.events)
 
     def testOutputIsPersistedFromRealOutputSetNotSidecar(self):
         # Regression test: which mics still need to be flushed to the output
@@ -159,7 +160,7 @@ class TestXmippDeepMicrographScreenRegression(unittest.TestCase):
     def testNoActionWhenAllProcessedAlreadyPersistedButNotFinished(self):
         protocol = _Harness([1], [1], [1], streamClosed=False)
         deep_screen.XmippProtDeepMicrographScreen._checkNewOutput(protocol)
-        self.assertEqual([('sleep',)], protocol.events)
+        self.assertEqual([], protocol.events)
 
     def testFinishedReplayClosesExistingOutput(self):
         protocol = _Harness([1], [1], [1], streamClosed=True, allMicsProcessed=True)
@@ -167,16 +168,22 @@ class TestXmippDeepMicrographScreenRegression(unittest.TestCase):
         self.assertTrue(protocol.finished)
         self.assertEqual([('output', Set.STREAM_CLOSED)], protocol.events)
 
-    def testFinishedStepsCheckIsNoOp(self):
+    def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
+        # The old _stepsCheck's own "finished -> no-op" short-circuit is
+        # now just the while-loop condition in stepsGeneratorStep.
         protocol = _InputHarness()
         protocol.finished = True
+        protocol._prepareStreamingGenerator = Mock()
         protocol._checkNewInput = Mock()
         protocol._checkNewOutput = Mock()
+        protocol._insertFunctionStep = Mock(return_value=1)
+        protocol.createOutputStep = Mock()
 
-        deep_screen.XmippProtDeepMicrographScreen._stepsCheck(protocol)
+        deep_screen.XmippProtDeepMicrographScreen.stepsGeneratorStep(protocol)
 
         protocol._checkNewInput.assert_not_called()
         protocol._checkNewOutput.assert_not_called()
+        protocol._insertFunctionStep.assert_called_once()
 
     def testZeroCoordinateMicrographIsNotReprocessedOnEveryPoll(self):
         # Regression test: a mic that is fully processed (DONE marker
@@ -210,14 +217,10 @@ class TestXmippDeepMicrographScreenThumbnailIsolation(unittest.TestCase):
         # Regression test: a single micrograph whose thumbnail
         # generation fails (e.g. a flat/saturated image) must not crash
         # the whole batch step (and hence the whole protocol) - it
-        # should be skipped, logged, and the rest of the batch (and its
-        # own DONE marker) must still be processed normally.
-        import shutil
-        import tempfile
-
-        tmpDir = tempfile.mkdtemp()
-        self.addCleanup(lambda: shutil.rmtree(tmpDir, ignore_errors=True))
-
+        # should be skipped, logged, and the rest of the batch still
+        # processed normally. No DONE marker file is involved any more -
+        # redundant recomputation is guarded by each real output
+        # artifact's own idempotency check instead.
         class _BoolValue:
             def __init__(self, value):
                 self.value = value
@@ -232,18 +235,14 @@ class TestXmippDeepMicrographScreenThumbnailIsolation(unittest.TestCase):
                 self.saveMicThumbnailWithMask = _BoolValue(True)
                 self.errors = []
                 self.thumbnailCalls = []
+                self.convertedMics = []
+                self.maskComputedFor = None
 
             def _convertCoordinates(self, mic, coordList):
-                pass
-
-            def isContinued(self):
-                return False
-
-            def _getMicDone(self, mic):
-                return os.path.join(tmpDir, 'done_%d' % mic.getObjId())
+                self.convertedMics.append(mic.getObjId())
 
             def _computeMaskForMicrographList(self, micList, *args):
-                pass
+                self.maskComputedFor = [mic.getObjId() for mic in micList]
 
             def _generateThumbnail(self, mic):
                 self.thumbnailCalls.append(mic.getObjId())
@@ -264,8 +263,8 @@ class TestXmippDeepMicrographScreenThumbnailIsolation(unittest.TestCase):
 
         self.assertEqual([1, 2], harness.thumbnailCalls)
         self.assertEqual(1, len(harness.errors))
-        self.assertTrue(os.path.exists(os.path.join(tmpDir, 'done_1')))
-        self.assertTrue(os.path.exists(os.path.join(tmpDir, 'done_2')))
+        self.assertEqual([1, 2], harness.convertedMics)
+        self.assertEqual([1, 2], harness.maskComputedFor)
 
 
 if __name__ == '__main__':
@@ -392,8 +391,9 @@ class _AutomaticBatchResumeHarness:
         # Simulate Continue after the input/output streams are no longer open.
         return False
 
-    def isContinued(self):
-        return True
+    def getRunMode(self):
+        from pyworkflow.protocol.constants import MODE_RESUME
+        return MODE_RESUME
 
     def loadSteps(self):
         return [_PersistedBatchStep()]
@@ -423,3 +423,316 @@ class TestXmippDeepMicrographScreenAutomaticBatchResume(unittest.TestCase):
             "materialized in persisted batch steps instead of switching to "
             "the static first batch of 4.",
         )
+
+
+class _FakeMic:
+    def __init__(self, objId, micName=None):
+        self._objId = objId
+        self._micName = micName or ('mic_%03d' % objId)
+
+    def getObjId(self):
+        return self._objId
+
+    def getMicName(self):
+        return self._micName
+
+    def copyObjId(self, other):
+        self._objId = other.getObjId()
+
+    def clone(self):
+        clone = _FakeMic(self._objId, self._micName)
+        return clone
+
+
+class _FakeMicSet:
+    """Stands in for a real SetOfMicrographs, tracking which query
+    mechanisms get used so tests can assert discovery is incremental
+    (id > watermark / id IN (...)) and never a full scan or a
+    filename-based reconstruction."""
+
+    def __init__(self, mics, streamClosed=False):
+        self._mics = {mic.getObjId(): mic for mic in mics}
+        self._streamClosed = streamClosed
+        self.uniqueCalls = []
+
+    def loadAllProperties(self):
+        pass
+
+    def getUniqueValues(self, field, where=None):
+        self.uniqueCalls.append((field, where))
+        ids = sorted(self._mics.keys())
+        if where:
+            threshold = int(where.split('>')[1].strip())
+            ids = [i for i in ids if i > threshold]
+        return ids
+
+    def iterItems(self, orderBy=None, direction=None, where=None):
+        if where and where.startswith('id IN'):
+            idsStr = where[where.index('(') + 1: where.index(')')]
+            wanted = {int(x) for x in idsStr.split(',')}
+        else:
+            wanted = set(self._mics.keys())
+        for i in sorted(wanted):
+            if i in self._mics:
+                yield self._mics[i]
+
+    def isStreamClosed(self):
+        return self._streamClosed
+
+    def getFileName(self):
+        raise AssertionError(
+            "Mic discovery must not reconstruct a Set from a raw filename."
+        )
+
+    def close(self):
+        pass
+
+
+class _FakePointer:
+    def __init__(self, value):
+        self._value = value
+
+    def get(self):
+        return self._value
+
+
+class _FakeCoords:
+    def __init__(self, micSetPointer):
+        self._micSetPointer = micSetPointer
+
+    def getMicrographs(self, asPointer=False):
+        return self._micSetPointer if asPointer else self._micSetPointer.get()
+
+
+class _FakeCoordItem:
+    def __init__(self, micId):
+        self._micId = micId
+
+    def clone(self):
+        return _FakeCoordItem(self._micId)
+
+
+class _FakeCoordSet:
+    def __init__(self, coordsByMicId, streamClosed=False):
+        self._coordsByMicId = coordsByMicId
+        self._streamClosed = streamClosed
+        self.iterCalls = []
+        self.closeCalls = 0
+
+    def loadAllProperties(self):
+        pass
+
+    def getUniqueValues(self, field, where=None):
+        if field == '_micName':
+            return sorted(
+                'mic_%03d' % micId
+                for micId, coords in self._coordsByMicId.items()
+                if coords
+            )
+        raise AssertionError('Unexpected getUniqueValues field: %s' % field)
+
+    def iterItems(self, where=None):
+        micId = int(where.split('=')[1])
+        self.iterCalls.append(micId)
+        return iter(self._coordsByMicId.get(micId, []))
+
+    def isStreamClosed(self):
+        return self._streamClosed
+
+    def getFileName(self):
+        raise AssertionError(
+            "Coordinate loading must not reconstruct a Set from a raw filename."
+        )
+
+    def close(self):
+        self.closeCalls += 1
+
+
+class _DeepScreenInputHarness(deep_screen.XmippProtDeepMicrographScreen):
+    """Exercises the real _loadInputList/_loadInputCoords/_checkNewInput/
+    _areAllMicsProcessed against fake logical Sets, without instantiating a
+    real Protocol (same no-super().__init__() pattern as
+    _BatchClosureHarness above) - subclassing the real protocol, rather
+    than just the XmippStreamingBase mixin, so internal self.xxx() calls
+    inside those methods (e.g. _loadInputList calling
+    self._loadInputCoords) resolve correctly."""
+
+    def __init__(self, coordMics, coordsByMicId, micsOther=False,
+                 otherMics=None, coordsStreamClosed=False,
+                 micsStreamClosed=False, otherStreamClosed=False):
+        self._micsWatermark = 0
+        self._pendingMicIds = set()
+        self._otherMicsWatermark = 0
+        self._pendingOtherMicIds = set()
+        self._otherIdByCoordId = {}
+        self.micDict = {}
+        self.coordDict = {}
+        self.newDeps = []
+
+        self.coordMicsSet = _FakeMicSet(coordMics, streamClosed=micsStreamClosed)
+        self._coords = _FakeCoords(_FakePointer(self.coordMicsSet))
+        self.coordSet = _FakeCoordSet(coordsByMicId, streamClosed=coordsStreamClosed)
+        self.inputCoordinates = _FakePointer(self.coordSet)
+
+        self._micsOtherFlag = micsOther
+        if micsOther:
+            self.otherMicsSet = _FakeMicSet(otherMics or [], streamClosed=otherStreamClosed)
+            self.inputMicrographs = _FakePointer(self.otherMicsSet)
+
+        # Controlled per test: whether _insertNewMics' batching would have
+        # actually folded the candidates into self.micDict this round
+        # (simulating pwem's own batch-size gating).
+        self.scheduleAll = True
+        self.insertNewMicsStepsCalls = []
+
+    def getCoords(self):
+        return self._coords
+
+    def _micsOther(self):
+        return self._micsOtherFlag
+
+    def _insertNewMicsSteps(self, mics):
+        mics = list(mics)
+        self.insertNewMicsStepsCalls.append([m.getMicName() for m in mics])
+        if self.scheduleAll:
+            for mic in mics:
+                self.micDict[mic.getMicName()] = mic
+        return [1]
+
+    def updateSteps(self):
+        pass
+
+
+class TestXmippDeepMicrographScreenInputDiscovery(unittest.TestCase):
+    def testLoadInputListDiscoversOnlyAboveWatermarkNotFullScan(self):
+        mics = [_FakeMic(1), _FakeMic(2), _FakeMic(3)]
+        coords = {
+            1: [_FakeCoordItem(1)],
+            2: [_FakeCoordItem(2)],
+            3: [_FakeCoordItem(3)],
+        }
+        harness = _DeepScreenInputHarness(mics, coords)
+
+        micDict = deep_screen.XmippProtDeepMicrographScreen._loadInputList(harness)
+
+        self.assertEqual({'mic_001', 'mic_002', 'mic_003'}, set(micDict.keys()))
+        self.assertEqual(3, harness._micsWatermark)
+        self.assertEqual(
+            [('id', 'id > 0')],
+            harness.coordMicsSet.uniqueCalls,
+            "Discovery must query only ids above the watermark, not scan "
+            "everything.",
+        )
+        self.assertEqual(
+            [1, 2, 3],
+            sorted(harness.coordSet.iterCalls),
+            "Coordinates must be fetched with one targeted per-mic query, "
+            "not a full scan of the coordinates Set.",
+        )
+
+    def testLoadInputListKeepsUndispatchedMicsPendingAcrossPolls(self):
+        # Regression test: a mic discovered via the watermark but not yet
+        # folded into self.micDict (because pwem's batch size isn't full
+        # yet) must still be retried on the next poll, exactly like the
+        # old full-rescan behavior naturally did - without re-scanning
+        # from scratch once the watermark has moved past it.
+        mics = [_FakeMic(1), _FakeMic(2)]
+        coords = {1: [_FakeCoordItem(1)], 2: [_FakeCoordItem(2)]}
+        harness = _DeepScreenInputHarness(mics, coords)
+        harness.scheduleAll = False
+
+        deep_screen.XmippProtDeepMicrographScreen._checkNewInput(harness)
+
+        self.assertEqual({}, harness.micDict)
+        self.assertEqual({1, 2}, harness._pendingMicIds)
+        self.assertEqual(2, harness._micsWatermark)
+
+        harness.coordMicsSet.uniqueCalls.clear()
+        deep_screen.XmippProtDeepMicrographScreen._checkNewInput(harness)
+
+        self.assertEqual(
+            [('id', 'id > 2')],
+            harness.coordMicsSet.uniqueCalls,
+            "The watermark must not reset to re-scan from the start just "
+            "because some mics are still pending.",
+        )
+        self.assertEqual(
+            2,
+            len(harness.insertNewMicsStepsCalls[-1]),
+            "The still-pending mics must be retried, not dropped.",
+        )
+
+    def testMicsOtherCrossReferencePrunesPendingOnlyWhenCoordSideScheduled(self):
+        coordMics = [_FakeMic(10, micName='mic_a'), _FakeMic(11, micName='mic_b')]
+        otherMics = [_FakeMic(90, micName='mic_a'), _FakeMic(91, micName='mic_b')]
+        coords = {10: [_FakeCoordItem(10)], 11: [_FakeCoordItem(11)]}
+        harness = _DeepScreenInputHarness(
+            coordMics, coords, micsOther=True, otherMics=otherMics,
+        )
+        harness.scheduleAll = False
+
+        deep_screen.XmippProtDeepMicrographScreen._checkNewInput(harness)
+
+        self.assertEqual({}, harness.micDict)
+        self.assertEqual({10, 11}, harness._pendingMicIds)
+        self.assertEqual({90, 91}, harness._pendingOtherMicIds)
+        self.assertEqual({10: 90, 11: 91}, harness._otherIdByCoordId)
+
+        harness.scheduleAll = True
+        deep_screen.XmippProtDeepMicrographScreen._checkNewInput(harness)
+
+        self.assertEqual({'mic_a', 'mic_b'}, set(harness.micDict.keys()))
+        self.assertEqual(
+            10, harness.micDict['mic_a'].getObjId(),
+            "The scheduled mic must carry the coordinates-side id once "
+            "matched, even though it originates from the other mics Set.",
+        )
+        self.assertEqual(set(), harness._pendingMicIds)
+        self.assertEqual(set(), harness._pendingOtherMicIds)
+        self.assertEqual({}, harness._otherIdByCoordId)
+
+    def testAreAllMicsProcessedUsesPointerNotFilename(self):
+        mics = [_FakeMic(1), _FakeMic(2)]
+        coords = {1: [_FakeCoordItem(1)], 2: [_FakeCoordItem(2)]}
+        harness = _DeepScreenInputHarness(mics, coords)
+        harness.micDict = {'mic_001': _FakeMic(1), 'mic_002': _FakeMic(2)}
+
+        result = deep_screen.XmippProtDeepMicrographScreen._areAllMicsProcessed(harness)
+
+        self.assertTrue(result)
+        self.assertEqual(1, harness.coordSet.closeCalls)
+
+    def testGetFinishedProcessedMicKeysOnlyCountsFinishedExtractSteps(self):
+        class _FakeFuncName:
+            def __init__(self, name):
+                self._name = name
+
+            def get(self):
+                return self._name
+
+        class _FakeArgsStr:
+            def __init__(self, value):
+                self._value = value
+
+            def get(self, default=None):
+                return self._value
+
+        class _FakeStep:
+            def __init__(self, funcName, args, finished=True):
+                self.funcName = _FakeFuncName(funcName)
+                self.argsStr = _FakeArgsStr(json.dumps(args))
+                self._finished = finished
+
+            def isFinished(self):
+                return self._finished
+
+        harness = Mock()
+        harness._iterKnownStreamingSteps = lambda: [
+            _FakeStep('extractMicrographListStepOwn', [['mic_001', 'mic_002']]),
+            _FakeStep('extractMicrographListStepOwn', [['mic_003']], finished=False),
+            _FakeStep('someOtherStep', [['mic_999']]),
+        ]
+
+        keys = deep_screen.XmippProtDeepMicrographScreen._getFinishedProcessedMicKeys(harness)
+
+        self.assertEqual({'mic_001', 'mic_002'}, keys)
