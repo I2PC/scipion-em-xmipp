@@ -35,14 +35,15 @@ from pyworkflow.object import Pointer, CsvList
 import pyworkflow.protocol.params as params
 
 from pwem.protocols import ProtCTFMicrographs
+from pyworkflow.protocol import ProtStreamingBase
 from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
-from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME, MODE_RESTART
+from pyworkflow.protocol.constants import MODE_RESUME, MODE_RESTART
 from pyworkflow import UPDATED, NEW
 
 OUTPUT_CTF =  "outputCTF"
 OUTPUT_MICS = "outputMicrographs"
 
-class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
+class XmippProtMicDefocusSampler(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrographs):
     """
     Protocol to make a balanced subsample of meaningful CTFs in basis of the
     defocus values. Both CTFs and micrographs will be output. CTFs with
@@ -296,19 +297,46 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
                       default=100, label='Minimum number of images to make sampling',
                       help='Minimum number of images to make the defocus balanced sampling.')
 
+        self._defineStreamingParams(form)
+        form.addParallelSection(threads=3, mpi=1)
+
     def _validate(self):
         errors = []
         if self.numImages.get() <= 0:
             errors.append('Sample size must be greater than zero.')
         if self.minImages.get() <= 0:
             errors.append('Minimum number of images must be greater than zero.')
+        errors.extend(self._validateParallelProcessing())
         return errors
 
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for extractBalancedDefocus.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
 # --------------------------- INSERT steps functions -------------------------
-    def _insertAllSteps(self):
+    def stepsGeneratorStep(self) -> None:
         self.initializeParams()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
         self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True, needsGPU=False)
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -319,25 +347,17 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
         self._lastInputId = 0
         self._pendingInputIds = set()
 
-        if self.runMode.get() == MODE_RESTART and self.sampledIds:
+        # initializeParams now runs as part of the streaming generator
+        # step, i.e. AFTER Protocol._runSteps() has already forced
+        # runMode to MODE_RESUME (unlike the old _insertAllSteps, which
+        # ran before that override) - so self.runMode.get() alone can no
+        # longer tell Restart and Continue apart here.
+        originalRunMode = getattr(self, '_originalRunMode', self.getRunMode())
+        if originalRunMode == MODE_RESTART and self.sampledIds:
             self.sampledIds.clear()
             self._store()
 
         self.sampled_images = list(self.sampledIds)
-
-    def _getFirstJoinStepName(self):
-        ''' This function will be used for streaming, to check which is
-        the first function that need to wait for all ctfs
-        to have completed, this can be overriden in subclasses
-        (e.g., in Xmipp 'sortPSDStep')
-        '''
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
 
     def _insertNewCtfsSteps(self, newIds):
         deps = []
@@ -346,13 +366,6 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
         self.insertedIds.extend(newIds)
 
         return deps
-
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
-
-        self._checkNewInput()
-        self._checkNewOutput()
 
     def _checkNewInput(self):
         if self.sampled_images:
@@ -411,7 +424,6 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
             producerClosed
             and terminalConsistent
         )
-        outputStep = self._getFirstJoinStep()
 
         if self._pendingInputIds and (
             len(self._pendingInputIds) >= self.minImages.get()
@@ -421,9 +433,7 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
             fDeps = self._insertNewCtfsSteps(pendingIds)
             self._pendingInputIds.clear()
 
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-
+            self.newDeps.extend(fDeps)
             self.updateSteps()
 
         elif streamClosed and not self.insertedIds:
@@ -515,33 +525,23 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtCTFMicrographs):
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
-        # Check for results: we have finished when there is results in sample_images list
-        if not self.finished:
-            if self.sampled_images:
-                ctfSet, micSet = self.createOutputs(self.sampled_images)
-                self.updateRelations(ctfSet, micSet)
-                self.finished = True
-                self._store()  # Update the summary dictionary
+        if self.finished:
+            return
 
-                # Unlock the join step in the same check that finishes
-                # sampling. A later _stepsCheck call may be skipped once
-                # self.finished is True.
-                outputStep = self._getFirstJoinStep()
-                if outputStep and outputStep.isWaiting():
-                    outputStep.setStatus(STATUS_NEW)
-        else:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
+        if self.sampled_images:
+            ctfSet, micSet = self.createOutputs(self.sampled_images)
+            self.updateRelations(ctfSet, micSet)
+            self.finished = True
+            self._store()  # Update the summary dictionary
 
     def createOutputs(self, newDone):
-        cSet = self._loadOutputSet(SetOfCTF, 'ctfs.sqlite', OUTPUT_CTF)
-        mSet = self._loadOutputSet(SetOfMicrographs, 'micrographs.sqlite', OUTPUT_MICS)
+        cSet = self._loadOutputSet(SetOfCTF, OUTPUT_CTF)
+        mSet = self._loadOutputSet(SetOfMicrographs, OUTPUT_MICS)
         self.fillOutput(cSet, mSet, newDone)
 
         return cSet, mSet
 
-    def _loadOutputSet(self, SetClass, baseName, outputName):
+    def _loadOutputSet(self, SetClass, outputName):
         outputSet = getattr(self, outputName, None)
 
         if outputSet is not None:

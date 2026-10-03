@@ -144,6 +144,7 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
         prot.finished = False
         prot._lastInputId = 0
         prot._pendingInputIds = set()
+        prot.newDeps = []
         return prot
 
     def _prepareCheck(self, prot, ids, streamClosed=False):
@@ -152,7 +153,6 @@ class TestXmippMicDefocusSamplerRegression(BaseTest):
         updates = []
 
         prot.inputCTF = _FakePointer(fakeSet)
-        prot._getFirstJoinStep = lambda: None
         prot._insertNewCtfsSteps = lambda newIds: scheduled.append(list(newIds)) or []
         prot.updateSteps = lambda: updates.append(True)
 
@@ -400,18 +400,24 @@ from xmipp3.protocols.protocol_mics_defocus_balancer import (
 
 class TestXmippMicDefocusSamplerFinalizationRegression(unittest.TestCase):
 
-    def testFinishedStepsCheckIsNoOp(self):
+    def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
+        # The old _stepsCheck's own "finished -> no-op" short-circuit is
+        # now just the while-loop condition in stepsGeneratorStep.
         class _Harness:
             finished = True
 
             def __init__(self):
                 self._checkNewInput = Mock()
                 self._checkNewOutput = Mock()
+                self.initializeParams = Mock()
+                self._insertFunctionStep = Mock(return_value=1)
+                self.createOutputStep = Mock()
 
         protocol = _Harness()
 
-        XmippProtMicDefocusSampler._stepsCheck(protocol)
+        XmippProtMicDefocusSampler.stepsGeneratorStep(protocol)
 
         protocol._checkNewInput.assert_not_called()
         protocol._checkNewOutput.assert_not_called()
+        protocol._insertFunctionStep.assert_called_once()
 

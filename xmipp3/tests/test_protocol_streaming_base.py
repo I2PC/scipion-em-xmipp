@@ -3506,7 +3506,11 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
         class _Harness(XmippStreamingBase):
             inputCTF = pointer
             runMode = _RunMode()
+            _originalRunMode = MODE_RESUME
             sampledIds = [4, 7]
+
+            def getRunMode(self):
+                return MODE_RESUME
 
         protocol = _Harness()
 
@@ -3590,9 +3594,6 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
                     "depend on ctfFn."
                 )
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _insertNewCtfsSteps(self, newIds):
                 self.batches.append(list(newIds))
                 self.insertedIds.extend(newIds)
@@ -3607,6 +3608,7 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
         protocol.insertedIds = []
         protocol._lastInputId = 0
         protocol._pendingInputIds = set()
+        protocol.newDeps = []
         protocol.batches = []
         protocol.updateCalls = 0
 
@@ -3702,9 +3704,6 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
             minImages = _Param(10)
             runMode = _RunMode()
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _insertNewCtfsSteps(self, newIds):
                 self.batches.append(list(newIds))
                 self.insertedIds.extend(newIds)
@@ -3719,6 +3718,7 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
         protocol.insertedIds = []
         protocol._lastInputId = 2
         protocol._pendingInputIds = {1, 2}
+        protocol.newDeps = []
         protocol.batches = []
         protocol.updateCalls = 0
 
@@ -4064,13 +4064,11 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
             ctfOutput = XmippProtMicDefocusSampler._loadOutputSet(
                 protocol,
                 _FakeSetOfCTF,
-                "ctfs.sqlite",
                 OUTPUT_CTF,
             )
             micOutput = XmippProtMicDefocusSampler._loadOutputSet(
                 protocol,
                 _FakeSetOfMicrographs,
-                "micrographs.sqlite",
                 OUTPUT_MICS,
             )
 
