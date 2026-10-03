@@ -7,6 +7,7 @@
 # *
 # ******************************************************************************
 
+import json
 from unittest.mock import patch
 
 from pyworkflow.object import Set
@@ -14,6 +15,36 @@ from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols import XmippProtClassifyPcaStreaming
+
+
+class _FakeFuncName:
+    def __init__(self, name):
+        self._name = name
+
+    def get(self):
+        return self._name
+
+
+class _FakeArgsStr:
+    def __init__(self, value):
+        self._value = value
+
+    def get(self, default=None):
+        return self._value
+
+
+class _FakeStreamingStep:
+    """Stands in for a persisted pyworkflow step graph entry, exactly as
+    _restoreStreamingStateFromSteps reads it: funcName/argsStr objects with
+    a .get() accessor, plus isFinished()."""
+
+    def __init__(self, funcName, args, finished=True):
+        self.funcName = _FakeFuncName(funcName)
+        self.argsStr = _FakeArgsStr(json.dumps(args))
+        self._finished = finished
+
+    def isFinished(self):
+        return self._finished
 
 
 class _LogicalParticles:
@@ -169,9 +200,6 @@ class _ClosedInputBatchHarness:
     def getRunMode(self):
         return MODE_RESTART
 
-    def _hasStreamingCheckpoint(self):
-        return False
-
     def _doClassification(self, batch):
         return XmippProtClassifyPcaStreaming._doClassification(
             self,
@@ -282,7 +310,7 @@ class TestXmippClassifyPcaResume(BaseTest):
     def _newPcaProtocol(self):
         return self.newProtocol(XmippProtClassifyPcaStreaming)
 
-    def _prepareGeneratorProtocol(self, originalRunMode, hasCheckpoint):
+    def _prepareGeneratorProtocol(self, originalRunMode):
         prot = self._newPcaProtocol()
 
         # Reproduce Protocol._runSteps(): Scipion changes runMode to RESUME
@@ -294,7 +322,6 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot.finish = True
         prot._initialStep = lambda: None
         prot._loadEmptyParticleSet = lambda: object()
-        prot._hasStreamingCheckpoint = lambda: hasCheckpoint
 
         resumeCalls = []
         prot._updateVarsToContinue = lambda: resumeCalls.append(True)
@@ -460,59 +487,84 @@ class TestXmippClassifyPcaResume(BaseTest):
             "of its own round-specific input filenames.",
         )
 
-    def testResumeRestoresClassificationCheckpoint(self):
+    def testResumeRestoresStateFromFinishedStepGraph(self):
         prot = self._newPcaProtocol()
-
-        prot._hasStreamingCheckpoint = lambda: True
-        prot._getLastDone = lambda: "42"
-        prot._getLastClassificationRound = lambda: 4
+        prot._iterKnownStreamingSteps = lambda: [
+            _FakeStreamingStep("updateOutputSetOfClasses", [10]),
+            _FakeStreamingStep("updateOutputSetOfClasses", [20]),
+            _FakeStreamingStep("updateOutputSetOfClasses", [30]),
+            _FakeStreamingStep("updateOutputSetOfClasses", [42]),
+        ]
 
         prot._updateVarsToContinue()
 
         self.assertEqual(42, prot.lastInputId)
-        self.assertEqual(5, prot.classificationRound)
+        self.assertEqual(
+            4, prot.classificationRound,
+            "classificationRound must equal the number of finished "
+            "rounds, since _updateFnClassification already advances it "
+            "exactly once per round before that round even runs.",
+        )
 
-    def testResumeWithoutCheckpointStartsFromInitialState(self):
+    def testResumeIgnoresUnfinishedUpdateStep(self):
         prot = self._newPcaProtocol()
+        prot._iterKnownStreamingSteps = lambda: [
+            _FakeStreamingStep("updateOutputSetOfClasses", [10]),
+            _FakeStreamingStep("updateOutputSetOfClasses", [999], finished=False),
+        ]
 
+        prot._updateVarsToContinue()
+
+        self.assertEqual(10, prot.lastInputId)
+        self.assertEqual(1, prot.classificationRound)
+
+    def testResumeWithoutPriorRoundsStartsFromInitialState(self):
+        prot = self._newPcaProtocol()
         prot.lastInputId = 999
         prot.classificationRound = 99
-        prot._hasStreamingCheckpoint = lambda: False
+        prot._iterKnownStreamingSteps = lambda: []
 
         prot._updateVarsToContinue()
 
         self.assertEqual(0, prot.lastInputId)
-        self.assertEqual(1, prot.classificationRound)
+        self.assertEqual(0, prot.classificationRound)
 
     def testResumeUpdateClassesPreservesUpdatedReferences(self):
         prot = self._newPcaProtocol()
 
         prot.mode.set(prot.UPDATE_CLASSES)
         prot.firstTimeDone = False
-        prot._hasStreamingCheckpoint = lambda: True
-        prot._getLastDone = lambda: "42"
-        prot._getLastClassificationRound = lambda: 4
+        prot._iterKnownStreamingSteps = lambda: [
+            _FakeStreamingStep("updateOutputSetOfClasses", [42]),
+        ]
 
         prot._updateVarsToContinue()
 
         self.assertTrue(prot.firstTimeDone, "Continue in UPDATE_CLASSES mode must preserve the classes produced by previous rounds.")
 
     def testStepsGeneratorRestoresStateOnRealResume(self):
-        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESUME, True)
+        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESUME)
 
         prot.stepsGeneratorStep()
 
-        self.assertEqual(1, len(resumeCalls), "Continue with a checkpoint must restore the previous PCA2D streaming state.")
+        self.assertEqual(1, len(resumeCalls), "A real Continue/Resume must reconstruct the PCA2D streaming state from the step graph.")
 
-    def testStepsGeneratorDoesNotRestoreFreshDefaultResume(self):
-        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESUME, False)
+    def testStepsGeneratorRestoresOnDefaultResumeWithNoOriginalRunMode(self):
+        # Protocol.runMode defaults to MODE_RESUME even on a never-run
+        # instance (_originalRunMode is only set once _runSteps() actually
+        # executes). Calling _updateVarsToContinue in that case is safe: on
+        # a protocol with no prior finished steps it just reconstructs the
+        # same initial state _initialStep already set, so there is no
+        # separate "has checkpoint" guard needed any more.
+        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESUME)
+        del prot._originalRunMode
 
         prot.stepsGeneratorStep()
 
-        self.assertEqual(0, len(resumeCalls), "A fresh protocol uses MODE_RESUME by default but must not restore nonexistent streaming state.")
+        self.assertEqual(1, len(resumeCalls))
 
     def testStepsGeneratorDoesNotRestoreStateOnRestart(self):
-        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESTART, True)
+        prot, resumeCalls = self._prepareGeneratorProtocol(MODE_RESTART)
 
         prot.stepsGeneratorStep()
 

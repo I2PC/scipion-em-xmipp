@@ -132,9 +132,6 @@ class TestXmippPcaStreamingSafety(TestCase):
         protocol._updateOutputSet = Mock()
         protocol._defineSourceRelation = Mock()
         protocol._getInputPointer = Mock(return_value=object())
-        protocol._setClassificationDone = Mock()
-        protocol._writeLastDone = Mock()
-        protocol._writeLastClassificationRound = Mock()
 
         protocol.updateOutputSetOfClasses(7, Set.STREAM_OPEN)
 

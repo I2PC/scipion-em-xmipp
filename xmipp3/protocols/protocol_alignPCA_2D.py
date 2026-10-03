@@ -26,6 +26,7 @@
 # *
 # ******************************************************************************
 import enum
+import json
 import sys
 import emtable
 import os
@@ -42,15 +43,13 @@ from pyworkflow.constants import BETA
 from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
 from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
 from xmipp3.base import XmippProtocol
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
                             writeSetOfClasses2D, xmippToLocation, matrixFromGeometry)
 
 OUTPUT_CLASSES = "outputClasses"
 OUTPUT_AVERAGES = "outputAverages"
-PCA_FILE = "pca_done.txt"
-CLASSIFICATION_FILE = "classification_done.txt"
-LAST_DONE_FILE = "last_done.txt"
 
 
 class XMIPPCOLUMNS(enum.Enum):
@@ -107,7 +106,7 @@ CONTRAST_AVERAGES_FILE = 'classes_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
 
 
-class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProtocol):
+class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtClassify2D, XmippProtocol):
     """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming,
         enabling efficient processing of large datasets.
 
@@ -417,7 +416,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         newParticlesSet = self._loadEmptyParticleSet()
 
         isResume = getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME
-        if isResume and self._hasStreamingCheckpoint():
+        if isResume:
             self.info('Continue protocol')
             self._updateVarsToContinue()
 
@@ -492,6 +491,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.pcaLaunch = False
         self.classificationLaunch = False
         self.classificationRound = 0
+        self.classificationStarted = False
         self.firstTimeDone = False
         self.staticRun = False
         # Initialize files
@@ -609,16 +609,22 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
         if not update:  # First time
             self._defineSourceRelation(self._getInputPointer(), outputClasses)
-            self._setClassificationDone()
+            self.classificationStarted = True
             self.numberClasses = len(outputClasses)  # In case the original number of classes is not reached
 
         self.lastInputIdProcessed = lastInputId
         self.info(r'Last input id processed UPDATED is %s' % str(self.lastInputIdProcessed))
-        self._writeLastDone(str(self.lastInputIdProcessed))
-        self._writeLastClassificationRound(self.classificationRound)
-
         self.info(r'Last classification round processed is %d' % self.classificationRound)
-        self.classificationRound += 1
+
+        # Durable truth for Continue/Resume is this step's own persisted
+        # record (funcName + args) in the step graph, reconstructed by
+        # _restoreStreamingStateFromSteps - not a last_done.txt/
+        # classification_done.txt sidecar. classificationRound already
+        # advanced exactly once for this round, inside
+        # _updateFnClassification (incrementing it again here would just
+        # make every other round number unused, with no effect on
+        # uniqueness - _updateFnClassification's own increment already
+        # guarantees the next round gets a fresh file-name suffix).
 
         # This round's external files (classes_classes.star,
         # classes_images.star) have now been fully read - it is safe for
@@ -765,55 +771,65 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
 
     def _isClassificationDone(self):
-        done = False
-        if os.path.exists(self._getExtraPath(CLASSIFICATION_FILE)):
-            done = True
+        return self.classificationStarted or self.mode.get() == self.UPDATE_CLASSES
 
-        if self.mode == self.UPDATE_CLASSES:
-            done = True
+    def _restoreStreamingStateFromSteps(self):
+        """ Reconstruct lastInputId/classificationRound/classificationStarted
+        from the persisted step graph instead of last_done.txt/
+        classification_done.txt sidecars - the step graph pyworkflow
+        already maintains durably is the source of truth, same principle
+        as XmippStreamingBase's own _isFunctionStepFinished for other
+        protocols. Only FINISHED updateOutputSetOfClasses steps count:
+        an interrupted round's particles are simply rediscovered as new
+        input on the next check (self.lastInputId stays at the last
+        completed round's value) and reprocessed into a fresh round,
+        safely overwriting that round's half-written fixed filenames.
+        """
+        lastInputId = 0
+        finishedRounds = 0
 
-        return done
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, "funcName", None)
+            if hasattr(funcName, "get"):
+                funcName = funcName.get()
+            if funcName != "updateOutputSetOfClasses" or not step.isFinished():
+                continue
 
-    def _setClassificationDone(self):
-        with open(self._getExtraPath(CLASSIFICATION_FILE), "w"):
-            self.debug("Creating Classification DONE file")
+            argsStr = getattr(step, "argsStr", None)
+            if hasattr(argsStr, "get"):
+                argsStr = argsStr.get("[]")
+            try:
+                args = json.loads(argsStr or "[]")
+            except (TypeError, ValueError):
+                continue
+            if not args:
+                continue
 
-    def _writeLastClassificationRound(self, classificationRound):
-        with open(self._getExtraPath(CLASSIFICATION_FILE), "w") as file:
-            file.write('%d' % classificationRound)
+            finishedRounds += 1
+            try:
+                stepLastInputId = int(args[0])
+            except (TypeError, ValueError, IndexError):
+                continue
+            lastInputId = max(lastInputId, stepLastInputId)
 
-    def _getLastClassificationRound(self):
-        with open(self._getExtraPath(CLASSIFICATION_FILE), "r") as file:
-            content = file.read()
-            return int(content)
-
-    def _writeLastDone(self, creationTime):
-        """ Write to a text file the last item creation time done. """
-        with open(self._getExtraPath(LAST_DONE_FILE), 'w') as file:
-            file.write('%s' % creationTime)
-
-    def _hasStreamingCheckpoint(self):
-        lastDoneFn = self._getExtraPath(LAST_DONE_FILE)
-        classificationFn = self._getExtraPath(CLASSIFICATION_FILE)
-        return os.path.exists(lastDoneFn) and os.path.getsize(lastDoneFn) > 0 and os.path.exists(classificationFn) and os.path.getsize(classificationFn) > 0
-
-    def _getLastDone(self):
-        # Open the file in read mode and read the number
-        with open(self._getExtraPath(LAST_DONE_FILE), "r") as file:
-            content = file.read()
-        return str(content)
+        return lastInputId, finishedRounds
 
     def _updateVarsToContinue(self):
-        """ Method to if needed and the protocol is set to continue then it will see in which state it was stopped """
+        """ If the protocol is set to continue, reconstruct where it was
+        stopped from the persisted step graph. """
+        lastInputId, finishedRounds = self._restoreStreamingStateFromSteps()
 
-        if self._hasStreamingCheckpoint():
-            self.lastInputId = int(self._getLastDone())
-            self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
-            if self.mode.get() == self.UPDATE_CLASSES:
-                self.firstTimeDone = True
-        else:
-            self.lastInputId = 0
-            self.classificationRound = 1
+        self.lastInputId = lastInputId
+        # _updateFnClassification advances classificationRound exactly
+        # once per round (before that round even runs) - after N rounds
+        # have finished, the in-memory counter sits at N, so resuming
+        # with classificationRound = finishedRounds reproduces the same
+        # value and the next round gets a fresh, never-before-used
+        # file-name suffix.
+        self.classificationRound = finishedRounds
+        self.classificationStarted = finishedRounds > 0
+        if finishedRounds > 0 and self.mode.get() == self.UPDATE_CLASSES:
+            self.firstTimeDone = True
 
         self.lastInputIdProcessed = self.lastInputId
 
