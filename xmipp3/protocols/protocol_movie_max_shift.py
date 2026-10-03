@@ -24,8 +24,6 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import os
-from os.path import exists
 import numpy as np
 import copy
 import time
@@ -678,14 +676,13 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
                 and getattr(self, micOutputName, None) is None
             )
             micsSet = self._loadOutputSet(SetOfMicrographs,'micrographs%s%s.sqlite'%(suffix1, suffix))
-            print('micrographs%s%s.sqlite'%(suffix1, suffix))
 
             def tryToAppend(outSet, micOut):
                 """ When micrograph is very big, sometimes it's not ready to be read
-                Then we will wait for it up to a minute in 6 time-growing tries. 
+                Then we will wait for it up to a minute in 6 time-growing tries.
                 Returns True if fails! """
                 if micOut is None:
-                    print('Mic/Movie is None do not introduce')
+                    self.debug('Mic/Movie is None do not introduce')
                 else:
                     micOut.setEnabled(enable)
                     outSet.append(micOut)
@@ -807,12 +804,6 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
         if discardedToFill:
             fillOutput(discardedToFill, firstTimeDiscarded, AccOrDisc='Discarded')
 
-        # Unlock createOutputStep if finished all jobs
-        if self.finished:  
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
-
         self._store()
 
     #--------------------------- UTILS functions -------------------------------
@@ -864,18 +855,13 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
         else:
             inputSet = self.inputMovies.get()
 
+        # Always create fresh when the protocol doesn't already know
+        # about this output - never fall back to os.path.exists() on a
+        # raw on-disk path, which may not be the authoritative backend
+        # under a PostgreSQL-backed compatibility bridge.
         setFile = self._getPath(baseName)
-        print(setFile)
-
-        if exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            if len(outputSet) == 0:
-                pwutils.path.cleanPath(setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+        outputSet = SetClass(filename=setFile)
+        outputSet.setStreamState(outputSet.STREAM_OPEN)
 
         outputSet.copyInfo(inputSet)
 
@@ -936,7 +922,20 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
         if not self.inputMovies.get().getFirstItem().hasAlignment():
             errors.append('The _Input Movies_ must come from an alignment '
                           'protocol.')
+        errors.extend(self._validateParallelProcessing())
         return errors
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for _evaluateMovieAlign.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     def _summary(self):
         def getSize(outNameCondition):

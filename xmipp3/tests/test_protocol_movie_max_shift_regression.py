@@ -139,7 +139,7 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         updates = []
 
         prot.inputMovies = _FakePointer(fakeSet)
-        prot._getFirstJoinStep = lambda: None
+        prot.newDeps = []
 
         def insertSteps(newIds):
             newIds = sorted(newIds)
@@ -231,8 +231,6 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         )
 
     def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
-        from unittest.mock import patch
-
         prot = self._newProtocol()
 
         logicalOutput = LogicalOutputSetProbe()
@@ -244,14 +242,10 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
             '/tmp/' + baseName
         )
 
-        with patch(
-            'xmipp3.protocols.protocol_movie_max_shift.exists',
-            return_value=False,
-        ):
-            outputSet = prot._loadOutputSet(
-                FreshOutputSetProbe,
-                'movies.sqlite',
-            )
+        outputSet = prot._loadOutputSet(
+            FreshOutputSetProbe,
+            'movies.sqlite',
+        )
 
         self.assertIs(
             outputSet,
@@ -273,7 +267,6 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         # without touching the real mapper/parent-protocol lookup.
         prot.setInputMics = lambda: None
         prot._getAllDoneIds = lambda: ([], 0, [], [])
-        prot._getFirstJoinStep = lambda: None
         prot._store = lambda: None
         prot._defineTransformRelation = lambda *args, **kwargs: None
 
@@ -404,7 +397,6 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         prot.inputMics = object()
         prot.outMicName = 'outputMicrographs'
         prot._getAllDoneIds = lambda: ([1], 1, [1], [])
-        prot._getFirstJoinStep = lambda: None
         prot._store = lambda: None
         prot._defineTransformRelation = lambda *args, **kwargs: None
 
@@ -468,7 +460,6 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         prot.inputMics = object()
         prot.outMicName = 'outputMicrographs'
         prot._getAllDoneIds = lambda: ([1], 1, [1], [])
-        prot._getFirstJoinStep = lambda: None
         prot._store = lambda: None
         prot._defineTransformRelation = lambda *args, **kwargs: None
 
@@ -504,17 +495,22 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
             'retried and would be permanently lost.',
         )
 
-    def testFinishedStepsCheckIsNoOp(self):
-        """The executor final callback must not touch streaming state again."""
+    def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
+        # The old _stepsCheck's own "finished -> no-op" short-circuit is
+        # now just the while-loop condition in stepsGeneratorStep.
         prot = self.newProtocol(XmippProtMovieMaxShift)
         prot.finished = True
+        prot.initializeStep = Mock()
         prot._checkNewInput = Mock()
         prot._checkNewOutput = Mock()
+        prot._insertFunctionStep = Mock(return_value=1)
+        prot.createOutputStep = Mock()
 
-        prot._stepsCheck()
+        prot.stepsGeneratorStep()
 
         prot._checkNewInput.assert_not_called()
         prot._checkNewOutput.assert_not_called()
+        prot._insertFunctionStep.assert_called_once()
 
     def testFillOutputChecksMembershipBeforeGetItem(self):
         # Regression test: Set.getItem raises (UnboundLocalError) rather
@@ -529,7 +525,6 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
         prot.inputMics = object()
         prot.outMicName = 'outputMicrographs'
         prot._getAllDoneIds = lambda: ([1], 1, [1], [])
-        prot._getFirstJoinStep = lambda: None
         prot._store = lambda: None
         prot._defineTransformRelation = lambda *args, **kwargs: None
 

@@ -281,9 +281,6 @@ class TestXmippMovieMaxShiftStreamingInput(unittest.TestCase):
                     producerClosed,
                 )
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _insertNewMoviesSteps(self, newIds):
                 newIds = list(newIds)
                 self.batches.append(newIds)
@@ -299,6 +296,7 @@ class TestXmippMovieMaxShiftStreamingInput(unittest.TestCase):
         protocol = _Harness()
         protocol.batches = []
         protocol.updateCalls = 0
+        protocol.newDeps = []
 
         XmippProtMovieMaxShift._checkNewInput(protocol)
         XmippProtMovieMaxShift._checkNewInput(protocol)
@@ -1065,9 +1063,6 @@ class TestXmippMovieMaxShiftResumePersistence(unittest.TestCase):
             _originalRunMode = MODE_RESUME
             runMode = _RunMode()
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _getAllDoneIds(self):
                 return XmippProtMovieMaxShift._getAllDoneIds(
                     self,
@@ -1090,6 +1085,7 @@ class TestXmippMovieMaxShiftResumePersistence(unittest.TestCase):
         protocol.batches = []
         protocol.updateCalls = 0
         protocol.infoMessages = []
+        protocol.newDeps = []
 
         XmippProtMovieMaxShift._checkNewInput(protocol)
 
