@@ -10,6 +10,8 @@
 import unittest
 from unittest.mock import Mock, patch
 
+import pyworkflow.protocol.constants as cons
+
 from xmipp3.protocols.protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
 
 
@@ -41,6 +43,12 @@ class _FlakyFakeMovieSet:
         return self.attempt >= self.visibleFromAttempt.get(movieId, 0)
 
     def getItem(self, _, movieId):
+        # Mirrors the real pyworkflow Set.__getitem__: raises
+        # UnboundLocalError (not a None return) for a row that is not
+        # yet selectable, matching what _loadMoviesByIds now catches.
+        if movieId not in self:
+            raise UnboundLocalError(
+                "local variable 'item' referenced before assignment")
         return _FakeMovie(movieId)
 
     def close(self):
@@ -204,6 +212,93 @@ class TestMovieDoseAnalysisRegression(unittest.TestCase):
 
         self.assertFalse(prot.finished)
         self.assertEqual(set(), prot._doneIds)
+
+    def _makeInputMoviesMock(self):
+        return Mock(get=Mock(return_value=Mock(
+            getSamplingRate=Mock(return_value=1.0),
+            isStreamClosed=Mock(return_value=False),
+            getFramesRange=Mock(return_value=None),
+            getFirstItem=Mock(return_value=Mock(
+                getAcquisition=Mock(return_value=Mock(
+                    getDosePerFrame=Mock(return_value=1.0))))),
+        )))
+
+    def testInitializeStepDoesNotRestoreStateOnRestartDespiteIsContinuedBeingTrue(self):
+        # Regression test: Protocol._runSteps() always forces runMode to
+        # MODE_RESUME while executing, even when the user selected Restart
+        # ("Always set to resume, even if set to restart" in pyworkflow's
+        # own source) - so self.isContinued() alone cannot distinguish a
+        # real Continue from a Restart once the protocol is actually
+        # running. Only a real Continue/Resume (tracked via
+        # _originalRunMode, set once per _runSteps() call before runMode
+        # gets overwritten) should restore in-memory scientific state
+        # (self.mu, stats, dose history) from the previous outputs.
+        prot = XmippProtMovieDoseAnalysis()
+        prot.inputMovies = self._makeInputMoviesMock()
+        prot._originalRunMode = cons.MODE_RESTART
+        prot._restoreRuntimeStateFromOutputs = Mock()
+
+        prot.initializeStep()
+
+        prot._restoreRuntimeStateFromOutputs.assert_not_called()
+
+    def testInitializeStepRestoresStateOnRealContinue(self):
+        prot = XmippProtMovieDoseAnalysis()
+        prot.inputMovies = self._makeInputMoviesMock()
+        prot._originalRunMode = cons.MODE_RESUME
+        prot._restoreRuntimeStateFromOutputs = Mock()
+
+        prot.initializeStep()
+
+        prot._restoreRuntimeStateFromOutputs.assert_called_once()
+
+    def testPrepareStreamingGeneratorDelegatesToInitializeStep(self):
+        prot = XmippProtMovieDoseAnalysis()
+        prot.initializeStep = Mock()
+
+        prot._prepareStreamingGenerator()
+
+        prot.initializeStep.assert_called_once()
+
+    def testFinalizeStreamingGeneratorInsertsCreateOutputStepOnce(self):
+        prot = XmippProtMovieDoseAnalysis()
+        prot._steps = []
+        prot._prevSteps = []
+        inserted = []
+        prot._insertFunctionStep = Mock(
+            side_effect=lambda *a, **kw: (inserted.append((a, kw)), 99)[1])
+        prot.updateSteps = Mock()
+
+        prot._finalizeStreamingGenerator()
+
+        self.assertEqual(1, len(inserted))
+        prot.updateSteps.assert_called_once()
+
+    def testFinalizeStreamingGeneratorDoesNotReinsertFinishedCreateOutputStepOnContinue(self):
+        class FuncName:
+            def get(self):
+                return 'createOutputStep'
+
+        class FinishedStep:
+            funcName = FuncName()
+
+            def isFinished(self):
+                return True
+
+        prot = XmippProtMovieDoseAnalysis()
+        prot._steps = []
+        prot._prevSteps = [FinishedStep()]
+        prot._insertFunctionStep = Mock(
+            side_effect=AssertionError(
+                'A persisted FINISHED createOutputStep must not be '
+                'inserted again on Continue.'))
+        prot.updateSteps = Mock(
+            side_effect=AssertionError(
+                'Continue must not update the graph when finalization is '
+                'already finished.'))
+
+        # Must not raise.
+        prot._finalizeStreamingGenerator()
 
 
 if __name__ == "__main__":

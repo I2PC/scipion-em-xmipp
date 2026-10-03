@@ -32,6 +32,7 @@ import time
 
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
+from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
@@ -42,13 +43,13 @@ from pwem.objects import SetOfMovies
 from pwem.protocols import ProtProcessMovies
 
 from xmipp3.convert import getScipionObj
-from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingMoviesMixin
 
 THRESHOLD = 2
 OUTPUT_MOVIES = "outputMovies"
 OUTPUT_MOVIES_DISCARDED = "outputMoviesDiscarded"
 
-class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
+class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProcessMovies):
     """
     Analyzes the electron dose applied throughout a movie acquisition. This
     protocol helps assess dose accumulation and its effects on image quality,
@@ -383,12 +384,24 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
         form.addParallelSection(threads=4, mpi=1)
 
     # -------------------------- STEPS functions ------------------------------
-    def _insertAllSteps(self):
-        """ Insert the steps to perform movie dose evaluation
-                """
+    def _prepareStreamingGenerator(self):
+        """ ProtStreamingBase._insertAllSteps() only inserts the single
+        resumableStepGeneratorStep (always with a fresh timestamp, so it
+        reruns fully on every launch - fresh, Restart or Continue). This
+        replaces the old _insertAllSteps(), which used to call
+        initializeStep() directly (as a plain method call, never its own
+        persisted step) before inserting the createOutputStep join-step
+        placeholder; the join-step insertion itself moved to
+        _finalizeStreamingGenerator, inserted only once processing is
+        actually done instead of upfront with wait=True. """
         self.initializeStep()
-        self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True, needsGPU=False)
+
+    def _finalizeStreamingGenerator(self):
+        if self._isFunctionStepFinished("createOutputStep"):
+            return
+
+        self._insertFunctionStep(self.createOutputStep, prerequisites=[])
+        self.updateSteps()
 
     def initializeStep(self):
         inputMovies = self.inputMovies.get()
@@ -422,7 +435,15 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
         else:
             self.usingExperimental = True
 
-        if self.isContinued():
+        # Protocol._runSteps() always forces runMode to MODE_RESUME while
+        # executing, even when the user selected Restart ("Always set to
+        # resume, even if set to restart") - so self.isContinued() cannot
+        # tell the two apart here. _originalRunMode preserves the action
+        # actually requested by the user; only a real Continue/Resume
+        # should restore in-memory scientific state (self.mu, stats,
+        # dose history) from the previously persisted outputs.
+        originalRunMode = getattr(self, '_originalRunMode', self.getRunMode())
+        if originalRunMode == cons.MODE_RESUME:
             self._restoreRuntimeStateFromOutputs()
 
     def _restoreRuntimeStateFromOutputs(self):
@@ -493,10 +514,16 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
                 try:
                     stillPending = []
                     for movieId in pendingIds:
-                        movie = inputMovies.getItem(
-                            "id",
-                            movieId,
-                        )
+                        try:
+                            movie = inputMovies.getItem(
+                                "id",
+                                movieId,
+                            )
+                        except UnboundLocalError:
+                            # pyworkflow Set.__getitem__ currently raises
+                            # this (rather than returning None) when a
+                            # logical id is not yet selectable.
+                            movie = None
                         if movie is None:
                             stillPending.append(movieId)
                         else:
@@ -668,6 +695,12 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
         self.meanDoseList = [doseById[movieId] for movieId in sorted(doseById)]
 
     def _getNewDoneIds(self, doneListIds):
+        # Processing steps run in parallel batches and may finish out of
+        # order (or, rarely, never - e.g. a movie whose row remains
+        # unreachable). A still-pending movie must not block every other,
+        # already-processed, higher-id movie from being counted done: skip
+        # it for this round instead of stopping there, and it will be
+        # picked up on its own once it is actually processed.
         doneIds = set(doneListIds)
         insertedIds = sorted(set(self.insertedIds))
         processedIds = set(self.processedIds)
@@ -677,7 +710,7 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
             if movieId in doneIds:
                 continue
             if movieId not in processedIds:
-                break
+                continue
             newDone.append(movieId)
 
         return newDone
