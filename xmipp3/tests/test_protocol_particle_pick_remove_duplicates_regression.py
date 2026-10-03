@@ -55,7 +55,7 @@ class TestXmippPickingRemoveDuplicatesRegression(BaseTest):
         prot.getMainInput = lambda: SimpleNamespace(
             getMicrographs=lambda: _FakeMicsDict({1: _FakeMic(1), 2: _FakeMic(2)})
         )
-        prot._getFirstJoinStep = lambda: None
+        prot.newDeps = []
         prot.updateSteps = lambda: None
 
         scheduled = []
@@ -85,7 +85,7 @@ class TestXmippPickingRemoveDuplicatesRegression(BaseTest):
         prot.getMainInput = lambda: SimpleNamespace(
             getMicrographs=lambda: _FakeMicsDict({2: _FakeMic(2)})  # mic 1 missing
         )
-        prot._getFirstJoinStep = lambda: None
+        prot.newDeps = []
         prot.updateSteps = lambda: None
         prot.warning = lambda *args, **kwargs: None
 
@@ -102,6 +102,29 @@ class TestXmippPickingRemoveDuplicatesRegression(BaseTest):
 
         self.assertEqual([2], scheduled)
         self.assertEqual({2}, prot.checkedMics)
+
+    def testPrepareStreamingGeneratorDoesNotTreatInputAsMultiPointer(self):
+        # Regression test: unlike the parent XmippProtConsensusPicking,
+        # inputCoordinates here is a single PointerParam, not a
+        # MultiPointerParam - the parent's _computeSamplingRates() (which
+        # iterates self.inputCoordinates expecting several pointers) must
+        # not run for this subclass.
+        prot = self._newProtocol()
+
+        class _TripwirePointer:
+            def get(self):
+                raise AssertionError(
+                    "_prepareStreamingGenerator must not resolve "
+                    "inputCoordinates as if it were a MultiPointerParam."
+                )
+
+        prot.inputCoordinates = _TripwirePointer()
+
+        prot._prepareStreamingGenerator()
+
+        self.assertEqual(set(), prot.checkedMics)
+        self.assertEqual(set(), prot.processedMics)
+        self.assertFalse(hasattr(prot, 'sampligRates'))
 
 
 if __name__ == '__main__':

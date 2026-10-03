@@ -206,11 +206,19 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
                            "are presumed to correspond to the same particle.\n "
                            "If -1 then 0.6 * box size is going to be assigned as radius.")
 
-        # FIXME: It's not using more than one since
-        #         self.stepsExecutionMode = STEPS_SERIAL
-        # form.addParallelSection(threads=4, mpi=0)
+        self._defineStreamingParams(form)
+
+        form.addParallelSection(threads=3, mpi=0)
 
 #--------------------------- INSERT steps functions ----------------------------
+    def _prepareStreamingGenerator(self):
+        # Unlike the parent (XmippProtConsensusPicking), this protocol has
+        # a single PointerParam input (not a MultiPointerParam) and never
+        # rescales by sampling rate, so there is no sampligRates to
+        # precompute here.
+        self.checkedMics = set()
+        self.processedMics = set()
+
     def insertNewCoorsSteps(self, mics):
         deps = []
         for micrograph in mics:
@@ -258,9 +266,7 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
 
             if newMics:
                 fDeps = self.insertNewCoorsSteps(newMics)
-                outputStep = self._getFirstJoinStep()
-                if outputStep is not None:
-                    outputStep.addPrerequisites(*fDeps)
+                self.newDeps.extend(fDeps)
                 self.updateSteps()
 
     def getMainInput(self):
@@ -277,20 +283,24 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
         self._defineTransformRelation(self.getMainInput(), outputSet)
 
     def removeDuplicatesStep(self, micId, micName):
-        print("Removing duplicates for micrograph %d: '%s'"
-              % (micId, micName))
+        self.info("Removing duplicates for micrograph %d: '%s'"
+                  % (micId, micName))
 
         coordArray = np.asarray([x.getPosition() for x in
                                  self.getMainInput().iterCoordinates(micId)],
                                 dtype=int)
 
         consensusWorker([coordArray], 1, self.getConsensusRadius(),
-                        self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, micId)))
+                        self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, micId)),
+                        lock=self._lock)
 
-        self.processedMics.update([micId])
+        # removeDuplicatesStep can now run concurrently across worker
+        # threads (parallel section enabled) - guard the shared set.
+        with self._lock:
+            self.processedMics.update([micId])
 
     def _validate(self):
-        errors = []
+        errors = self._validateParallelProcessing()
         return errors
 
     def _summary(self):
