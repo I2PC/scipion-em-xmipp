@@ -26,13 +26,16 @@
 # *
 # **************************************************************************
 
+import json
 import sys
 import os
+from datetime import datetime
 
 from pwem import RELATION_CTF
 from pwem.emlib.image import ImageHandler
-from pwem.objects import SetOfCTF, OrderedDict
-from pyworkflow.object import String
+from pwem.objects import OrderedDict
+from pyworkflow.object import Set, String
+from pyworkflow.protocol import ProtStreamingBase
 
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as pwconst
@@ -43,11 +46,12 @@ import pwem.emlib.metadata as md
 
 from xmipp3.base import isMdEmpty
 from xmipp3.convert import readCTFModel
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 from pwem.emlib import Image
 from pyworkflow.utils.path import copyFile
 
-class XmippProtCTFMicrographs(ProtCTFMicrographs):
+class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrographs):
     """ Estimates the contrast transfer function (CTF) parameters on a set of
     micrographs using Xmipp, as well as other useful parameters such as ice
     thickness or information decay rate. Accurate CTF estimation is essential
@@ -349,6 +353,15 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                         }
         self._updateFilenamesDict(_templateDict)
 
+    def _defineParams(self, form):
+        ProtCTFMicrographs._defineParams(self, form)
+        # stepsGeneratorStep permanently holds one worker thread for the
+        # whole run (on top of the one the executor always reserves for
+        # its own bookkeeping) - bump the inherited default so a fresh
+        # protocol doesn't start under the floor validated below.
+        form.getParam("numberOfThreads").setDefault(3)
+        self._defineStreamingParams(form)
+
     def _defineProcessParams(self, form):
         # Change default value for Automatic downsampling
         param = form.getParam("AutoDownsampling")
@@ -403,34 +416,189 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
     def getInputMicrographs(self):
         return self.inputMicrographs.get()
 
-    # --------------------------- STEPS functions ------------------------------
-    def _loadSet(self, inputSet, SetClass, getKeyFunc):
-        """ method overrided in order to check if the previous CTF estimation
-            is ready when doInitialCTF=True and streaming is activated
-        """
-        setFn = inputSet.getFileName()
-        self.debug("Loading input db: %s" % setFn)
-        updatedSet = SetClass(filename=setFn)
-        updatedSet.loadAllProperties()
-        streamClosed = updatedSet.isStreamClosed()
-        initCtfCheck = lambda idItem: True
-        if self.doInitialCTF.get():
-            ctfSet = SetOfCTF(filename=self.ctfRelations.get().getFileName())
-            ctfSet.loadAllProperties()
-            streamClosed = streamClosed and ctfSet.isStreamClosed()
-            if not streamClosed:
-                readyCtfIds = ctfSet.getIdSet()
-                initCtfCheck = lambda idItem: idItem in readyCtfIds
-            ctfSet.close()
+    # --------------------------- INSERT steps functions -----------------------
+    def _insertAllSteps(self):
+        self._defineCtfParamsDict()
+        self.micDict = OrderedDict()
 
-        newItemDict = OrderedDict()
-        for item in updatedSet:
-            micKey = getKeyFunc(item)
-            if micKey not in self.micDict and initCtfCheck(item.getObjId()):
-                newItemDict[micKey] = item.clone()
-        updatedSet.close()
-        self.debug("Closed db.")
-        return newItemDict, streamClosed
+        if self.recalculate:
+            if self.isFirstTime:
+                self._insertPreviousSteps()
+                self.isFirstTime.set(False)
+            ctfIds = self._insertRecalculateSteps()
+            # Recalculate is a one-shot, non-streaming flow (manual
+            # corrections from the GUI) - never allowed to stream, so it
+            # never goes through stepsGeneratorStep.
+            self._insertFunctionStep('createOutputStep', prerequisites=ctfIds,
+                                     wait=False)
+        else:
+            self._insertFunctionStep(self.resumableStepGeneratorStep,
+                                     str(datetime.now()), needsGPU=False)
+
+    def _prepareStreamingGenerator(self):
+        self.initialIds = []
+        self._micsWatermark = 0
+        self._pendingMicIds = set()
+
+    def stepsGeneratorStep(self) -> None:
+        self._prepareStreamingGenerator()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
+
+    # --------------------------- STEPS functions ------------------------------
+    def _insertNewMicsSteps(self, inputMics):
+        """ Own step hook (not pwem's estimateCtfStep/estimateCtfListStep)
+        so completion tracking comes from the persisted step graph instead
+        of pwem's os.path.exists(micDoneFn) marker file. """
+        return self._insertNewMics(inputMics,
+                                   lambda mic: mic.getMicName(),
+                                   self._insertEstimateCtfStepOwn,
+                                   self._insertEstimateCtfListStepOwn,
+                                   *self._getCtfArgs())
+
+    def _insertEstimateCtfStepOwn(self, mic, prerequisites, *args):
+        return self._insertFunctionStep('estimateCtfStepOwn',
+                                        mic.getMicName(), *args,
+                                        prerequisites=prerequisites)
+
+    def _insertEstimateCtfListStepOwn(self, micList, prerequisites, *args):
+        return self._insertFunctionStep('estimateCtfListStepOwn',
+                                        [mic.getMicName() for mic in micList],
+                                        *args, prerequisites=prerequisites)
+
+    def estimateCtfStepOwn(self, micKey, *args):
+        mic = self.micDict[micKey]
+        self.info("Estimating CTF of micrograph: %s " % mic.getObjId())
+        self._estimateCTF(mic, *args)
+
+    def estimateCtfListStepOwn(self, micKeyList, *args):
+        micList = [self.micDict[micKey] for micKey in micKeyList]
+        self.info("Estimating CTF for micrographs: %s"
+                  % [mic.getObjId() for mic in micList])
+        self._estimateCtfList(micList, *args)
+
+    def _getFinishedProcessedMicKeys(self):
+        """ Mic keys whose own estimation step has actually FINISHED, read
+        from the persisted step graph - replaces the old
+        os.path.exists(micDoneFn) marker-file check as the durable source
+        of truth for "has this mic's CTF been estimated". """
+        finishedKeys = set()
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName not in ('estimateCtfStepOwn', 'estimateCtfListStepOwn'):
+                continue
+            if not step.isFinished():
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+            if not args:
+                continue
+
+            if funcName == 'estimateCtfListStepOwn':
+                if isinstance(args[0], list):
+                    finishedKeys.update(args[0])
+            else:
+                finishedKeys.add(args[0])
+
+        return finishedKeys
+
+    def _loadInputList(self):
+        """ Backend-agnostic replacement for ProtCTFMicrographs._loadInputList
+        / _loadSet (pwem): discovers only mics above their logical id
+        watermark instead of reconstructing a fresh Set from a filename and
+        scanning it whole. When doInitialCTF is set, candidate mics are
+        additionally filtered against the (still-open) previous CTF
+        estimation's current id set, mirroring the original behaviour. """
+        micSet = self._loadLogicalSet(self.inputMicrographs)
+        try:
+            newIds, self._micsWatermark = self._discoverIdsAfter(
+                micSet, self._micsWatermark,
+            )
+            self._pendingMicIds.update(newIds)
+            candidateMics = self._loadLogicalSetItemsByIds(
+                micSet, self._pendingMicIds,
+            )
+            micDict = {mic.getMicName(): mic for mic in candidateMics}
+            streamClosed = micSet.isStreamClosed()
+        finally:
+            micSet.close()
+
+        if self.doInitialCTF.get():
+            ctfSet = self._loadLogicalSet(self.ctfRelations)
+            try:
+                ctfClosed = ctfSet.isStreamClosed()
+                if not ctfClosed:
+                    readyCtfIds = set(ctfSet.getIdSet())
+                    micDict = {
+                        micKey: mic for micKey, mic in micDict.items()
+                        if mic.getObjId() in readyCtfIds
+                    }
+                streamClosed = streamClosed and ctfClosed
+            finally:
+                ctfSet.close()
+
+        return micDict, streamClosed
+
+    def _checkNewInput(self):
+        micDict, self.streamClosed = self._loadInputList()
+
+        if micDict:
+            fDeps = self._insertNewMicsSteps(micDict.values())
+            self.newDeps.extend(fDeps)
+            self.updateSteps()
+
+        scheduledIds = {mic.getObjId() for mic in self.micDict.values()}
+        self._pendingMicIds.difference_update(scheduledIds)
+
+    def _checkNewOutput(self):
+        if getattr(self, 'finished', False):
+            return
+
+        finishedKeys = self._getFinishedProcessedMicKeys()
+        listOfMics = list(self.micDict.values())
+        persistedIds = self._getKnownPersistedOutputIds('outputCTF')
+
+        newDone = [mic for mic in listOfMics
+                  if mic.getMicName() in finishedKeys
+                  and mic.getObjId() not in persistedIds]
+
+        nMics = len(listOfMics)
+        allDone = len(persistedIds) + len(newDone)
+        self.finished = self.streamClosed and allDone == nMics
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        if newDone:
+            publishedMics = self._updateOutputCTFSet(newDone, streamMode)
+            self._markOutputIdsPersisted(
+                'outputCTF',
+                [mic.getObjId() for mic in publishedMics],
+            )
+        elif not self.finished:
+            if allDone == nMics:
+                self._streamingSleepOnWait()
+            return
+
+        if self.finished:
+            self._updateStreamState(streamMode)
 
 
     def calculateAutodownsampling(self,samplingRate, targetSampling):
@@ -561,7 +729,26 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                 validateMsgs.append('If you want to use a previous estimation '
                                     'of the CTF, the corresponding set of CTFs '
                                     'is needed')
+
+        validateMsgs.extend(self._validateParallelProcessing())
         return validateMsgs
+
+    def _validateParallelProcessing(self):
+        # Recalculate is a one-shot, non-streaming flow - it never goes
+        # through stepsGeneratorStep, so it doesn't need the extra
+        # reserved thread.
+        if self.recalculate:
+            return []
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for CTF estimation.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     def _summary(self):
         summary = ProtCTFMicrographs._summary(self)

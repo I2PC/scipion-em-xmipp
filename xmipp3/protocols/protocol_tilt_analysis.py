@@ -31,12 +31,11 @@ import math
 import time
 from datetime import datetime
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol import STEPS_PARALLEL, ProtStreamingBase
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED, FloatParam, GE, GT, Range)
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
-import pyworkflow.protocol.constants as cons
 from pwem.objects import SetOfMicrographs, Image, Set, Float
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
@@ -49,7 +48,7 @@ OUTPUT_MICS = "outputMicrographs"
 OUTPUT_MICS_DISCARDED = "discardedMicrographs"
 AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
 
-class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
+class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrographs):
     """ Estimates the tilt angle of a micrograph by analyzing power spectral
     density correlations across different image quadrants. This helps discard
     the ones that have a tilt so high it could negatively affect the posterior
@@ -412,16 +411,26 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
                       help='''By default, micrographs will be divided into an output set and a discarded set based'''
                            ''' on the mean and std threshold.''')
 
+        self._defineStreamingParams(form)
+
         form.addParallelSection(threads=4, mpi=1)
 
     # -------------------------- STEPS functions ------------------------------
-    def _insertAllSteps(self):
-        """ Insert the steps to perform CTF estimation, or re-estimation,
-        on a set of micrographs.
-        """
+    def stepsGeneratorStep(self) -> None:
+        self.newDeps = []
         self.initializeStep()
+
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
         self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True, needsGPU=False)
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def initializeStep(self):
         inputMicrographs = self.inputMicrographs.get()
@@ -437,28 +446,6 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
 
     def createOutputStep(self):
         self._closeOutputSet()
-
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
-
-        # Input micrograph set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
-
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
 
     def _checkNewInput(self):
         micSet = self._loadLogicalSet(self.inputMicrographs)
@@ -479,8 +466,6 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
         finally:
             micSet.close()
 
-        outputStep = self._getFirstJoinStep()
-
         if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
             doneIds, _, _, _ = self._getAllDoneIds()
             doneIdsSet = set(doneIds)
@@ -491,8 +476,7 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
 
         if newIds:
             fDeps = self._insertNewMicrographSteps(newIds)
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+            self.newDeps.extend(fDeps)
             self.updateSteps()
 
     def _checkNewOutput(self):
@@ -513,9 +497,6 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
 
         if not newDone:
             if self.finished:
-                outputStep = self._getFirstJoinStep()
-                if outputStep and outputStep.isWaiting():
-                    outputStep.setStatus(cons.STATUS_NEW)
                 self._store()
             return
 
@@ -580,11 +561,6 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
                 OUTPUT_MICS_DISCARDED,
                 [mic.getObjId() for mic in micsDiscarded],
             )
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
 
         self._store()
 
@@ -865,6 +841,21 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtMicrographs):
         return os.path.join(micFolder, filename)
 
     # --------------------------- INFO functions -------------------------------
+    def _validate(self):
+        return self._validateParallelProcessing()
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for the tilt-analysis batches.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
     def _summary(self):
         fnSummary = self._getPath("summary.txt")
         if not os.path.exists(fnSummary):

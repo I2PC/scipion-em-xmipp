@@ -30,14 +30,14 @@ import os
 import time
 from datetime import datetime
 
-import pyworkflow.protocol.constants as cons
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol import Protocol
+from pyworkflow.protocol import Protocol, ProtStreamingBase
 from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 
 from xmipp3.utils import loadOutputSetForAppend
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 SIGNAL_FILENAME = "STOP_STREAM.TXT"
 
@@ -55,7 +55,7 @@ class _PersistedImagePlaceholder:
         return self._objId
 
 
-class XmippProtTriggerData(EMProtocol, Protocol):
+class XmippProtTriggerData(XmippStreamingBase, ProtStreamingBase, EMProtocol, Protocol):
     """
     Waits until certain number of images is prepared and then
     send them to output.
@@ -375,8 +375,10 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                       validators=[GT(3, "must be larger than 3sec.")],
                       help="Delay in seconds before checking new output")
 
+        form.addParallelSection(threads=3, mpi=0)
+
     # --------------------------- INSERT steps functions ----------------------
-    def _insertAllSteps(self):
+    def _prepareStreamingGenerator(self):
         # initializing variables
         self.finished = False
         self.setImagesClass()
@@ -389,10 +391,27 @@ class XmippProtTriggerData(EMProtocol, Protocol):
             self.splitedImages = []
             self.outputCount = 0
 
-        # steps
-        imsSteps = self._insertFunctionStep('delayStep')
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=[imsSteps], wait=True)
+    def stepsGeneratorStep(self) -> None:
+        self.newDeps = []
+        self._prepareStreamingGenerator()
+
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
+
+    def _streamingSleepOnWait(self):
+        # Reuse the existing, already-validated 'delay' param instead of
+        # also adding the generic streamingSleepOnWait form param, which
+        # would duplicate the same "how long to sleep" concept in the UI.
+        time.sleep(self.delay.get())
 
     def _restoreStreamingState(self):
         """ Reconstruct durable state from the real, already-persisted
@@ -427,24 +446,14 @@ class XmippProtTriggerData(EMProtocol, Protocol):
         persistedIds = set(outputSet.getIdSet()) if outputSet is not None else set()
         return persistedIds, 0
 
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
-
-        self._checkNewInput()
-        self._checkNewOutput()
-
     def createOutputStep(self):
         self._closeOutputSet()
 
     def _checkNewInput(self):
-        imsFile = self.inputImages.get().getFileName()
-
-        # Load the input Set dynamically so newly persisted streaming
-        # items are visible before checking for new work.
-        inputClass = self.getImagesClass()
-        self.imsSet = inputClass(filename=imsFile)
-        self.imsSet.loadAllProperties()
+        # Load the input Set via its own logical Pointer so newly
+        # persisted streaming items are visible before checking for new
+        # work - never reconstruct it from a raw sqlite filename.
+        self.imsSet = self._loadLogicalSet(self.inputImages)
 
         processedIds = {image.getObjId() for image in self.images}
         remaining = None if self.allImages.get() else max(0, self.outputSize.get() - len(self.images))
@@ -500,19 +509,8 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                 self.info('Stopped by received signal from a trigger data protocol')
                 self.finished = True
 
-        outputStep = self._getFirstJoinStep()
-        deps = []
-        if self.finished:  # Unlock createOutputStep if finished all jobs
+        if self.finished:
             self._fillingOutput()  # To do the last filling
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
-        else:
-            delayId = self._insertFunctionStep('delayStep', prerequisites=[])
-            deps.append(delayId)
-
-        if outputStep is not None:
-            outputStep.addPrerequisites(*deps)
-        self.updateSteps()
 
     def _fillingOutput(self):
         imsSqliteFn = '%s.sqlite' % self.getImagesType('lower')
@@ -540,8 +538,12 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                                                   imageSet, Set.STREAM_CLOSED)
                             self.splitedImages = self.splitedImages[splitLimIndex:] if splitLimIndex else []
                 else:  # Full streaming case
-                    if getattr(self, outputName, None) is None and \
-                            not os.path.exists(self._getPath(imsSqliteFn)):
+                    # Whether the output already exists is answered purely
+                    # by the logical attribute Scipion already knows about
+                    # - loadOutputSetForAppend (inside _loadOutputSet)
+                    # always creates fresh otherwise, never by checking a
+                    # raw .sqlite path on disk.
+                    if getattr(self, outputName, None) is None:
                         imageSet = self._loadOutputSet(self.getImagesClass(),
                                                        imsSqliteFn,
                                                        self.images,
@@ -558,8 +560,10 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                     self._updateOutputSet(outputName, imageSet, streamMode)
 
             else:
-                # Always reopen/update the static output. This repairs Resume if
-                # the SQLite was persisted before the protocol output attribute.
+                # Always reopen/update the static output - _loadOutputSet's
+                # loadOutputSetForAppend reuses the logical attribute if
+                # Scipion already knows about it, or creates fresh
+                # otherwise, never based on a raw .sqlite path on disk.
                 imageSet = self._loadOutputSet(self.getImagesClass(), imsSqliteFn, self.images,
                                                outputName=outputName)
                 self._updateOutputSet(outputName, imageSet, Set.STREAM_CLOSED)
@@ -629,23 +633,22 @@ class XmippProtTriggerData(EMProtocol, Protocol):
             if not isinstance(self.triggerProt.get(), XmippProtTriggerData):
                 errors.append("There is not a Trigger protocol connected to send a stop signal.")
 
+        errors.extend(self._validateParallelProcessing())
+        return errors
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
     # --------------------------- UTILS functions -----------------------------
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
-    def delayStep(self):
-        time.sleep(self.delay)
-
     def setImagesClass(self):
         self._inputClass = self.inputImages.get().getClass()
 

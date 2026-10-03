@@ -97,7 +97,7 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         scheduled = []
 
         prot.inputMicrographs = _FakePointer(inputSet)
-        prot._getFirstJoinStep = lambda: None
+        prot.newDeps = []
         prot.isContinued = lambda: False
         prot._insertNewMicrographSteps = lambda ids: scheduled.append(sorted(ids)) or []
         prot.updateSteps = lambda: None
@@ -240,7 +240,6 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         inputSet = _FakeInputSet([1])
         prot.inputMicrographs = _FakePointer(inputSet)
         prot._getAllDoneIds = lambda: ([], 0, [], [])
-        prot._getFirstJoinStep = lambda: None
         prot._store = Mock()
 
         prot._checkNewOutput()  # must not raise
@@ -256,7 +255,6 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         inputSet = _FakeInputSet([1], streamClosed=True)
         prot.inputMicrographs = _FakePointer(inputSet)
         prot._getAllDoneIds = lambda: ([1], 1, [1], [])
-        prot._getFirstJoinStep = lambda: None
         prot._loadOutputSet = Mock()
         prot._updateOutputSet = Mock()
         prot._store = Mock()
@@ -274,13 +272,19 @@ class TestXmippTiltAnalysisRegression(BaseTest):
         prot._updateOutputSet.assert_not_called()
         prot._store.assert_called_once()
 
-    def testFinishedStepsCheckIsNoOp(self):
+    def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
+        # The old _stepsCheck's own "finished -> no-op" short-circuit is
+        # now just the while-loop condition in stepsGeneratorStep.
         prot = self._newProtocol()
         prot.finished = True
+        prot.initializeStep = Mock()
         prot._checkNewInput = Mock()
         prot._checkNewOutput = Mock()
+        prot._insertFunctionStep = Mock(return_value=1)
+        prot.createOutputStep = Mock()
 
-        prot._stepsCheck()
+        prot.stepsGeneratorStep()
 
         prot._checkNewInput.assert_not_called()
         prot._checkNewOutput.assert_not_called()
+        prot._insertFunctionStep.assert_called_once()

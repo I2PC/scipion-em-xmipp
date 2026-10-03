@@ -1585,9 +1585,6 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
             def isContinued(self):
                 return False
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _insertNewMicrographSteps(self, newIds):
                 newIds = list(newIds)
                 self.batches.append(newIds)
@@ -1604,6 +1601,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
         protocol.insertedIds = [1, 2, 3]
         protocol.batches = []
         protocol.updateCalls = 0
+        protocol.newDeps = []
 
         XmippProtTiltAnalysis._checkNewInput(protocol)
         XmippProtTiltAnalysis._checkNewInput(protocol)
@@ -1797,9 +1795,6 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
             def _getExtraPath(self):
                 return "/tmp"
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _store(self):
                 pass
 
@@ -1871,9 +1866,6 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
 
             def _getAllDoneIds(self):
                 return [], 0, [], []
-
-            def _getFirstJoinStep(self):
-                return None
 
             def _store(self):
                 pass
@@ -2012,9 +2004,6 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
 
             def _getExtraPath(self):
                 return "/tmp"
-
-            def _getFirstJoinStep(self):
-                return None
 
             def _store(self):
                 pass
@@ -2181,9 +2170,6 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                     self,
                 )
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _insertNewMicrographSteps(self, newIds):
                 newIds = list(newIds)
                 self.batches.append(newIds)
@@ -2201,6 +2187,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
         protocol.batches = []
         protocol.updateCalls = 0
         protocol.infoMessages = []
+        protocol.newDeps = []
 
         XmippProtTiltAnalysis._checkNewInput(protocol)
 
@@ -2281,9 +2268,6 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
             def isContinued(self):
                 return False
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _insertNewMicrographSteps(self, newIds):
                 newIds = list(newIds)
                 self.batches.append(newIds)
@@ -2300,6 +2284,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
         protocol.insertedIds = []
         protocol.batches = []
         protocol.updateCalls = 0
+        protocol.newDeps = []
 
         XmippProtTiltAnalysis._checkNewInput(protocol)
 

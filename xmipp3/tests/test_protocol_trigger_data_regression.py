@@ -114,8 +114,7 @@ class TestXmippTriggerDataRegression(BaseTest):
 
         prot.images = [image1]
         prot.check = creation
-        prot.inputImages = SimpleNamespace(get=lambda: SimpleNamespace(getFileName=lambda: 'input.sqlite'))
-        prot._inputClass = lambda filename=None: inputSet
+        prot.inputImages = SimpleNamespace(get=lambda: inputSet)
         prot._fillingOutput = lambda: None
 
         with patch('xmipp3.protocols.protocol_trigger_data.os.path.getmtime', side_effect=AssertionError('Streaming input must not depend on SQLite mtime.')):
@@ -131,8 +130,7 @@ class TestXmippTriggerDataRegression(BaseTest):
         prot.inputImages = SimpleNamespace(get=lambda: object())
         prot._getPath = lambda name: name
 
-        with patch('xmipp3.protocols.protocol_trigger_data.os.path.exists', return_value=True):
-            outputSet = prot._loadOutputSet(_FakeOutputSet, 'particles.sqlite', [_FakeImage(1), _FakeImage(2)])
+        outputSet = prot._loadOutputSet(_FakeOutputSet, 'particles.sqlite', [_FakeImage(1), _FakeImage(2)])
 
         self.assertEqual({1, 2}, outputSet.getIdSet())
         self.assertEqual([2], outputSet.appended)
@@ -151,11 +149,10 @@ class TestXmippTriggerDataRegression(BaseTest):
         existingOutputSet.ids = {1, 2}
         prot.outputParticles = existingOutputSet
 
-        with patch('xmipp3.protocols.protocol_trigger_data.os.path.exists', return_value=False):
-            outputSet = prot._loadOutputSet(
-                _FakeOutputSet, 'particles.dat', [_FakeImage(2), _FakeImage(3)],
-                outputName='outputParticles',
-            )
+        outputSet = prot._loadOutputSet(
+            _FakeOutputSet, 'particles.dat', [_FakeImage(2), _FakeImage(3)],
+            outputName='outputParticles',
+        )
 
         self.assertIs(existingOutputSet, outputSet)
         self.assertEqual({1, 2, 3}, outputSet.getIdSet())
@@ -176,8 +173,7 @@ class TestXmippTriggerDataRegression(BaseTest):
         updates = []
         prot._updateOutputSet = lambda name, output, streamMode: updates.append((name, output, streamMode))
 
-        with patch('xmipp3.protocols.protocol_trigger_data.os.path.exists', return_value=True):
-            prot._fillingOutput()
+        prot._fillingOutput()
 
         self.assertEqual([('outputParticles', outputSet, Set.STREAM_CLOSED)], updates)
 
@@ -225,9 +221,8 @@ class TestXmippTriggerDataRegression(BaseTest):
         prot.isContinued = lambda: True
         prot.setImagesClass = lambda: None
         prot.setImagesType = lambda: None
-        prot._insertFunctionStep = lambda *args, **kwargs: 1
 
-        prot._insertAllSteps()
+        prot._prepareStreamingGenerator()
 
         self.assertEqual(
             {1, 2},
@@ -242,9 +237,8 @@ class TestXmippTriggerDataRegression(BaseTest):
         prot.isContinued = lambda: False
         prot.setImagesClass = lambda: None
         prot.setImagesType = lambda: None
-        prot._insertFunctionStep = lambda *args, **kwargs: 1
 
-        prot._insertAllSteps()
+        prot._prepareStreamingGenerator()
 
         self.assertEqual([], prot.images)
         self.assertEqual(0, prot.outputCount)
@@ -263,14 +257,20 @@ class TestXmippTriggerDataFinalizationRegression(BaseTest):
     def setUpClass(cls):
         setupTestProject(cls)
 
-    def testFinishedStepsCheckIsNoOp(self):
+    def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
+        # The old _stepsCheck's own "finished -> no-op" short-circuit is
+        # now just the while-loop condition in stepsGeneratorStep.
         prot = self.newProtocol(XmippProtTriggerData)
         prot.finished = True
+        prot._prepareStreamingGenerator = Mock()
         prot._checkNewInput = Mock()
         prot._checkNewOutput = Mock()
+        prot._insertFunctionStep = Mock(return_value=1)
+        prot.createOutputStep = Mock()
 
-        prot._stepsCheck()
+        prot.stepsGeneratorStep()
 
         prot._checkNewInput.assert_not_called()
         prot._checkNewOutput.assert_not_called()
+        prot._insertFunctionStep.assert_called_once()
 
