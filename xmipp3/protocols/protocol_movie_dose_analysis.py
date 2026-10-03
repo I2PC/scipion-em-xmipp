@@ -475,7 +475,7 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
         A movie still missing after a few retries is left out of the
         returned dict instead of blocking the caller forever.
         """
-        pendingIds = set(movieIds)
+        pendingIds = list(dict.fromkeys(movieIds))
         movies = {}
 
         for attempt in range(self.MOVIE_VISIBILITY_MAX_ATTEMPTS):
@@ -491,15 +491,19 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
                 )
 
                 try:
-                    stillPending = set()
+                    stillPending = []
                     for movieId in pendingIds:
-                        if movieId in inputMovies:
-                            movies[movieId] = inputMovies.getItem(
-                                "id",
-                                movieId,
-                            ).clone()
+                        movie = inputMovies.getItem(
+                            "id",
+                            movieId,
+                        )
+                        if movie is None:
+                            stillPending.append(movieId)
                         else:
-                            stillPending.add(movieId)
+                            clone = getattr(movie, "clone", None)
+                            movies[movieId] = (
+                                clone() if callable(clone) else movie
+                            )
                     pendingIds = stillPending
                 finally:
                     inputMovies.close()
@@ -520,7 +524,7 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
             try:
                 newIds, self._lastInputId = self._discoverIdsAfter(
                     movSet,
-                    self._lastInputId,
+                    getattr(self, "_lastInputId", 0),
                 )
 
                 self._inputSize = movSet.getSize()
@@ -664,24 +668,16 @@ class XmippProtMovieDoseAnalysis(XmippStreamingBase, ProtProcessMovies):
         self.meanDoseList = [doseById[movieId] for movieId in sorted(doseById)]
 
     def _getNewDoneIds(self, doneListIds):
-        # Processing steps run in parallel batches and may finish out of
-        # order (or, rarely, never - e.g. a movie whose row remains
-        # unreachable). A still-pending movie must not block every other,
-        # already-processed, higher-id movie from being counted done: skip
-        # it for this round instead of stopping there, and it will be
-        # picked up on its own once it is actually processed.
+        doneIds = set(doneListIds)
         insertedIds = sorted(set(self.insertedIds))
         processedIds = set(self.processedIds)
-        doneIds = set(doneListIds)
         newDone = []
 
         for movieId in insertedIds:
             if movieId in doneIds:
                 continue
-
             if movieId not in processedIds:
-                continue
-
+                break
             newDone.append(movieId)
 
         return newDone

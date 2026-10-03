@@ -32,23 +32,24 @@ import numpy as np
 from math import ceil
 
 import pyworkflow.utils as pwutils
-from pyworkflow.utils import yellowStr
 import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pwem.emlib.metadata as md
 from pwem import emlib
-from pwem.objects import Image, SetOfMovies
+from pwem.objects import Image
 from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
 from pwem.protocols import ProtAlignMovies
+from pyworkflow.protocol import ProtStreamingBase
 
 from xmipp3.convert import writeMovieMd, isEerMovie
 from xmipp3.base import isXmippCudaPresent
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingMoviesMixin
 import xmipp3.utils as xmutils
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
-class XmippProtFlexAlign(ProtAlignMovies):
+class XmippProtFlexAlign(XmippStreamingMoviesMixin, ProtStreamingBase, ProtAlignMovies):
     """
     Wrapper protocol for Xmipp Movie Alignment using cross-correlation methods.
     It aligns movie frames to produce beam-induced motion corrected micrographs.
@@ -313,7 +314,10 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
     When using GPUs, the number of Scipion threads should be consistent with the
     number of selected GPU devices. In typical use, the protocol expects the number
-    of threads to correspond to the number of GPUs plus one.
+    of threads to correspond to the number of GPUs plus two: one thread is always
+    reserved internally by Scipion, and one more is held by the streaming
+    coordinator step for the whole run, leaving the rest free for actual movie
+    processing.
 
     ## Outputs and Their Interpretation
 
@@ -474,7 +478,16 @@ class XmippProtFlexAlign(ProtAlignMovies):
                       help="Flip gain reference after rotation. "
                            "For tiff movies, gain is automatically upside-down flipped")
 
-        form.addParallelSection(threads=1, mpi=1)
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping ("main process") before
+        # handing the rest out as execution slots - see
+        # ThreadStepExecutor(hostConfig, nThreads - 1, ...) in
+        # pyworkflow/protocol/protocol.py. Of those remaining execution
+        # slots, one is permanently held by the streaming generator step
+        # (resumableStepGeneratorStep) for the whole run, and at least
+        # one more is needed free for actual movie processing.
+        self._defineStreamingParams(form)
+        form.addParallelSection(threads=3, mpi=1)
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -484,12 +497,56 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
 
     #--------------------------- STEPS functions -------------------------------
+    def _prepareStreamingGenerator(self):
+        self.insertedDict = {}
+        self.samplingRate = self.inputMovies.get().getSamplingRate()
+        self.streamClosed = False
+        self.finished = False
+        self.convertCIStep = []
+
+        if self._isFunctionStepFinished("_convertInputStep"):
+            return
+
+        convertStepId = self._insertFunctionStep(
+            "_convertInputStep", prerequisites=[])
+        self.convertCIStep.append(convertStepId)
+        self.updateSteps()
+
+    def _finalizeStreamingGenerator(self):
+        # The generic _checkNewOutput (XmippStreamingMoviesMixin) already
+        # closes every output Set inline once self.finished becomes True -
+        # this join step only exists to give _getFirstJoinStep() something
+        # to unblock, matching the placeholder the old _insertFinalSteps
+        # model used to insert automatically.
+        if self._isFunctionStepFinished("createOutputStep"):
+            return
+
+        self._insertFunctionStep("createOutputStep", prerequisites=[])
+        self.updateSteps()
+
+    def createOutputStep(self):
+        pass
+
+    def _getResumeRepairCandidateIds(self, finishedIds):
+        """Only movies whose processMovieStep finished but are still
+        missing from outputMovies need repairing after Continue - the
+        other (best-effort) micrograph outputs already tolerate gaps via
+        their own per-movie warning, matching _updateOutputSets' existing
+        behavior. """
+        finishedIds = set(finishedIds)
+        if not finishedIds:
+            return set()
+
+        persistedIds = self._getPersistedCandidateIds(
+            'outputMovies', finishedIds)
+        return finishedIds - persistedIds
+
     def _processMovie(self, movie):
         try:
             self.tryProcessMovie(movie)
         except Exception as ex:
-            print(yellowStr("We cannot process %s" % movie.getFileName()))
-            print(ex)
+            self.error("We cannot process %s with the exception %s"
+                       % (movie.getFileName(), ex))
 
     def getUserAngle(self):
       anglesDic = {0:0, 1:90, 2:180, 3:270}
@@ -698,9 +755,23 @@ class XmippProtFlexAlign(ProtAlignMovies):
         nGpus = len(self.gpuList.get().split())
         nThreads = self.numberOfThreads.get()
         errors = []
-        neededThreads = 1 if nGpus == 1 else nGpus + 1
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping before handing out the
+        # rest as execution slots (ThreadStepExecutor(hostConfig,
+        # nThreads - 1, ...) in pyworkflow/protocol/protocol.py) - that
+        # reservation is invisible from here, so it must be budgeted for
+        # explicitly. Of the remaining execution slots, one is
+        # permanently held by the streaming generator step for the whole
+        # run, and max(nGpus, 1) more are needed for actual movie
+        # processing (max() also covers CPU-only runs with an empty GPU
+        # list). The previous "1 if nGpus == 1 else nGpus + 1" special
+        # case predates ProtStreamingBase and, like the later
+        # "nGpus + 1" version, undercounts by not knowing about
+        # pyworkflow's own reserved thread - both would starve
+        # processMovieStep of a worker thread and deadlock the protocol.
+        neededThreads = max(nGpus, 1) + 2
         if nThreads != neededThreads:
-            errors.append('Please assign the number of threads so that it corresponds to the amount of GPUs + 1.')
+            errors.append('Please assign the number of threads so that it corresponds to the amount of GPUs + 2.')
         return errors
 
     def _validateBinary(self):
