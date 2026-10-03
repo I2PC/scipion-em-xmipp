@@ -30,7 +30,7 @@
 import os
 from datetime import datetime
 
-import pyworkflow.protocol.constants as cons
+from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cleanPath
 from pyworkflow.object import Set, Float, CsvList
 from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
@@ -47,7 +47,8 @@ from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 
-class XmippProtScreenParticles(XmippStreamingBase, ProtProcessParticles):
+class XmippProtScreenParticles(XmippStreamingBase, ProtStreamingBase,
+                               ProtProcessParticles):
     """Protocol to attach different merit values to every particle metadata for subsequent pruning the set.
 There are different merit values to be calculated:
     - zScore evaluates the similarity of a particles with an average (lower zScore -> higher similarity).
@@ -418,14 +419,17 @@ There are different merit values to be calculated:
                       help='Add features used for the ranking to each one '
                            'of the input particles')
 
-        form.addParallelSection(threads=0, mpi=0)
+        self._defineStreamingParams(form)
 
     def _getDefaultParallel(self):
-        """This protocol doesn't have mpi version"""
-        return (0, 0)
+        """This protocol doesn't have mpi version, but stepsGeneratorStep
+        needs at least 3 threads: one reserved by the executor for its
+        own bookkeeping, one permanently held by the streaming generator,
+        and one free worker slot."""
+        return (3, 0)
 
     # --------------------------- INSERT steps functions ----------------------
-    def _insertAllSteps(self):
+    def _prepareStreamingGenerator(self):
         self._initializeZscores()
         self.inputSize = 0
         self._pendingParticleIds = set()
@@ -443,7 +447,6 @@ There are different merit values to be calculated:
 
         processedIds = self._getKnownProcessedParticleIds()
         self.outputSize = len(processedIds)
-        partsSteps = []
 
         if os.path.exists(self.fnOutputMd):
             self.inputSize, self.streamClosed = self._getInputStatus()
@@ -456,25 +459,23 @@ There are different merit values to be calculated:
 
             if not isEmpty(self.fnInputMd):
                 partsSteps = self._insertNewPartsSteps()
+                self.newDeps.extend(partsSteps)
 
-        self._insertFunctionStep(
-            'createOutputStep',
-            prerequisites=partsSteps,
-            wait=True,
-        )
+    def stepsGeneratorStep(self) -> None:
+        self.newDeps = []
+        self._prepareStreamingGenerator()
 
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
 
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def createOutputStep(self):
         pass
@@ -485,15 +486,6 @@ There are different merit values to be calculated:
         deps.append(stepId)
         return deps
 
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
-
-        # Input particles set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
-
     def _checkNewInput(self):
         # Consume any pending output before preparing another input batch.
         if os.path.exists(self.fnOutputMd):
@@ -502,9 +494,7 @@ There are different merit values to be calculated:
         self.inputSize, self.streamClosed = self._loadInput()
         if not isEmpty(self.fnInputMd):
             fDeps = self._insertNewPartsSteps()
-            outputStep = self._getFirstJoinStep()
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+            self.newDeps.extend(fDeps)
             self.updateSteps()
 
     def _getInputStatus(self):
@@ -734,12 +724,6 @@ There are different merit values to be calculated:
                 self._store()
                 cleanPath(self.fnOutputMd)
 
-        if self.finished:
-            outputStep = self._getFirstJoinStep()
-
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
-
     def _loadOutputSet(self, SetClass, baseName):
         outputSet = getattr(self, 'outputParticles', None)
 
@@ -801,11 +785,11 @@ There are different merit values to be calculated:
         self.runJob("xmipp_image_ssnr", args)
 
         if self.autoParRejectionVar != self.REJ_NONE:
-            print('Rejecting by variance:')
+            self.info('Rejecting by variance:')
             if self.outputSize == 0:
                 varList = []
                 giniList = []
-                print('  - Reading metadata')
+                self.info('  - Reading metadata')
                 mdata = emlib.MetaData(self.fnInputMd)
                 for objId in mdata:
                     varList.append(mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId))
@@ -819,7 +803,7 @@ There are different merit values to be calculated:
                     self.mdLabels = [emlib.MDL_SCORE_BY_VAR, emlib.MDL_SCORE_BY_GINI]
 
                 self.varThreshold.set(histThresholding(valuesList))
-                print('  - Variance threshold: %f' % self.varThreshold)
+                self.info('  - Variance threshold: %f' % self.varThreshold)
 
             rejectByVariance(self.fnInputMd, self.fnOutputMd, self.varThreshold,
                              self.autoParRejectionVar)
@@ -910,7 +894,21 @@ There are different merit values to be calculated:
                                     'done because the particles have not the '
                                     'scoreByVariance attribute. Use Xmipp to '
                                     'extract the particles.')
+
+        validateMsgs.extend(self._validateParallelProcessing())
         return validateMsgs
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for screening.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     def _citations(self):
         return ['Vargas2013b']

@@ -144,7 +144,7 @@ class TestXmippScreenParticlesRegression(BaseTest):
         prot = self._newProtocol()
         prot._loadInput = lambda: (3, False)
         prot._insertNewPartsSteps = lambda: []
-        prot._getFirstJoinStep = lambda: None
+        prot.newDeps = []
         prot.updateSteps = lambda: None
 
         with patch('xmipp3.protocols.protocol_screen_particles.os.path.getmtime', side_effect=AssertionError('Streaming input must not depend on SQLite mtime.')), patch('xmipp3.protocols.protocol_screen_particles.os.path.exists', return_value=False), patch('xmipp3.protocols.protocol_screen_particles.isEmpty', return_value=False):
@@ -329,18 +329,24 @@ from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
 
 class TestXmippScreenParticlesFinalizationRegression(unittest.TestCase):
 
-    def testFinishedStepsCheckIsNoOp(self):
+    def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
+        # The old _stepsCheck's own "finished -> no-op" short-circuit is
+        # now just the while-loop condition in stepsGeneratorStep.
         class _Harness:
             finished = True
 
             def __init__(self):
+                self._prepareStreamingGenerator = Mock()
                 self._checkNewInput = Mock()
                 self._checkNewOutput = Mock()
+                self._insertFunctionStep = Mock(return_value=1)
+                self.createOutputStep = Mock()
 
         protocol = _Harness()
 
-        XmippProtScreenParticles._stepsCheck(protocol)
+        XmippProtScreenParticles.stepsGeneratorStep(protocol)
 
         protocol._checkNewInput.assert_not_called()
         protocol._checkNewOutput.assert_not_called()
+        protocol._insertFunctionStep.assert_called_once()
 

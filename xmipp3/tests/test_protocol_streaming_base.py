@@ -4528,17 +4528,6 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
                     "No batch should be inserted in this focused test."
                 )
 
-            def _insertFunctionStep(
-                self,
-                funcName,
-                prerequisites=None,
-                wait=False,
-            ):
-                self.insertedSteps.append(
-                    (funcName, prerequisites, wait)
-                )
-                return len(self.insertedSteps)
-
             _getRejectedParticleIds = (
                 XmippProtScreenParticles._getRejectedParticleIds
             )
@@ -4548,7 +4537,7 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
 
         protocol = _Harness()
         protocol.loadInputCalls = 0
-        protocol.insertedSteps = []
+        protocol.newDeps = []
 
         with patch.object(
             screen_particles.os.path,
@@ -4559,16 +4548,13 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
             "isEmpty",
             return_value=True,
         ):
-            XmippProtScreenParticles._insertAllSteps(protocol)
+            XmippProtScreenParticles._prepareStreamingGenerator(protocol)
 
         self.assertEqual(protocol.outputSize, 2)
         self.assertEqual(protocol.inputSize, 3)
         self.assertFalse(protocol.streamClosed)
         self.assertEqual(protocol.loadInputCalls, 1)
-        self.assertEqual(
-            protocol.insertedSteps,
-            [("createOutputStep", [], True)],
-        )
+        self.assertEqual(protocol.newDeps, [])
         self.assertEqual(
             protocol.outputParticles.getIdSetCalls,
             1,
@@ -4670,12 +4656,6 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
 
             def _store(self):
                 self.storeCalls += 1
-
-            def _getFirstJoinStep(self):
-                return None
-
-
-
 
 
         protocol = _Harness()
@@ -4780,7 +4760,7 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
             "isEmpty",
             return_value=True,
         ):
-            XmippProtScreenParticles._insertAllSteps(protocol)
+            XmippProtScreenParticles._prepareStreamingGenerator(protocol)
 
         self.assertEqual(
             protocol.extraPaths,
@@ -5299,9 +5279,6 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
 
             def _store(self):
                 self.storeCalls += 1
-
-            def _getFirstJoinStep(self):
-                return None
 
         protocol = _Harness()
         protocol._rejectedParticleIds = CsvList(pType=int)
