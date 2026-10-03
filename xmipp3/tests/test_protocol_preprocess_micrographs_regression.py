@@ -7,6 +7,7 @@
 # *
 # *****************************************************************************
 
+import json
 import os
 
 from pyworkflow.tests import BaseTest, setupTestProject
@@ -74,6 +75,32 @@ class _FakeInputMicSet:
         self.closed = True
 
 
+class _FakeFuncName:
+    def __init__(self, name):
+        self._name = name
+
+    def get(self):
+        return self._name
+
+
+class _FakeArgsStr:
+    def __init__(self, args):
+        self._argsJson = json.dumps(args)
+
+    def get(self, default=None):
+        return self._argsJson
+
+
+class _FakeStep:
+    def __init__(self, funcName, args, finished=True):
+        self.funcName = _FakeFuncName(funcName)
+        self.argsStr = _FakeArgsStr(args)
+        self._finished = finished
+
+    def isFinished(self):
+        return self._finished
+
+
 class _FakeMapper:
     def __init__(self, events):
         self.events = events
@@ -96,23 +123,37 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
         return self.newProtocol(XmippProtPreprocessMicrographs, doInvert=True)
 
     def testOutputFileAloneDoesNotMarkPipelineDone(self):
+        # Regression test: an output .mrc file existing on disk must not,
+        # by itself, be read as "this mic's pipeline is done" - completion
+        # comes only from markMicDoneStep's own FINISHED status in the
+        # persisted step graph, never a filesystem marker/output file.
         prot = self._newProtocol()
         mic = _FakeMicrograph(1)
         outputFn = prot._getOutputMicrograph(mic)
-        doneFn = prot._getMicDoneMarker(mic.getObjId())
-
-        if os.path.exists(doneFn):
-            os.remove(doneFn)
 
         try:
             os.makedirs(os.path.dirname(outputFn), exist_ok=True)
             open(outputFn, 'w').close()
+
+            prot._steps = []
+            prot._prevSteps = []
             self.assertFalse(prot._isMicPipelineDone(mic))
-            prot.markMicDoneStep(mic.getObjId())
+
+            prot._steps = [_FakeStep('markMicDoneStep', [1])]
             self.assertTrue(prot._isMicPipelineDone(mic))
         finally:
-            if os.path.exists(doneFn):
-                os.remove(doneFn)
+            if os.path.exists(outputFn):
+                os.remove(outputFn)
+
+    def testMarkMicDoneStepWritesNoMarkerFile(self):
+        prot = self._newProtocol()
+        os.makedirs(prot._getExtraPath(), exist_ok=True)
+        before = set(os.listdir(prot._getExtraPath()))
+
+        prot.markMicDoneStep(1)
+
+        after = set(os.listdir(prot._getExtraPath()))
+        self.assertEqual(before, after)
 
     def testRestoreInsertedMicsUsesCompletionMarkers(self):
         prot = self._newProtocol()
@@ -130,7 +171,7 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
         prot.inputMicrographs = _FakePointer(_FakeInputMicSet(
             ids=[1, 2], items={1: mic1, 2: mic2},
         ))
-        prot._getFirstJoinStep = lambda: None
+        prot.newDeps = []
         scheduled = []
         prot._insertNewMicsSteps = lambda inserted, mics: scheduled.extend(m.getObjId() for m in mics) or []
         prot.updateSteps = lambda: None
@@ -150,7 +191,7 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
         prot._lastInputId = 0
         inputSet = _FakeInputMicSet(ids=[2], items={})
         prot.inputMicrographs = _FakePointer(inputSet)
-        prot._getFirstJoinStep = lambda: None
+        prot.newDeps = []
         scheduled = []
         prot._insertNewMicsSteps = lambda inserted, mics: scheduled.extend(m.getObjId() for m in mics) or []
         prot.updateSteps = lambda: None
@@ -178,7 +219,6 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
         events = []
         prot._updateOutputSet = lambda *args: events.append('output')
         prot._refreshOutputRelation = lambda *args: events.append('relations')
-        prot._getFirstJoinStep = lambda: None
         prot._checkNewOutput()
         self.assertEqual([1], outputSet.appended)
         self.assertEqual(['output', 'relations'], events)
@@ -197,7 +237,6 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
         events = []
         prot._updateOutputSet = lambda *args: events.append('output')
         prot._refreshOutputRelation = lambda *args: events.append('relations')
-        prot._getFirstJoinStep = lambda: None
         prot._checkNewOutput()
         self.assertEqual([], events)
 
@@ -225,14 +264,20 @@ class TestXmippPreprocessMicrographsFinalizationRegression(BaseTest):
     def setUpClass(cls):
         setupTestProject(cls)
 
-    def testFinishedStepsCheckIsNoOp(self):
+    def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
+        # The old _stepsCheck's own "finished -> no-op" short-circuit is
+        # now just the while-loop condition in stepsGeneratorStep.
         prot = self.newProtocol(XmippProtPreprocessMicrographs)
         prot.finished = True
+        prot._prepareStreamingGenerator = Mock()
         prot._checkNewInput = Mock()
         prot._checkNewOutput = Mock()
+        prot._insertFunctionStep = Mock(return_value=1)
+        prot.createOutputStep = Mock()
 
-        prot._stepsCheck()
+        prot.stepsGeneratorStep()
 
         prot._checkNewInput.assert_not_called()
         prot._checkNewOutput.assert_not_called()
+        prot._insertFunctionStep.assert_called_once()
 

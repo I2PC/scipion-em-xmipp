@@ -5461,9 +5461,6 @@ class TestXmippPreprocessMicrographsIncrementalDiscovery(unittest.TestCase):
             insertedDict = {1: None, 2: None, 3: None}
             _lastInputId = 3
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _insertNewMicsSteps(self, insertedDict, inputMics):
                 ids = [mic.getObjId() for mic in inputMics]
                 self.batches.append(ids)
@@ -5478,6 +5475,7 @@ class TestXmippPreprocessMicrographsIncrementalDiscovery(unittest.TestCase):
         protocol.insertedDict = {1: None, 2: None, 3: None}
         protocol.batches = []
         protocol.updateCalls = 0
+        protocol.newDeps = []
 
         XmippProtPreprocessMicrographs._checkNewInput(protocol)
 
@@ -5554,9 +5552,6 @@ class TestXmippPreprocessMicrographsTerminalReconciliation(unittest.TestCase):
                 for objId in range(1, 6)
             ]
 
-            def _getFirstJoinStep(self):
-                return None
-
             def _insertNewMicsSteps(self, insertedDict, inputMics):
                 ids = [mic.getObjId() for mic in inputMics]
                 self.batches.append(ids)
@@ -5581,6 +5576,7 @@ class TestXmippPreprocessMicrographsTerminalReconciliation(unittest.TestCase):
         ]
         protocol.batches = []
         protocol.updateCalls = 0
+        protocol.newDeps = []
 
         XmippProtPreprocessMicrographs._checkNewInput(protocol)
 
@@ -5770,9 +5766,6 @@ class TestXmippPreprocessMicrographsNoDoneAllSidecar(unittest.TestCase):
             def _refreshOutputRelation(self, outSet):
                 pass
 
-            def _getFirstJoinStep(self):
-                return None
-
         protocol = _Harness()
 
         XmippProtPreprocessMicrographs._checkNewOutput(protocol)
@@ -5817,9 +5810,6 @@ class TestXmippPreprocessMicrographsResumeCompletion(unittest.TestCase):
 
             def _refreshOutputRelation(self, outSet):
                 pass
-
-            def _getFirstJoinStep(self):
-                return None
 
         protocol = _Harness()
 

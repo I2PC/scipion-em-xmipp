@@ -25,12 +25,13 @@
 # *
 # **************************************************************************
 
+import json
 import os
 from os.path import basename
 
 from pyworkflow.utils import getExt, replaceExt
-from pyworkflow.protocol.constants import STEPS_PARALLEL, LEVEL_ADVANCED
-import pyworkflow.protocol.constants as cons
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
                                         FloatParam, LabelParam)
 from pyworkflow.object import Set
@@ -42,7 +43,8 @@ from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 OUTPUT_MICROGRAPHS = 'outputMicrographs'
 
 
-class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrographs):
+class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
+                                     ProtPreprocessMicrographs):
     """This protocol preprocesses micrographs by performing several operations:
     cropping borders, take logarithm in order to have a linear relationship,
     removing bad pixels, invert contrast, downsampling micrograph, denoising,
@@ -357,10 +359,9 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
     _possibleOutputs = {OUTPUT_MICROGRAPHS: SetOfMicrographs}
 
 
-    def __init__(self, **args):        
+    def __init__(self, **args):
         ProtPreprocessMicrographs.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
-    
+
     #--------------------------- DEFINE params functions -----------------------
     
     def _defineParams(self, form):
@@ -465,7 +466,9 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
                       label='Normalize micrograph?',
                       help='Normalize micrographs to be zero mean and '
                            'standard deviation one')
-        form.addParallelSection(threads=2, mpi=1)
+        self._defineStreamingParams(form)
+
+        form.addParallelSection(threads=3, mpi=1)
 
 
     def _defineInputs(self):
@@ -491,7 +494,7 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
 
     #--------------------------- INSERT steps functions ------------------------
 
-    def _insertAllSteps(self):
+    def _prepareStreamingGenerator(self):
         self._defineInputs()
         inputMics, self.streamClosed = self._loadInputMics()
         self.SetOfMicrographs = list(inputMics)
@@ -503,11 +506,23 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
         self._pendingMicIds = set()
         self._restoreInsertedMics(inputMics)
         preprocessSteps = self._insertNewMicsSteps(self.insertedDict, inputMics)
-        self._insertFunctionStep(
-            'createOutputStep',
-            prerequisites=preprocessSteps,
-            wait=True,
-        )
+        self.newDeps.extend(preprocessSteps)
+
+    def stepsGeneratorStep(self) -> None:
+        self.newDeps = []
+        self._prepareStreamingGenerator()
+
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def _loadInputMics(self):
         micsSet = self._loadLogicalSet(self.inputMicrographs)
@@ -534,19 +549,6 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
     def createOutputStep(self):
         pass
 
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
     def _insertNewMicsSteps(self, insertedDict, inputMics):
         deps = []
         for mic in inputMics:
@@ -556,15 +558,6 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
                 deps.append(stepId)
                 insertedDict[mic.getObjId()] = stepId
         return deps
-
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
-
-        # Input micrograph set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
 
     def _checkNewInput(self):
         inputSet = self._loadLogicalSet(self.inputMicrographs)
@@ -618,14 +611,12 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
         )
         self.SetOfMicrographs = knownMics
 
-        outputStep = self._getFirstJoinStep()
         if newMics:
             fDeps = self._insertNewMicsSteps(
                 self.insertedDict,
                 newMics,
             )
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+            self.newDeps.extend(fDeps)
             self.updateSteps()
 
 
@@ -689,7 +680,7 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
                     'Image Extension: File %s has wrong size.'
                     % micFn
                 )
-                print(
+                self.info(
                     "Output micrographs not ready, yet. "
                     "Try: %d/6 (next in %fs)"
                     % (tries, tries * 3)
@@ -728,12 +719,6 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
             publishedIds,
         )
         self._refreshOutputRelation(outSet)
-
-        if self.finished:
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
-
 
     def getOutputMics(self):
         outputSet = getattr(self, OUTPUT_MICROGRAPHS, None)
@@ -820,16 +805,39 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
         return self._insertFunctionStep('markMicDoneStep', micId, prerequisites=[self.lastStepId])
 
     def markMicDoneStep(self, micId):
-        doneFn = self._getMicDoneMarker(micId)
-        os.makedirs(os.path.dirname(doneFn), exist_ok=True)
-        open(doneFn, 'w').close()
-
-    def _getMicDoneMarker(self, micId):
-        return self._getExtraPath('DONE', 'mic_%06d.TXT' % micId)
+        """ Pure synchronization join-point for this mic's variable-length
+        preprocessing sub-step chain - no marker file. Completion is read
+        back from this step's own FINISHED status in the persisted step
+        graph (_isMicPipelineDone), never from the filesystem. """
+        pass
 
     def _isMicPipelineDone(self, mic):
-        return os.path.exists(self._getMicDoneMarker(mic.getObjId()))
-    
+        """ A micrograph's preprocessing pipeline is done when its
+        markMicDoneStep has actually FINISHED in the persisted step graph -
+        never a filesystem marker (breaks backend-agnosticism under a
+        PostgreSQL-backed compatibility bridge). """
+        micId = mic.getObjId()
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName != 'markMicDoneStep':
+                continue
+            if not step.isFinished():
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+            if args and args[0] == micId:
+                return True
+
+        return False
+
     def __insertOneStep(self, condition, program, arguments):
         """Insert operation if the condition is met.
         Possible conditions are: doDownsample, doCrop...etc"""
@@ -854,8 +862,22 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
         if not(self.doCrop or self.doDownsample or self.doLog or self.doRemoveBadPix or self.doInvert
                or self.doNormalize or self.doDenoise or self.doSmooth or self.doHighPass or self.doLowPass):
             validateMsgs.append('Some preprocessing option need to be selected.')
+
+        validateMsgs.extend(self._validateParallelProcessing())
         return validateMsgs
-    
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for preprocessing.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
     def _citations(self):
         return ["Sorzano2009d"]
 
@@ -933,14 +955,3 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtPreprocessMicrograp
             fn = replaceExt(fn, "mrc")
         fnOut = self._getExtraPath(basename(fn))
         return fnOut
-
-    def _isMicDone(self, mic):
-        """ A movie is done if the marker file exists. """
-        return os.path.exists(self._getMicDone(mic))
-
-    def _getMicDone(self, mic):
-        fn = mic.getFileName()
-        extFn = getExt(fn)
-        if extFn != ".mrc":
-            fn = replaceExt(fn, "mrc")
-        return self._getExtraPath('%s' % basename(fn))

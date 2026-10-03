@@ -90,7 +90,7 @@ class TestXmippBase(BaseTest):
                                        scannedPixelSize=None, magnification=56000)
 
     @classmethod
-    def runDownsamplingMicrographs(cls, mics, downFactorValue, threads=1):
+    def runDownsamplingMicrographs(cls, mics, downFactorValue, threads=3):
         # test downsampling a set of micrographs
         cls.protDown = XmippProtPreprocessMicrographs(doDownsample=True,
                                                       downFactor=downFactorValue,
