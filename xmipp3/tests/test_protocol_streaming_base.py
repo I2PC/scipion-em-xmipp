@@ -1259,6 +1259,8 @@ class TestXmippMovieDoseAnalysisStreamingInput(unittest.TestCase):
 class TestXmippMovieDoseAnalysisLogicalInitialization(unittest.TestCase):
 
     def testMovieDoseInitializeStepDoesNotRequireInputFilename(self):
+        from pyworkflow.protocol.constants import MODE_RESTART
+
         from xmipp3.protocols.protocol_movie_dose_analysis import (
             XmippProtMovieDoseAnalysis,
         )
@@ -1293,9 +1295,10 @@ class TestXmippMovieDoseAnalysisLogicalInitialization(unittest.TestCase):
 
         class _Harness:
             inputMovies = _Pointer(_LogicalMovieSet())
+            _originalRunMode = MODE_RESTART
 
-            def isContinued(self):
-                return False
+            def getRunMode(self):
+                return MODE_RESTART
 
         protocol = _Harness()
 
@@ -2534,6 +2537,7 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
         protocol.insertedIds = [1, 2, 3]
         protocol.batches = []
         protocol.updateCalls = 0
+        protocol.newDeps = []
 
         XmippProtCTFConsensus._checkNewInput(protocol)
         XmippProtCTFConsensus._checkNewInput(protocol)
@@ -2658,6 +2662,7 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
         protocol._pendingInputIds2 = set()
         protocol.batches = []
         protocol.updateCalls = 0
+        protocol.newDeps = []
 
         XmippProtCTFConsensus._checkNewInput(protocol)
         XmippProtCTFConsensus._checkNewInput(protocol)
@@ -3351,6 +3356,7 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
         protocol.isStreamClosed = False
         protocol.batches = []
         protocol.updateCalls = 0
+        protocol.newDeps = []
 
         XmippProtCTFConsensus._checkNewInput(protocol)
 
@@ -3384,7 +3390,14 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
         self.assertEqual(input1.closeCalls, 1)
         self.assertEqual(input2.closeCalls, 1)
 
-    def testCTFConsensusInsertAllStepsDoesNotRequireSecondaryFilename(self):
+    def testCTFConsensusStepsGeneratorDoesNotRequireSecondaryFilenameUpfront(self):
+        # CTFConsensus now uses the generic ProtStreamingBase._insertAllSteps
+        # (shared by every migrated protocol, which only inserts the
+        # resumableStepGeneratorStep - no CTF-specific logic runs during
+        # step insertion any more). The behavior this test used to pin -
+        # not touching the secondary input's filename while seeding steps -
+        # is exercised here at the stepsGeneratorStep level instead, which
+        # is where CTFConsensus's own logic now actually starts running.
         from xmipp3.protocols.protocol_ctf_consensus import (
             XmippProtCTFConsensus,
         )
@@ -3407,21 +3420,22 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
 
             def initializeParams(self):
                 self.initializeCalls += 1
+                self.finished = True
+
+            def _checkNewInput(self):
+                self.checkNewInputCalls += 1
+
+            def _checkNewOutput(self):
+                self.checkNewOutputCalls += 1
 
             def _insertFunctionStep(
                 self,
                 func,
                 prerequisites=None,
-                wait=False,
                 needsGPU=False,
             ):
                 self.insertedSteps.append(
-                    (
-                        func,
-                        prerequisites,
-                        wait,
-                        needsGPU,
-                    )
+                    (func, prerequisites, needsGPU)
                 )
                 return 1
 
@@ -3430,21 +3444,22 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
 
         protocol = _Harness()
         protocol.initializeCalls = 0
+        protocol.checkNewInputCalls = 0
+        protocol.checkNewOutputCalls = 0
         protocol.insertedSteps = []
 
-        XmippProtCTFConsensus._insertAllSteps(protocol)
+        XmippProtCTFConsensus.stepsGeneratorStep(protocol)
 
         self.assertEqual(protocol.initializeCalls, 1)
+        self.assertEqual(protocol.checkNewInputCalls, 0)
+        self.assertEqual(protocol.checkNewOutputCalls, 0)
         self.assertEqual(pointer2.getCalls, 0)
         self.assertEqual(len(protocol.insertedSteps), 1)
 
-        func, prerequisites, wait, needsGPU = (
-            protocol.insertedSteps[0]
-        )
+        func, prerequisites, needsGPU = protocol.insertedSteps[0]
 
         self.assertEqual(func.__name__, "createOutputStep")
         self.assertEqual(prerequisites, [])
-        self.assertTrue(wait)
         self.assertFalse(needsGPU)
 
 

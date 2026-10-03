@@ -41,7 +41,8 @@ import pyworkflow.utils as pwutils
 
 from pwem.protocols import ProtCTFMicrographs
 from pwem.emlib.metadata import Row
-from pyworkflow.protocol.constants import STATUS_NEW, MODE_RESUME
+from pyworkflow.protocol import ProtStreamingBase
+from pyworkflow.protocol.constants import MODE_RESUME
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem import emlib
@@ -58,7 +59,7 @@ OUTPUT_MICS = "outputMicrographs"
 OUTPUT_CTF_DISCARDED = "outputCTFDiscarded"
 OUTPUT_MICS_DISCARDED = "outputMicrographsDiscarded"
 
-class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
+class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrographs):
     """
     Protocol to make a selection of meaningful CTFs in basis of the defocus
     values, the astigmatism, the resolution, other Xmipp parameters, and
@@ -410,13 +411,25 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
                            'If *No*, only the primary metadata (plus consensus '
                            'scores) will be in the resulting CTF.')
 
+        self._defineStreamingParams(form)
+        form.addParallelSection(threads=3, mpi=1)
 
 # --------------------------- INSERT steps functions -------------------------
-    def _insertAllSteps(self):
+    def stepsGeneratorStep(self) -> None:
         self.initializeParams()
+        self.newDeps = []
+
+        while not self.finished:
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if self.finished:
+                break
+
+            self._streamingSleepOnWait()
 
         self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True, needsGPU=False)
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -436,19 +449,6 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
         self.initializeRejDict()
         self.setSecondaryAttributes()
 
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all ctfs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
     def _insertNewCtfsSteps(self, newIds):
         deps = []
         stepId = self._insertFunctionStep(self.selectCtfStep, newIds,  needsGPU=False,
@@ -459,10 +459,6 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
             self.insertedIds.append(ctfId)
 
         return deps
-
-    def _stepsCheck(self):
-        self._checkNewInput()
-        self._checkNewOutput()
 
     def _checkNewInput(self):
         if self.calculateConsensus:
@@ -547,8 +543,6 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
             finally:
                 ctfSet.close()
 
-        outputStep = self._getFirstJoinStep()
-
         if (
             getattr(
                 self,
@@ -577,8 +571,7 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
 
         if newIds:
             fDeps = self._insertNewCtfsSteps(newIds)
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+            self.newDeps.extend(fDeps)
             self.updateSteps()
 
 
@@ -605,9 +598,6 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
                 and allDone == len(self.insertedIds)
             )
             if self.finished:
-                outputStep = self._getFirstJoinStep()
-                if outputStep and outputStep.isWaiting():
-                    outputStep.setStatus(STATUS_NEW)
                 self._store()
             return
 
@@ -676,11 +666,6 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
                 OUTPUT_CTF_DISCARDED,
                 publishedDiscarded,
             )
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
 
         self._store()  # Update the summary dictionary
 
@@ -1328,7 +1313,22 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtCTFMicrographs):
                 errors.append("One of the CTF inputs ( _Input CTF_ or "
                               "_Secundary CTF_) must be estimated using the "
                               "_Xmipp - CTF estimation_ protocol.")
+        errors.extend(self._validateParallelProcessing())
         return errors
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping before handing out the
+        # rest as execution slots (ThreadStepExecutor(hostConfig,
+        # nThreads - 1, ...) in pyworkflow/protocol/protocol.py), and one
+        # more of the remaining slots is permanently held by the streaming
+        # generator step for the whole run - so at least 3 threads are
+        # needed to leave a worker slot free for selectCtfStep.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     def usingXmipp(self, ctf):
         return ctf.hasAttribute('_xmipp_ctfCritFirstZero')

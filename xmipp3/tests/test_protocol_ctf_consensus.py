@@ -102,6 +102,7 @@ class TestXmippCTFConsensusBase(BaseTest):
         prot = self.newProtocol(XmippProtCTFConsensus)
         prot.inputCTF = _LogicalInputPointer(fnCtfSet)
         prot.insertedIds = list(insertedIds or [])
+        prot.newDeps = []
         prot._lastInputId = max(prot.insertedIds, default=0)
         prot.isStreamClosed = False
         prot._originalRunMode = originalRunMode
@@ -117,7 +118,6 @@ class TestXmippCTFConsensusBase(BaseTest):
             return []
 
         prot._insertNewCtfsSteps = insertNewCtfsSteps
-        prot._getFirstJoinStep = lambda: None
         prot.updateSteps = lambda: None
 
         if doneIds is not None:
@@ -449,7 +449,6 @@ class TestXmippCTFConsensusBase(BaseTest):
         prot._loadOutputSet = Mock()
         prot.fillOutput = Mock()
         prot._updateOutputSet = Mock()
-        prot._getFirstJoinStep = lambda: None
         prot._store = Mock()
 
         prot._checkNewOutput()
@@ -479,7 +478,6 @@ class TestXmippCTFConsensusBase(BaseTest):
         prot._updateOutputSet = Mock()
         prot._defineTransformRelation = Mock()
         prot._defineCtfRelation = Mock()
-        prot._getFirstJoinStep = lambda: None
         prot._store = Mock()
         prot._markOutputIdsPersisted = Mock()
 
