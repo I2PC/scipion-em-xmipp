@@ -36,22 +36,6 @@ class _FakeMovie:
         return _FakeMovie(self._objId)
 
 
-class _FakeMovieSet:
-    def __init__(self, ids, streamClosed=False):
-        self._movies = [_FakeMovie(objId) for objId in ids]
-        self._streamClosed = streamClosed
-        self.closed = False
-
-    def iterItems(self):
-        return iter(self._movies)
-
-    def isStreamClosed(self):
-        return self._streamClosed
-
-    def close(self):
-        self.closed = True
-
-
 class _FakeAcquisition:
     def clone(self):
         return _FakeAcquisition()
@@ -114,6 +98,68 @@ class _FakeMicrograph(_FakeMovie):
         pass
 
 
+class _FakePointer:
+    def __init__(self, value):
+        self._value = value
+
+    def get(self):
+        return self._value
+
+
+class _FakeWatermarkMovieItem:
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+    def clone(self):
+        return _FakeWatermarkMovieItem(self._objId)
+
+
+class _FakeWatermarkMovieSet:
+    """Stands in for a real SetOfMovies, tracking which query mechanisms
+    get used so tests can assert discovery is incremental (id > watermark
+    / id IN (...)) and never a full scan or a filename reconstruction."""
+
+    def __init__(self, items, streamClosed=False):
+        self._items = {item.getObjId(): item for item in items}
+        self._streamClosed = streamClosed
+        self.uniqueCalls = []
+
+    def loadAllProperties(self):
+        pass
+
+    def getUniqueValues(self, field, where=None):
+        self.uniqueCalls.append((field, where))
+        ids = sorted(self._items.keys())
+        if where:
+            threshold = int(where.split('>')[1].strip())
+            ids = [i for i in ids if i > threshold]
+        return ids
+
+    def iterItems(self, orderBy=None, direction=None, where=None):
+        if where and where.startswith('id IN'):
+            idsStr = where[where.index('(') + 1: where.index(')')]
+            wanted = {int(x) for x in idsStr.split(',')}
+        else:
+            wanted = set(self._items.keys())
+        for i in sorted(wanted):
+            if i in self._items:
+                yield self._items[i]
+
+    def isStreamClosed(self):
+        return self._streamClosed
+
+    def getFileName(self):
+        raise AssertionError(
+            "Movie discovery must not reconstruct a Set from a raw filename."
+        )
+
+    def close(self):
+        pass
+
+
 class _FakeIndexedSet:
     def __init__(self, items):
         self.items = items
@@ -139,40 +185,59 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
     def _newProtocol(self):
         return self.newProtocol(XmippProtConsensusMovieAlignment)
 
-    def testStreamingInputDoesNotDependOnSqliteMtime(self):
+    def testCheckNewInputDiscoversOnlyAboveWatermarkAndIntersectsBothSides(self):
+        # Regression test: the old implementation reconstructed both
+        # input Sets from a raw filename and fully re-scanned them
+        # (iterItems() with no filter) on every single poll. This proves
+        # discovery is now incremental (id > watermark) and that only a
+        # movie id present on BOTH sides gets scheduled - the other side
+        # stays pending and is retried later, never lost.
         prot = self._newProtocol()
-        prot.movieFn1 = 'movies1.sqlite'
-        prot.movieFn2 = 'movies2.sqlite'
         prot.processedDict = []
         prot.insertedDict = {}
         prot.allMovies1 = {}
         prot.allMovies2 = {}
+        prot._movies1Watermark = 0
+        prot._movies2Watermark = 0
+        prot._pendingMovieIds1 = set()
+        prot._pendingMovieIds2 = set()
+        prot.newDeps = []
 
-        movieSet1 = _FakeMovieSet([1, 2], streamClosed=False)
-        movieSet2 = _FakeMovieSet([2, 3], streamClosed=False)
-        movieSets = {
-            prot.movieFn1: movieSet1,
-            prot.movieFn2: movieSet2,
-        }
+        movieSet1 = _FakeWatermarkMovieSet(
+            [_FakeWatermarkMovieItem(1), _FakeWatermarkMovieItem(2)]
+        )
+        movieSet2 = _FakeWatermarkMovieSet(
+            [_FakeWatermarkMovieItem(2), _FakeWatermarkMovieItem(3)]
+        )
+        prot.inputMovies1 = _FakePointer(movieSet1)
+        prot.inputMovies2 = _FakePointer(movieSet2)
 
-        prot._loadInputMovieSet = lambda fn: movieSets[fn]
         prot._insertFunctionStep = lambda *args, **kwargs: 7
-        prot._getFirstJoinStep = lambda: None
-
         updates = []
         prot.updateSteps = lambda: updates.append(True)
 
-        with patch(
-            'xmipp3.protocols.protocol_movie_alignment_consensus.os.path.getmtime',
-            side_effect=AssertionError('Streaming input must not depend on SQLite mtime.')
-        ):
-            prot._checkNewInput()
+        prot._checkNewInput()
 
+        # Only movie 2 is present on both sides - the only schedulable one.
         self.assertEqual([2], prot.processedDict)
         self.assertEqual({2: 7}, prot.insertedDict)
         self.assertEqual(1, len(updates))
-        self.assertTrue(movieSet1.closed)
-        self.assertTrue(movieSet2.closed)
+        self.assertEqual(
+            {1}, prot._pendingMovieIds1,
+            "Movie 1 (only on side 1) must stay pending, not be dropped.",
+        )
+        self.assertEqual(
+            {3}, prot._pendingMovieIds2,
+            "Movie 3 (only on side 2) must stay pending, not be dropped.",
+        )
+        self.assertEqual({1, 2}, set(prot.allMovies1))
+        self.assertEqual({2, 3}, set(prot.allMovies2))
+        self.assertEqual(
+            [('id', 'id > 0')],
+            movieSet1.uniqueCalls,
+            "Discovery must query only ids above the watermark, not scan "
+            "everything.",
+        )
 
     def testResumeRestoresPersistedOutputsFromRealSets(self):
         # Regression test: Resume must reconstruct processedDict purely
@@ -270,19 +335,14 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         self.assertEqual([1], prot._decidedAccepted)
         self.assertEqual([], prot._decidedDiscarded)
 
-    def testDirectMovieSetPointerResolvesParentMicrographs(self):
+    def testDirectMovieSetPointerResolvesParentMicrographOutputName(self):
         prot = self._newProtocol()
 
         movieSet = SetOfMovies()
         movieSet._objParentId = 101
         prot.inputMovies1.set(movieSet)
 
-        expectedPath = 'reference-micrographs.sqlite'
-        parentProtocol = SimpleNamespace(
-            outputMicrographs=SimpleNamespace(
-                getFileName=lambda: expectedPath
-            )
-        )
+        parentProtocol = SimpleNamespace(outputMicrographs=object())
 
         class _FakeProject:
             def getProtocol(self, protocolId):
@@ -292,7 +352,7 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         prot.getProject = lambda: _FakeProject()
 
-        self.assertEqual(expectedPath, prot._getMicsPath())
+        self.assertEqual('outputMicrographs', prot._resolveMicsOutputName())
 
     def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
         class InputPointer:
@@ -305,15 +365,11 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot.inputMovies1 = InputPointer()
         prot._getPath = lambda baseName: '/tmp/' + baseName
 
-        with patch(
-            'xmipp3.protocols.protocol_movie_alignment_consensus.os.path.exists',
-            return_value=False,
-        ):
-            outputSet = prot._loadOutputSet(
-                FreshOutputSetProbe,
-                'movies.sqlite',
-                fixSampling=False,
-            )
+        outputSet = prot._loadOutputSet(
+            FreshOutputSetProbe,
+            'movies.sqlite',
+            fixSampling=False,
+        )
 
         self.assertIs(
             outputSet,
@@ -342,7 +398,6 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet(ids=[1])
         prot.fillOutput = lambda *args, **kwargs: [1]
-        prot._getFirstJoinStep = lambda: None
         prot._defineTransformRelation = lambda *args: None
 
         def realUpdateOutputSet(name, outputSet, streamMode):
@@ -374,7 +429,6 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet(ids=[1])
         prot.fillOutput = lambda *args, **kwargs: [1]
-        prot._getFirstJoinStep = lambda: None
 
         events = []
         prot.mapper = SimpleNamespace(
@@ -392,8 +446,6 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
     def testFillOutputIsIdempotentAfterPartialPersistence(self):
         prot = self._newProtocol()
-        prot.movieFn1 = 'movies.sqlite'
-        prot.micsFn = 'micrographs.sqlite'
         prot.stats = {
             1: {
                 'shift_corr': 1.0,
@@ -404,8 +456,8 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         inputMovies = _FakeIndexedSet({1: _FakeAlignedMovie(1)})
         inputMics = _FakeIndexedSet({1: _FakeMicrograph(1)})
-        prot._loadInputMovieSet = lambda fn: inputMovies
-        prot._loadInputMicrographSet = lambda fn: inputMics
+        prot._loadInputMovieSet = lambda: inputMovies
+        prot._loadInputMicrographSet = lambda: inputMics
         prot._getEnable = lambda movieId: True
 
         movieOutput = _FakeOutputSet(ids=[1])
@@ -422,14 +474,12 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
     def testFillOutputDoesNotQueryIdsFromFreshOutputSets(self):
         prot = self._newProtocol()
-        prot.movieFn1 = 'movies.sqlite'
-        prot.micsFn = 'micrographs.sqlite'
         prot.stats = {1: {'shift_corr': 1.0, 'rmse_error': 0.0, 'max_error': 0.0}}
 
         inputMovies = _FakeIndexedSet({1: _FakeAlignedMovie(1)})
         inputMics = _FakeIndexedSet({1: _FakeMicrograph(1)})
-        prot._loadInputMovieSet = lambda fn: inputMovies
-        prot._loadInputMicrographSet = lambda fn: inputMics
+        prot._loadInputMovieSet = lambda: inputMovies
+        prot._loadInputMicrographSet = lambda: inputMics
         prot._getEnable = lambda movieId: True
 
         class _FreshOutputSet(_FakeOutputSet):
@@ -456,8 +506,6 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         # may not have a visible micrograph row yet - it must be
         # deferred to a later check, not crash the whole protocol.
         prot = self._newProtocol()
-        prot.movieFn1 = 'movies.sqlite'
-        prot.micsFn = 'micrographs.sqlite'
         prot.stats = {
             1: {'shift_corr': 1.0, 'rmse_error': 0.0, 'max_error': 0.0},
             2: {'shift_corr': 1.0, 'rmse_error': 0.0, 'max_error': 0.0},
@@ -468,8 +516,8 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
             2: _FakeAlignedMovie(2),
         })
         inputMics = _FakeIndexedSet({2: _FakeMicrograph(2)})  # mic 1 missing
-        prot._loadInputMovieSet = lambda fn: inputMovies
-        prot._loadInputMicrographSet = lambda fn: inputMics
+        prot._loadInputMovieSet = lambda: inputMovies
+        prot._loadInputMicrographSet = lambda: inputMics
         prot._getEnable = lambda movieId: True
         prot.info = Mock()
 
@@ -504,7 +552,6 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet()
         prot.fillOutput = lambda *args, **kwargs: []  # movie 1 stayed pending
-        prot._getFirstJoinStep = lambda: None
         prot._updateOutputSet = lambda *args, **kwargs: None
 
         prot._checkNewOutput()
@@ -531,7 +578,6 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot.fillOutput = Mock()
         prot._updateOutputSet = Mock()
         prot._refreshOutputRelations = Mock()
-        prot._getFirstJoinStep = lambda: None
 
         prot._checkNewOutput()
 

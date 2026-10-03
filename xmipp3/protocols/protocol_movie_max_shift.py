@@ -35,7 +35,8 @@ from pyworkflow import UPDATED, PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
-from pyworkflow.protocol.constants import MODE_RESUME, STATUS_NEW
+from pyworkflow.protocol import ProtStreamingBase
+from pyworkflow.protocol.constants import MODE_RESUME
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
 
@@ -53,7 +54,7 @@ OUTPUT_MICS_DW = "outputMicrographsDoseWeighted"
 OUTPUT_MICS_DW_DISCARDED = "outputMicrographsDoseWeightedDiscarded"
 
 
-class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
+class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessMovies):
     """
     Protocol to make an automatic rejection of those movies whose
     frames move more than a given threshold.
@@ -306,7 +307,6 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
 
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
-        #self.stepsExecutionMode = STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -341,13 +341,25 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
                        help='Maximum total travel to evaluate the whole movie '
                             'condition.')
 
+        self._defineStreamingParams(form)
+        form.addParallelSection(threads=3, mpi=1)
+
     # --------------------------- INSERT steps functions ------------------------
-    def _insertAllSteps(self):
-        """ Insert the steps to perform movie alignment evaluation
-        """
+    def stepsGeneratorStep(self) -> None:
         self.initializeStep()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
         self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True, needsGPU=False)
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def initializeStep(self):
         inputMovies = self.inputMovies.get()
@@ -382,15 +394,6 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
 
         return micSet
 
-    def _stepsCheck(self):
-        if getattr(self, 'finished', False):
-            return
-
-        # Input micrograph set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
-
     def _checkNewInput(self):
         inputSet = self._loadLogicalSet(self.inputMovies)
 
@@ -417,8 +420,6 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
             )
         finally:
             inputSet.close()
-
-        outputStep = self._getFirstJoinStep()
 
         if (
             getattr(
@@ -447,10 +448,7 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtProcessMovies):
 
         if newIds:
             fDeps = self._insertNewMoviesSteps(newIds)
-
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-
+            self.newDeps.extend(fDeps)
             self.updateSteps()
 
     def _insertNewMoviesSteps(self, newIds):

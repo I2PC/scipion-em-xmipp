@@ -858,15 +858,14 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         if outputSet is not None:
             outputSet.enableAppend()
         else:
+            # Always create fresh when the protocol doesn't already know
+            # about this output - never fall back to os.path.exists() on
+            # a raw on-disk path, which may not be the authoritative
+            # backend under a PostgreSQL-backed compatibility bridge.
             baseName = '%sClasses.sqlite' % suffix
             setFile = self._getPath(baseName)
-            if os.path.exists(setFile):
-                outputSet = SetOfClasses2D(filename=setFile)
-                outputSet.loadAllProperties()
-                outputSet.enableAppend()
-            else:
-                outputSet = SetOfClasses2D(filename=setFile)
-                outputSet.setStreamState(streamingState)
+            outputSet = SetOfClasses2D(filename=setFile)
+            outputSet.setStreamState(streamingState)
 
         outputSet.copyInfo(self.getInput())  # if fails, delete
 

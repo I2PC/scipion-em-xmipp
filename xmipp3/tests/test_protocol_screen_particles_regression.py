@@ -305,13 +305,17 @@ class TestXmippScreenParticlesRegression(BaseTest):
         self.assertFalse(isNew)
         self.assertEqual(1, logicalOutput.enableAppendCalls)
 
-        with patch('xmipp3.utils.os.path.exists', return_value=False):
-            outputSet, isNew = loader(
-                Protocol(),
-                FreshOutputSetProbe,
-                'outputParticles.sqlite',
-                'missingOutput',
-            )
+        # No os.path.exists() fallback any more: a missing logical
+        # attribute always means "create fresh", never "reopen a raw
+        # on-disk file by path" (that path isn't necessarily the
+        # authoritative backend under a PostgreSQL-backed compatibility
+        # bridge).
+        outputSet, isNew = loader(
+            Protocol(),
+            FreshOutputSetProbe,
+            'outputParticles.sqlite',
+            'missingOutput',
+        )
 
         self.assertTrue(isNew)
         self.assertEqual('/tmp/outputParticles.sqlite', outputSet.filename)

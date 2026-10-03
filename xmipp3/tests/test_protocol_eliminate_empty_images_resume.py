@@ -122,14 +122,10 @@ class TestXmippEliminateEmptyResume(BaseTest):
         prot.inputImages = object()
         prot._getPath = lambda baseName: '/tmp/' + baseName
 
-        with patch(
-            'xmipp3.protocols.protocol_eliminate_empty_images.os.path.exists',
-            return_value=False,
-        ):
-            outputSet = prot._loadOutputSet(
-                FreshOutputSetProbe,
-                'outputParticles.sqlite',
-            )
+        outputSet = prot._loadOutputSet(
+            FreshOutputSetProbe,
+            'outputParticles.sqlite',
+        )
 
         self.assertIs(outputSet, logicalOutput)
         self.assertEqual(1, logicalOutput.enableAppendCalls)
@@ -212,9 +208,6 @@ class TestXmippEliminateEmptyResume(BaseTest):
         prot._store = lambda *args, **kwargs: None
 
         with patch(
-            'xmipp3.protocols.protocol_eliminate_empty_images.os.path.exists',
-            return_value=False,
-        ), patch(
             'xmipp3.protocols.protocol_eliminate_empty_images.SetOfClasses2D',
             side_effect=AssertionError(
                 'A fresh class Set must not be created when the logical output exists.'

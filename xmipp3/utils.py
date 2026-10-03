@@ -31,7 +31,6 @@ This module contains utils functions for Xmipp protocols
 from os.path import join, basename, isfile
 import numpy as np
 import math
-import os
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from pwem import emlib
@@ -43,7 +42,13 @@ def validateXmippGpuBins():
 
 
 def loadOutputSetForAppend(protocol, SetClass, baseName, outputName=None):
-    """Reuse a logical output Set or reopen/create its legacy backing Set."""
+    """Reuse the logical output Set the protocol already knows about;
+    otherwise always create a fresh one. Deliberately never falls back
+    to os.path.exists()-based reopening of a raw on-disk path: under a
+    PostgreSQL-backed compatibility bridge that path may not even be the
+    authoritative backend, so the protocol's own registered attribute is
+    the only backend-agnostic source of truth for whether this output
+    already exists."""
     outputSet = getattr(protocol, outputName, None) if outputName else None
 
     if outputSet is not None:
@@ -51,12 +56,6 @@ def loadOutputSetForAppend(protocol, SetClass, baseName, outputName=None):
         return outputSet, False
 
     setFile = protocol._getPath(baseName)
-    if os.path.exists(setFile):
-        outputSet = SetClass(filename=setFile)
-        outputSet.loadAllProperties()
-        outputSet.enableAppend()
-        return outputSet, False
-
     outputSet = SetClass(filename=setFile)
     outputSet.setStreamState(outputSet.STREAM_OPEN)
     return outputSet, True
