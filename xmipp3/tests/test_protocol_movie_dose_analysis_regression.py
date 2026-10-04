@@ -303,3 +303,59 @@ class TestMovieDoseAnalysisRegression(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _PersistedDoseMovie:
+    def __init__(self, objId, mean, diff, globalMedian, usingExperimental):
+        self._objId = objId
+        self._values = {
+            '_MEAN_DOSE_PER_ANGSTROM2': mean,
+            '_DIFF_TO_DOSE_PER_ANGSTROM2': diff,
+            '_GLOBAL_DOSE_PER_ANGSTROM2': globalMedian,
+            '_USING_EXPERIMENTAL_DOSE': usingExperimental,
+        }
+
+    def getObjId(self):
+        return self._objId
+
+    def getAttributeValue(self, name):
+        return self._values.get(name)
+
+
+class _RefreshRequiredDoseOutput:
+    def __init__(self, movies):
+        self.movies = list(movies)
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def __iter__(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted movie output must be refreshed before restoring runtime state.'
+            )
+        return iter(self.movies)
+
+
+class TestMovieDoseAnalysisLogicalOutputRestore(unittest.TestCase):
+    def testRestoreRuntimeStateRefreshesPersistedOutputsBeforeIteration(self):
+        accepted = _RefreshRequiredDoseOutput([
+            _PersistedDoseMovie(1, 1.2, 0.1, 1.15, False),
+        ])
+        discarded = _RefreshRequiredDoseOutput([
+            _PersistedDoseMovie(2, 1.8, 0.7, 1.15, False),
+        ])
+
+        prot = XmippProtMovieDoseAnalysis()
+        prot.outputMovies = accepted
+        prot.outputMoviesDiscarded = discarded
+
+        prot._restoreRuntimeStateFromOutputs()
+
+        self.assertTrue(accepted.loaded)
+        self.assertTrue(discarded.loaded)
+        self.assertEqual({1}, prot._acceptedIds)
+        self.assertEqual({2}, prot._discardedIds)
+        self.assertEqual({1, 2}, prot._doneIds)
+        self.assertEqual(1.15, prot.mu)

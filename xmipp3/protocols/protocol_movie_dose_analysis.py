@@ -456,6 +456,10 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
             if outputSet is None:
                 continue
 
+            loadAllProperties = getattr(outputSet, 'loadAllProperties', None)
+            if callable(loadAllProperties):
+                loadAllProperties()
+
             outputIds = acceptedIds if outputName == OUTPUT_MOVIES else discardedIds
             for movie in outputSet:
                 movieId = movie.getObjId()
@@ -688,12 +692,10 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
                 continue
 
             if movieId not in processedIds:
-                # Preserve acquisition order. A later movie may finish
-                # first under parallel execution, but it must not be
-                # published or used for dose-window sampling before every
-                # earlier inserted movie is either already persisted or
-                # processed and ready for this same publication batch.
-                break
+                # Parallel batches may finish out of order. Keep this id
+                # pending without blocking later ids that are already ready;
+                # deterministic dose sampling is handled separately by id.
+                continue
 
             newDone.append(movieId)
 
