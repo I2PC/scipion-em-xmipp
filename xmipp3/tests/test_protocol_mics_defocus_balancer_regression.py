@@ -421,3 +421,31 @@ class TestXmippMicDefocusSamplerFinalizationRegression(unittest.TestCase):
         protocol._checkNewOutput.assert_not_called()
         protocol._insertFunctionStep.assert_called_once()
 
+
+class _PersistedDefocusOutput:
+    def __init__(self):
+        self.loaded = False
+        self.appendEnabled = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def enableAppend(self):
+        if not self.loaded:
+            raise AssertionError('Persisted output must be refreshed before append mode is enabled.')
+        self.appendEnabled = True
+
+
+class TestXmippMicDefocusSamplerLogicalOutputRegression(unittest.TestCase):
+
+    def testExistingOutputIsRefreshedBeforeAppendMode(self):
+        outputSet = _PersistedDefocusOutput()
+
+        class _Harness:
+            outputCTF = outputSet
+
+        result = XmippProtMicDefocusSampler._loadOutputSet(_Harness(), object, 'outputCTF')
+
+        self.assertIs(result, outputSet)
+        self.assertTrue(outputSet.loaded)
+        self.assertTrue(outputSet.appendEnabled)

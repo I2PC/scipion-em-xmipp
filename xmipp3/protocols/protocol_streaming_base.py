@@ -135,9 +135,9 @@ class XmippStreamingBase:
             for itemId in itemIds:
                 try:
                     item = getItem("id", itemId)
-                except UnboundLocalError:
-                    # pyworkflow Set.__getitem__ currently raises this
-                    # when a logical id is absent instead of returning None.
+                except (UnboundLocalError, KeyError):
+                    # Some logical Set implementations raise when an id is absent
+                    # instead of returning None.
                     item = None
                 if item is None:
                     continue

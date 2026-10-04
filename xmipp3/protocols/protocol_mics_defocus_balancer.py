@@ -510,28 +510,19 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtStreamingBase, ProtCTFM
         return cSet, mSet
 
     def _loadOutputSet(self, SetClass, outputName):
-        outputSet = getattr(self, outputName, None)
-
-        if outputSet is not None:
-            outputSet.enableAppend()
+        outputSet, created = XmippStreamingBase._loadOrCreateOutputSet(self, outputName, SetClass)
+        if not created:
             return outputSet
 
-        if issubclass(SetClass, SetOfCTF):
-            outputSet = self._createSetOfCTF()
-        elif issubclass(SetClass, SetOfMicrographs):
-            outputSet = self._createSetOfMicrographs()
-        else:
-            raise TypeError(
-                "Unsupported MicDefocusSampler output Set class: %s"
-                % SetClass
-            )
-
-        micSet = self.inputCTF.get().getMicrographs()
-
-        if isinstance(outputSet, SetOfMicrographs):
-            outputSet.copyInfo(micSet)
-        elif isinstance(outputSet, SetOfCTF):
-            outputSet.setMicrographs(micSet)
+        inputCtfSet = self._loadLogicalSet(self.inputCTF)
+        try:
+            micSet = inputCtfSet.getMicrographs()
+            if isinstance(outputSet, SetOfMicrographs):
+                outputSet.copyInfo(micSet)
+            elif isinstance(outputSet, SetOfCTF):
+                outputSet.setMicrographs(micSet)
+        finally:
+            inputCtfSet.close()
 
         return outputSet
 
