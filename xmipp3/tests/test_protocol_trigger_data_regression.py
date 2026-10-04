@@ -41,9 +41,32 @@ class _FakeInputSet:
     def loadAllProperties(self):
         pass
 
-    def iterItems(self, orderBy='id', direction='ASC', where=None, limit=None):
+    def getUniqueValues(self, field, where=None):
+        if field != 'id':
+            raise AssertionError('Unexpected field: %s' % field)
         self.whereCalls.append(where)
-        items = sorted(self._items, key=lambda item: (item.getObjCreation(), item.getObjId()))
+        ids = sorted(item.getObjId() for item in self._items)
+        if where:
+            threshold = int(where.split('>')[1].strip())
+            ids = [itemId for itemId in ids if itemId > threshold]
+        return ids
+
+    def iterItems(self, orderBy='id', direction='ASC', where=None, limit=None):
+        items = sorted(self._items, key=lambda item: item.getObjId())
+
+        if where and where.startswith('id IN'):
+            idsStr = where[where.index('(') + 1: where.index(')')]
+            wantedIds = {
+                int(itemId.strip())
+                for itemId in idsStr.split(',')
+                if itemId.strip()
+            }
+            items = [
+                item
+                for item in items
+                if item.getObjId() in wantedIds
+            ]
+
         if direction == 'DESC':
             items = list(reversed(items))
         if limit is not None and limit > 0:
@@ -122,36 +145,40 @@ class TestXmippTriggerDataRegression(BaseTest):
 
         self.assertEqual([2], [image.getObjId() for image in prot.newImages])
         self.assertEqual([1, 2], [image.getObjId() for image in prot.images])
-        self.assertTrue(any(where is not None and '>=' in where for where in inputSet.whereCalls))
+        self.assertIn('id > 0', inputSet.whereCalls)
         self.assertTrue(inputSet.closed)
 
     def testLoadOutputSetSkipsAlreadyPersistedIds(self):
         prot = self._newProtocol()
         prot.inputImages = SimpleNamespace(get=lambda: object())
-        prot._getPath = lambda name: name
+        prot.getOututName = lambda: 'outputParticles'
+        prot._create_FakeOutputSet = lambda *args: _FakeOutputSet()
 
-        outputSet = prot._loadOutputSet(_FakeOutputSet, 'particles.sqlite', [_FakeImage(1), _FakeImage(2)])
+        outputSet = prot._loadOutputSet(
+            _FakeOutputSet,
+            'outputParticles',
+            [_FakeImage(1), _FakeImage(2)],
+        )
 
         self.assertEqual({1, 2}, outputSet.getIdSet())
         self.assertEqual([2], outputSet.appended)
 
     def testLoadOutputSetReusesLogicalOutputWithoutBackingFile(self):
         # Regression test: an output that Scipion already knows about
-        # (protocol.outputParticles is set) must be reused even when its
-        # backing file was never materialized on disk yet. Falling through
-        # to "no backing file -> build a fresh, empty Set" would silently
-        # discard whatever was already appended to the real logical output.
+        # (protocol.outputParticles is set) must be reused directly as the
+        # logical output, without depending on any backing-file identity.
         prot = self._newProtocol()
         prot.inputImages = SimpleNamespace(get=lambda: object())
-        prot._getPath = lambda name: name
+        prot.getOututName = lambda: 'outputParticles'
 
         existingOutputSet = _FakeOutputSet()
         existingOutputSet.ids = {1, 2}
         prot.outputParticles = existingOutputSet
 
         outputSet = prot._loadOutputSet(
-            _FakeOutputSet, 'particles.dat', [_FakeImage(2), _FakeImage(3)],
-            outputName='outputParticles',
+            _FakeOutputSet,
+            'outputParticles',
+            [_FakeImage(2), _FakeImage(3)],
         )
 
         self.assertIs(existingOutputSet, outputSet)
@@ -274,3 +301,41 @@ class TestXmippTriggerDataFinalizationRegression(BaseTest):
         prot._checkNewOutput.assert_not_called()
         prot._insertFunctionStep.assert_called_once()
 
+
+class _RefreshRequiredTriggerOutput:
+    def __init__(self, ids):
+        self.ids = set(ids)
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def getIdSet(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted TriggerData output must be refreshed before reading ids.'
+            )
+        return set(self.ids)
+
+
+class TestXmippTriggerDataLogicalOutputRestore(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testResumeRefreshesPersistedOutputBeforeRestoringIds(self):
+        prot = self.newProtocol(
+            XmippProtTriggerData,
+            outputSize=2,
+            allImages=True,
+            splitImages=False,
+            delay=4,
+        )
+        prot.getOututName = lambda: 'outputParticles'
+        prot.outputParticles = _RefreshRequiredTriggerOutput({1, 2})
+
+        persistedIds, batchCount = prot._getPersistedOutputIds()
+
+        self.assertTrue(prot.outputParticles.loaded)
+        self.assertEqual({1, 2}, persistedIds)
+        self.assertEqual(0, batchCount)

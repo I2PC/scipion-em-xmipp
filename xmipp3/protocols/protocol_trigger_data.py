@@ -429,17 +429,22 @@ class XmippProtTriggerData(XmippStreamingBase, ProtStreamingBase, EMProtocol, Pr
             persistedIds = set()
             batchCount = 0
             while True:
-                batchOutput = getattr(self, '%s%d' % (outputName, batchCount + 1), None)
-                if batchOutput is None:
+                splitOutputName = '%s%d' % (outputName, batchCount + 1)
+                if getattr(self, splitOutputName, None) is None:
                     break
-                persistedIds.update(batchOutput.getIdSet())
+                persistedIds.update(
+                    XmippStreamingBase._getPersistedOutputIds(
+                        self, splitOutputName
+                    )
+                )
                 batchCount += 1
             return persistedIds, batchCount
 
         # Static output or full streaming: a single named output.
-        outputSet = getattr(self, outputName, None)
-        persistedIds = set(outputSet.getIdSet()) if outputSet is not None else set()
-        return persistedIds, 0
+        return (
+            XmippStreamingBase._getPersistedOutputIds(self, outputName),
+            0,
+        )
 
     def createOutputStep(self):
         self._closeOutputSet()
