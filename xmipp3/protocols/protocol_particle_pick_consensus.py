@@ -38,7 +38,6 @@ from pyworkflow.protocol.constants import *
 from pwem.objects import SetOfCoordinates, Coordinate
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 from pyworkflow import UPDATED, PROD
-from xmipp3.utils import loadOutputSetForAppend
 from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 
@@ -452,7 +451,7 @@ class XmippProtConsensusPicking(XmippStreamingBase, ProtStreamingBase,
 
         newFiles = [fn for fn in getFiles(self._getTmpPath()) if self._isConsensusResultFile(fn)]
         if newFiles or workDone:  # when finished to close the output set
-            outSet = self._loadOutputSet(SetOfCoordinates, 'coordinates.sqlite')
+            outSet = self._loadOutputSet(SetOfCoordinates, self.outputName)
             outputMicIds = self._getOutputMicIds(outSet)
 
             micrographs = None
@@ -565,18 +564,19 @@ class XmippProtConsensusPicking(XmippStreamingBase, ProtStreamingBase,
         for inCorrds in self.inputCoordinates:
             self._defineTransformRelation(inCorrds, outputSet)
 
-    def _loadOutputSet(self, SetClass, baseName):
-        outputSet, isNew = loadOutputSetForAppend(
-            self, SetClass, baseName,
-            self.outputName if baseName == 'coordinates.sqlite' else None
-        )
-        if isNew:
+    def _loadOutputSet(self, SetClass, outputName):
+        if outputName != self.outputName:
+            raise ValueError("Unknown ParticlePickConsensus output: %s" % outputName)
+
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass)
+        if created:
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
         inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)
-
         return outputSet
+
+
 
     def calculateConsensusStep(self, micId, micName):
 

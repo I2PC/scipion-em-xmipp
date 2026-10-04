@@ -21,16 +21,16 @@ class XmippStreamingBase:
 
 
     def _discoverIdsAfter(self, inputSet, lastId):
-        """Discover only logical ids above the current streaming watermark."""
-        ids = list(
-            inputSet.getUniqueValues(
-                'id',
-                where='id > %d' % lastId,
-            )
-        )
+        """Discover logical ids above the current streaming watermark."""
+        try:
+            ids = list(inputSet.getUniqueValues('id', where='id > %d' % lastId))
+        except NotImplementedError:
+            ids = [itemId for itemId in inputSet.getUniqueValues('id') if itemId > lastId]
+        ids = sorted(ids)
         if ids:
             lastId = max(ids)
         return ids, lastId
+
 
 
     def _reconcileClosedStreamIds(
@@ -94,16 +94,16 @@ class XmippStreamingBase:
 
         iterItems = getattr(inputSet, "iterItems", None)
         if callable(iterItems) and watermark is not None:
-            items = iterItems(orderBy="id", direction="ASC", where="id > %d" % watermark)
-        else:
-            items = inputSet
+            try:
+                items = iterItems(orderBy="id", direction="ASC", where="id > %d" % watermark)
+                return [item.clone() if callable(getattr(item, "clone", None)) else item for item in items]
+            except NotImplementedError:
+                items = iterItems(orderBy="id", direction="ASC")
+                return [item.clone() if callable(getattr(item, "clone", None)) else item for item in items if item.getObjId() > watermark]
 
-        result = []
-        for item in items:
-            clone = getattr(item, "clone", None)
-            result.append(clone() if callable(clone) else item)
+        items = inputSet
+        return [item.clone() if callable(getattr(item, "clone", None)) else item for item in items]
 
-        return result
 
 
     def _loadLogicalSetItemsByIds(self, inputSet, itemIds, batchSize=500):
@@ -155,6 +155,10 @@ class XmippStreamingBase:
     @staticmethod
     def _getOutputIds(outputSet):
         if outputSet is None:
+            return set()
+
+        getSize = getattr(outputSet, "getSize", None)
+        if callable(getSize) and getSize() == 0:
             return set()
 
         getIdSet = getattr(outputSet, "getIdSet", None)

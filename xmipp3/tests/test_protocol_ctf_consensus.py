@@ -42,6 +42,46 @@ from xmipp3.protocols import XmippProtCTFConsensus, XmippProtCTFMicrographs
 from xmipp3.protocols.protocol_ctf_consensus import OUTPUT_CTF
 
 
+
+class TestCTFConsensusBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        tests.setupTestProject(cls)
+
+    def testLoadOutputSetUsesLogicalFactoryWithoutPhysicalStorage(self):
+        class MicSet:
+            pass
+
+        class InputCTFSet:
+            def getMicrographs(self):
+                return MicSet()
+
+        class Pointer:
+            def get(self):
+                return InputCTFSet()
+
+        class OutputSet:
+            STREAM_OPEN = 1
+            def setMicrographs(self, micSet):
+                self.micSet = micSet
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        outputSet = OutputSet()
+        calls = []
+        prot.inputCTF = Pointer()
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+        result = prot._loadOutputSet(SetOfCTF, OUTPUT_CTF)
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls, [(OUTPUT_CTF, SetOfCTF, '')])
+        self.assertIsInstance(outputSet.micSet, MicSet)
+
+    def testOutputPublishingDoesNotUsePhysicalSqliteNames(self):
+        import inspect
+        source = '\n'.join((inspect.getsource(XmippProtCTFConsensus._loadOutputSet), inspect.getsource(XmippProtCTFConsensus._checkNewOutput)))
+        self.assertNotIn('.sqlite', source)
+        self.assertIn('_loadOrCreateOutputSet(', source)
+
+
 class TestXmippCTFConsensusBase(BaseTest):
     """ Testing the non consensus part of the protocol (former ctf-selection)
     """
@@ -336,7 +376,7 @@ class TestXmippCTFConsensusBase(BaseTest):
 
         outputSet = prot._loadOutputSet(
             FreshOutputSet,
-            'ctfs.sqlite',
+            OUTPUT_CTF,
         )
 
         self.assertIs(

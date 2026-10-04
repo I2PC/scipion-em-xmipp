@@ -659,35 +659,12 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
             stats = None # If it fails, then Stats should be empty as it could not be read
         return stats
 
-    def _loadOutputSet(self, SetClass, baseName):
-        """
-        Load the output set if it exists or create a new one.
-        fixSampling: correct the output sampling rate if binning was used,
-        except for the case when the original movies are kept and shifts
-        refers to that one.
-        """
-        outputNameByBaseName = {
-            'movies.sqlite': OUTPUT_MOVIES,
-            'movies_discarded.sqlite': OUTPUT_MOVIES_DISCARDED,
-        }
-        outputName = outputNameByBaseName.get(baseName)
-        outputSet = getattr(self, outputName, None) if outputName else None
-
-        if outputSet is not None:
-            outputSet.enableAppend()
-            return outputSet
-
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile) and os.path.getsize(setFile) > 0:
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-            inputMovies = self.inputMovies.get()
-            outputSet.copyInfo(inputMovies)
-
+    def _loadOutputSet(self, SetClass, outputName):
+        """Load or create a logical protocol output Set."""
+        suffix = 'Discarded' if outputName == OUTPUT_MOVIES_DISCARDED else ''
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffix)
+        if created:
+            outputSet.copyInfo(self.inputMovies.get())
         return outputSet
 
     def _syncMeanDoseList(self):
@@ -709,8 +686,15 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
         for movieId in insertedIds:
             if movieId in doneIds:
                 continue
+
             if movieId not in processedIds:
-                continue
+                # Preserve acquisition order. A later movie may finish
+                # first under parallel execution, but it must not be
+                # published or used for dose-window sampling before every
+                # earlier inserted movie is either already persisted or
+                # processed and ready for this same publication batch.
+                break
+
             newDone.append(movieId)
 
         return newDone
@@ -862,13 +846,13 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
                     setAttribute(newMovie, '_USING_EXPERIMENTAL_DOSE', self.usingExperimental)
 
             if len(acceptedMovies)>0:
-                moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
+                moviesSet = self._loadOutputSet(SetOfMovies, OUTPUT_MOVIES)
                 for movie in acceptedMovies:
                     moviesSet.append(movie)
                 self._updateOutputSet(OUTPUT_MOVIES, moviesSet, streamMode)
                 self._registerDoneIds((movie.getObjId() for movie in acceptedMovies), accepted=True)
             if len(discardedMovies)>0:
-                moviesSetDiscarded = self._loadOutputSet(SetOfMovies, 'movies_discarded.sqlite')
+                moviesSetDiscarded = self._loadOutputSet(SetOfMovies, OUTPUT_MOVIES_DISCARDED)
                 for movie in discardedMovies:
                     moviesSetDiscarded.append(movie)
                 self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
@@ -902,7 +886,7 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
             setAttribute(movie, '_DOSE_ANALYSIS_FAILED', True)
             failedMovies.append(movie)
 
-        moviesSetDiscarded = self._loadOutputSet(SetOfMovies, 'movies_discarded.sqlite')
+        moviesSetDiscarded = self._loadOutputSet(SetOfMovies, OUTPUT_MOVIES_DISCARDED)
         for movie in failedMovies:
             moviesSetDiscarded.append(movie)
         self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
@@ -981,7 +965,13 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
             errors.append('Samples to estimate the median dose must be greater than zero.')
         if self.window.get() <= 0:
             errors.append('Window step must be greater than zero.')
+        errors.extend(self._validateParallelProcessing())
         return errors
+
+    def _validateParallelProcessing(self):
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by the executor for its own bookkeeping and another is permanently held by the streaming generator.']
+        return []
 
     def _summary(self):
         fnSummary = self._getPath("summary.txt")

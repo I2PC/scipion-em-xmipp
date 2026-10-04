@@ -27,6 +27,7 @@
 # *
 # **************************************************************************
 
+import json
 import os
 from datetime import datetime
 
@@ -448,18 +449,12 @@ There are different merit values to be calculated:
         processedIds = self._getKnownProcessedParticleIds()
         self.outputSize = len(processedIds)
 
-        if os.path.exists(self.fnOutputMd):
+        if self._getPendingScreeningStep() is not None:
             self.inputSize, self.streamClosed = self._getInputStatus()
-            pendingIds = set(
-                self._readMetadataIds(self.fnInputMd)
-            ).difference(processedIds)
-            self.outputSize += len(pendingIds)
         else:
             self.inputSize, self.streamClosed = self._loadInput()
-
             if not isEmpty(self.fnInputMd):
-                partsSteps = self._insertNewPartsSteps()
-                self.newDeps.extend(partsSteps)
+                self.newDeps.extend(self._insertNewPartsSteps())
 
     def stepsGeneratorStep(self) -> None:
         self.newDeps = []
@@ -481,20 +476,53 @@ There are different merit values to be calculated:
         pass
 
     def _insertNewPartsSteps(self):
-        deps = []
-        stepId = self._insertFunctionStep('sortImagesStep', prerequisites=[])
-        deps.append(stepId)
-        return deps
+        batchIds = self._readMetadataIds(self.fnInputMd)
+        return [self._insertFunctionStep('sortImagesStep', batchIds, prerequisites=[])]
+
+    @staticmethod
+    def _getScreeningStepBatchIds(step):
+        argsStr = getattr(step, 'argsStr', None)
+        if hasattr(argsStr, 'get'):
+            argsStr = argsStr.get('[]')
+        try:
+            args = json.loads(argsStr or '[]')
+        except (TypeError, ValueError):
+            return []
+        if not args or not isinstance(args[0], list):
+            return []
+        return [int(particleId) for particleId in args[0]]
+
+    def _getPendingScreeningStep(self):
+        processedIds = self._getKnownProcessedParticleIds()
+        legacyFinished = []
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName != 'sortImagesStep':
+                continue
+            batchIds = self._getScreeningStepBatchIds(step)
+            if batchIds:
+                if not set(batchIds).issubset(processedIds):
+                    return step
+            elif not step.isFinished():
+                return step
+            else:
+                legacyFinished.append(step)
+
+        if legacyFinished:
+            batchIds = set(self._readMetadataIds(self.fnInputMd)).difference(processedIds)
+            if batchIds:
+                return legacyFinished[-1]
+        return None
 
     def _checkNewInput(self):
-        # Consume any pending output before preparing another input batch.
-        if os.path.exists(self.fnOutputMd):
+        if self._getPendingScreeningStep() is not None:
             return
 
         self.inputSize, self.streamClosed = self._loadInput()
         if not isEmpty(self.fnInputMd):
-            fDeps = self._insertNewPartsSteps()
-            self.newDeps.extend(fDeps)
+            self.newDeps.extend(self._insertNewPartsSteps())
             self.updateSteps()
 
     def _getInputStatus(self):
@@ -644,30 +672,18 @@ There are different merit values to be calculated:
             else Set.STREAM_OPEN
         )
 
-        newData = os.path.exists(self.fnOutputMd)
-        lastToClose = (
-            self.finished
-            and hasattr(self, 'outputParticles')
-        )
+        pendingStep = self._getPendingScreeningStep()
+        newData = pendingStep is not None and pendingStep.isFinished()
+        lastToClose = self.finished and hasattr(self, 'outputParticles')
 
         if newData or lastToClose:
-            firstTime = not hasattr(
-                self,
-                'outputParticles',
-            )
-            outSet = self._loadOutputSet(
-                SetOfParticles,
-                'outputParticles.sqlite',
-            )
+            firstTime = not hasattr(self, 'outputParticles')
+            outSet = self._loadOutputSet(SetOfParticles, 'outputParticles')
             acceptedBatchIds = set()
             rejectedBatchIds = set()
 
             if newData:
-                batchIds = set(
-                    self._readMetadataIds(
-                        self.fnInputMd,
-                    )
-                )
+                batchIds = set(self._getScreeningStepBatchIds(pendingStep) or self._readMetadataIds(self.fnInputMd))
                 partsSet = self._createSetOfParticles()
                 readSetOfParticles(
                     self.fnOutputMd,
@@ -724,21 +740,12 @@ There are different merit values to be calculated:
                 self._store()
                 cleanPath(self.fnOutputMd)
 
-    def _loadOutputSet(self, SetClass, baseName):
-        outputSet = getattr(self, 'outputParticles', None)
-
-        if outputSet is not None:
-            outputSet.enableAppend()
-        else:
-            # Keep the logical output storage distinct from the temporary
-            # SetOfParticles used to import each processed Xmipp batch.
-            outputSet = self._createSetOfParticles(
-                suffix='_output',
-            )
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-
-        outputSet.copyInfo(self.inputParticles.get())
-
+    def _loadOutputSet(self, SetClass, outputName):
+        if outputName != 'outputParticles':
+            raise ValueError("Unknown ScreenParticles output: %s" % outputName)
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, '_output')
+        if created:
+            outputSet.copyInfo(self.inputParticles.get())
         return outputSet
 
     def _readMetadataIds(self, metadataFile):
@@ -763,7 +770,7 @@ There are different merit values to be calculated:
             self.sumZScore.set(sum(zScores))
 
     # --------------------------- STEP functions -----------------------------
-    def sortImagesStep(self):
+    def sortImagesStep(self, batchIds):
         args = "-i Particles@%s -o %s --addToInput " % (self.fnInputMd,
                                                         self.fnOutputMd)
         if os.path.exists(self.fnInputOldMd):
@@ -808,8 +815,8 @@ There are different merit values to be calculated:
             rejectByVariance(self.fnInputMd, self.fnOutputMd, self.varThreshold,
                              self.autoParRejectionVar)
 
-        # update the processed particles
-        self.outputSize += getSize(self.fnInputMd)
+        # batchIds is persisted in the step graph so completion can be
+        # reconciled against logical outputs instead of temporary files.
 
     def _initializeZscores(self):
         # Preserve persisted statistics and the variance threshold on Continue.

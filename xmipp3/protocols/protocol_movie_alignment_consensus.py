@@ -645,8 +645,8 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
         def readOrCreateOutputs(doneList, newDone, label=''):
             if len(doneList) > 0 or len(newDone) > 0:
                 with self._lock:
-                    movSet = self._loadOutputSet(SetOfMovies, 'movies'+label+'.sqlite')
-                    micSet = self._loadOutputSet(SetOfMicrographs, 'micrographs'+label+'.sqlite')
+                    movSet = self._loadOutputSet(SetOfMovies, 'outputMovies'+label)
+                    micSet = self._loadOutputSet(SetOfMicrographs, 'outputMicrographs'+label)
                     label = ACCEPTED if label == '' else DISCARDED
                     publishedIds = self.fillOutput(movSet, micSet, newDone, label)
                     movSet.setSamplingRate(self.samplingRate)
@@ -765,39 +765,20 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
 
         return publishedIds
 
-    def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
-        """
-        Load the output set if it exists or create a new one.
-        """
-        outputNameByBaseName = {
-            'movies.sqlite': 'outputMovies',
-            'micrographs.sqlite': 'outputMicrographs',
-            'moviesDiscarded.sqlite': 'outputMoviesDiscarded',
-            'micrographsDiscarded.sqlite': 'outputMicrographsDiscarded',
-        }
-        outputName = outputNameByBaseName.get(baseName)
-        outputSet = getattr(self, outputName, None) if outputName else None
+    def _loadOutputSet(self, SetClass, outputName, fixSampling=True):
+        suffixByOutputName = {'outputMovies': '', 'outputMicrographs': '', 'outputMoviesDiscarded': 'Discarded', 'outputMicrographsDiscarded': 'Discarded'}
+        if outputName not in suffixByOutputName:
+            raise ValueError("Unknown MovieAlignmentConsensus output: %s" % outputName)
 
-        if outputSet is not None:
-            outputSet.enableAppend()
-            return outputSet
-
-        # Always create fresh when the protocol doesn't already know
-        # about this output - never fall back to os.path.exists() on a
-        # raw on-disk path, which may not be the authoritative backend
-        # under a PostgreSQL-backed compatibility bridge.
-        setFile = self._getPath(baseName)
-        outputSet = SetClass(filename=setFile)
-        outputSet.setStreamState(outputSet.STREAM_OPEN)
-
-        inputMovies = self.inputMovies1.get()
-        outputSet.copyInfo(inputMovies)
-
-        if fixSampling:
-            newSampling = inputMovies.getSamplingRate() * self._getBinFactor()
-            outputSet.setSamplingRate(newSampling)
-
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffixByOutputName[outputName])
+        if created:
+            inputMovies = self.inputMovies1.get()
+            outputSet.copyInfo(inputMovies)
+            if fixSampling:
+                outputSet.setSamplingRate(inputMovies.getSamplingRate() * self._getBinFactor())
         return outputSet
+
+
 
     def _loadInputMovieSet(self):
         return self._loadLogicalSet(self.inputMovies1)
@@ -991,4 +972,3 @@ def setAttribute(obj, label, value):
     if value is None:
         return
     setattr(obj, label, getScipionObj(value))
-

@@ -908,16 +908,18 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
     def _validate(self):
         errors = []
         if self.estimateOrientation.get() and not self.getInputGain():
-            errors.append("Experimental gain needed to estimate its proper "
-                         "orientation.")
+            errors.append("Experimental gain needed to estimate its proper orientation.")
         if self.normalizeGain.get() and not self.getInputGain():
             errors.append("Experimental gain needed to normalize it.")
         if errors:
-            errors.append("An experimental gain can be associated with a "
-                          "setOfMovies during its importing protocol. "
-                          "Otherwise, no gain reorientation nor "
-                          "gain normalization can be performed.")
+            errors.append("An experimental gain can be associated with a setOfMovies during its importing protocol. Otherwise, no gain reorientation nor gain normalization can be performed.")
+        errors.extend(self._validateParallelProcessing())
         return errors
+
+    def _validateParallelProcessing(self):
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by the executor for its own bookkeeping and another is permanently held by the streaming generator.']
+        return []
 
     def _summary(self):
         fnSummary = self._getPath("summary.txt")

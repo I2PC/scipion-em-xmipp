@@ -34,6 +34,7 @@ from pyworkflow.protocol import getProtocolFromDb
 from xmipp3.convert import *
 from xmipp3.constants import *
 from xmipp3.protocols import *
+from xmipp3.protocols.protocol_eliminate_empty_images import XmippProtEliminateEmptyBase
 
 
 # Some utility functions to import micrographs that are used
@@ -1023,6 +1024,89 @@ class TestXmippVarianceFiltering(TestXmippBase):
                                GOLD_THRESHOLD))
 
 
+class TestEliminateEmptyBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testLoadOutputSetUsesLogicalFactoryWithoutPhysicalStorage(self):
+        class InputSet:
+            pass
+
+        class OutputSet:
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+
+        class SetClass:
+            pass
+
+        prot = self.newProtocol(XmippProtEliminateEmptyParticles)
+        inputSet = InputSet()
+        outputSet = OutputSet()
+        calls = []
+        prot.inputImages = inputSet
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+        prot._getPath = lambda *args, **kwargs: self.fail('EliminateEmpty output loading must not consult a physical .sqlite path.')
+
+        result = prot._loadOutputSet(SetClass, 'outputParticles')
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls, [('outputParticles', SetClass, '')])
+        self.assertIs(outputSet.inputSet, inputSet)
+
+    def testOutputPublishingDoesNotUsePhysicalSqliteNames(self):
+        import inspect
+
+        source = '\n'.join((inspect.getsource(XmippProtEliminateEmptyBase._loadOutputSet), inspect.getsource(XmippProtEliminateEmptyParticles.createOutputs), inspect.getsource(XmippProtEliminateEmptyClasses.createOutputs), inspect.getsource(XmippProtEliminateEmptyClasses.createOutputClasses)))
+        self.assertNotIn('.sqlite', source)
+        self.assertNotIn('SetOfClasses2D(filename=', source)
+
+    def testClassOutputsUseLogicalFactory(self):
+        import inspect
+
+        source = inspect.getsource(XmippProtEliminateEmptyClasses.createOutputClasses)
+        self.assertIn('_loadOrCreateOutputSet(', source)
+
+
+
+    def testCheckNewInputUsesSharedIdWatermarkDiscovery(self):
+        import inspect
+        source = inspect.getsource(XmippProtEliminateEmptyBase._checkNewInput)
+        self.assertIn('_discoverIdsAfter(', source)
+        self.assertIn('_reconcileClosedStreamIds(', source)
+
+    def testInsertedEliminationStepsPersistBatchIds(self):
+        import inspect
+        source = inspect.getsource(XmippProtEliminateEmptyBase._insertNewPartsSteps)
+        self.assertIn('batchIds', source)
+        self.assertIn("'eliminationStep'", source)
+
+    def testEliminationStepDoesNotUseBackendWhereExpression(self):
+        import inspect
+        source = inspect.getsource(XmippProtEliminateEmptyBase.eliminationStep)
+        self.assertNotIn("where='id >", source)
+        self.assertIn('_loadLogicalSetItemsByIds(', source)
+
+    def testCreateOutputsDoesNotInferFinishedBatchFromMetadataExistence(self):
+        import inspect
+        source = '\n'.join((inspect.getsource(XmippProtEliminateEmptyParticles.createOutputs), inspect.getsource(XmippProtEliminateEmptyClasses.createOutputs)))
+        self.assertNotIn('newData = os.path.exists', source)
+
+
+
+    def testGetOutputIdsHandlesFreshEmptySetWithoutPhysicalTable(self):
+        class FreshOutputSet:
+            def getSize(self):
+                return 0
+
+            def getIdSet(self):
+                self.fail('getIdSet must not be called for a fresh empty Set whose mapper table does not exist yet.')
+
+        prot = self.newProtocol(XmippProtEliminateEmptyParticles)
+        self.assertEqual(prot._getOutputIds(FreshOutputSet()), set())
+
+
+
 class TestXmippEliminatingEmptyParticles(TestXmippBase):
     """This class check if the protocol for eliminating
      empty particles in Xmipp works properly."""
@@ -1066,13 +1150,7 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         protElimination1.inputParticles.set(protExtract.outputParticles)
         self.launchProtocol(protElimination1)
 
-        outSet = SetOfParticles(
-            filename=protElimination1._getPath('outputParticles.sqlite'))
-        elimSet = SetOfParticles(
-            filename=protElimination1._getPath('eliminatedParticles.sqlite'))
-
-        self.assertSetSize(protExtract.outputParticles, outSet.getSize() + elimSet.getSize(),
-                        "Output sets size does not much the input set size.")
+        self.assertSetSize(protExtract.outputParticles, protElimination1.outputParticles.getSize() + protElimination1.eliminatedParticles.getSize(), "Output sets size does not much the input set size.")
 
         kwargs = {'nDim': 20,  # 20 objects/particles
                   'creationInterval': 10,  # wait 1 sec. after creation
@@ -1091,15 +1169,49 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         self.launchProtocol(protElimination2)
 
 
-        partSet = SetOfParticles(
-            filename=protStream._getPath("particles.sqlite"))
-        outSet = SetOfParticles(
-            filename=protElimination2._getPath('outputParticles.sqlite'))
-        elimSet = SetOfParticles(
-            filename=protElimination2._getPath('eliminatedParticles.sqlite'))
-        self.assertEquals(outSet.getSize() + elimSet.getSize(),
-                        partSet.getSize(),
-                        "Output sets size does not much the input set size.")
+        self.assertEquals(protElimination2.outputParticles.getSize() + protElimination2.eliminatedParticles.getSize(), kwargs['nDim'], "Output sets size does not much the streamed input size.")
+
+
+
+class TestParticlePickConsensusBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testLoadOutputSetUsesLogicalFactoryWithoutPhysicalStorage(self):
+        class MainInput:
+            def getBoxSize(self):
+                return 128
+
+            def getMicrographs(self, asPointer=False):
+                return "mics-pointer" if asPointer else None
+
+        class OutputSet:
+            def setBoxSize(self, value):
+                self.boxSize = value
+
+            def setMicrographs(self, value):
+                self.micrographs = value
+
+        prot = self.newProtocol(XmippProtConsensusPicking)
+        outputSet = OutputSet()
+        calls = []
+        prot.getMainInput = lambda: MainInput()
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+
+        result = prot._loadOutputSet(SetOfCoordinates, prot.outputName)
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls, [(prot.outputName, SetOfCoordinates, '')])
+        self.assertEqual(outputSet.boxSize, 128)
+        self.assertEqual(outputSet.micrographs, "mics-pointer")
+
+    def testOutputPublishingDoesNotUsePhysicalSqliteNames(self):
+        import inspect
+        source = '\n'.join((inspect.getsource(XmippProtConsensusPicking._loadOutputSet), inspect.getsource(XmippProtConsensusPicking._checkNewOutput)))
+        self.assertNotIn('.sqlite', source)
+        self.assertNotIn('loadOutputSetForAppend', source)
+        self.assertIn('_loadOrCreateOutputSet(', source)
 
 
 class TestXmippParticlesPickConsensus(TestXmippBase):
@@ -1361,6 +1473,141 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     #     self._checkSamplingConsistency(outputParts)
 
 
+
+class TestTiltAnalysisBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testLoadOutputSetUsesLogicalFactoryWithoutPhysicalStorage(self):
+        class InputSet:
+            pass
+
+        class Pointer:
+            def get(self):
+                return InputSet()
+
+        class OutputSet:
+            STREAM_OPEN = 1
+
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+
+        prot = self.newProtocol(XmippProtTiltAnalysis)
+        outputSet = OutputSet()
+        calls = []
+        prot.inputMicrographs = Pointer()
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+
+        result = prot._loadOutputSet(SetOfMicrographs, 'outputMicrographs')
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls, [('outputMicrographs', SetOfMicrographs, '')])
+        self.assertIsInstance(outputSet.inputSet, InputSet)
+
+    def testOutputPublishingDoesNotUsePhysicalSqliteNames(self):
+        import inspect
+        source = '\n'.join((inspect.getsource(XmippProtTiltAnalysis._loadOutputSet), inspect.getsource(XmippProtTiltAnalysis._checkNewOutput)))
+        self.assertNotIn('.sqlite', source)
+        self.assertIn('_loadOrCreateOutputSet(', source)
+
+    def testParallelWorkersSerializeSharedLogicalInputSetAccess(self):
+        import threading
+        import time
+
+        class Item:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+            def clone(self):
+                return Item(self.objId)
+
+        class SharedInputSet:
+            def __init__(self):
+                self.guard = threading.Lock()
+                self.active = 0
+                self.firstAccess = threading.Event()
+
+            def loadAllProperties(self):
+                pass
+
+            def getItem(self, attribute, objId):
+                with self.guard:
+                    self.active += 1
+                    concurrent = self.active > 1
+                    self.firstAccess.set()
+                try:
+                    time.sleep(0.1)
+                    if concurrent:
+                        raise RuntimeError("concurrent mapper access")
+                    return Item(objId)
+                finally:
+                    with self.guard:
+                        self.active -= 1
+
+            def __contains__(self, objId):
+                return self.getItem("id", objId) is not None
+
+            def close(self):
+                pass
+
+        class Pointer:
+            def __init__(self, inputSet):
+                self.inputSet = inputSet
+
+            def get(self):
+                return self.inputSet
+
+        prot = self.newProtocol(XmippProtTiltAnalysis)
+        sharedSet = SharedInputSet()
+        prot.inputMicrographs = Pointer(sharedSet)
+        prot.processedIds = []
+        prot._processMicrograph = lambda mic: None
+        errors = []
+
+        def run(ids):
+            try:
+                prot.processMicrographListStep(ids)
+            except Exception as e:
+                errors.append(str(e))
+
+        first = threading.Thread(target=run, args=([1],))
+        second = threading.Thread(target=run, args=([2],))
+        first.start()
+        self.assertTrue(sharedSet.firstAccess.wait(timeout=2))
+        second.start()
+        first.join(timeout=2)
+        second.join(timeout=2)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(errors, [])
+
+    def testStreamingGeneratorRaisesWhenProcessingStepHasFailed(self):
+        class Value:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class FailedStep:
+            funcName = Value("processMicrographListStep")
+
+            def isFailed(self):
+                return True
+
+        prot = self.newProtocol(XmippProtTiltAnalysis)
+        prot._steps = [FailedStep()]
+
+        with self.assertRaisesRegex(RuntimeError, "processing step failed"):
+            prot._raiseIfProcessingStepFailed()
+
+
+
 class TestXmippProtTiltAnalysis(TestXmippBase):
     """This class check if the preprocessing micrographs protocol in Xmipp works properly."""
     @classmethod
@@ -1395,6 +1642,48 @@ class TestXmippProtTiltAnalysis(TestXmippBase):
         self.assertEquals(len(protTilt2.outputMicrographs), 17, "Incorrect number of accepted micrographs")
         self.assertEquals(len(protTilt2.discardedMicrographs), 3, "Incorrect number of discarded micrographs")
         self.assertTrue(protTilt2.isFinished(), "Tilt analysis failed")
+
+
+
+class TestMicDefocusSamplerBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testGetAllDoneIdsRestoresPersistedCtfIdsOnlyOnce(self):
+        class OutputSet:
+            def __init__(self):
+                self.idReads = 0
+
+            def loadAllProperties(self):
+                pass
+
+            def getSize(self):
+                return 2
+
+            def getIdSet(self):
+                self.idReads += 1
+                return {1, 2}
+
+        prot = self.newProtocol(XmippProtMicDefocusSampler)
+        outputSet = OutputSet()
+        prot.outputCTF = outputSet
+
+        firstIds, firstSize = prot._getAllDoneIds()
+        secondIds, secondSize = prot._getAllDoneIds()
+
+        self.assertEqual(set(firstIds), {1, 2})
+        self.assertEqual(firstSize, 2)
+        self.assertEqual(set(secondIds), {1, 2})
+        self.assertEqual(secondSize, 2)
+        self.assertEqual(outputSet.idReads, 1, "Persisted output ids should be restored once and then cached.")
+
+    def testInputHydrationDoesNotProbeMembershipOnLogicalSet(self):
+        import inspect
+        source = '\n'.join((inspect.getsource(XmippProtMicDefocusSampler.extractBalancedDefocus), inspect.getsource(XmippProtMicDefocusSampler.fillOutput)))
+        self.assertNotIn(' in inputCtfSet', source)
+        self.assertNotIn(' not in inputCtfSet', source)
+        self.assertIn('_loadLogicalSetItemsByIds(', source)
 
 
 class TestXmippMicDefocusSampler(TestXmippBase):

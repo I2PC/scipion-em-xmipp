@@ -444,84 +444,52 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtStreamingBase, ProtCTFM
             )
 
     def extractBalancedDefocus(self, ctfIds):
-        inputCtfSet = self._loadLogicalSet(self.inputCTF)
+        pendingIds = sorted(set(ctfIds))
         ctfDefocus = {}
 
-        try:
-            for ctfId in ctfIds:
-                # Set.getItem raises rather than returning None for a row
-                # it cannot find, so check membership first - a ctfId just
-                # discovered via the id watermark may not be selectable yet
-                # under a PostgreSQL-backed compatibility bridge.
-                for attempt in range(self.CTF_VISIBILITY_MAX_ATTEMPTS):
-                    if attempt > 0:
-                        time.sleep(self.CTF_VISIBILITY_RETRY_DELAY)
-                        inputCtfSet.close()
-                        inputCtfSet = self._loadLogicalSet(self.inputCTF)
+        for attempt in range(self.CTF_VISIBILITY_MAX_ATTEMPTS):
+            if not pendingIds:
+                break
 
-                    if ctfId in inputCtfSet:
-                        break
-                else:
-                    self.error(
-                        "CTF with id %d never became visible in the input "
-                        "Set after %d attempts; excluding it from the "
-                        "defocus sampling pool."
-                        % (ctfId, self.CTF_VISIBILITY_MAX_ATTEMPTS)
-                    )
-                    continue
+            if attempt > 0:
+                time.sleep(self.CTF_VISIBILITY_RETRY_DELAY)
 
-                ctf = inputCtfSet.getItem("id", ctfId).clone()
+            inputCtfSet = self._loadLogicalSet(self.inputCTF)
+            try:
+                visibleCtfs = self._loadLogicalSetItemsByIds(inputCtfSet, pendingIds)
+            finally:
+                inputCtfSet.close()
+
+            visibleIds = set()
+            for ctf in visibleCtfs:
+                ctfId = ctf.getObjId()
+                visibleIds.add(ctfId)
                 try:
                     defocusU = ctf.getDefocusU()
                     if defocusU is None:
                         raise ValueError("CTF has no defocusU value")
                 except Exception as e:
-                    # A single CTF with corrupted/missing defocus data must
-                    # not crash the whole batch step (and hence the whole
-                    # protocol) - exclude just this CTF and keep sampling
-                    # the rest.
-                    self.error(
-                        "CTF with id %d failed while reading its defocus "
-                        "value (%s); excluding it from the defocus "
-                        "sampling pool."
-                        % (ctfId, e)
-                    )
+                    self.error("CTF with id %d failed while reading its defocus value (%s); excluding it from the defocus sampling pool." % (ctfId, e))
                     continue
                 ctfDefocus[ctfId] = defocusU
-        finally:
-            inputCtfSet.close()
 
-        self.sampled_images = balanced_sampling(
-            image_dict=ctfDefocus,
-            N=self.numImages.get(),
-            bins=10,
-        )
-        self.info(
-            'The number of CTFs selected for defocus balanced sampling '
-            'is the following: %d'
-            % len(self.sampled_images)
-        )
+            pendingIds = [ctfId for ctfId in pendingIds if ctfId not in visibleIds]
 
-        stats = compute_statistics(
-            list(ctfDefocus.values())
-        )
-        message = (
-            "The defocus statistics are the following: "
-            "range %d   min %d   max %d   mean %d   std %.1f"
-            % (
-                stats["range"],
-                stats["min"],
-                stats["max"],
-                stats["mean"],
-                stats["std"],
-            )
-        )
+        if pendingIds:
+            self.error("CTF(s) with id %s never became visible in the input Set after %d attempts; excluding them from the defocus sampling pool." % (pendingIds, self.CTF_VISIBILITY_MAX_ATTEMPTS))
+
+        self.sampled_images = balanced_sampling(image_dict=ctfDefocus, N=self.numImages.get(), bins=10)
+        self.info('The number of CTFs selected for defocus balanced sampling is the following: %d' % len(self.sampled_images))
+
+        stats = compute_statistics(list(ctfDefocus.values()))
+        message = ("The defocus statistics are the following: range %d   min %d   max %d   mean %d   std %.1f" % (stats["range"], stats["min"], stats["max"], stats["mean"], stats["std"]))
         self.summaryVar.set(message)
         self.sampledIds.set(self.sampled_images)
 
         # Persist the selected ids before output creation so Resume can reuse
         # exactly the same sample.
         self._store()
+
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
@@ -569,30 +537,41 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtStreamingBase, ProtCTFM
 
     def fillOutput(self, ctfSet, micSet, newDone):
         inputCtfSet = self._loadLogicalSet(self.inputCTF)
-        ctfIds = set(ctfSet.getIdSet()) if ctfSet.getSize() else set()
-        micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
-
         try:
-            for ctfId in newDone:
-                if ctfId not in inputCtfSet:
-                    self.error(
-                        "CTF with id %d is not visible in the input Set; "
-                        "excluding it from the output." % ctfId
-                    )
-                    continue
-
-                ctf = inputCtfSet.getItem("id", ctfId).clone()
-                mic = ctf.getMicrograph().clone()
-
-                if ctf.getObjId() not in ctfIds:
-                    ctfSet.append(ctf)
-                    ctfIds.add(ctf.getObjId())
-
-                if mic.getObjId() not in micIds:
-                    micSet.append(mic)
-                    micIds.add(mic.getObjId())
+            visibleCtfs = self._loadLogicalSetItemsByIds(inputCtfSet, newDone)
         finally:
             inputCtfSet.close()
+
+        visibleById = {ctf.getObjId(): ctf for ctf in visibleCtfs}
+        missingIds = sorted(set(newDone).difference(visibleById))
+        for ctfId in missingIds:
+            self.error("CTF with id %d is not visible in the input Set; excluding it from the output." % ctfId)
+
+        ctfIds = self._getOutputIds(ctfSet) if ctfSet.getSize() else set()
+        micIds = self._getOutputIds(micSet) if micSet.getSize() else set()
+        persistedCtfIds = []
+        persistedMicIds = []
+
+        for ctfId in newDone:
+            ctf = visibleById.get(ctfId)
+            if ctf is None:
+                continue
+
+            mic = ctf.getMicrograph().clone()
+
+            if ctf.getObjId() not in ctfIds:
+                ctfSet.append(ctf)
+                ctfIds.add(ctf.getObjId())
+            persistedCtfIds.append(ctf.getObjId())
+
+            if mic.getObjId() not in micIds:
+                micSet.append(mic)
+                micIds.add(mic.getObjId())
+            persistedMicIds.append(mic.getObjId())
+
+        self._markOutputIdsPersisted(OUTPUT_CTF, persistedCtfIds)
+        self._markOutputIdsPersisted(OUTPUT_MICS, persistedMicIds)
+
 
     def updateRelations(self, cSet, mSet):
         micsAttrName = OUTPUT_MICS
@@ -612,34 +591,34 @@ class XmippProtMicDefocusSampler(XmippStreamingBase, ProtStreamingBase, ProtCTFM
         self._defineCtfRelation(mSet, cSet)
 
     def _getAllDoneIds(self):
-        doneIds = []
-        sizeOutput = 0
-
         if hasattr(self, OUTPUT_CTF):
-            sizeOutput = self.outputCTF.getSize()
-            doneIds.extend(list(self.outputCTF.getIdSet()))
+            doneIds = sorted(self._getKnownPersistedOutputIds(OUTPUT_CTF))
+            return doneIds, len(doneIds)
 
-        elif hasattr(self, OUTPUT_MICS):
-            micIds = set(self.outputMicrographs.getIdSet())
+        if hasattr(self, OUTPUT_MICS):
+            cached = getattr(self, "_micFallbackCtfIds", None)
+            if cached is None:
+                micIds = self._getKnownPersistedOutputIds(OUTPUT_MICS)
+                doneIds = []
 
-            if micIds:
-                inputCtfSet = self._loadLogicalSet(self.inputCTF)
+                if micIds:
+                    inputCtfSet = self._loadLogicalSet(self.inputCTF)
+                    try:
+                        for ctf in inputCtfSet:
+                            mic = ctf.getMicrograph()
+                            if mic is not None and mic.getObjId() in micIds:
+                                doneIds.append(ctf.getObjId())
+                    finally:
+                        inputCtfSet.close()
 
-                try:
-                    for ctf in inputCtfSet:
-                        mic = ctf.getMicrograph()
+                cached = set(doneIds)
+                self._micFallbackCtfIds = cached
 
-                        if (
-                            mic is not None
-                            and mic.getObjId() in micIds
-                        ):
-                            doneIds.append(ctf.getObjId())
-                finally:
-                    inputCtfSet.close()
+            doneIds = sorted(cached)
+            return doneIds, len(doneIds)
 
-                sizeOutput = len(doneIds)
+        return [], 0
 
-        return doneIds, sizeOutput
 
     def _summary(self):
         summary = []

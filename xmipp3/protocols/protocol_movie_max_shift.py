@@ -669,13 +669,14 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
 
             enable = False if AccOrDisc=='Discarded' else True
                 
-            movieSet = self._loadOutputSet(SetOfMovies, 'movies%s.sqlite' % suffix)
+            movieOutputName = OUTPUT_MOVIES + suffix
+            movieSet = self._loadOutputSet(SetOfMovies, movieOutputName)
             micOutputName = self.outMicName + suffix if self.outMicName else None
             firstTimeMics = (
                 micOutputName is not None
                 and getattr(self, micOutputName, None) is None
             )
-            micsSet = self._loadOutputSet(SetOfMicrographs,'micrographs%s%s.sqlite'%(suffix1, suffix))
+            micsSet = self._loadOutputSet(SetOfMicrographs, micOutputName) if micOutputName else None
 
             def tryToAppend(outSet, micOut):
                 """ When micrograph is very big, sometimes it's not ready to be read
@@ -694,7 +695,6 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
                 else None
             )
 
-            movieOutputName = OUTPUT_MOVIES + suffix
             movieSetIds = self._getKnownPersistedOutputIds(
                 movieOutputName,
             )
@@ -829,41 +829,19 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
             discardedIds,
         )
 
-    def _loadOutputSet(self, SetClass, baseName):
-        """ Load the output set if it exists or create a new one based on the inputs.
-        """
-        outputNameByBaseName = {
-            'movies.sqlite': OUTPUT_MOVIES,
-            'moviesDiscarded.sqlite': OUTPUT_MOVIES_DISCARDED,
-            'micrographs.sqlite': OUTPUT_MICS,
-            'micrographsDiscarded.sqlite': OUTPUT_MICS_DISCARDED,
-            'micrographs_dose-weighted.sqlite': OUTPUT_MICS_DW,
-            'micrographs_dose-weightedDiscarded.sqlite': OUTPUT_MICS_DW_DISCARDED,
-        }
-        outputName = outputNameByBaseName.get(baseName)
-        outputSet = getattr(self, outputName, None) if outputName else None
+    def _loadOutputSet(self, SetClass, outputName):
+        """Load or create a logical protocol output Set."""
+        if SetClass == SetOfMicrographs and self.inputMics is None:
+            return None
 
-        if outputSet is not None:
-            outputSet.enableAppend()
-            return outputSet
+        suffixByOutputName = {OUTPUT_MOVIES: '', OUTPUT_MOVIES_DISCARDED: 'Discarded', OUTPUT_MICS: '', OUTPUT_MICS_DISCARDED: 'Discarded', OUTPUT_MICS_DW: '_dose-weighted', OUTPUT_MICS_DW_DISCARDED: '_dose-weightedDiscarded'}
+        if outputName not in suffixByOutputName:
+            raise ValueError("Unknown MovieMaxShift output: %s" % outputName)
 
-        if SetClass == SetOfMicrographs:
-            if self.inputMics is None:
-                # if no mics to do, do nothing and exit
-                return None
-            inputSet = self.inputMics
-        else:
-            inputSet = self.inputMovies.get()
-
-        # Always create fresh when the protocol doesn't already know
-        # about this output - never fall back to os.path.exists() on a
-        # raw on-disk path, which may not be the authoritative backend
-        # under a PostgreSQL-backed compatibility bridge.
-        setFile = self._getPath(baseName)
-        outputSet = SetClass(filename=setFile)
-        outputSet.setStreamState(outputSet.STREAM_OPEN)
-
-        outputSet.copyInfo(inputSet)
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffixByOutputName[outputName])
+        if created:
+            inputSet = self.inputMics if SetClass == SetOfMicrographs else self.inputMovies.get()
+            outputSet.copyInfo(inputSet)
 
         return outputSet
 

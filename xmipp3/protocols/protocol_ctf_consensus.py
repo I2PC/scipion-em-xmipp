@@ -603,9 +603,8 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
 
         def readOrCreateOutputs(doneList, newDone, label=''):
             if len(doneList) > 0 or len(newDone) > 0:
-                cSet = self._loadOutputSet(SetOfCTF, 'ctfs'+label+'.sqlite')
-                mSet = self._loadOutputSet(SetOfMicrographs,
-                                             'micrographs'+label+'.sqlite')
+                cSet = self._loadOutputSet(SetOfCTF, OUTPUT_CTF + label)
+                mSet = self._loadOutputSet(SetOfMicrographs, OUTPUT_MICS + label)
                 label = ACCEPTED if label == '' else DISCARDED
                 publishedIds = self.fillOutput(cSet, mSet, newDone, label)
 
@@ -871,55 +870,38 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
             self.secondaryAttributes = set()
 
 
-    def _loadOutputSet(self, SetClass, baseName):
-        outputInfo = {
-            'ctfs.sqlite': (OUTPUT_CTF, ''),
-            'micrographs.sqlite': (OUTPUT_MICS, ''),
-            'ctfsDiscarded.sqlite': (
-                OUTPUT_CTF_DISCARDED,
-                'Discarded',
-            ),
-            'micrographsDiscarded.sqlite': (
-                OUTPUT_MICS_DISCARDED,
-                'Discarded',
-            ),
-        }
+    def _loadOutputSet(self, SetClass, outputName):
+        suffixByOutputName = {OUTPUT_CTF: '', OUTPUT_MICS: '', OUTPUT_CTF_DISCARDED: 'Discarded', OUTPUT_MICS_DISCARDED: 'Discarded'}
+        if outputName not in suffixByOutputName:
+            raise ValueError("Unknown CTFConsensus output: %s" % outputName)
 
-        if baseName not in outputInfo:
-            raise ValueError(
-                "Unknown CTFConsensus output basename: %s"
-                % baseName
-            )
+        suffix = suffixByOutputName[outputName]
 
-        outputName, suffix = outputInfo[baseName]
-        outputSet = getattr(self, outputName, None)
+        # Reuse an already-published logical output before validating the
+        # concrete SetClass. This is important for resume/tests and keeps
+        # output identity tied to the protocol output name, not to storage.
+        if getattr(self, outputName, None) is not None:
+            outputSet, _ = self._loadOrCreateOutputSet(outputName, SetClass, suffix)
+            return outputSet
 
-        if outputSet is not None:
-            outputSet.enableAppend()
-        elif issubclass(SetClass, SetOfCTF):
-            outputSet = self._createSetOfCTF(
-                suffix=suffix,
-            )
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-        elif issubclass(SetClass, SetOfMicrographs):
-            outputSet = self._createSetOfMicrographs(
-                suffix=suffix,
-            )
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-        else:
-            raise TypeError(
-                "Unsupported CTFConsensus output Set class: %s"
-                % SetClass
-            )
+        if not (issubclass(SetClass, SetOfCTF) or issubclass(SetClass, SetOfMicrographs)):
+            raise TypeError("Unsupported CTFConsensus output Set class: %s" % SetClass)
 
-        micSet = self.inputCTF.get().getMicrographs()
-
-        if isinstance(outputSet, SetOfMicrographs):
-            outputSet.copyInfo(micSet)
-        elif isinstance(outputSet, SetOfCTF):
-            outputSet.setMicrographs(micSet)
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffix)
+        if created:
+            micSet = self.inputCTF.get().getMicrographs()
+            if issubclass(SetClass, SetOfMicrographs):
+                outputSet.copyInfo(micSet)
+            else:
+                outputSet.setMicrographs(micSet)
 
         return outputSet
+
+
+
+
+
+
 
     def _ctfToMd(self, ctf, ctfMd):
         """ Write the proper metadata for Xmipp from a given CTF """

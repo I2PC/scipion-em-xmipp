@@ -36,7 +36,6 @@ from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 
-from xmipp3.utils import loadOutputSetForAppend
 from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 SIGNAL_FILENAME = "STOP_STREAM.TXT"
@@ -414,16 +413,12 @@ class XmippProtTriggerData(XmippStreamingBase, ProtStreamingBase, EMProtocol, Pr
         time.sleep(self.delay.get())
 
     def _restoreStreamingState(self):
-        """ Reconstruct durable state from the real, already-persisted
-        outputs - never from a runtime-only assumption about ordering. """
+        """Restore durable streaming state from persisted logical outputs."""
         persistedIds, batchCount = self._getPersistedOutputIds()
         self.outputCount = batchCount
-        # A lightweight stand-in is enough: the processed-id filter in
-        # _checkNewInput only needs getObjId(). The real content of these
-        # items already lives in the persisted output(s); nothing else
-        # needs to be reconstructed for them.
-        self.images = [_PersistedImagePlaceholder(itemId) for itemId in persistedIds]
+        self.images = [_PersistedImagePlaceholder(itemId) for itemId in sorted(persistedIds)]
         self.splitedImages = []
+        self._lastInputId = max(persistedIds) if persistedIds else 0
 
     def _getPersistedOutputIds(self):
         """ Ids already published to the real output(s), plus - in
@@ -450,40 +445,24 @@ class XmippProtTriggerData(XmippStreamingBase, ProtStreamingBase, EMProtocol, Pr
         self._closeOutputSet()
 
     def _checkNewInput(self):
-        # Load the input Set via its own logical Pointer so newly
-        # persisted streaming items are visible before checking for new
-        # work - never reconstruct it from a raw sqlite filename.
         self.imsSet = self._loadLogicalSet(self.inputImages)
-
         processedIds = {image.getObjId() for image in self.images}
-        remaining = None if self.allImages.get() else max(0, self.outputSize.get() - len(self.images))
-        where = 'creation>="%s"' % self.check if self.images and hasattr(self, 'check') else None
-        items = self.imsSet.iterItems(orderBy='creation') if where is None else self.imsSet.iterItems(orderBy='creation', where=where)
 
-        self.newImages = []
-        if remaining is None or remaining > 0:
-            for item in items:
-                itemId = item.getObjId()
-                if itemId in processedIds:
-                    continue
-                self.newImages.append(item.clone())
-                processedIds.add(itemId)
-                if remaining is not None and len(self.newImages) >= remaining:
-                    break
+        try:
+            newIds, self._lastInputId = self._discoverIdsAfter(self.imsSet, getattr(self, '_lastInputId', 0))
+            producerClosed = self.imsSet.isStreamClosed()
+            newIds, terminalConsistent = self._reconcileClosedStreamIds(self.imsSet, newIds, processedIds, producerClosed)
+            newIds = [itemId for itemId in newIds if itemId not in processedIds]
+            remaining = None if self.allImages.get() else max(0, self.outputSize.get() - len(self.images))
+            if remaining is not None:
+                newIds = newIds[:remaining]
+            self.newImages = self._loadLogicalSetItemsByIds(self.imsSet, newIds)
+            self.streamClosed = producerClosed and terminalConsistent
+        finally:
+            self.imsSet.close()
 
-        self.splitedImages = self.splitedImages + self.newImages
-        self.images = self.images + self.newImages
-
-        # Keep the latest creation value only as an efficient lower bound.
-        # The >= query plus the processed-id filter also handles equal timestamps.
-        for item in self.imsSet.iterItems(orderBy='creation', direction='DESC', limit=1):
-            self.check = item.getObjCreation()
-            break
-
-        self.streamClosed = self.imsSet.isStreamClosed()
-        self.imsSet.close()
-
-        # filling the output if needed
+        self.splitedImages += self.newImages
+        self.images += self.newImages
         self._fillingOutput()
 
     def _checkNewOutput(self):
@@ -513,75 +492,41 @@ class XmippProtTriggerData(XmippStreamingBase, ProtStreamingBase, EMProtocol, Pr
             self._fillingOutput()  # To do the last filling
 
     def _fillingOutput(self):
-        imsSqliteFn = '%s.sqlite' % self.getImagesType('lower')
         outputName = self.getOututName()
-        if len(self.images) >= self.outputSize or self.finished:
-            if self.allImages:  # Streaming and semi-streaming
-                if self.splitImages:  # Semi-streaming: Splitting the input
-                    if len(self.splitedImages) >= self.outputSize or \
-                            (self.finished and len(self.splitedImages) > 0):
-                        splitLimIndex = self.outputSize.get() if not self.finished else None
-                        numIter = 1 if len(self.splitedImages) < self.outputSize.get() \
-                            else int(len(self.splitedImages) / self.outputSize.get())
-                        for _ in range(numIter):
-                            self.outputCount += 1
-                            splitOutputName = "%s%d" % (outputName, self.outputCount)
-                            imageSet = self._loadOutputSet(self.getImagesClass(),
-                                                           '%s%d.sqlite'
-                                                           % (self.getImagesType('lower'),
-                                                              self.outputCount),
-                                                           self.splitedImages[:splitLimIndex
-                                                                              or len(self.splitedImages)],
-                                                           outputName=splitOutputName)
-                            # The splitted outputSets are always closed
-                            self._updateOutputSet(splitOutputName,
-                                                  imageSet, Set.STREAM_CLOSED)
-                            self.splitedImages = self.splitedImages[splitLimIndex:] if splitLimIndex else []
-                else:  # Full streaming case
-                    # Whether the output already exists is answered purely
-                    # by the logical attribute Scipion already knows about
-                    # - loadOutputSetForAppend (inside _loadOutputSet)
-                    # always creates fresh otherwise, never by checking a
-                    # raw .sqlite path on disk.
-                    if getattr(self, outputName, None) is None:
-                        imageSet = self._loadOutputSet(self.getImagesClass(),
-                                                       imsSqliteFn,
-                                                       self.images,
-                                                       outputName=outputName)
-                    else:
-                        # if finished no images to add, but we need to close the set
-                        imagesToAdd = self.newImages if not self.finished else []
-                        imageSet = self._loadOutputSet(self.getImagesClass(),
-                                                       imsSqliteFn,
-                                                       imagesToAdd,
-                                                       outputName=outputName)
-                    streamMode = Set.STREAM_CLOSED if self.finished else \
-                        Set.STREAM_OPEN
-                    self._updateOutputSet(outputName, imageSet, streamMode)
+        if len(self.images) < self.outputSize and not self.finished:
+            return
 
+        if self.allImages:
+            if self.splitImages:
+                if len(self.splitedImages) < self.outputSize and not (self.finished and self.splitedImages):
+                    return
+                splitLimIndex = self.outputSize.get() if not self.finished else None
+                numIter = 1 if len(self.splitedImages) < self.outputSize.get() else int(len(self.splitedImages) / self.outputSize.get())
+                for _ in range(numIter):
+                    self.outputCount += 1
+                    splitOutputName = "%s%d" % (outputName, self.outputCount)
+                    imagesToAdd = self.splitedImages[:splitLimIndex or len(self.splitedImages)]
+                    imageSet = self._loadOutputSet(self.getImagesClass(), splitOutputName, imagesToAdd)
+                    self._updateOutputSet(splitOutputName, imageSet, Set.STREAM_CLOSED)
+                    self.splitedImages = self.splitedImages[splitLimIndex:] if splitLimIndex else []
             else:
-                # Always reopen/update the static output - _loadOutputSet's
-                # loadOutputSetForAppend reuses the logical attribute if
-                # Scipion already knows about it, or creates fresh
-                # otherwise, never based on a raw .sqlite path on disk.
-                imageSet = self._loadOutputSet(self.getImagesClass(), imsSqliteFn, self.images,
-                                               outputName=outputName)
-                self._updateOutputSet(outputName, imageSet, Set.STREAM_CLOSED)
+                imagesToAdd = self.images if getattr(self, outputName, None) is None else (self.newImages if not self.finished else [])
+                imageSet = self._loadOutputSet(self.getImagesClass(), outputName, imagesToAdd)
+                self._updateOutputSet(outputName, imageSet, Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN)
+        else:
+            imageSet = self._loadOutputSet(self.getImagesClass(), outputName, self.images)
+            self._updateOutputSet(outputName, imageSet, Set.STREAM_CLOSED)
 
-    def _loadOutputSet(self, SetClass, baseName, newImages, outputName=None):
-        # Reuse the logical output Scipion already knows about before
-        # falling back to the on-disk backing file, otherwise an output
-        # still awaiting its backing file to materialize would be silently
-        # discarded and replaced with an empty fresh Set.
-        outputSet, _ = loadOutputSetForAppend(
-            self, SetClass, baseName, outputName
-        )
+    def _loadOutputSet(self, SetClass, outputName, newImages):
+        baseOutputName = self.getOututName()
+        if outputName != baseOutputName and not outputName.startswith(baseOutputName):
+            raise ValueError("Unknown TriggerData output: %s" % outputName)
 
-        inputs = self.inputImages.get()
-        outputSet.copyInfo(inputs)
+        suffix = outputName[len(baseOutputName):]
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffix)
+        if created:
+            outputSet.copyInfo(self.inputImages.get())
 
-        # Resume may replay items already persisted before a crash. Append only
-        # missing ids so reopening an existing output is idempotent.
         outputIds = set(outputSet.getIdSet()) if outputSet.getSize() else set()
         for image in newImages:
             imageId = image.getObjId()

@@ -259,6 +259,27 @@ class TestEstimateGain(BaseTest):
         self.launchProtocol(protGain)
 
 
+class TestMovieStreamingThreadValidation(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testMovieDoseAnalysisRequiresThreeThreads(self):
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.numberOfThreads.set(2)
+        self.assertTrue(prot._validateParallelProcessing())
+        prot.numberOfThreads.set(3)
+        self.assertEqual(prot._validateParallelProcessing(), [])
+
+    def testMovieGainRequiresThreeThreads(self):
+        prot = self.newProtocol(XmippProtMovieGain)
+        prot.numberOfThreads.set(2)
+        self.assertTrue(prot._validateParallelProcessing())
+        prot.numberOfThreads.set(3)
+        self.assertEqual(prot._validateParallelProcessing(), [])
+
+
+
 class TestMaxShift(BaseTest):
     @classmethod
     def setData(cls):
@@ -474,6 +495,74 @@ class TestMaxShift(BaseTest):
         self._checkMaxShiftFiltering(protDoMic, label,  noBin=True, hasMic=True, results=[True, True])
 
 
+class TestMovieMaxShiftState(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testLoadMovieOutputUsesLogicalFactoryWithoutPhysicalStorage(self):
+        class InputSet:
+            pass
+
+        class OutputSet:
+            def __init__(self):
+                self.copyInfoSource = None
+
+            def copyInfo(self, inputSet):
+                self.copyInfoSource = inputSet
+
+        prot = self.newProtocol(XmippProtMovieMaxShift)
+        inputSet = InputSet()
+        outputSet = OutputSet()
+        calls = []
+        prot.inputMovies = _InputPointer(inputSet)
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+        prot._getPath = lambda *args, **kwargs: self.fail('MovieMaxShift must not consult a physical .sqlite output path.')
+
+        result = prot._loadOutputSet(SetOfMovies, 'outputMovies')
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls[0][0], 'outputMovies')
+        self.assertIs(outputSet.copyInfoSource, inputSet)
+
+    def testLoadMicrographOutputUsesLogicalFactoryWithoutPhysicalStorage(self):
+        from pwem.objects import SetOfMicrographs
+
+        class InputSet:
+            pass
+
+        class OutputSet:
+            def __init__(self):
+                self.copyInfoSource = None
+
+            def copyInfo(self, inputSet):
+                self.copyInfoSource = inputSet
+
+        prot = self.newProtocol(XmippProtMovieMaxShift)
+        inputSet = InputSet()
+        outputSet = OutputSet()
+        calls = []
+        prot.inputMics = inputSet
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+        prot._getPath = lambda *args, **kwargs: self.fail('MovieMaxShift must not consult a physical .sqlite output path.')
+
+        result = prot._loadOutputSet(SetOfMicrographs, 'outputMicrographsDoseWeightedDiscarded')
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls[0][0], 'outputMicrographsDoseWeightedDiscarded')
+        self.assertIs(outputSet.copyInfoSource, inputSet)
+
+    def testStreamingOutputCodeDoesNotUseSqliteNames(self):
+        import inspect
+
+        loadSource = inspect.getsource(XmippProtMovieMaxShift._loadOutputSet)
+        checkSource = inspect.getsource(XmippProtMovieMaxShift._checkNewOutput)
+
+        self.assertNotIn('.sqlite', loadSource)
+        self.assertNotIn('.sqlite', checkSource)
+
+
+
 class TestMovieDoseAnalysis(BaseTest):
 
     @classmethod
@@ -664,6 +753,53 @@ class TestMovieAlignmentConsensus(BaseTest):
 
 
 
+
+class TestMovieAlignmentConsensusBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testLoadOutputSetUsesLogicalFactoryWithoutPhysicalStorage(self):
+        class InputMovies:
+            def getSamplingRate(self):
+                return 1.5
+
+        class Pointer:
+            def get(self):
+                return InputMovies()
+
+        class OutputSet:
+            STREAM_OPEN = 1
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+            def setSamplingRate(self, samplingRate):
+                self.samplingRate = samplingRate
+
+        class SetClass:
+            pass
+
+        prot = self.newProtocol(XmippProtConsensusMovieAlignment)
+        outputSet = OutputSet()
+        calls = []
+        prot.inputMovies1 = Pointer()
+        prot._getBinFactor = lambda: 1
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+        prot._getPath = lambda *args, **kwargs: self.fail('MovieAlignmentConsensus output loading must not consult a physical path.')
+
+        result = prot._loadOutputSet(SetClass, 'outputMovies')
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls, [('outputMovies', SetClass, '')])
+        self.assertIsInstance(outputSet.inputSet, InputMovies)
+
+    def testOutputPublishingDoesNotUsePhysicalSqliteNames(self):
+        import inspect
+        source = '\n'.join((inspect.getsource(XmippProtConsensusMovieAlignment._loadOutputSet), inspect.getsource(XmippProtConsensusMovieAlignment._checkNewOutput)))
+        self.assertNotIn('.sqlite', source)
+        self.assertNotIn('SetClass(filename=', source)
+        self.assertNotIn('_getPath(baseName)', source)
+
+
 class _InputPointer:
     def __init__(self, value):
         self.value = value
@@ -788,7 +924,7 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot._updateOutputSet = lambda *args, **kwargs: None
         prot._updateDosePlots = lambda *args, **kwargs: None
         prot._store = lambda: None
-        prot._loadOutputSet = lambda setClass, baseName: prot.outputMovies if baseName == 'movies.sqlite' else prot.outputMoviesDiscarded
+        prot._loadOutputSet = lambda setClass, baseName: prot.outputMovies if baseName == 'outputMovies' else prot.outputMoviesDiscarded
 
         with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
             prot._checkNewOutput()
@@ -880,7 +1016,7 @@ class TestMovieDoseAnalysisState(BaseTest):
         ):
             outputSet = prot._loadOutputSet(
                 FreshOutputSet,
-                'movies.sqlite',
+                'outputMovies',
             )
 
         self.assertIs(
@@ -1175,7 +1311,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         accepted = OutputSet()
         discarded = OutputSet()
-        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'outputMovies' else discarded
 
         with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
             prot._checkNewOutput()
@@ -1430,7 +1566,7 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot._loadOutputSet = (
             lambda setClass, baseName:
             accepted
-            if baseName == 'movies.sqlite'
+            if baseName == 'outputMovies'
             else discarded
         )
 
@@ -1475,7 +1611,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         accepted = OutputSet()
         discarded = OutputSet()
-        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'outputMovies' else discarded
 
         with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
             prot._checkNewOutput()
@@ -1515,7 +1651,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         accepted = OutputSet()
         discarded = OutputSet()
-        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'outputMovies' else discarded
 
         with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
             with patch('builtins.open') as openFile:
@@ -1566,7 +1702,7 @@ class TestMovieDoseAnalysisState(BaseTest):
         prot._loadOutputSet = (
             lambda setClass, baseName:
             accepted
-            if baseName == 'movies.sqlite'
+            if baseName == 'outputMovies'
             else discarded
         )
 
@@ -1629,6 +1765,105 @@ class TestMovieDoseAnalysisState(BaseTest):
         self.assertFalse(hasattr(prot, 'mu'))
         self.assertEqual(discarded.ids, [1, 2])
         self.assertEqual(prot._doneIds, {1, 2})
+
+
+
+
+    def testLoadOutputSetUsesLogicalProtocolFactoryWithoutPhysicalStorage(self):
+        class InputSet:
+            pass
+
+        class OutputSet:
+            STREAM_OPEN = 'open'
+
+            def __init__(self):
+                self.copyInfoSource = None
+
+            def setStreamState(self, state):
+                pass
+
+            def copyInfo(self, inputSet):
+                self.copyInfoSource = inputSet
+
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        inputSet = InputSet()
+        prot.inputMovies = _InputPointer(inputSet)
+        outputSet = OutputSet()
+        factoryCalls = []
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': factoryCalls.append((outputName, setClass, suffix)) or (outputSet, True)
+        prot._getPath = lambda *args, **kwargs: self.fail('MovieDoseAnalysis output loading must not consult a physical .sqlite path.')
+
+        result = prot._loadOutputSet(SetOfMovies, 'outputMovies')
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(factoryCalls, [('outputMovies', SetOfMovies, '')])
+        self.assertIs(outputSet.copyInfoSource, inputSet)
+
+    def testCheckNewOutputRequestsLogicalOutputNames(self):
+        from unittest.mock import patch
+
+        Movie = _DoseTestMovie
+        OutputSet = _OrderedOutputSet
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.mu = 1.0
+        prot.usingExperimental = False
+        prot.stats = {1: {'mean': 1.0, 'std': 0.0, 'min': 1.0, 'max': 1.0}}
+        prot.meanDoseList = [1.0]
+        prot.meanDoseById = {1: 1.0}
+        prot.insertedIds = [1, 2]
+        prot.processedIds = [1, 2]
+        prot.medianDifferences = []
+        prot.medianDifferenceIds = []
+        prot.medianDoseTemporal = []
+        prot.framesRange = (1, 1, 1)
+        prot.isStreamClosed = False
+        prot._doneIds = set()
+        prot._hasEnoughDoseSamples = lambda: False
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._getInputSize = lambda: 2
+        prot._loadMoviesByIds = lambda movieIds: {movieId: Movie(movieId) for movieId in movieIds}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda movieIds, accepted: prot._doneIds.update(movieIds)
+        prot._updateDosePlots = lambda *args, **kwargs: None
+        prot._store = lambda: None
+        accepted = OutputSet()
+        discarded = OutputSet()
+        requestedOutputNames = []
+
+        def loadOutputSet(setClass, outputName):
+            requestedOutputNames.append(outputName)
+            return accepted if len(requestedOutputNames) == 1 else discarded
+
+        prot._loadOutputSet = loadOutputSet
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._checkNewOutput()
+
+        self.assertEqual(requestedOutputNames, ['outputMovies', 'outputMoviesDiscarded'])
+
+    def testPublishFailedMoviesRequestsLogicalDiscardedOutputName(self):
+        from unittest.mock import patch
+
+        Movie = _DoseTestMovie
+        OutputSet = _OrderedOutputSet
+        prot = self.newProtocol(XmippProtMovieDoseAnalysis)
+        prot.framesRange = (1, 1, 1)
+        prot._loadMoviesByIds = lambda movieIds: {movieId: Movie(movieId) for movieId in movieIds}
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._registerDoneIds = lambda *args, **kwargs: None
+        discarded = OutputSet()
+        requestedOutputNames = []
+
+        def loadOutputSet(setClass, outputName):
+            requestedOutputNames.append(outputName)
+            return discarded
+
+        prot._loadOutputSet = loadOutputSet
+
+        with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute'):
+            prot._publishFailedMovies([1], 0)
+
+        self.assertEqual(requestedOutputNames, ['outputMoviesDiscarded'])
 
 
     def testLoadLogicalSetReturnsOpenSet(self):
@@ -1812,7 +2047,7 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         accepted = OutputSet()
         discarded = OutputSet()
-        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'movies.sqlite' else discarded
+        prot._loadOutputSet = lambda setClass, baseName: accepted if baseName == 'outputMovies' else discarded
 
         with patch('xmipp3.protocols.protocol_movie_dose_analysis.setAttribute') as setAttr:
             prot._checkNewOutput()
@@ -1903,4 +2138,3 @@ class TestMovieDoseAnalysisState(BaseTest):
 
         self.assertIsNotNone(stats)
         self.assertEqual([call.args[0] for call in imageHandler.read.call_args_list], ['1@movie.mrcs', '3@movie.mrcs', '5@movie.mrcs'])
-
