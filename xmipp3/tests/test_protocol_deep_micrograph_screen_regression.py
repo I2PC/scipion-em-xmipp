@@ -35,6 +35,9 @@ class _OutputCoords:
         self.micIds = set(micIds or [])
         self.enabledAppend = False
 
+    def loadAllProperties(self):
+        pass
+
     def getSize(self):
         return len(self.micIds)
 
@@ -736,3 +739,44 @@ class TestXmippDeepMicrographScreenInputDiscovery(unittest.TestCase):
         keys = deep_screen.XmippProtDeepMicrographScreen._getFinishedProcessedMicKeys(harness)
 
         self.assertEqual({'mic_001', 'mic_002'}, keys)
+
+
+class _RefreshRequiredOutputCoords:
+    def __init__(self, micIds):
+        self.micIds = set(micIds)
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def getSize(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted coordinates must be refreshed before reading their size.'
+            )
+        return len(self.micIds)
+
+    def getUniqueValues(self, attr):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted coordinates must be refreshed before reading their micrograph ids.'
+            )
+        if attr != '_micId':
+            raise AssertionError('Unexpected attribute: %s' % attr)
+        return list(self.micIds)
+
+
+class TestXmippDeepMicrographScreenLogicalOutputRestore(unittest.TestCase):
+    def testGetOutputMicIdsRefreshesPersistedLogicalOutput(self):
+        outputCoords = _RefreshRequiredOutputCoords([3, 7])
+
+        class _Harness:
+            def getOutput(self):
+                return outputCoords
+
+        protocol = _Harness()
+
+        micIds = deep_screen.XmippProtDeepMicrographScreen._getOutputMicIds(protocol)
+
+        self.assertEqual({3, 7}, micIds)
+        self.assertTrue(outputCoords.loaded)

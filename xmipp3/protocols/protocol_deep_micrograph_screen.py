@@ -726,6 +726,8 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
     def _getOutputMicIds(self):
         if not hasattr(self, '_outputMicIds'):
             outputCoords = self.getOutput()
+            if outputCoords is not None:
+                outputCoords.loadAllProperties()
             self._outputMicIds = (
                 set() if outputCoords is None or outputCoords.getSize() == 0
                 else {int(micId) for micId in outputCoords.getUniqueValues('_micId')}
