@@ -354,7 +354,7 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         self.assertEqual('outputMicrographs', prot._resolveMicsOutputName())
 
-    def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
+    def testStreamingMovieOutputReusesLogicalSet(self):
         class InputPointer:
             def get(self):
                 return object()
@@ -363,19 +363,17 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         logicalOutput = LogicalOutputSetProbe()
         prot.outputMovies = logicalOutput
         prot.inputMovies1 = InputPointer()
-        prot._getPath = lambda baseName: '/tmp/' + baseName
 
         outputSet = prot._loadOutputSet(
             FreshOutputSetProbe,
-            'movies.sqlite',
+            'outputMovies',
             fixSampling=False,
         )
 
         self.assertIs(
             outputSet,
             logicalOutput,
-            "Streaming movie output must reuse the logical Set when "
-            "the legacy SQLite file is absent.",
+            "Streaming movie output must reuse the persisted logical Set.",
         )
         self.assertEqual(
             1,
@@ -586,3 +584,37 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot.fillOutput.assert_not_called()
         prot._updateOutputSet.assert_not_called()
         prot._refreshOutputRelations.assert_not_called()
+
+
+class _RefreshRequiredConsensusOutput:
+    def __init__(self, ids):
+        self.ids = set(ids)
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def getIdSet(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted consensus output must be refreshed before reading ids.'
+            )
+        return set(self.ids)
+
+
+class TestXmippMovieAlignmentConsensusLogicalOutputRestore(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testGetAllDoneIdsRefreshesPersistedOutputs(self):
+        prot = self.newProtocol(XmippProtConsensusMovieAlignment)
+        prot.outputMovies = _RefreshRequiredConsensusOutput({1, 3})
+        prot.outputMoviesDiscarded = _RefreshRequiredConsensusOutput({2})
+
+        acceptedIds, discardedIds = prot._getAllDoneIds()
+
+        self.assertTrue(prot.outputMovies.loaded)
+        self.assertTrue(prot.outputMoviesDiscarded.loaded)
+        self.assertEqual({1, 3}, set(acceptedIds))
+        self.assertEqual({2}, set(discardedIds))

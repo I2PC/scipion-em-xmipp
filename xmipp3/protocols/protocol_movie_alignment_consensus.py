@@ -428,13 +428,11 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
 
     def _getAllDoneIds(self):
         """ Movie ids already reflected in the real, persisted outputs. """
-        acceptedIds = (
-            list(self.outputMovies.getIdSet())
-            if hasattr(self, 'outputMovies') else []
+        acceptedIds = sorted(
+            self._getPersistedOutputIds('outputMovies')
         )
-        discardedIds = (
-            list(self.outputMoviesDiscarded.getIdSet())
-            if hasattr(self, 'outputMoviesDiscarded') else []
+        discardedIds = sorted(
+            self._getPersistedOutputIds('outputMoviesDiscarded')
         )
         return acceptedIds, discardedIds
 
