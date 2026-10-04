@@ -101,6 +101,24 @@ class TestXmippDeepConsensusResume(BaseTest):
     def _newProtocol(self):
         return self.newProtocol(XmippProtScreenDeepConsensus)
 
+
+    def testFreshInputCoordinatesUsesLogicalPointer(self):
+        class CoordSet:
+            def __init__(self):
+                self.loaded = False
+
+            def getFileName(self):
+                raise AssertionError('Physical Set filename must not be used.')
+
+            def loadAllProperties(self):
+                self.loaded = True
+
+        coordSet = CoordSet()
+        prot = self._newProtocol()
+        result = prot._loadFreshInputCoordinates(SimpleNamespace(get=lambda: coordSet))
+        self.assertIs(result, coordSet)
+        self.assertTrue(coordSet.loaded)
+
     def testStreamingMicrographsUseFreshCoordinateSnapshot(self):
         class Mic:
             def __init__(self, micId, fileName):
@@ -121,21 +139,18 @@ class TestXmippDeepConsensusResume(BaseTest):
                 return iter(self.mics)
 
         class CoordSet:
-            def __init__(self, filename=None):
-                self.fresh = filename is not None
+            def __init__(self):
+                self.loaded = False
 
             def getFileName(self):
-                return 'coordinates.sqlite'
+                raise AssertionError('Streaming code must not use physical Set filenames.')
 
             def loadAllProperties(self):
-                pass
+                self.loaded = True
 
             def getMicrographs(self):
-                if not self.fresh:
-                    raise AssertionError(
-                        'Streaming code must not enumerate micrographs '
-                        'from the stale pointer object.'
-                    )
+                if not self.loaded:
+                    raise AssertionError('Streaming code must refresh the logical coordinate Set.')
                 return MicSet([
                     Mic(1, '/data/mic1.mrc'),
                     Mic(2, '/data/mic2.mrc'),
@@ -160,21 +175,18 @@ class TestXmippDeepConsensusResume(BaseTest):
                 return '/data/mic2.mrc'
 
         class CoordSet:
-            def __init__(self, filename=None):
-                self.fresh = filename is not None
+            def __init__(self):
+                self.loaded = False
 
             def getFileName(self):
-                return 'coordinates.sqlite'
+                raise AssertionError('Streaming code must not use physical Set filenames.')
 
             def loadAllProperties(self):
-                pass
+                self.loaded = True
 
             def iterCoordinates(self, mic):
-                if not self.fresh:
-                    raise AssertionError(
-                        'Streaming code must not read coordinates '
-                        'from the stale pointer object.'
-                    )
+                if not self.loaded:
+                    raise AssertionError('Streaming code must refresh the logical coordinate Set.')
                 return iter([object()])
 
             def close(self):
@@ -193,17 +205,17 @@ class TestXmippDeepConsensusResume(BaseTest):
 
     def testParentClosureUsesFreshCoordinateSnapshot(self):
         class CoordSet:
-            def __init__(self, filename=None):
-                self.fresh = filename is not None
+            def __init__(self):
+                self.loaded = False
 
             def getFileName(self):
-                return 'coordinates.sqlite'
+                raise AssertionError('Streaming code must not use physical Set filenames.')
 
             def loadAllProperties(self):
-                pass
+                self.loaded = True
 
             def isStreamOpen(self):
-                return not self.fresh
+                return not self.loaded
 
             def close(self):
                 pass
@@ -225,16 +237,18 @@ class TestXmippDeepConsensusResume(BaseTest):
         class CoordSet:
             snapshot = 0
 
-            def __init__(self, filename=None):
-                self.fresh = filename is not None
+            def __init__(self):
+                self.loaded = False
 
             def getFileName(self):
-                return 'coordinates.sqlite'
+                raise AssertionError('Streaming code must not use physical Set filenames.')
 
             def loadAllProperties(self):
-                pass
+                self.loaded = True
 
             def getMicrographs(self):
+                if not self.loaded:
+                    raise AssertionError('Streaming code must refresh the logical coordinate Set.')
                 CoordSet.snapshot += 1
                 return MicSet(CoordSet.snapshot)
 

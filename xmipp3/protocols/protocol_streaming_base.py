@@ -13,7 +13,8 @@ from pwem.objects import Acquisition, Movie, MovieAlignment
 class XmippStreamingBase:
     """Backend-agnostic helpers for Xmipp streaming protocols."""
 
-    def _loadLogicalSet(self, pointer):
+    @staticmethod
+    def _loadLogicalSet(pointer):
         """Load and return the logical Set referenced by ``pointer``."""
         inputSet = pointer.get()
         inputSet.loadAllProperties()

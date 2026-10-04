@@ -47,6 +47,7 @@ from pyworkflow.protocol import params, STATUS_NEW
 import pwem.emlib.metadata as md
 from pwem import emlib
 from xmipp3.base import XmippProtocol
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput, IN_COORDS_POS_DIR_BASENAME
 from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             micrographToCTFParam, writeSetOfParticles,
@@ -1943,11 +1944,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       return partSet
 
     def _loadFreshInputCoordinates(self, coordPointer):
-        """Open a fresh coordinate Set snapshot for streaming reads."""
-        coordSet = coordPointer.get()
-        freshSet = coordSet.__class__(filename=coordSet.getFileName())
-        freshSet.loadAllProperties()
-        return freshSet
+        """Refresh and return the logical coordinate Set for streaming reads."""
+        return XmippStreamingBase._loadLogicalSet(coordPointer)
 
     def getMicrographFnsWithCoordinates(self, shared=True):
         """Return micrograph filenames that already have coordinates."""
