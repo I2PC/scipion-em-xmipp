@@ -53,8 +53,14 @@ class TestCTFConsensusBackendIndependence(BaseTest):
             pass
 
         class InputCTFSet:
+            def loadAllProperties(self):
+                pass
+
             def getMicrographs(self):
                 return MicSet()
+
+            def close(self):
+                pass
 
         class Pointer:
             def get(self):
@@ -80,6 +86,48 @@ class TestCTFConsensusBackendIndependence(BaseTest):
         source = '\n'.join((inspect.getsource(XmippProtCTFConsensus._loadOutputSet), inspect.getsource(XmippProtCTFConsensus._checkNewOutput)))
         self.assertNotIn('.sqlite', source)
         self.assertIn('_loadOrCreateOutputSet(', source)
+
+
+    def testNewOutputLoadsLogicalInputBeforeUsingMicrographs(self):
+        class InputCtfSet:
+            def __init__(self):
+                self.loaded = False
+                self.closed = False
+
+            def loadAllProperties(self):
+                self.loaded = True
+
+            def getMicrographs(self):
+                if not self.loaded:
+                    raise AssertionError('Logical input must be refreshed before reading its micrographs.')
+                return object()
+
+            def close(self):
+                self.closed = True
+
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class OutputSet:
+            def setMicrographs(self, micrographs):
+                self.micrographs = micrographs
+
+        inputSet = InputCtfSet()
+        outputSet = OutputSet()
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.inputCTF = InputPointer(inputSet)
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': (outputSet, True)
+
+        result = prot._loadOutputSet(SetOfCTF, OUTPUT_CTF)
+
+        self.assertIs(result, outputSet)
+        self.assertTrue(inputSet.loaded)
+        self.assertTrue(inputSet.closed)
+        self.assertIsNotNone(outputSet.micrographs)
 
 
 class TestXmippCTFConsensusBase(BaseTest):

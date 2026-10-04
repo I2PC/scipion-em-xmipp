@@ -889,11 +889,15 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
 
         outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffix)
         if created:
-            micSet = self.inputCTF.get().getMicrographs()
-            if issubclass(SetClass, SetOfMicrographs):
-                outputSet.copyInfo(micSet)
-            else:
-                outputSet.setMicrographs(micSet)
+            inputCtfSet = self._loadLogicalSet(self.inputCTF)
+            try:
+                micSet = inputCtfSet.getMicrographs()
+                if issubclass(SetClass, SetOfMicrographs):
+                    outputSet.copyInfo(micSet)
+                else:
+                    outputSet.setMicrographs(micSet)
+            finally:
+                inputCtfSet.close()
 
         return outputSet
 
