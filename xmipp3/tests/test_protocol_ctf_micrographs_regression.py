@@ -133,3 +133,43 @@ class TestXmippCtfStreamingFailures(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _PersistedCtfOutput:
+    def __init__(self):
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def getSize(self):
+        return 0
+
+
+class TestXmippCtfLogicalOutputResume(unittest.TestCase):
+    def testOutputIsRefreshedBeforeTerminalStreamUpdate(self):
+        outputSet = _PersistedCtfOutput()
+
+        class _Harness(ctf_micrographs.XmippStreamingBase):
+            def __init__(self):
+                self.finished = False
+                self.streamClosed = True
+                self.micDict = {}
+                self.outputCTF = outputSet
+                self.streamUpdated = False
+
+            def _getFinishedProcessedMicKeys(self):
+                return set()
+
+            def _updateStreamState(self, streamMode):
+                if not self.outputCTF.loaded:
+                    raise AssertionError('Persisted output must be refreshed before the terminal stream update.')
+                self.streamUpdated = True
+
+        protocol = _Harness()
+
+        ctf_micrographs.XmippProtCTFMicrographs._checkNewOutput(protocol)
+
+        self.assertTrue(outputSet.loaded)
+        self.assertTrue(protocol.finished)
+        self.assertTrue(protocol.streamUpdated)
