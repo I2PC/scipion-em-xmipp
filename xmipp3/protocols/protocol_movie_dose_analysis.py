@@ -910,8 +910,12 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
         self._lastPlotCount = doneCount
 
     def _loadDoneIdsCache(self):
-        acceptedIds = set(self.outputMovies.getIdSet()) if hasattr(self, OUTPUT_MOVIES) else set()
-        discardedIds = set(self.outputMoviesDiscarded.getIdSet()) if hasattr(self, OUTPUT_MOVIES_DISCARDED) else set()
+        acceptedIds = self._getPersistedOutputIds(
+            OUTPUT_MOVIES,
+        )
+        discardedIds = self._getPersistedOutputIds(
+            OUTPUT_MOVIES_DISCARDED,
+        )
         self._acceptedIds = acceptedIds
         self._discardedIds = discardedIds
         self._doneIds = acceptedIds.union(discardedIds)

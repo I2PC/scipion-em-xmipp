@@ -359,3 +359,37 @@ class TestMovieDoseAnalysisLogicalOutputRestore(unittest.TestCase):
         self.assertEqual({2}, prot._discardedIds)
         self.assertEqual({1, 2}, prot._doneIds)
         self.assertEqual(1.15, prot.mu)
+
+
+class _RefreshRequiredDoseIdOutput:
+    def __init__(self, ids):
+        self.ids = set(ids)
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def getIdSet(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted dose output must be refreshed before reading ids.'
+            )
+        return set(self.ids)
+
+
+class TestMovieDoseAnalysisDoneCacheRestore(unittest.TestCase):
+    def testDoneIdsCacheRefreshesPersistedOutputsBeforeReadingIds(self):
+        accepted = _RefreshRequiredDoseIdOutput({1, 3})
+        discarded = _RefreshRequiredDoseIdOutput({2})
+
+        prot = XmippProtMovieDoseAnalysis()
+        prot.outputMovies = accepted
+        prot.outputMoviesDiscarded = discarded
+
+        prot._loadDoneIdsCache()
+
+        self.assertTrue(accepted.loaded)
+        self.assertTrue(discarded.loaded)
+        self.assertEqual({1, 3}, prot._acceptedIds)
+        self.assertEqual({2}, prot._discardedIds)
+        self.assertEqual({1, 2, 3}, prot._doneIds)
