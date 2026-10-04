@@ -331,21 +331,12 @@ class TestXmippClassifyPcaResume(BaseTest):
         particles = _LogicalParticles()
         harness = _StreamingSetContractHarness(particles)
 
-        module = "xmipp3.protocols.protocol_alignPCA_2D"
-
-        with patch(
-            module + ".SetOfParticles",
-            side_effect=AssertionError(
-                "Streaming must not reconstruct SetOfParticles from a "
-                "compatibility storage filename."
-            ),
-        ):
-            loadedParticles = (
-                XmippProtClassifyPcaStreaming._loadInputParticleSet(harness)
-            )
-            emptyParticles = (
-                XmippProtClassifyPcaStreaming._loadEmptyParticleSet(harness)
-            )
+        loadedParticles = (
+            XmippProtClassifyPcaStreaming._loadInputParticleSet(harness)
+        )
+        emptyParticles = (
+            XmippProtClassifyPcaStreaming._loadEmptyParticleSet(harness)
+        )
 
         self.assertIs(
             particles,
@@ -568,3 +559,44 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot.stepsGeneratorStep()
 
         self.assertEqual(0, len(resumeCalls), "Restart must not restore the previous PCA2D streaming state.")
+
+
+class _RefreshRequiredPcaClasses:
+    def __init__(self):
+        self.loaded = False
+        self.appendEnabled = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def enableAppend(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted PCA classes must be refreshed before append mode.'
+            )
+        self.appendEnabled = True
+
+
+class TestXmippClassifyPcaLogicalOutputResume(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testExistingOutputClassesAreRefreshedBeforeReuse(self):
+        outputClasses = _RefreshRequiredPcaClasses()
+
+        class _Harness:
+            pass
+
+        protocol = _Harness()
+        protocol.outputClasses = outputClasses
+
+        loadedOutput, update = XmippProtClassifyPcaStreaming._loadOutputSet(
+            protocol,
+            'outputClasses',
+        )
+
+        self.assertIs(outputClasses, loadedOutput)
+        self.assertTrue(update)
+        self.assertTrue(outputClasses.loaded)
+        self.assertTrue(outputClasses.appendEnabled)

@@ -735,6 +735,8 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
             outputSet = self._createSetOfClasses2D(self._getInputPointer())
             outputSet.setStreamState(Set.STREAM_OPEN)
         else:
+            outputSet.loadAllProperties()
+            outputSet.enableAppend()
             update = True
 
         return outputSet, update
