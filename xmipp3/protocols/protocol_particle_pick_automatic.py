@@ -369,7 +369,10 @@ class XmippParticlePickingAutomatic(XmippStreamingBase, ProtStreamingBase,
         # Get pointer to input micrographs
         self.particlePickingRun = self.xmippParticlePicking.get()
 
-        copyId = self._insertFunctionStep('copyInputFilesStep')
+        copyId = self._insertFunctionStep(
+            'copyInputFilesStep',
+            prerequisites=[],
+        )
 
         return [copyId]
 

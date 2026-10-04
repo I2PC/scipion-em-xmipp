@@ -466,6 +466,32 @@ class TestXmippCTFEstimation(TestXmippBase):
 
         self.assertEqual(len(loadCalls), 3)
 
+
+class TestXmippAutomaticPickingBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testInitialCopyStepDoesNotDependOnStreamingGenerator(self):
+        prot = self.newProtocol(XmippParticlePickingAutomatic)
+        prot.xmippParticlePicking.set(prot)
+
+        insertedSteps = []
+
+        def insertFunctionStep(func, *args, **kwargs):
+            insertedSteps.append((func, kwargs.get('prerequisites')))
+            return len(insertedSteps)
+
+        prot._insertFunctionStep = insertFunctionStep
+
+        initialIds = prot._insertInitialSteps()
+
+        self.assertEqual(initialIds, [1])
+        self.assertEqual(insertedSteps, [
+            ('copyInputFilesStep', [])
+        ])
+
+
 class TestXmippAutomaticPicking(TestXmippBase):
     """This class check if the protocol to pick the micrographs automatically in Xmipp works properly."""
     @classmethod
@@ -1197,12 +1223,22 @@ class TestParticlePickConsensusBackendIndependence(BaseTest):
         outputSet = OutputSet()
         calls = []
         prot.getMainInput = lambda: MainInput()
-        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+        prot._loadOrCreateOutputSet = (
+            lambda outputName, setClass, suffix='', factoryArgs=():
+            calls.append((outputName, setClass, suffix, factoryArgs))
+            or (outputSet, True)
+        )
 
         result = prot._loadOutputSet(SetOfCoordinates, prot.outputName)
 
         self.assertIs(result, outputSet)
-        self.assertEqual(calls, [(prot.outputName, SetOfCoordinates, '')])
+        self.assertEqual(
+            calls,
+            [(prot.outputName,
+              SetOfCoordinates,
+              '',
+              ('mics-pointer',))]
+        )
         self.assertEqual(outputSet.boxSize, 128)
         self.assertEqual(outputSet.micrographs, "mics-pointer")
 

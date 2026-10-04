@@ -167,7 +167,8 @@ class XmippStreamingBase:
 
         return {item.getObjId() for item in outputSet}
 
-    def _loadOrCreateOutputSet(self, outputName, SetClass, suffix=""):
+    def _loadOrCreateOutputSet(self, outputName, SetClass, suffix="",
+                               factoryArgs=()):
         outputSet = getattr(self, outputName, None)
         if outputSet is not None:
             loadAllProperties = getattr(outputSet, "loadAllProperties", None)
@@ -181,7 +182,10 @@ class XmippStreamingBase:
             return outputSet, False
 
         factory = getattr(self, "_create%s" % SetClass.__name__)
-        outputSet = factory(suffix) if suffix else factory()
+        factoryArgs = tuple(factoryArgs or ())
+        if suffix:
+            factoryArgs += (suffix,)
+        outputSet = factory(*factoryArgs)
         outputSet.setStreamState(outputSet.STREAM_OPEN)
         return outputSet, True
 

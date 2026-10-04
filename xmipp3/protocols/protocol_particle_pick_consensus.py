@@ -568,11 +568,15 @@ class XmippProtConsensusPicking(XmippStreamingBase, ProtStreamingBase,
         if outputName != self.outputName:
             raise ValueError("Unknown ParticlePickConsensus output: %s" % outputName)
 
-        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass)
+        inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
+        outputSet, created = self._loadOrCreateOutputSet(
+            outputName,
+            SetClass,
+            factoryArgs=(inMicsPointer,),
+        )
         if created:
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
-        inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
         outputSet.setMicrographs(inMicsPointer)
         return outputSet
 
