@@ -302,11 +302,10 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
         extraDir = self._getExtraPath()
         process = launchSupervisedPickerGUI(micFn, extraDir, self)
         process.wait()
-        # generate the discarded output only if there is a good output
-        if self.saveDiscarded and exists(self._getPath('coordinates.sqlite')):
+        coordSet = self.getCoords()
+        if self.saveDiscarded and coordSet:
             self.createDiscardedStep()
 
-        coordSet = self.getCoords()
         if coordSet:
             boxSize = Integer(coordSet.getBoxSize())
             self._defineOutputs(boxsize=boxSize)
