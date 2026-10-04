@@ -32,6 +32,9 @@ class _Mic:
     def getSamplingRate(self):
         return 1.0
 
+    def copyObjId(self, _other):
+        pass
+
 
 class _CtfFailureHarness:
     def __init__(self, workdir):
@@ -173,3 +176,57 @@ class TestXmippCtfLogicalOutputResume(unittest.TestCase):
         self.assertTrue(outputSet.loaded)
         self.assertTrue(protocol.finished)
         self.assertTrue(protocol.streamUpdated)
+
+
+class _CtfPlaceholderHarness:
+    def __init__(self, workdir):
+        self.workdir = workdir
+
+    def _getMicBase(self, mic):
+        return "mic_%03d" % mic.getObjId()
+
+    def _getExtraPath(self):
+        return self.workdir
+
+    def _getFileName(self, key, **kwargs):
+        root = kwargs.get("root", self.workdir)
+        micBase = kwargs.get("micBase", "mic_001")
+        return str(Path(root) / ("%s_%s.xmd" % (micBase, key)))
+
+    def _createErrorCtfParam(self, mic):
+        return ctf_micrographs.XmippProtCTFMicrographs._createErrorCtfParam(
+            self,
+            mic,
+        )
+
+    def _setPsdFiles(self, ctfModel):
+        pass
+
+
+class TestXmippCtfDurableFailureOutput(unittest.TestCase):
+    def testMissingCtfResultCreatesDisabledPlaceholder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            protocol = _CtfPlaceholderHarness(tmp)
+            mic = _Mic()
+
+            ctfModel = ctf_micrographs.XmippProtCTFMicrographs._createCtfModel(
+                protocol,
+                mic,
+                updateSampling=False,
+            )
+
+            self.assertIsNotNone(
+                ctfModel,
+                "A finished CTF step with no valid result must still produce "
+                "a durable logical placeholder instead of relying on a "
+                "failure sidecar.",
+            )
+            self.assertFalse(
+                ctfModel.isEnabled(),
+                "The durable placeholder for a failed CTF estimation must "
+                "be disabled.",
+            )
+            self.assertIs(
+                mic,
+                ctfModel.getMicrograph(),
+            )

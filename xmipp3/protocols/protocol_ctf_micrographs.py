@@ -1032,11 +1032,27 @@ class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicr
         if updateSampling:
             newSampling = mic.getSamplingRate() * self.ctfDownFactor.get()
             mic.setSamplingRate(newSampling)
-        ctfParam = self._getFileName('ctf', micBase=self._getMicBase(mic),
-                                     root=self._getExtraPath())
+
+        micBase = self._getMicBase(mic)
+        extraPath = self._getExtraPath()
+        ctfParam = self._getFileName(
+            'ctf',
+            micBase=micBase,
+            root=extraPath,
+        )
+        failed = not os.path.exists(ctfParam)
+
+        if failed:
+            ctfParam = self._createErrorCtfParam(mic)
+
         ctfModel2 = readCTFModel(ctfParam, mic)
         ctfModel2.setMicrograph(mic)
-        self._setPsdFiles(ctfModel2)
+
+        if failed:
+            ctfModel2.setEnabled(False)
+        else:
+            self._setPsdFiles(ctfModel2)
+
         return ctfModel2
 
     def _createErrorCtfParam(self, mic):
