@@ -41,7 +41,6 @@ from pyworkflow.object import Float
 from xmipp3.convert import setXmippAttribute
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
-import os
 import json
 import numpy as np
 import scipy.stats
@@ -282,6 +281,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
     """
     _label = 'consensus classes'
     _devStatus = BETA
+    _possibleOutputs = {'outputClasses': SetOfClasses}
 
     METRICS = [
         'cosine',
@@ -425,9 +425,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
     def _getSetOfClassesSubtype(self) -> type:
         return type(self._getInputClassification(0))
  
-    def _getSetOfImagesSubtype(self) -> type:
-        return type(self._getInputImages())
-
     def _getOutputIntersectionIds(self):
         return list(map(SetOfImages.getIdSet, self.outputClasses))
 
@@ -449,21 +446,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
     def _getMergedIntersectionSuffix(self, numel: int) -> str:
         return 'merged_%06d' % numel
 
-    def _getImagesSuffix(self) -> str:
-        return 'used'
- 
-    def _getOutputClassesSqliteTemplate(self) -> str:
-        return 'classes_%s.sqlite'
-
-    def _getOutputImagesSqliteTemplate(self) -> str:
-        return 'images_%s.sqlite'
-
-    def _getOutputClassesSqliteFilename(self, suffix: str = '') -> str:
-        return self._getPath(self._getOutputClassesSqliteTemplate() % suffix)
-
-    def _getOutputImagesSqliteFilename(self, suffix: str = '') -> str:
-        return self._getPath(self._getOutputImagesSqliteTemplate() % suffix)
- 
     def _writeReferenceIntersectionSizes(self, sizes, normalizedSizes):
         np.save(self._getReferenceIntersectionSizeFilename(), sizes)
         np.save(self._getReferenceIntersectionNormalizedSizeFilename(), normalizedSizes)
@@ -727,41 +709,24 @@ class XmippProtConsensusClasses(ProtClassify3D):
         return int(delta.argmin() + 1)
     
     def _obtainMergedIntersections(self, n: int) -> SetOfClasses:
-        suffix = self._getMergedIntersectionSuffix(n)
-        filename = self._getOutputClassesSqliteFilename(suffix)
-    
-        if os.path.exists(filename):
-            SetOfClassesSubtype = self._getSetOfClassesSubtype()
-            return SetOfClassesSubtype(filename=filename)
-            
-        else:
-            # Load from input
-            SetOfImagesSubtype = self._getSetOfImagesSubtype()
-            if os.path.exists(self._getOutputImagesSqliteFilename(self._getImagesSuffix())):
-                images = SetOfImagesSubtype(filename=self._getOutputImagesSqliteFilename(self._getImagesSuffix()))
-            else:
-                images = self._getInputImages()
-            classifications = self._getInputClassifications()
-            intersections = self._getOutputIntersectionIds()
-            linkage = self._readLinkageMatrix()
-            referenceSizes, normalizedReferenceSizes = self._readReferenceIntersectionSizes()
-            
-            # Merge and create the set of classes
-            merging = self._calculateMergedIntersections(intersections, linkage, stop=n)
-            merged = merging[-1]
-            outputClasses = self._createSetOfClasses(
-                images=images,
-                classifications=classifications,
-                clustering=merged,
-                suffix=suffix,
-                referenceSizes=referenceSizes,
-                normalizedReferenceSizes=normalizedReferenceSizes
-            )
-
-            self._defineOutputs(**{'merged' + str(n): outputClasses})
-            self._defineSourceRelation(self.inputClassifications, outputClasses)
+        outputName = 'merged%d' % n
+        outputClasses = getattr(self, outputName, None)
+        if outputClasses is not None:
+            outputClasses.loadAllProperties()
             return outputClasses
-        
+
+        classifications = self._getInputClassifications()
+        intersections = self._getOutputIntersectionIds()
+        linkage = self._readLinkageMatrix()
+        referenceSizes, normalizedReferenceSizes = self._readReferenceIntersectionSizes()
+        merged = self._calculateMergedIntersections(intersections, linkage, stop=n)[-1]
+        outputClasses = self._createSetOfClasses(images=self._getInputImages(), classifications=classifications, clustering=merged,
+                                                 suffix=self._getMergedIntersectionSuffix(n), referenceSizes=referenceSizes,
+                                                 normalizedReferenceSizes=normalizedReferenceSizes)
+        self._defineOutputs(**{outputName: outputClasses})
+        self._defineSourceRelation(self.inputClassifications, outputClasses)
+        return outputClasses
+
     # -------------------------- Convert functions -----------------------------
     def _createSetOfClasses(self, 
                             images: SetOfImages,
@@ -773,11 +738,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                             normalizedReferenceSizes=None ):
 
         # Create an empty set with the same images as the input classification
-        result: SetOfClasses = self._EMProtocol__createSet( # HACK
-            self._getSetOfClassesSubtype(), 
-            self._getOutputClassesSqliteTemplate(),
-            suffix
-        ) 
+        result: SetOfClasses = self._getSetOfClassesSubtype().create(self._getPath(), prefix='classes', suffix=suffix)
         result.setImages(images)
     
         # Fill the output
