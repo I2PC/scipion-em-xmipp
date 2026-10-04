@@ -558,9 +558,17 @@ class XmippParticlePickingAutomatic(XmippStreamingBase, ProtStreamingBase,
 
     def _getOutputMicIds(self):
         outputCoords = getattr(self, 'outputCoordinates', None)
-        if outputCoords is None or outputCoords.getSize() == 0:
+        if outputCoords is None:
             return set()
-        return {int(micId) for micId in outputCoords.getUniqueValues('_micId')}
+
+        outputCoords.loadAllProperties()
+        if outputCoords.getSize() == 0:
+            return set()
+
+        return {
+            int(micId)
+            for micId in outputCoords.getUniqueValues('_micId')
+        }
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):

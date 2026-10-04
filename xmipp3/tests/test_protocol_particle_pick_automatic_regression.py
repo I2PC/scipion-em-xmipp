@@ -79,6 +79,9 @@ class _OutputCoords:
     def __init__(self, micIds=None):
         self.micIds = set(micIds or [])
 
+    def loadAllProperties(self):
+        pass
+
     def getSize(self):
         return len(self.micIds)
 
@@ -261,3 +264,42 @@ class TestXmippParticlePickingAutomaticFinalizationRegression(unittest.TestCase)
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class _RefreshRequiredOutputCoords:
+    def __init__(self, micIds):
+        self.micIds = set(micIds)
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def getSize(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted outputCoordinates must be refreshed before reading size.'
+            )
+        return len(self.micIds)
+
+    def getUniqueValues(self, attr):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted outputCoordinates must be refreshed before reading mic ids.'
+            )
+        return list(self.micIds)
+
+
+class TestXmippAutomaticPickingLogicalOutputRestore(unittest.TestCase):
+    def testOutputMicIdsRefreshPersistedCoordinatesBeforeReading(self):
+        class _Harness:
+            pass
+
+        protocol = _Harness()
+        protocol.outputCoordinates = _RefreshRequiredOutputCoords({1, 3})
+
+        micIds = auto_pick.XmippParticlePickingAutomatic._getOutputMicIds(
+            protocol,
+        )
+
+        self.assertTrue(protocol.outputCoordinates.loaded)
+        self.assertEqual({1, 3}, micIds)
