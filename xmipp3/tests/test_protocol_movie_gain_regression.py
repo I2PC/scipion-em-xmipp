@@ -86,40 +86,41 @@ class TestXmippMovieGainRegression(BaseTest):
         prot.listOfMovies = [_FakeMovie(1)]
         scheduled = []
 
-        def reloadInput():
-            prot.listOfMovies = [_FakeMovie(1), _FakeMovie(2)]
-            prot.streamClosed = False
-
-        prot._loadInputList = reloadInput
+        prot._loadLogicalInputMovies = lambda watermark: (
+            [_FakeMovie(2)],
+            False,
+        )
         prot._getFirstJoinStep = lambda: None
-        prot._insertNewMoviesSteps = lambda inserted, movies: scheduled.extend(m.getObjId() for m in movies if m.getObjId() not in inserted) or []
+        prot._insertNewMoviesSteps = (
+            lambda inserted, movies:
+            scheduled.extend(
+                movie.getObjId()
+                for movie in movies
+                if movie.getObjId() not in inserted
+            ) or []
+        )
         prot.updateSteps = lambda: None
 
         prot._checkNewInput()
 
         self.assertEqual([2], scheduled)
 
-    def testProcessMovieSkipsMovieWithCorruptedGainDataAndKeepsProtocolAlive(self):
-        # Regression test: a single movie with corrupted/unreadable gain
-        # data must not crash the whole step (and hence the whole
-        # protocol via pyworkflow's fail-on-any-exception step boundary).
-        # It must be logged clearly and _processMovie must return
-        # normally so the rest of the movies keep being processed.
+    def testProcessMoviePropagatesCorruptedGainFailure(self):
+        # A corrupted gain must fail the movie step. Swallowing this error
+        # would let ProtProcessMovies mark the step as FINISHED even though
+        # the logical gain outputs were never produced.
         prot = self._newProtocol()
         prot.estimatedIds = []
         prot.estimatedResIds = []
         prot.doGainProcess = lambda movieId: True
-        prot.getInputGain = Mock(side_effect=ValueError("corrupted gain header"))
-        prot.error = Mock()
+        prot.getInputGain = Mock(
+            side_effect=ValueError("corrupted gain header"),
+        )
 
-        prot._processMovie(_FakeMovie(7))  # must not raise
+        with self.assertRaises(ValueError):
+            prot._processMovie(_FakeMovie(7))
 
-        prot.error.assert_called_once()
-        self.assertIn("7", prot.error.call_args[0][0])
-
-    def testStreamingMovieOutputReusesLogicalSetWithoutLegacySqlite(self):
-        from unittest.mock import patch
-
+    def testStreamingMovieOutputReusesLogicalSet(self):
         class InputPointer:
             def get(self):
                 return object()
@@ -128,63 +129,78 @@ class TestXmippMovieGainRegression(BaseTest):
         logicalOutput = LogicalOutputSetProbe()
         prot.outputMovies = logicalOutput
         prot.inputMovies = InputPointer()
-        prot._getPath = lambda baseName: '/tmp/' + baseName
 
-        with patch(
-            'xmipp3.protocols.protocol_movie_gain.os.path.exists',
-            return_value=False,
-        ):
-            outputSet = prot._loadOutputSet(
-                FreshOutputSetProbe,
-                'movies.sqlite',
-            )
+        outputSet = prot._loadOutputSet(
+            FreshOutputSetProbe,
+            'outputMovies',
+        )
 
         self.assertIs(
             outputSet,
             logicalOutput,
-            "Streaming movie output must reuse the logical Set when "
-            "the legacy SQLite file is absent.",
+            "Streaming movie output must reuse the persisted logical Set.",
         )
         self.assertEqual(1, logicalOutput.enableAppendCalls)
 
     def testFreshOutputSetDoesNotQueryIds(self):
         self.assertEqual(set(), XmippProtMovieGain._getOutputIds(_FreshOutputSet()))
 
-    def testOutputsAreIdempotentWithoutDoneAllSidecar(self):
-        # Regression test: done-tracking must come from the real,
-        # persisted outputMovies Set, not from a DONE_all.TXT sidecar -
-        # the append itself is already id-deduped against the real Sets,
-        # so the sidecar was only ever a redundant checkpoint.
+    def testOutputsAreIdempotentFromPersistedLogicalState(self):
+        # Persisted logical outputs are the completion truth. An already
+        # published estimated gain must not be appended again, while the
+        # missing residual gain and movie are repaired exactly once.
+        class _PersistedOutputSet(_FakeOutputSet):
+            iterItems = None
+
         prot = self._newProtocol()
         movie = _FakeMovie(1)
         prot.listOfMovies = [movie]
         prot.streamClosed = False
-        prot._isMovieDone = lambda movie: True
         prot.doGainProcess = lambda movieId: True
-        prot.getEstimatedGainPath = lambda movieId: 'estimated_%d.xmp' % movieId
-        prot.getResidualGainPath = lambda movieId: 'residual_%d.xmp' % movieId
+        prot.getEstimatedGainPath = (
+            lambda movieId: 'estimated_%d.xmp' % movieId
+        )
+        prot.getResidualGainPath = (
+            lambda movieId: 'residual_%d.xmp' % movieId
+        )
         prot._getFirstJoinStep = lambda: None
-        prot.outputMovies = _FakeOutputSet()
+        prot._getFinishedProcessMovieIds = lambda: {1}
 
-        estimated = _FakeOutputSet({1})
-        residual = _FakeOutputSet()
-        movies = prot.outputMovies
+        estimated = _PersistedOutputSet({1})
+        residual = _PersistedOutputSet()
+        movies = _PersistedOutputSet()
+
+        prot.estimatedGains = estimated
+        prot.residualGains = residual
+        prot.outputMovies = movies
+
         events = []
 
-        def loadOutputSet(SetClass, baseName, fixGain=False):
-            if baseName == prot.estimatedDatabase:
+        def loadOutputSet(SetClass, outputName, fixGain=False):
+            if outputName == 'estimatedGains':
                 return estimated
-            if baseName == prot.residualDatabase:
+            if outputName == 'residualGains':
                 return residual
-            return movies
+            if outputName == 'outputMovies':
+                return movies
+            raise AssertionError(
+                'Unexpected output name: %s' % outputName
+            )
 
         prot._loadOutputSet = loadOutputSet
-        prot._updateOutputSet = lambda outputName, outputSet, state: events.append(outputName)
+        prot._updateOutputSet = (
+            lambda outputName, outputSet, state:
+            events.append(outputName)
+        )
         prot._readDoneList = lambda: (_ for _ in ()).throw(
-            AssertionError('DONE_all.TXT must not be used as durable state.')
+            AssertionError(
+                'A sidecar must not be used as durable state.'
+            )
         )
         prot._writeDoneList = lambda done: (_ for _ in ()).throw(
-            AssertionError('DONE_all.TXT must not be written.')
+            AssertionError(
+                'A sidecar must not be written as durable state.'
+            )
         )
 
         prot._checkNewOutput()
@@ -192,7 +208,10 @@ class TestXmippMovieGainRegression(BaseTest):
         self.assertEqual([], estimated.appended)
         self.assertEqual([1], residual.appended)
         self.assertEqual([1], movies.appended)
-        self.assertEqual(['estimatedGains', 'residualGains', 'outputMovies'], events)
+        self.assertEqual(
+            ['residualGains', 'outputMovies'],
+            events,
+        )
 
     def testGetAllDoneIdsReadsRealOutputMovies(self):
         prot = self._newProtocol()
@@ -241,41 +260,39 @@ class TestXmippMovieGainRegression(BaseTest):
 
         self.assertIn('estimateOrientationStep', inserted)
 
-    def testNormalizeStepIsNotReinsertedWhenMarkerExists(self):
+    def testNormalizeStepIsNotReinsertedWhenStepAlreadyFinished(self):
         prot = self._newProtocol()
         prot.estimateOrientation = SimpleNamespace(get=lambda: False)
         prot.normalizeGain = SimpleNamespace(get=lambda: True)
         prot.convertCIStep = []
+        prot._isFunctionStepFinished = (
+            lambda name: name == 'normalizeGainStep'
+        )
 
         inserted = []
         prot._insertFunctionStep = (
-            lambda name, *args, **kwargs: inserted.append(name) or len(inserted)
+            lambda name, *args, **kwargs:
+            inserted.append(name) or len(inserted)
         )
 
-        with patch(
-                'xmipp3.protocols.protocol_movie_gain.os.path.exists',
-                return_value=True,
-        ):
-            prot._insertNewMoviesSteps({}, _FakeMoviesList())
+        prot._insertNewMoviesSteps({}, _FakeMoviesList())
 
         self.assertNotIn('normalizeGainStep', inserted)
 
-    def testNormalizeStepIsInsertedWhenMarkerAbsent(self):
+    def testNormalizeStepIsInsertedWhenStepNotFinished(self):
         prot = self._newProtocol()
         prot.estimateOrientation = SimpleNamespace(get=lambda: False)
         prot.normalizeGain = SimpleNamespace(get=lambda: True)
         prot.convertCIStep = []
+        prot._isFunctionStepFinished = lambda name: False
 
         inserted = []
         prot._insertFunctionStep = (
-            lambda name, *args, **kwargs: inserted.append(name) or len(inserted)
+            lambda name, *args, **kwargs:
+            inserted.append(name) or len(inserted)
         )
 
-        with patch(
-                'xmipp3.protocols.protocol_movie_gain.os.path.exists',
-                return_value=False,
-        ):
-            prot._insertNewMoviesSteps({}, _FakeMoviesList())
+        prot._insertNewMoviesSteps({}, _FakeMoviesList())
 
         self.assertIn('normalizeGainStep', inserted)
 
@@ -323,3 +340,54 @@ class TestXmippMovieGainFinalizationRegression(BaseTest):
         prot._checkNewInput.assert_not_called()
         prot._checkNewOutput.assert_not_called()
 
+
+class _RefreshRequiredMovieGainOutput:
+    def __init__(self, ids):
+        self.ids = set(ids)
+        self.loaded = False
+
+    def loadAllProperties(self):
+        self.loaded = True
+
+    def getIdSet(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted MovieGain output must be refreshed before reading ids.'
+            )
+        return set(self.ids)
+
+    def getSize(self):
+        if not self.loaded:
+            raise AssertionError(
+                'Persisted MovieGain output must be refreshed before reading size.'
+            )
+        return len(self.ids)
+
+
+class TestXmippMovieGainLogicalOutputRestore(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testResumeRefreshesPersistedGainOutputsBeforeReadingState(self):
+        prot = self.newProtocol(
+            XmippProtMovieGain,
+            estimateGain=True,
+            estimateResidualGain=True,
+            estimateOrientation=True,
+            normalizeGain=False,
+        )
+
+        estimated = _RefreshRequiredMovieGainOutput({1, 2})
+        oriented = _RefreshRequiredMovieGainOutput({1})
+
+        prot.estimatedGains = estimated
+        prot.orientedGain = oriented
+
+        prot._restoreEstimatedIds('estimatedIds', 'estimatedGains')
+        alreadyPublished = prot._isOutputAlreadyPublished('orientedGain')
+
+        self.assertEqual({1, 2}, set(prot.estimatedIds))
+        self.assertTrue(alreadyPublished)
+        self.assertTrue(estimated.loaded)
+        self.assertTrue(oriented.loaded)

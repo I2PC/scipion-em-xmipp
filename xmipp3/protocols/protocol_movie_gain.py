@@ -740,21 +740,19 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
             outputStep.setStatus(cons.STATUS_NEW)
 
     def _getAllDoneIds(self):
-        outputMovies = getattr(self, OUTPUT_MOVIES, None)
-        if outputMovies is None:
-            return set()
-        return self._getOutputIds(outputMovies)
+        return self._getPersistedOutputIds(OUTPUT_MOVIES)
 
     def _isOutputAlreadyPublished(self, outputName):
-        outputSet = getattr(self, outputName, None)
-        return outputSet is not None and outputSet.getSize() > 0
+        return bool(self._getPersistedOutputIds(outputName))
 
     def _restoreEstimatedIds(self, attrName, outputName):
         if hasattr(self, attrName):
             return
-        outputSet = getattr(self, outputName, None)
-        setattr(self, attrName,
-                list(self._getOutputIds(outputSet)) if outputSet is not None else [])
+        setattr(
+            self,
+            attrName,
+            sorted(self._getPersistedOutputIds(outputName)),
+        )
 
     def updateGainsOutput(self, movie, imgSet, imageFile):
         movieId = movie.getObjId()
