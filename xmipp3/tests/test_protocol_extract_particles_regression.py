@@ -160,6 +160,132 @@ class _OutputHarness:
 
 
 class TestXmippExtractParticlesRegression(unittest.TestCase):
+
+    def testLogicalMicrographRestoresMissingAcquisitionFromOwningSet(self):
+        class _Acquisition:
+            def __init__(self, voltage=None, sphericalAberration=None, amplitudeContrast=None):
+                self.voltage = voltage
+                self.sphericalAberration = sphericalAberration
+                self.amplitudeContrast = amplitudeContrast
+
+            def getVoltage(self):
+                return self.voltage
+
+            def setVoltage(self, value):
+                self.voltage = value
+
+            def getSphericalAberration(self):
+                return self.sphericalAberration
+
+            def setSphericalAberration(self, value):
+                self.sphericalAberration = value
+
+            def getAmplitudeContrast(self):
+                return self.amplitudeContrast
+
+            def setAmplitudeContrast(self, value):
+                self.amplitudeContrast = value
+
+        class _MicWithAcquisition(_Mic):
+            def __init__(self, objId, acquisition):
+                super().__init__(objId)
+                self.acquisition = acquisition
+                self.ctf = None
+
+            def getAcquisition(self):
+                return self.acquisition
+
+            def setAcquisition(self, acquisition):
+                self.acquisition = acquisition
+
+            def setCTF(self, ctf):
+                self.ctf = ctf
+
+        class _Ctf:
+            def __init__(self, objId, mic):
+                self.objId = objId
+                self.mic = mic
+
+            def getObjId(self):
+                return self.objId
+
+            def getMicrograph(self):
+                return self.mic
+
+        class _LogicalSet:
+            def __init__(self, items, acquisition=None):
+                self.items = list(items)
+                self.acquisition = acquisition
+
+            def getAcquisition(self):
+                return self.acquisition
+
+            def isStreamClosed(self):
+                return True
+
+            def close(self):
+                return None
+
+        class _Coords:
+            def getMicrographs(self, asPointer=False):
+                return "coordMics"
+
+        class _Harness:
+            def __init__(self):
+                self._micsWatermark = 0
+                self._pendingMicIds = set()
+                self._otherMicsWatermark = 0
+                self._pendingOtherMicIds = set()
+                self._otherIdByCoordId = {}
+                self._ctfWatermark = 0
+                self._pendingCtfIds = set()
+                self._ctfIdByCoordId = {}
+                self.coordDict = {}
+
+                itemAcquisition = _Acquisition()
+                setAcquisition = _Acquisition(voltage=300.0, sphericalAberration=2.7, amplitudeContrast=0.1)
+                self.mic = _MicWithAcquisition(1, itemAcquisition)
+                self.coordMicSet = _LogicalSet([self.mic], setAcquisition)
+                self.ctf = _Ctf(11, _MicWithAcquisition(1, itemAcquisition))
+                self.ctfSet = _LogicalSet([self.ctf])
+                self.ctfRelations = "ctfs"
+
+            def getCoords(self):
+                return _Coords()
+
+            def _loadLogicalSet(self, pointer):
+                if pointer == "coordMics":
+                    return self.coordMicSet
+                if pointer == "ctfs":
+                    return self.ctfSet
+                raise AssertionError("Unexpected pointer %r" % (pointer,))
+
+            def _discoverIdsAfter(self, inputSet, watermark):
+                ids = [item.getObjId() for item in inputSet.items if item.getObjId() > watermark]
+                return ids, max(ids) if ids else watermark
+
+            def _loadLogicalSetItemsByIds(self, inputSet, itemIds):
+                wanted = set(itemIds)
+                return [item for item in inputSet.items if item.getObjId() in wanted]
+
+            def _micsOther(self):
+                return False
+
+            def _useCTF(self):
+                return True
+
+            def _loadInputCoords(self, micDict):
+                return micDict
+
+        protocol = _Harness()
+
+        result = extract_particles.XmippProtExtractParticles._loadInputList(protocol)
+        acquisition = result["mic_001"].getAcquisition()
+
+        self.assertEqual(300.0, acquisition.getVoltage())
+        self.assertEqual(2.7, acquisition.getSphericalAberration())
+        self.assertEqual(0.1, acquisition.getAmplitudeContrast())
+
     def testBulkCoordinateLoadUsesSingleScan(self):
         protocol = _CoordLoadHarness(120)
         micDict = {_Mic(objId).getMicName(): _Mic(objId) for objId in range(1, 101)}

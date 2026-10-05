@@ -107,6 +107,34 @@ class XmippStreamingBase:
 
 
 
+    @staticmethod
+    def _hydrateLogicalSetItemAcquisition(inputSet, item):
+        getItemAcquisition = getattr(item, "getAcquisition", None)
+        setItemAcquisition = getattr(item, "setAcquisition", None)
+        getSetAcquisition = getattr(inputSet, "getAcquisition", None)
+        if not callable(getItemAcquisition) or not callable(setItemAcquisition) or not callable(getSetAcquisition):
+            return item
+
+        setAcquisition = getSetAcquisition()
+        if setAcquisition is None:
+            return item
+
+        itemAcquisition = getItemAcquisition()
+        if itemAcquisition is None:
+            setItemAcquisition(setAcquisition)
+            return item
+
+        for getterName, setterName in (("getMagnification", "setMagnification"), ("getVoltage", "setVoltage"), ("getSphericalAberration", "setSphericalAberration"), ("getAmplitudeContrast", "setAmplitudeContrast")):
+            itemGetter = getattr(itemAcquisition, getterName, None)
+            setGetter = getattr(setAcquisition, getterName, None)
+            itemSetter = getattr(itemAcquisition, setterName, None)
+            if callable(itemGetter) and callable(setGetter) and callable(itemSetter) and itemGetter() is None:
+                value = setGetter()
+                if value is not None:
+                    itemSetter(value)
+
+        return item
+
     def _loadLogicalSetItemsByIds(self, inputSet, itemIds, batchSize=500):
         itemIds = sorted(set(itemIds))
         if not itemIds:
@@ -114,6 +142,11 @@ class XmippStreamingBase:
 
         if hasattr(inputSet, "loadAllProperties"):
             inputSet.loadAllProperties()
+
+        def cloneItem(item):
+            item = self._hydrateLogicalSetItemAcquisition(inputSet, item)
+            clone = getattr(item, "clone", None)
+            return clone() if callable(clone) else item
 
         iterItems = getattr(inputSet, "iterItems", None)
         if callable(iterItems):
@@ -123,8 +156,7 @@ class XmippStreamingBase:
                     batch = itemIds[offset:offset + batchSize]
                     where = "id IN (%s)" % ",".join(str(itemId) for itemId in batch)
                     for item in iterItems(orderBy="id", direction="ASC", where=where):
-                        clone = getattr(item, "clone", None)
-                        items.append(clone() if callable(clone) else item)
+                        items.append(cloneItem(item))
                 return items
             except NotImplementedError:
                 pass
@@ -136,22 +168,13 @@ class XmippStreamingBase:
                 try:
                     item = getItem("id", itemId)
                 except (UnboundLocalError, KeyError):
-                    # Some logical Set implementations raise when an id is absent
-                    # instead of returning None.
                     item = None
-                if item is None:
-                    continue
-                clone = getattr(item, "clone", None)
-                items.append(clone() if callable(clone) else item)
+                if item is not None:
+                    items.append(cloneItem(item))
             return items
 
         wantedIds = set(itemIds)
-        items = []
-        for item in inputSet:
-            if item.getObjId() in wantedIds:
-                clone = getattr(item, "clone", None)
-                items.append(clone() if callable(clone) else item)
-        return items
+        return [cloneItem(item) for item in inputSet if item.getObjId() in wantedIds]
 
     @staticmethod
     def _getOutputIds(outputSet):
@@ -503,13 +526,15 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
 
     def stepsGeneratorStep(self):
         self._prepareStreamingGenerator()
+        if self.isContinued():
+            self._restorePersistedOutputIds("outputMovies")
         self._restoreFinishedStreamingMovieSteps()
 
-        while not self.finished:
+        while not self.finished and not self.isFailed():
             self._checkNewInput()
             self._checkNewOutput()
 
-            if self.finished:
+            if self.finished or self.isFailed():
                 break
 
             if self._getStreamingSleepOnWait() > 0:
@@ -517,7 +542,8 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
             else:
                 time.sleep(1)
 
-        self._finalizeStreamingGenerator()
+        if not self.isFailed():
+            self._finalizeStreamingGenerator()
 
     def _stepFinished(self, step):
         doContinue = super()._stepFinished(step)
@@ -623,7 +649,7 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
             movie.setAlignment(MovieAlignment())
 
         movie.setAttributesFromDict(movieDict, setBasic=True, ignoreMissing=True)
-        if self.isContinued() and movie.getObjId() in self._getPersistedOutputMovieIds():
+        if self.isContinued() and movie.getObjId() in getattr(self, "_persistedOutputIds", {}).get("outputMovies", set()):
             return
 
         movieFolder = self._getOutputMovieFolder(movie)
