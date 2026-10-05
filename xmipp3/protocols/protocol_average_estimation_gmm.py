@@ -24,6 +24,7 @@
 # *
 # ******************************************************************************
 from pathlib import Path
+from shlex import join, quote
 from typing import Union, Dict, List
 from enum import IntEnum
 
@@ -50,6 +51,7 @@ class EstimatorType(IntEnum):
     FOURIER_IRLS = 1
     FOURIER_MASKED = 2
     ADMM = 3
+    NOISE_CORRECTED_COSINE = 4
 
     @property
     def label(self) -> str:
@@ -82,7 +84,9 @@ def add_estimator_section(form):
         BooleanParam,
         default=True,
         help=(
-            "Apply GMM reweighting to the results of the estimator."
+            "Apply GMM reweighting to the results of the estimator. "
+            "For noise-corrected cosine, use its native GMM weighting; "
+            "disable this option for direct cosine weights. "
             "GMM reweighting makes the estimator more aggressive in "
             "rejecting possibly misaligned or corrupted particles. This means "
             "it can slightly improve performance on more contaminated datasets."
@@ -115,7 +119,7 @@ def add_estimator_section(form):
     form.addParam(
         "internalEstimatorIterations",
         IntParam,
-        condition=gmm_condition,
+        condition=f"{gmm_condition} and estimatorType != {EstimatorType.NOISE_CORRECTED_COSINE.value}",
         default=1,
         help="Number of iterations for the internal estimator",
         label="Internal iterations",
@@ -135,7 +139,7 @@ def add_estimator_section(form):
         default=True,
         help=(
             "If using a GMM-type estimator, this option makes sure the GMM model "
-            "is checked for degeneracy after the last iteration in each class. "
+            "is checked for degeneracy at each iteration in each class. "
             "The model is considered degenerate if the two GMM components are too "
             "close together, or if the component associated with good particles "
             "has too little weight."
@@ -183,6 +187,102 @@ def add_estimator_section(form):
         expertLevel=LEVEL_ADVANCED,
         label="Initial bad component mean"
     )
+
+
+    noise_condition = estimator_condition[EstimatorType.NOISE_CORRECTED_COSINE]
+    form.addParam(
+        "estimateNoiseVariance", BooleanParam, condition=noise_condition,
+        default=True, label="Estimate noise variance?",
+        help="Estimate input pixel noise variance with checkerboard MAD inside the mask. "
+             "CTF correction and alignment interpolation can make the white-noise model approximate.",
+    )
+    form.addParam(
+        "noiseVariance", FloatParam, condition=f"{noise_condition} and not estimateNoiseVariance",
+        default=1.0, label="Input noise variance",
+        help="Known per-pixel variance in the supplied image units, before score preprocessing. "
+             "This is a variance, not a standard deviation.",
+    )
+    form.addParam(
+        "poolNoiseVariance", BooleanParam, condition=f"{noise_condition} and estimateNoiseVariance",
+        default=False, label="Pool noise estimates?",
+        help="Use the median automatic variance for every image. Enable only for common noise variance.",
+        expertLevel=LEVEL_ADVANCED,
+    )
+    for name, default, label, help_text in [
+        ("noiseFilterSigma", 0.0, "Score smoothing width (pixels)",
+         "Gaussian Fourier smoothing for scores only. Zero disables smoothing; averages use original images."),
+        ("noiseMinFrequency", 0.0, "Minimum score frequency",
+         "Radial frequency in cycles/pixel. Zero disables the lower cutoff."),
+        ("noiseMaxFrequency", 0.0, "Maximum score frequency",
+         "Radial frequency in cycles/pixel. Zero disables the upper cutoff. 0.25 is half axial Nyquist."),
+        ("noiseMinSignalFraction", 0.05, "Minimum resolved signal fraction",
+         "Require corrected signal energy above this fraction of expected noise energy. "
+         "Unresolved images receive cosine zero."),
+    ]:
+        form.addParam(name, FloatParam, condition=noise_condition, default=default,
+                      label=label, help=help_text, expertLevel=LEVEL_ADVANCED)
+    form.addParam(
+        "clipNoiseCosine", BooleanParam, condition=noise_condition, default=False,
+        label="Clip corrected cosine?", expertLevel=LEVEL_ADVANCED,
+        help="Clip scores to [-1,1]. Disabled by default to avoid point masses in the GMM. "
+             "Direct weights always clip to [0,1].",
+    )
+    form.addParam(
+        "noiseWeightPower", FloatParam, condition=f"{noise_condition} and not gmmReweighting",
+        default=1.0, label="Cosine weight power", expertLevel=LEVEL_ADVANCED,
+        help="Positive exponent applied to direct cosine weights; larger values increase contrast.",
+    )
+
+
+def build_estimator_args(protocol):
+    """Build shared flags before the subcommand, then estimator-specific flags.
+
+    Native noise-corrected GMM owns its outer loop: it must not be wrapped in
+    --gmm, and gmmIterations controls --estimator-max-iter in that mode.
+    """
+    estimator = protocol._getEstimatorType()
+    native = estimator == EstimatorType.NOISE_CORRECTED_COSINE
+    use_gmm = protocol.gmmReweighting.get()
+    args = []
+    if use_gmm:
+        if native:
+            args += ["--estimator-max-iter", str(protocol.gmmIterations.get())]
+        else:
+            args += ["--gmm", "--estimator-max-iter", str(protocol.internalEstimatorIterations.get()),
+                     "--gmm-external-max-iter", str(protocol.gmmIterations.get())]
+        args += ["--gmm-initial-bad-weight", str(protocol.gmmInitialBadWeight.get()),
+                 "--gmm-initial-bad-quantile", str(protocol.gmmInitialBadQuantile.get())]
+        if protocol.checkDegenerateGmm.get():
+            args += ["--gmm-check-degenerate", "--gmm-min-component-sep", str(protocol.gmmMinSep.get()),
+                     "--gmm-min-good-weight", str(protocol.gmmMinWeight.get())]
+        else:
+            args += ["--no-gmm-check-degenerate"]
+        if protocol.saveGmmFits.get():
+            args += ["--out-gmm-diagnostics", protocol._getGmmDiagnosticsPath()]
+    else:
+        args += ["--no-gmm", "--estimator-max-iter", str(protocol.estimatorIterations.get())]
+
+    if native:
+        args += [estimator.label, "--weighting", "gmm" if use_gmm else "cosine",
+                 "--filter-sigma", str(protocol.noiseFilterSigma.get()),
+                 "--min-frequency", str(protocol.noiseMinFrequency.get()),
+                 "--min-signal-fraction", str(protocol.noiseMinSignalFraction.get()),
+                 "--clip-cosine" if protocol.clipNoiseCosine.get() else "--no-clip-cosine"]
+        maximum = protocol.noiseMaxFrequency.get()
+        if maximum != 0:
+            args += ["--max-frequency", str(maximum)]
+        if protocol.estimateNoiseVariance.get():
+            args += ["--pool-noise" if protocol.poolNoiseVariance.get() else "--no-pool-noise"]
+        else:
+            args += ["--noise-variance", str(protocol.noiseVariance.get())]
+        if not use_gmm:
+            args += ["--weight-power", str(protocol.noiseWeightPower.get())]
+    elif estimator == EstimatorType.FOURIER_MASKED:
+        args += ["fourier_irls", "--weight-approach", "per-image", "--lowpass-mask",
+                 "--lowpass-mask-cutoff", str(protocol.lowpassCutoff.get())]
+    else:
+        args += [estimator.label]
+    return join(args)
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -483,43 +583,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         # Run the GMM average estimation script for all classes
         args = (
-            f"--input-xmd {self._getPreprocessedMetadataPath()} "
-            f"--base-xmd {self._getInputParticlesPath()} "
-            f"--out-star {outputStarPath} "
-            f"--out-corrected-avgs {correctedAveragePath} "
-            f"--out-original-avgs {originalAveragePath} "
+            f"--input-xmd {quote(str(self._getPreprocessedMetadataPath()))} "
+            f"--base-xmd {quote(str(self._getInputParticlesPath()))} "
+            f"--out-star {quote(str(outputStarPath))} "
+            f"--out-corrected-avgs {quote(str(correctedAveragePath))} "
+            f"--out-original-avgs {quote(str(originalAveragePath))} "
             f"--device {device} "
         )
 
-        if self.gmmReweighting.get():
-            args += "--gmm "
-            args += f"--estimator-max-iter {self.internalEstimatorIterations.get()} "
-            args += f"--gmm-external-max-iter {self.gmmIterations.get()} "
-
-            args += f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()} "
-            args += f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()} "
-
-            if self.checkDegenerateGmm.get():
-                args += "--gmm-check-degenerate "
-                args += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
-                args += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
-            else:
-                args += "--no-gmm-check-degenerate "
-
-            if self.saveGmmFits.get():
-                args += f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
-        else:
-            args += "--no-gmm "
-            args += f"--estimator-max-iter {self.estimatorIterations.get()} "
-
-        estimatorType = self._getEstimatorType()
-        if estimatorType == EstimatorType.FOURIER_MASKED:
-            args += "fourier_irls "
-            args += "--weight-approach per-image "
-            args += "--lowpass-mask "
-            args += f"--lowpass-mask-cutoff {self.lowpassCutoff.get()} "
-        else:
-            args += f"{estimatorType.label} "
+        args += build_estimator_args(self)
 
         self.runJob("xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1)
 
