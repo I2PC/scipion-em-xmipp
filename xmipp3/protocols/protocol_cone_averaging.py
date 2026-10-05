@@ -25,6 +25,7 @@
 # ******************************************************************************
 
 from pathlib import Path
+from shlex import quote
 from typing import Dict, Union, Set
 
 from pwem.protocols import ProtClassify2D
@@ -52,6 +53,7 @@ from .protocol_average_estimation_gmm import (
     WEIGHT_COLUMN_TO_ATTRIBUTE,
     EstimatorType,
     add_estimator_section,
+    build_estimator_args,
 )
 
 
@@ -217,7 +219,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         groupingArgs = (
             f"--input-xmd {self._getInputMdPath()} "
             f"--out-star {self._getGroupingOutputStarPath()} "
-            f"--out-group-column '{self._getGroupByColumn()}' "
+            f"--out-group-column {quote(str(self._getGroupByColumn()))} "
             f"--n-groups {self.numberOfGroups.get()} "
             f"--grouping-batch-size {self.groupingBatchSize.get()} "
             f"--symmetry-group {self.symmetryGroup.get()} "
@@ -264,7 +266,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         geometryArgs = (
             f"-i '{geometryInput}' "
             f"-o '{self._getParticleStackPath()}' "
-            f"--save_metadata_stack '{self._getParticleMdPath()}' "
+            f"--save_metadata_stack {quote(str(self._getParticleMdPath()))} "
             f"--keep_input_columns "
             f"--apply_transform "
         )
@@ -280,47 +282,16 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         device = "cuda" if self.useGpu.get() else "cpu"
 
         args = (
-            f"--input-xmd '{self._getParticleMdPath()}' "
-            f"--base-xmd '{self._getInputMdPath()}' "
-            f"--out-star '{self._getAveragingOutputStarPath()}' "
+            f"--input-xmd {quote(str(self._getParticleMdPath()))} "
+            f"--base-xmd {quote(str(self._getInputMdPath()))} "
+            f"--out-star {quote(str(self._getAveragingOutputStarPath()))} "
             f"--device {device} "
-            f"--group-by-column '{self._getGroupByColumn()}' "
-            f"--out-corrected-avgs '{self._getCorrectedConeAveragesPath()}' "
-            f"--out-original-avgs '{self._getRawConeAveragesPath()}' "
+            f"--group-by-column {quote(str(self._getGroupByColumn()))} "
+            f"--out-corrected-avgs {quote(str(self._getCorrectedConeAveragesPath()))} "
+            f"--out-original-avgs {quote(str(self._getRawConeAveragesPath()))} "
         )
 
-        if self.gmmReweighting.get():
-            args += "--gmm "
-            args += f"--estimator-max-iter {self.internalEstimatorIterations.get()} "
-            args += f"--gmm-external-max-iter {self.gmmIterations.get()} "
-            
-            args += f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()} "
-            args += f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()} "
-
-            if self.checkDegenerateGmm.get():
-                args += "--gmm-check-degenerate "
-                args += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
-                args += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
-            else:
-                args += "--no-gmm-check-degenerate "
-
-            if self.saveGmmFits.get():
-                args += (
-                    f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
-                )
-        else:
-            args += "--no-gmm "
-            args += f"--estimator-max-iter {self.estimatorIterations.get()} "
-
-
-        estimatorType = self._getEstimatorType()
-        if estimatorType == "fourier_masked":
-            args += "fourier_irls "
-            args += "--weight-approach per-image "
-            args += "--lowpass-mask "
-            args += f"--lowpass-mask-cutoff {self.lowpassCutoff.get()} "
-        else:
-            args += f"{estimatorType.label} "
+        args += build_estimator_args(self)
 
         self.runJob(
             "xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1
