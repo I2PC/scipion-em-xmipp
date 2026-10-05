@@ -682,6 +682,7 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
             candidateMics = self._loadLogicalSetItemsByIds(
                 coordMicsSet, self._pendingMicIds,
             )
+            candidateMics = [XmippStreamingBase._hydrateLogicalSetItemAcquisition(coordMicsSet, mic) for mic in candidateMics]
             micDict = {mic.getMicName(): mic for mic in candidateMics}
             self.micsClosed = coordMicsSet.isStreamClosed()
         finally:
