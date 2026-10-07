@@ -547,6 +547,7 @@ class XmippProtFlexAlign(XmippStreamingMoviesMixin, ProtStreamingBase, ProtAlign
         except Exception as ex:
             self.error("We cannot process %s with the exception %s"
                        % (movie.getFileName(), ex))
+            raise
 
     def getUserAngle(self):
       anglesDic = {0:0, 1:90, 2:180, 3:270}
