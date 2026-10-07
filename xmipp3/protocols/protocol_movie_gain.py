@@ -506,7 +506,7 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
         expGainFn = self.inputMovies.get().getGain()
 
         if not movieId in self.estimatedIds:
-            self.estimatedIds.append(movieId)
+            self.estimatedIds.add(movieId)
             self.estimateGainFun(movie, noSigma=True)
 
         estGain = xmutils.readImage(estGainFn)
@@ -538,12 +538,12 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
         inputGain = self.getInputGain()
 
         if self.estimateGain.get() and not movieId in self.estimatedIds:
-                self.estimatedIds.append(movieId)
+                self.estimatedIds.add(movieId)
                 self.estimateGainFun(movie)
 
         if self.estimateResidualGain.get() and not movieId in self.estimatedResIds:
             self.info('\nEstimating residual gain')
-            self.estimatedResIds.append(movieId)
+            self.estimatedResIds.add(movieId)
             self.estimateGainFun(movie, residual=True)
 
         # If the gain hasn't been oriented or normalized, we still need
@@ -644,14 +644,16 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
 
             if missingEstimatedIds:
                 estimatedSet = self._loadOutputSet(SetOfImages, OUTPUT_ESTIMATED_GAINS)
+                knownEstimatedIds = self._getOutputIds(estimatedSet)
                 for movieId in sorted(missingEstimatedIds):
-                    estimatedSet = self.updateGainsOutput(movieById[movieId], estimatedSet, self.getEstimatedGainPath(movieId))
+                    estimatedSet = self.updateGainsOutput(movieById[movieId], estimatedSet, self.getEstimatedGainPath(movieId), knownEstimatedIds)
                 self._updateOutputSet(OUTPUT_ESTIMATED_GAINS, estimatedSet, Set.STREAM_OPEN)
 
             if missingResidualIds:
                 residualSet = self._loadOutputSet(SetOfImages, OUTPUT_RESIDUAL_GAINS)
+                knownResidualIds = self._getOutputIds(residualSet)
                 for movieId in sorted(missingResidualIds):
-                    residualSet = self.updateGainsOutput(movieById[movieId], residualSet, self.getResidualGainPath(movieId))
+                    residualSet = self.updateGainsOutput(movieById[movieId], residualSet, self.getResidualGainPath(movieId), knownResidualIds)
                 self._updateOutputSet(OUTPUT_RESIDUAL_GAINS, residualSet, Set.STREAM_OPEN)
 
             if missingMovieIds:
@@ -748,16 +750,30 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
     def _restoreEstimatedIds(self, attrName, outputName):
         if hasattr(self, attrName):
             return
+        # A set: these are only ever tested for membership and added to,
+        # and a linear scan here costs O(movies) per movie processed.
         setattr(
             self,
             attrName,
-            sorted(self._getPersistedOutputIds(outputName)),
+            set(self._getPersistedOutputIds(outputName)),
         )
 
-    def updateGainsOutput(self, movie, imgSet, imageFile):
+    def updateGainsOutput(self, movie, imgSet, imageFile, knownIds=None):
+        """Append this movie's gain image to the output Set.
+
+        ``knownIds`` lets a caller publishing several movies read the
+        output ids once instead of once per movie, which otherwise makes
+        a single poll cost O(published x publishing).
+        """
         movieId = movie.getObjId()
-        if movieId in self._getOutputIds(imgSet):
+
+        if knownIds is None:
+            knownIds = self._getOutputIds(imgSet)
+
+        if movieId in knownIds:
             return imgSet
+
+        knownIds.add(movieId)
 
         imgOut = Image()
         imgOut.setObjId(movieId)
@@ -875,7 +891,7 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
                 firstMovie = self.inputMovies.get().getFirstItem()
                 movieId = firstMovie.getObjId()
                 if not movieId in self.estimatedIds:
-                    self.estimatedIds.append(movieId)
+                    self.estimatedIds.add(movieId)
                     self.estimateGainFun(firstMovie)
                 finalGainFn = self.getEstimatedGainPath(movieId)
 

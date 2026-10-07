@@ -428,6 +428,12 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
         self.newDeps = []
 
         while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
             self._checkNewInput()
             self._checkNewOutput()
 
@@ -580,6 +586,12 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
             self._convertCoordinates(mic, coordList)
             self.info("Extracting micrograph: %s " % mic.getFileName())
             micList.append(mic)
+
+            # The coordinates have been written out, so this micrograph's
+            # list is not needed again. Keeping it turns coordDict into a
+            # record of the whole run: with a million micrographs that is
+            # hundreds of millions of live Coordinate objects.
+            del self.coordDict[mic.getObjId()]
 
         self._computeMaskForMicrographList(micList, *args)
 

@@ -461,6 +461,12 @@ There are different merit values to be calculated:
         self._prepareStreamingGenerator()
 
         while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
             self._checkNewInput()
             self._checkNewOutput()
 

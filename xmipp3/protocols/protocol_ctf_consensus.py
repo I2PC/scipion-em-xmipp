@@ -420,6 +420,12 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
         self.newDeps = []
 
         while not self.finished:
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
             self._checkNewInput()
             self._checkNewOutput()
 
@@ -581,10 +587,14 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
         # Check for newly done items
         acceptedIds = list(self.acceptedIds)
         discardedIds = list(self.discardedIds)
+        # Membership against a list is linear; these comprehensions would
+        # otherwise cost O(accepted x done) on every poll.
+        doneAcceptedSet = set(doneListAccepted)
+        doneDiscardedSet = set(doneListDiscarded)
         newDoneAccepted = [ctfId for ctfId in acceptedIds
-                           if ctfId not in doneListAccepted]
+                           if ctfId not in doneAcceptedSet]
         newDoneDiscarded = [ctfId for ctfId in discardedIds
-                            if ctfId not in doneListDiscarded]
+                            if ctfId not in doneDiscardedSet]
 
         firstTimeAccepted = len(doneListAccepted) == 0
         firstTimeDiscarded = len(doneListDiscarded) == 0

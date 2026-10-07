@@ -485,9 +485,13 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrograp
     def _checkNewOutput(self):
         with self._lock:
             doneListIds, _, _, _ = self._getAllDoneIds()
-            processedIds = self.processedIds
-            newDone = [micId for micId in processedIds if micId not in doneListIds]
-            allDone = len(doneListIds) + len(newDone)
+            # Membership against a list is linear, so this comprehension
+            # costs O(done x processed) on every single poll: a second per
+            # poll at 20k micrographs, and tens of minutes at a million.
+            doneIdSet = set(doneListIds)
+            processedIds = list(self.processedIds)
+            newDone = [micId for micId in processedIds if micId not in doneIdSet]
+            allDone = len(doneIdSet) + len(newDone)
             inputMicSet = self._loadLogicalSet(self.inputMicrographs)
             try:
                 maxMicSize = inputMicSet.getSize()

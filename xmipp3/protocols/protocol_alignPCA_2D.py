@@ -423,6 +423,12 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
         checkInterval = 5
 
         while not self.finish:
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
             particlesSet = self._loadInputParticleSet()
             self.streamState = particlesSet.getStreamState()
 

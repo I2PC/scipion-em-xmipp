@@ -348,6 +348,12 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
         self.newDeps = []
 
         while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
             self._checkNewInput()
             self._checkNewOutput()
 
@@ -582,8 +588,13 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
         # load if first time in order to make dataSets relations
         _, _, doneListAccepted, doneListDiscarded = self._getAllDoneIds()
         # Check for newly done items
-        acceptedIds = copy.deepcopy(self.acceptedIds)
-        discardedIds = copy.deepcopy(self.discardedIds)
+        # A plain copy is enough for a list of ints, and membership has to
+        # go through a set: against a list these comprehensions cost
+        # O(accepted x done) on every poll.
+        acceptedIds = list(self.acceptedIds)
+        discardedIds = list(self.discardedIds)
+        doneListAccepted = set(doneListAccepted)
+        doneListDiscarded = set(doneListDiscarded)
 
         newDoneAccepted = [movId for movId in acceptedIds
                            if movId not in doneListAccepted]

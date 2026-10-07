@@ -13,6 +13,20 @@ from pwem.objects import Acquisition, Movie, MovieAlignment
 class XmippStreamingBase:
     """Backend-agnostic helpers for Xmipp streaming protocols."""
 
+    def _streamingMustStop(self):
+        """True when the generator has to abandon its polling loop.
+
+        A failed step makes pyworkflow mark the protocol as FAILED and the
+        executor break out of its own loop - and then join every running
+        thread, the generator's among them. A generator that keeps polling
+        is never joined, so the whole run hangs with nothing left to do.
+        The same applies once the run has been aborted.
+        """
+        status = getattr(self, 'status', None)
+        value = status.get() if hasattr(status, 'get') else status
+
+        return value in (cons.STATUS_FAILED, cons.STATUS_ABORTED)
+
     @staticmethod
     def _loadLogicalSet(pointer):
         """Load and return the logical Set referenced by ``pointer``."""
@@ -358,13 +372,19 @@ class XmippStreamingBase:
     def _getFinishedInsertedIds(self):
         pendingIds, _, finishedIds = self._ensureInsertedStepTracking()
 
-        if not getattr(self, "_finishedInsertedIdsRestored", False):
-            for itemId in pendingIds:
-                stepIndex = getattr(self, "insertedDict", {}).get(itemId)
-                step = self._getCurrentStreamingStep(stepIndex)
-                if step is not None and step.isFinished():
-                    finishedIds.add(itemId)
-            self._finishedInsertedIdsRestored = True
+        # A step becomes runnable the moment it is inserted, which is
+        # before the generator gets to record who owns it. One that
+        # finishes inside that window is never reported by
+        # _recordFinishedInsertedStep, so its item would never be
+        # published and the protocol would never reach its end. Reading
+        # the steps of what is still pending covers that for good; the
+        # cost follows the work in flight, not the whole run.
+        for itemId in set(pendingIds) - finishedIds:
+            stepIndex = getattr(self, "insertedDict", {}).get(itemId)
+            step = self._getCurrentStreamingStep(stepIndex)
+
+            if step is not None and step.isFinished():
+                finishedIds.add(itemId)
 
         return set(finishedIds)
 
@@ -405,11 +425,48 @@ class XmippStreamingBase:
     def _recordFinishedInsertedStep(self, stepIndex):
         pendingIds, stepToItemId, finishedIds = self._ensureInsertedStepTracking()
         itemId = stepToItemId.get(stepIndex)
+
+        if itemId is None:
+            # The step finished before the generator recorded its owner.
+            # insertedDict already knows which item it belongs to.
+            for knownId, knownStep in getattr(self, "insertedDict", {}).items():
+                if knownStep == stepIndex:
+                    itemId = knownId
+                    stepToItemId[stepIndex] = knownId
+                    break
+
         if itemId in pendingIds:
             finishedIds.add(itemId)
 
 class XmippStreamingMoviesMixin(XmippStreamingBase):
     """Streaming behavior shared by Xmipp protocols based on ProtProcessMovies."""
+
+    def _cleanMovieFolder(self, movieFolder):
+        """Remove a movie's working folder without going through a shell.
+
+        pwem does this with os.system('rm -rf %s' % folder). The path
+        comes from _getTmpPath, so it carries the project directory, and
+        a project whose path contains a space turns that command into two
+        arguments: it then deletes something else entirely and leaves the
+        real folder behind. Removing the tree from Python avoids the
+        quoting problem altogether, and the path is checked to be inside
+        this protocol's own tmp directory before anything is deleted.
+        """
+        if pwutils.envVarOn('SCIPION_DEBUG_NOCLEAN'):
+            self.info('Clean movie data DISABLED. '
+                      'Movie folder will remain in disk!!!')
+            return
+
+        workspace = os.path.realpath(self._getTmpPath())
+        target = os.path.realpath(movieFolder)
+
+        if target != workspace and not target.startswith(workspace + os.sep):
+            self.warning("Refusing to remove %s: it is outside this "
+                         "protocol's working directory." % movieFolder)
+            return
+
+        self.info("Erasing.....movieFolder: %s" % movieFolder)
+        pwutils.cleanPath(target)
 
     def _loadLogicalInputMovies(self, watermark=None):
         inputMovies = self.inputMovies.get()

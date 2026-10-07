@@ -347,6 +347,12 @@ class XmippProtEliminateEmptyBase(XmippStreamingBase, ProtStreamingBase, ProtCla
         self._prepareStreamingGenerator()
         self.newDeps = []
         while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
             self._checkNewInput()
             self._checkNewOutput()
             if getattr(self, 'finished', False):
@@ -687,6 +693,12 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) else Set.STREAM_OPEN
         for batchIndex, batchIds in self._getReadyEliminationBatches():
             enableByOutput = {}
+            # The metadata files are this batch's only way back: nothing is
+            # deleted until every output of the batch, classes included, is
+            # published. Removing them earlier left a batch that
+            # _getReadyEliminationBatches still offers but whose files are
+            # gone, so its classes could never be created.
+            consumedFiles = []
             for mdFn, outputName, auxSuffix in ((self._getExtraPath("output%d.xmd" % batchIndex), 'outputAverages', "AUXOUT%d" % batchIndex), (self._getExtraPath("eliminated%d.xmd" % batchIndex), 'eliminatedAverages', "AUXELIM%d" % batchIndex)):
                 enableOut = {}
                 if os.path.exists(mdFn):
@@ -705,10 +717,15 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                             item._appendItem = False
                     outSet.copyItems(partsSet, updateItemCallback=updateItem, itemDataIterator=md.iterRows(mdFn, sortByLabel=md.MDL_ITEM_ID))
                     self._updateOutputSet(outputName, outSet, streamMode)
-                    cleanPath(mdFn)
+                    consumedFiles.append(mdFn)
                 enableByOutput[outputName] = enableOut
             self.createOutputClasses('output', streamMode, enableByOutput.get('outputAverages', {}))
             self.createOutputClasses('eliminated', streamMode, enableByOutput.get('eliminatedAverages', {}))
+
+            # Everything this batch had to produce is durable now.
+            for mdFn in consumedFiles:
+                cleanPath(mdFn)
+
             self.outputSize = len(self._getPersistedProcessedIds())
 
     # ------------- UTILS Fuctions ------------------------------------
