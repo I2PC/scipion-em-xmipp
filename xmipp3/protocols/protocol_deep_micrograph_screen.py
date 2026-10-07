@@ -976,13 +976,13 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
         return self._getPath('images.xmd')
 
     def _getMicPos(self, mic):
-        """ Return the corresponding .pos file for a given micrograph. """
+        """Return the .pos path expected by micrograph_cleaner_em.
+
+        The external cleaner matches coordinates to micrographs strictly by
+        basename, so this file must remain <micrograph-basename>.pos.
+        """
         micBase = pwutils.removeBaseExt(mic.getFileName())
-        # Scoped by id: two micrographs from different folders can share
-        # a base name and would otherwise write the same file.
-        return self._itemScopedPath(
-            mic, micBase + ".pos",
-            lambda name: self._getExtraPath('inputCoords', name))
+        return self._getExtraPath('inputCoords', micBase + ".pos")
 
     def _getMicXmd(self, mic):
         """ Return the corresponding .xmd with extracted particles

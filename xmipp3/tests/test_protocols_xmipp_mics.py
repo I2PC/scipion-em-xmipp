@@ -650,9 +650,42 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
         self.assertEquals(protCleaner.outputCoordinates_Full.getSize(),
                           self.protImportCoords.outputCoordinates.getSize(), "mismatch input output coordinates size")
 
-        predMasksPath= protCleaner._getExtraPath("predictedMasks")
-        for fname in self.fnameMaskGroundTruth_toMeanVal:
-          self._compareMaskAndGroundTruth( fname%predMasksPath, self.fnameMaskGroundTruth_toMeanVal[fname])
+        predMasksPath = protCleaner._getExtraPath("predictedMasks")
+
+        # With micsSource=OTHER the cleaner processes the actual
+        # downsampled micrograph files. Their filenames may be ID-scoped
+        # to avoid collisions, and micrograph_cleaner_em names masks from
+        # that real input basename. Match expected values through the
+        # stable logical micName, but validate the mask written for the
+        # actual processed filename.
+        expectedByMicName = {
+            os.path.splitext(os.path.basename(fname % ""))[0]: expected
+            for fname, expected in self.fnameMaskGroundTruth_toMeanVal.items()
+        }
+        checkedMicNames = set()
+
+        for mic in self.protDown.outputMicrographs:
+            micName = os.path.splitext(
+                os.path.basename(mic.getMicName())
+            )[0]
+            if micName not in expectedByMicName:
+                continue
+
+            maskFn = os.path.join(
+                predMasksPath,
+                os.path.basename(mic.getFileName()),
+            )
+            self._compareMaskAndGroundTruth(
+                maskFn,
+                expectedByMicName[micName],
+            )
+            checkedMicNames.add(micName)
+
+        self.assertEqual(
+            checkedMicNames,
+            set(expectedByMicName),
+            "All reference micrographs must have a predicted mask.",
+        )
 
         self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Full, 2)
 
