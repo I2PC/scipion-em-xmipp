@@ -27,6 +27,29 @@ class XmippStreamingBase:
 
         return value in (cons.STATUS_FAILED, cons.STATUS_ABORTED)
 
+    def _itemScopedPath(self, item, baseName, pathFunc=None):
+        """Path for a per-item artefact, scoped by the item's own id.
+
+        Two micrographs coming from different folders can share a base
+        name (/a/mic001.mrc and /b/mic001.mrc). Naming the artefact after
+        the base name alone makes the second silently overwrite the
+        first, and the output then points two items at the same file.
+
+        Runs made before this was scoped keep working: when only the old
+        unscoped file exists, that one is returned.
+        """
+        pathFunc = pathFunc or self._getExtraPath
+        itemId = item.getObjId() if hasattr(item, 'getObjId') else item
+        scoped = pathFunc('%06d__%s' % (itemId, baseName))
+
+        if not os.path.exists(scoped):
+            legacy = pathFunc(baseName)
+
+            if os.path.exists(legacy):
+                return legacy
+
+        return scoped
+
     @staticmethod
     def _loadLogicalSet(pointer):
         """Load and return the logical Set referenced by ``pointer``."""
@@ -716,6 +739,11 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
         if not self._filterMovie(movie):
             return
 
+        # Named after the movie id, so a retry or a Continue finds what a
+        # previous attempt left behind. The decompression branches below
+        # skip their work when the output already exists, so a truncated
+        # file from an interrupted run would be reused as if it were good.
+        pwutils.cleanPath(movieFolder)
         pwutils.makePath(movieFolder)
         pwutils.createAbsLink(os.path.abspath(movieFn), os.path.join(movieFolder, movieName))
 

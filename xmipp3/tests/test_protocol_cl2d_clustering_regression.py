@@ -146,7 +146,7 @@ class TestXmippCL2DClusteringRegression(BaseTest):
         # not strings - Set.getItem("id", "36") relies on the backend
         # coercing a string to match an integer column, which SQLite does
         # only by its own type-affinity rules and a strict backend (e.g.
-        # PostgreSQL) may not.
+        # other backends) may not.
         prot = self._newProtocol()
         txtPath = self.proj.getTmpPath('cl2d_clusters.txt')
         with open(txtPath, 'w') as f:

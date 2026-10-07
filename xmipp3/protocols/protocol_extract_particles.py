@@ -656,9 +656,8 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
 
     def _loadInputCoords(self, micDict):
         # Load via the logical input's own Pointer instead of
-        # reconstructing a fresh SetOfCoordinates from a raw sqlite
-        # filename (breaks the backend-agnostic contract under a
-        # PostgreSQL-backed compatibility bridge).
+        # reconstructing a fresh SetOfCoordinates from a raw storage
+        # filename, which ties discovery to how the Set is persisted.
         coordSet = self.inputCoordinates.get()
         if not hasattr(coordSet, '_xmippMd'):
             # Mirrors pwem's own defensive patch for this xmipp-specific
@@ -1244,10 +1243,12 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
     def _getMicPos(self, mic):
         """ Return the corresponding .pos file for a given micrograph. """
         micBase = pwutils.removeBaseExt(mic.getFileName())
-        return self._getExtraPath(micBase + ".pos")
+        # Scoped by id: two micrographs from different folders can share
+        # a base name and would otherwise write the same file.
+        return self._itemScopedPath(mic, micBase + ".pos")
 
     def _getMicXmd(self, mic):
         """ Return the corresponding .xmd with extracted particles
         for this micrograph. """
         micBase = pwutils.removeBaseExt(mic.getFileName())
-        return self._getExtraPath(micBase + ".xmd")
+        return self._itemScopedPath(mic, micBase + ".xmd")

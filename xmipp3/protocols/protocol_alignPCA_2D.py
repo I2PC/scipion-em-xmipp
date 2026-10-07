@@ -30,6 +30,8 @@ import json
 import sys
 import emtable
 import os
+
+import pyworkflow.utils as pwutils
 import time
 import numpy as np
 
@@ -555,6 +557,15 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
         numTrain = min(len(newParticlesSet), self.training.get())
         self.classification(imgsFn, self.numberClasses, imgsOrigXmd,
                             self.mask.get(), self.sigmaProt, numTrain, self.resolutionPca)
+
+        # The classification has written its results under extra/, and the
+        # output particles keep their original location - _updateParticle
+        # only sets the class id and the transform - so nothing points at
+        # this round's CTF-corrected stack any more. One per round was
+        # kept for the whole run, each a full copy of that round's
+        # particles. It is removed only once the classification returned,
+        # so a failed round still has its input to retry from.
+        pwutils.cleanPath(imgsFn)
 
     def convertInputStep(self, input, outputOrig, outputMRC):
         writeSetOfParticles(input, outputOrig)

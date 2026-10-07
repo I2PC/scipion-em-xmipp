@@ -648,9 +648,23 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrograp
 
     def _processMicrograph(self, micrograph):
         micFolderTmp = self._getOutputMicFolder(micrograph)
+        # The folder is named after the micrograph id, so a retry or a
+        # Continue finds whatever a previous attempt left inside. The
+        # window files are written under fixed names, so a failed
+        # xmipp_transform_filter would otherwise leave the PSD of the
+        # earlier attempt in place and the correlation would be computed
+        # from it without any error being raised.
+        pwutils.cleanPath(micFolderTmp)
         pwutils.makePath(micFolderTmp)
         micrographId = micrograph.getObjId()
         correlations = self.calculateTiltCorrelationStep(micrograph)
+
+        # The correlations are in memory and the PSD image this protocol
+        # publishes already lives in extra/, so the working folder - about
+        # twenty .mrc windows - has been consumed. One per micrograph was
+        # being kept for the whole run.
+        pwutils.cleanPath(micFolderTmp)
+
         # Numpy array to compute all the
         correlations = np.asarray(correlations)
         # Calculate the mean, dev of the correlation

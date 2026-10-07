@@ -982,7 +982,7 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
                 # Set.getItem raises rather than returning None for a row
                 # it cannot find, so check membership first - a ctfId just
                 # discovered via the id watermark may not be selectable yet
-                # under a PostgreSQL-backed compatibility bridge.
+                # when the Set is not backed by a local file.
                 for attempt in range(self.CTF_VISIBILITY_MAX_ATTEMPTS):
                     if attempt > 0:
                         time.sleep(self.CTF_VISIBILITY_RETRY_DELAY)

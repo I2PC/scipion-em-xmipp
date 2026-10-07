@@ -492,7 +492,7 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
                     # Set.getItem raises rather than returning None for a
                     # row it cannot find, so check membership first - a
                     # movie just discovered via the id watermark may not
-                    # be selectable yet under a PostgreSQL-backed
+                    # be selectable yet under a backend with
                     # compatibility bridge.
                     if movieId in inputMovies:
                         movie = inputMovies.getItem("id", movieId).clone()
@@ -732,7 +732,7 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
                     # Set.getItem raises rather than returning None for a
                     # row it cannot find, so check membership first - a
                     # movie just marked done may not be selectable yet
-                    # under a PostgreSQL-backed compatibility bridge.
+                    # when the Set is not backed by a local file.
                     if movieId in inputMovies:
                         movie = inputMovies.getItem(
                             "id",

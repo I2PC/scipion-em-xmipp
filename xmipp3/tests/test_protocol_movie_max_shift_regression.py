@@ -155,7 +155,7 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
     def testCheckNewInputUsesWatermarkNotSqliteMtime(self):
         # Regression test: new-id discovery must come from the id watermark
         # (_lastInputId / getUniqueValues('id', where=...)), not from any
-        # SQLite file mtime - a PostgreSQL-backed Set can change without its
+        # file mtime - a Set not backed by a local file can change without its
         # compatibility file's mtime changing.
         prot = self._newProtocol()
         prot.insertedIds = [1]

@@ -508,7 +508,7 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
     def _loadInputCoords(self, micDict):
         """ Load the coordinates for the given candidate mics from the
         logical input Set (via its Pointer), instead of reconstructing a
-        fresh SetOfCoordinates from a raw sqlite filename. """
+        fresh SetOfCoordinates from a raw storage filename. """
         coordSet = self.inputCoordinates.get()
         if not hasattr(coordSet, '_xmippMd'):
             # Mirrors pwem's own defensive patch for this xmipp-specific
@@ -978,13 +978,17 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
     def _getMicPos(self, mic):
         """ Return the corresponding .pos file for a given micrograph. """
         micBase = pwutils.removeBaseExt(mic.getFileName())
-        return self._getExtraPath('inputCoords', micBase + ".pos")
+        # Scoped by id: two micrographs from different folders can share
+        # a base name and would otherwise write the same file.
+        return self._itemScopedPath(
+            mic, micBase + ".pos",
+            lambda name: self._getExtraPath('inputCoords', name))
 
     def _getMicXmd(self, mic):
         """ Return the corresponding .xmd with extracted particles
         for this micrograph. """
         micBase = pwutils.removeBaseExt(mic.getFileName())
-        return self._getExtraPath(micBase + ".xmd")
+        return self._itemScopedPath(mic, micBase + ".xmd")
 
     def getDoneMics(self):
         out = set([])

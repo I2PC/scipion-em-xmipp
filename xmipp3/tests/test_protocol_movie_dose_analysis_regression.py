@@ -28,7 +28,7 @@ class _FakeMovie:
 
 class _FlakyFakeMovieSet:
     """A fake movie Set where some ids only become visible after a given
-    number of reopen attempts, simulating a transient PostgreSQL-bridge
+    number of reopen attempts, simulating a transient visibility
     visibility lag. Each pointer.get() call represents a fresh reopen."""
 
     def __init__(self, visibleFromAttempt):
@@ -130,7 +130,7 @@ class TestMovieDoseAnalysisRegression(unittest.TestCase):
         # when a row is not yet selectable, so a movie that was just
         # discovered via a fresh id-watermark scan may still momentarily
         # fail a subsequent getItem lookup - especially plausible under a
-        # PostgreSQL-backed compatibility bridge. _loadMoviesByIds must
+        # backend with delayed visibility. _loadMoviesByIds must
         # retry rather than crash the whole batch.
         prot = XmippProtMovieDoseAnalysis()
         movieSet = _FlakyFakeMovieSet(visibleFromAttempt={2: 2})

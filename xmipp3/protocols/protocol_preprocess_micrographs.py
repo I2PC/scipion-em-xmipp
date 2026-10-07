@@ -820,8 +820,8 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
     def _isMicPipelineDone(self, mic):
         """ A micrograph's preprocessing pipeline is done when its
         markMicDoneStep has actually FINISHED in the persisted step graph -
-        never a filesystem marker (breaks backend-agnosticism under a
-        PostgreSQL-backed compatibility bridge). """
+        never a filesystem marker, which would tie completion to how the
+        Set happens to be persisted. """
         micId = mic.getObjId()
         for step in self._iterKnownStreamingSteps():
             funcName = getattr(step, 'funcName', None)
@@ -959,5 +959,6 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
         extFn = getExt(fn)
         if extFn != ".mrc":
             fn = replaceExt(fn, "mrc")
-        fnOut = self._getExtraPath(basename(fn))
-        return fnOut
+        # Scoped by the micrograph id: two inputs from different folders
+        # can share a base name and would otherwise write the same file.
+        return self._itemScopedPath(mic, basename(fn))

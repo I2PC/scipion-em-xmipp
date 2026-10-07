@@ -404,3 +404,154 @@ class TestTemporaryFilesAreNamedNotGlobbed(unittest.TestCase):
 
         self.assertNotIn('cleanPattern', source)
         self.assertIn('for fn in micTmpFiles', source)
+
+
+class TestWorkspacesAreCleanedBeforeUse(unittest.TestCase):
+    """A per-item folder is named after the item, so a retry finds what a
+    previous attempt left inside. The files are written under fixed
+    names, so stale ones can be read back as if they were fresh."""
+
+    def _sourceOf(self, moduleName, methodName, className):
+        import inspect
+        import importlib
+
+        module = importlib.import_module('xmipp3.protocols.' + moduleName)
+
+        return inspect.getsource(getattr(getattr(module, className),
+                                         methodName))
+
+    def testTiltAnalysisCleansItsMicrographFolderFirst(self):
+        source = self._sourceOf('protocol_tilt_analysis',
+                                '_processMicrograph',
+                                'XmippProtTiltAnalysis')
+
+        self.assertIn('cleanPath(micFolderTmp)', source)
+        self.assertLess(source.index('cleanPath(micFolderTmp)'),
+                        source.index('makePath(micFolderTmp)'),
+                        "The folder must be cleaned before it is created.")
+
+    def testMovieFolderIsCleanedBeforeBeingFilled(self):
+        source = self._sourceOf('protocol_streaming_base',
+                                'processMovieStep',
+                                'XmippStreamingMoviesMixin')
+
+        self.assertIn('cleanPath(movieFolder)', source)
+        self.assertLess(source.index('cleanPath(movieFolder)'),
+                        source.index('makePath(movieFolder)'))
+
+
+class TestConsumedArtefactsAreReleased(unittest.TestCase):
+    """CONSUMED artefacts get cleaned; PENDING ones are preserved."""
+
+    def testTiltAnalysisDropsTheWindowsOnceCorrelated(self):
+        import inspect
+        from xmipp3.protocols import protocol_tilt_analysis
+
+        source = inspect.getsource(
+            protocol_tilt_analysis.XmippProtTiltAnalysis._processMicrograph)
+
+        # Cleaned only after the correlations have been computed.
+        self.assertLess(source.index('calculateTiltCorrelationStep'),
+                        source.rindex('cleanPath(micFolderTmp)'))
+
+    def testCtfMicrographsDropsItsWorkingFolderAfterMovingResults(self):
+        import inspect
+        from xmipp3.protocols import protocol_ctf_micrographs
+
+        source = inspect.getsource(
+            protocol_ctf_micrographs.XmippProtCTFMicrographs._estimateCTF)
+
+        self.assertIn('cleanPath(micDir)', source)
+        self.assertLess(source.index('moveFile(_getFn(key)'),
+                        source.rindex('cleanPath(micDir)'),
+                        "Results must be moved out before the folder goes.")
+
+    def testAlignPcaDropsTheRoundStackAfterClassifying(self):
+        import inspect
+        from xmipp3.protocols import protocol_alignPCA_2D
+
+        source = inspect.getsource(
+            protocol_alignPCA_2D.XmippProtClassifyPcaStreaming
+            .runClassificationSteps)
+
+        self.assertIn('cleanPath(imgsFn)', source)
+        self.assertLess(source.index('self.classification('),
+                        source.index('cleanPath(imgsFn)'),
+                        "A failed round must keep its input to retry from.")
+
+
+class _ScopedPathHarness(XmippStreamingBase):
+    def __init__(self, root):
+        self._root = root
+
+    def _getExtraPath(self, *parts):
+        return os.path.join(self._root, *parts)
+
+
+class _IdOnly:
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+
+class TestPerItemPathsAreScopedById(unittest.TestCase):
+    """Two micrographs from different folders can share a base name.
+
+    Naming an artefact after the base name alone makes the second
+    silently overwrite the first, and the output then points two items at
+    the same file.
+    """
+
+    def testTwoItemsSharingABaseNameGetDifferentPaths(self):
+        with tempfile.TemporaryDirectory() as root:
+            protocol = _ScopedPathHarness(root)
+
+            first = protocol._itemScopedPath(_IdOnly(1), 'mic001.pos')
+            second = protocol._itemScopedPath(_IdOnly(2), 'mic001.pos')
+
+            self.assertNotEqual(first, second)
+
+    def testExistingUnscopedFileIsStillUsed(self):
+        # A run made before this was scoped keeps working on Continue.
+        with tempfile.TemporaryDirectory() as root:
+            protocol = _ScopedPathHarness(root)
+            legacy = os.path.join(root, 'mic001.pos')
+            open(legacy, 'w').close()
+
+            self.assertEqual(
+                legacy, protocol._itemScopedPath(_IdOnly(1), 'mic001.pos'))
+
+    def testScopedFileWinsOverTheLegacyOne(self):
+        with tempfile.TemporaryDirectory() as root:
+            protocol = _ScopedPathHarness(root)
+            open(os.path.join(root, 'mic001.pos'), 'w').close()
+            scoped = os.path.join(root, '000001__mic001.pos')
+            open(scoped, 'w').close()
+
+            self.assertEqual(
+                scoped, protocol._itemScopedPath(_IdOnly(1), 'mic001.pos'))
+
+    def testPreprocessOutputIsScoped(self):
+        from xmipp3.protocols.protocol_preprocess_micrographs import (
+            XmippProtPreprocessMicrographs)
+
+        class _Mic:
+            def __init__(self, objId, fileName):
+                self._objId, self._fileName = objId, fileName
+
+            def getObjId(self):
+                return self._objId
+
+            def getFileName(self):
+                return self._fileName
+
+        with tempfile.TemporaryDirectory() as root:
+            protocol = _ScopedPathHarness(root)
+            getOut = XmippProtPreprocessMicrographs._getOutputMicrograph
+
+            self.assertNotEqual(
+                getOut(protocol, _Mic(1, '/data/A/mic001.mrc')),
+                getOut(protocol, _Mic(2, '/data/B/mic001.mrc')),
+            )

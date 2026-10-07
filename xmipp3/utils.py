@@ -45,7 +45,7 @@ def loadOutputSetForAppend(protocol, SetClass, baseName, outputName=None):
     """Reuse the logical output Set the protocol already knows about;
     otherwise always create a fresh one. Deliberately never falls back
     to os.path.exists()-based reopening of a raw on-disk path: under a
-    PostgreSQL-backed compatibility bridge that path may not even be the
+    backend that does not keep the Set in a file, that path may not even be the
     authoritative backend, so the protocol's own registered attribute is
     the only backend-agnostic source of truth for whether this output
     already exists."""

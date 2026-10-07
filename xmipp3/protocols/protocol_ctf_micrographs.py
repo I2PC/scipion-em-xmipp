@@ -657,7 +657,11 @@ class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicr
             if self.findPhaseShift:
                 localParams['phaseShift0'] = self._params['phaseShift0']
 
-        # Create micrograph dir under extra directory
+        # Create micrograph dir under extra directory. Clean it first:
+        # it is named after the micrograph id, so a retry would otherwise
+        # find the output files of a previous failed attempt and promote
+        # them to extra/ as if they belonged to this one.
+        pwutils.path.cleanPath(micDir)
         pwutils.path.makePath(micDir)
         if not os.path.exists(micDir):
             raise Exception("No created dir: %s " % micDir)
@@ -716,6 +720,11 @@ class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicr
             for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
                         'ctfmodel_quadrant', 'ctf']:
                 pwutils.moveFile(_getFn(key), self._getExtraPath())
+
+            # The results are in extra/ now, so the working folder - which
+            # holds a full downsampled micrograph - has been consumed. One
+            # per micrograph was being kept for the whole run.
+            pwutils.path.cleanPath(micDir)
 
         except Exception:
             sys.stderr.write("xmipp_ctf_estimate_from_micrograph has " \

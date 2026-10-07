@@ -308,7 +308,7 @@ class TestXmippScreenParticlesRegression(BaseTest):
         # No os.path.exists() fallback any more: a missing logical
         # attribute always means "create fresh", never "reopen a raw
         # on-disk file by path" (that path isn't necessarily the
-        # authoritative backend under a PostgreSQL-backed compatibility
+        # authoritative backend under a non file-backed
         # bridge).
         outputSet, isNew = loader(
             Protocol(),
