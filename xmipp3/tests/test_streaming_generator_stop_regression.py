@@ -363,3 +363,44 @@ class TestMembershipUsesSets(unittest.TestCase):
 
         self.assertIn('set(', source)
         self.assertNotIn('sorted(', source)
+
+
+class TestTemporaryFilesAreNamedNotGlobbed(unittest.TestCase):
+    """Cleaning up with a prefix glob reaches other micrographs.
+
+    "mic1" and "mic10" are extracted by parallel steps; finishing the
+    first used to delete the second's working files mid-extraction.
+    """
+
+    def testPrefixGlobWouldDeleteAnotherMicrographsFiles(self):
+        import pyworkflow.utils as pwutils
+
+        with tempfile.TemporaryDirectory() as root:
+            ours = [os.path.join(root, 'mic1_downsampled.xmp'),
+                    os.path.join(root, 'mic1_noDust.xmp')]
+            theirs = [os.path.join(root, 'mic10_downsampled.xmp'),
+                      os.path.join(root, 'mic10.ctfParam')]
+
+            for fn in ours + theirs:
+                open(fn, 'w').close()
+
+            # What the protocol does now: delete the files it created.
+            for fn in ours:
+                pwutils.cleanPath(fn)
+
+            self.assertFalse(any(os.path.exists(fn) for fn in ours))
+            self.assertTrue(
+                all(os.path.exists(fn) for fn in theirs),
+                "Another micrograph's working files must survive.",
+            )
+
+    def testExtractMicrographCleansByNameAndNotByPattern(self):
+        import inspect
+        from xmipp3.protocols import protocol_extract_particles
+
+        source = inspect.getsource(
+            protocol_extract_particles.XmippProtExtractParticles
+            ._extractMicrograph)
+
+        self.assertNotIn('cleanPattern', source)
+        self.assertIn('for fn in micTmpFiles', source)

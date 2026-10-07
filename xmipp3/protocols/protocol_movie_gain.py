@@ -887,12 +887,22 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
             # Elif, take the estimated gain
             finalGainFn = self.searchEstimatedGainPath()
             if finalGainFn == None:
-                # If no gains have been estimated, estimate one and use that
+                # If no gains have been estimated, estimate one and use that.
+                # Every movie being processed asks for the gain of the SAME
+                # first movie, so under STEPS_PARALLEL several of them reach
+                # this at once: without the lock two of them launch
+                # estimateGainFun on the same output path and the readers
+                # that follow get a half-written gain image. Same guard and
+                # re-check already used for orientedGain above.
                 firstMovie = self.inputMovies.get().getFirstItem()
                 movieId = firstMovie.getObjId()
+
                 if not movieId in self.estimatedIds:
-                    self.estimatedIds.add(movieId)
-                    self.estimateGainFun(firstMovie)
+                    with self._lock:
+                        if not movieId in self.estimatedIds:
+                            self.estimatedIds.add(movieId)
+                            self.estimateGainFun(firstMovie)
+
                 finalGainFn = self.getEstimatedGainPath(movieId)
 
         ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()

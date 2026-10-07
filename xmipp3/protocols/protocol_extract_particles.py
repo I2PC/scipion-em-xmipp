@@ -824,6 +824,10 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                     else int(boxSize*1.5*downFactor)
 
         particlesMd = 'particles@%s' % fnPosFile
+        # Every temporary file this micrograph creates, so cleanup can
+        # name them instead of globbing a prefix.
+        micTmpFiles = []
+
         # If it has coordinates extract the particles
         if exists(fnPosFile):
             # Create a list with micrographs operations (programs in xmipp) and
@@ -842,7 +846,9 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                           "%s micrograph. We continue..." % mic.getMicName())
 
             def getMicTmp(suffix):
-                return self._getTmpPath(baseMicName + suffix)
+                fn = self._getTmpPath(baseMicName + suffix)
+                micTmpFiles.append(fn)
+                return fn
 
             # Check if it is required to downsample our micrographs
             if self.notOne(downFactor):
@@ -863,6 +869,7 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                 # We need to write a Xmipp ctfparam file
                 # to perform the phase flip on the micrograph
                 fnCTF = self._getTmpPath("%s.ctfParam" % baseMicName)
+                micTmpFiles.append(fnCTF)
                 micrographToCTFParam(mic, fnCTF)
                 # Insert step to flip micrograph
                 if self.doFlip:
@@ -898,9 +905,13 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                          % baseMicName)
             self.warning("Maybe you picked over a subset of micrographs")
 
-        # Let's clean the temporary mrc micrographs
+        # Clean exactly the temporary files this micrograph created. The
+        # old pattern was a prefix glob, so finishing "mic1" also deleted
+        # "mic10"'s working files while that micrograph was still being
+        # extracted in a parallel step.
         if not pwutils.envVarOn("SCIPION_DEBUG_NOCLEAN"):
-            pwutils.cleanPattern(self._getTmpPath(baseMicName) + '*')
+            for fn in micTmpFiles:
+                pwutils.cleanPath(fn)
 
     def _getNormalizeArgs(self):
         if not self.doNormalize:
