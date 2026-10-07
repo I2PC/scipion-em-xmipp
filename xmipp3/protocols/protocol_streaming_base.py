@@ -177,8 +177,6 @@ class XmippStreamingBase:
         if not itemIds:
             return []
 
-        if hasattr(inputSet, "loadAllProperties"):
-            inputSet.loadAllProperties()
 
         def cloneItem(item):
             item = self._hydrateLogicalSetItemAcquisition(inputSet, item)
@@ -710,6 +708,14 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
         if newDone:
             self._updateOutputSets(newDone, pwobj.Set.STREAM_OPEN)
             persistedIds = self._getPersistedOutputMovieIds()
+            self._firstTimeOutput = not persistedIds
+
+        if self._doMovieFolderCleanUp():
+            for movie in self.listOfMovies:
+                if movie.getObjId() in persistedIds:
+                    self._cleanMovieFolder(
+                        self._getOutputMovieFolder(movie)
+                    )
 
         inputIds = {movie.getObjId() for movie in self.listOfMovies}
         self.finished = self.streamClosed and inputIds.issubset(persistedIds)
@@ -793,5 +799,3 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
         self.info("Processing movie: %s" % movie.getFileName())
         self._processMovie(movie)
 
-        if self._doMovieFolderCleanUp():
-            self._cleanMovieFolder(movieFolder)

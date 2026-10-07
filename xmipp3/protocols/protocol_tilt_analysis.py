@@ -609,31 +609,45 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrograp
 
 
     def processMicrographListStep(self, micIds):
+        pendingIds = sorted(set(micIds))
+        micrographsById = {}
+
+        for attempt in range(self.MIC_VISIBILITY_MAX_ATTEMPTS):
+            if not pendingIds:
+                break
+
+            if attempt > 0:
+                time.sleep(self.MIC_VISIBILITY_RETRY_DELAY)
+
+            with self._lock:
+                inputMicSet = self._loadLogicalSet(self.inputMicrographs)
+                try:
+                    visibleMicrographs = self._loadLogicalSetItemsByIds(
+                        inputMicSet,
+                        pendingIds,
+                    )
+                finally:
+                    inputMicSet.close()
+
+            for micrograph in visibleMicrographs:
+                micrographsById[micrograph.getObjId()] = micrograph
+
+            pendingIds = [
+                micId
+                for micId in pendingIds
+                if micId not in micrographsById
+            ]
+
         for micId in micIds:
-            micrograph = None
-            for attempt in range(self.MIC_VISIBILITY_MAX_ATTEMPTS):
-                if attempt > 0:
-                    time.sleep(self.MIC_VISIBILITY_RETRY_DELAY)
-
-                with self._lock:
-                    inputMicSet = self._loadLogicalSet(self.inputMicrographs)
-                    try:
-                        try:
-                            item = inputMicSet.getItem("id", micId)
-                        except (UnboundLocalError, KeyError):
-                            item = None
-
-                        if item is not None:
-                            clone = getattr(item, "clone", None)
-                            micrograph = clone() if callable(clone) else item
-                    finally:
-                        inputMicSet.close()
-
-                if micrograph is not None:
-                    break
+            micrograph = micrographsById.get(micId)
 
             if micrograph is None:
-                self.error("Micrograph with id %d never became visible in the input Set after %d attempts; marking it processed with no statistics." % (micId, self.MIC_VISIBILITY_MAX_ATTEMPTS))
+                self.error(
+                    "Micrograph with id %d never became visible in the input "
+                    "Set after %d attempts; marking it processed with no "
+                    "statistics."
+                    % (micId, self.MIC_VISIBILITY_MAX_ATTEMPTS)
+                )
                 if micId not in self.processedIds:
                     self.processedIds.append(micId)
                 continue
@@ -641,7 +655,12 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrograp
             try:
                 self._processMicrograph(micrograph)
             except Exception as e:
-                self.error("Micrograph with id %d failed while computing its tilt correlation statistics (%s); marking it processed with no statistics." % (micId, e))
+                self.error(
+                    "Micrograph with id %d failed while computing its tilt "
+                    "correlation statistics (%s); marking it processed with "
+                    "no statistics."
+                    % (micId, e)
+                )
                 if micId not in self.processedIds:
                     self.processedIds.append(micId)
 

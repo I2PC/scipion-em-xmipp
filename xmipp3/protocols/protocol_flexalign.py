@@ -549,6 +549,53 @@ class XmippProtFlexAlign(XmippStreamingMoviesMixin, ProtStreamingBase, ProtAlign
                        % (movie.getFileName(), ex))
             raise
 
+
+    def _convertInputStep(self):
+        super()._convertInputStep()
+        self._prepareGainForAlignment()
+
+    def _getPreparedGainPath(self):
+        gainFn = self.inputMovies.get().getGain()
+        if not gainFn:
+            return None
+
+        movieExt = pwutils.getExt(
+            self.inputMovies.get().getFirstItem().getFileName()
+        ).lower()
+
+        if movieExt in ['.tif', '.tiff', '.gain']:
+            gainBase = os.path.basename(gainFn)
+            gainRoot, gainExt = os.path.splitext(gainBase)
+            if '_flipped' in gainRoot:
+                gainRoot = gainRoot.replace('_flipped', '')
+            else:
+                gainRoot += '_flipped'
+            gainFn = self._getExtraPath(gainRoot + gainExt)
+
+        if self.gainRot.get() != 0 or self.gainFlip.get() != 0:
+            gainFn = self._getExtraPath('gain_transformed.tif')
+
+        return gainFn
+
+    def _prepareGainForAlignment(self):
+        gainFn = self.inputMovies.get().getGain()
+        if not gainFn:
+            return None
+
+        movieExt = pwutils.getExt(
+            self.inputMovies.get().getFirstItem().getFileName()
+        ).lower()
+
+        if movieExt in ['.tif', '.tiff', '.gain']:
+            gainFn = xmutils.flipYImage(gainFn, outDir=self._getExtraPath())
+
+        if self.gainRot.get() != 0 or self.gainFlip.get() != 0:
+            gainFn = self.transformGain(
+                gainFn, self._getExtraPath('gain_transformed.tif')
+            )
+
+        return gainFn
+
     def getUserAngle(self):
       anglesDic = {0:0, 1:90, 2:180, 3:270}
       return anglesDic[self.gainRot.get()]
@@ -561,8 +608,9 @@ class XmippProtFlexAlign(XmippStreamingMoviesMixin, ProtStreamingBase, ProtAlign
 
     def getGPUArgs(self):
         args = ' --device %(GPU)s'
-        args += ' --storage "%s"' % self._getExtraPath("fftBenchmark.txt")
-        args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
+        args += ' --storage "%s"' % self._getExtraPath("fftBenchmark_%(GPU)s.txt")
+        controlPointX, controlPointY, controlPointT = self._getControlPoints()
+        args += ' --controlPoints %d %d %d' % (controlPointX, controlPointY, controlPointT)
         args += ' --patchesAvg %d' % self.groupNFrames
         return args
 
@@ -605,21 +653,16 @@ class XmippProtFlexAlign(XmippStreamingMoviesMixin, ProtStreamingBase, ProtAlign
         if self.inputMovies.get().getDark():
             args += ' --dark "%s"' % self.inputMovies.get().getDark()
 
-        if self.inputMovies.get().getGain():
-            ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
-            if ext in ['.tif', '.tiff', '.gain']:
-              self.flipY = True
-              inGainFn = self.inputMovies.get().getGain()
-              gainFn = xmutils.flipYImage(inGainFn, outDir = self._getExtraPath())
-            else:
-              gainFn = self.inputMovies.get().getGain()
-
-            if self.gainRot.get() != 0 or self.gainFlip.get() != 0:
-              gainFn = self.transformGain(gainFn, self._getTmpPath('gain.tif'))
+        gainFn = self._getPreparedGainPath()
+        if gainFn:
+            if not os.path.exists(gainFn):
+                raise RuntimeError(
+                    "Prepared gain file does not exist: %s. "
+                    "The input-conversion step must complete before movie workers."
+                    % gainFn
+                )
             args += ' --gain "%s"' % gainFn
 
-        if self.autoControlPoints.get():
-            self._setControlPoints()
 
         if not self.autoPatches.get():
             args += ' --patches %d %d ' % (self.patchesX, self.patchesY)
@@ -675,15 +718,30 @@ class XmippProtFlexAlign(XmippStreamingMoviesMixin, ProtStreamingBase, ProtAlign
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
-    def _setControlPoints(self):
+    def _getControlPoints(self):
+        if not self.autoControlPoints.get():
+            return (
+                self.controlPointX.get(),
+                self.controlPointY.get(),
+                self.controlPointT.get(),
+            )
+
         x, y, frames = self.inputMovies.get().getDim()
         if self._isInputEer():
             frames = self.nFrames.get()
-        Ts = self.inputMovies.get().getSamplingRate()
-        # one control point each 1000 A
-        self.controlPointX.set(max([int(x * Ts) / 1000 + 2, 3]))
-        self.controlPointY.set(max([int(y * Ts) / 1000 + 2, 3]))
-        self.controlPointT.set(max([ceil(frames/7.) + 2, 3]))
+        samplingRate = self.inputMovies.get().getSamplingRate()
+
+        return (
+            int(max([int(x * samplingRate) / 1000 + 2, 3])),
+            int(max([int(y * samplingRate) / 1000 + 2, 3])),
+            int(max([ceil(frames / 7.) + 2, 3])),
+        )
+
+    def _setControlPoints(self):
+        controlPointX, controlPointY, controlPointT = self._getControlPoints()
+        self.controlPointX.set(controlPointX)
+        self.controlPointY.set(controlPointY)
+        self.controlPointT.set(controlPointT)
 
     def _getMovieShifts(self, movie):
         from ..convert import readShiftsMovieAlignment

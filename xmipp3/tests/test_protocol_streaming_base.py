@@ -7,6 +7,7 @@
 import importlib
 import importlib.util
 import unittest
+from threading import Lock
 
 from pwem.protocols import ProtProcessMovies
 
@@ -255,7 +256,6 @@ class TestXmippMovieMaxShiftStreamingInput(unittest.TestCase):
 
             def _loadLogicalSet(self, inputPointer):
                 return XmippStreamingBase._loadLogicalSet(
-                    self,
                     inputPointer,
                 )
 
@@ -388,7 +388,6 @@ class TestXmippMovieMaxShiftLogicalWorkerInput(unittest.TestCase):
 
             def _loadLogicalSet(self, inputPointer):
                 return XmippStreamingBase._loadLogicalSet(
-                    self,
                     inputPointer,
                 )
 
@@ -617,10 +616,16 @@ class _FakeOutputSet:
 class TestXmippMovieMaxShiftLogicalOutputCreation(unittest.TestCase):
 
     def testMovieOutputCreationCopiesInfoFromLogicalInput(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
+
         logicalInput = _OutputInfoSource()
         pointer = _Pointer(logicalInput)
 
-        class _Harness:
+        _FakeOutputSet.__name__ = "SetOfMovies"
+
+        class _Harness(XmippStreamingBase):
             inputMovies = pointer
             inputMics = None
 
@@ -634,12 +639,15 @@ class TestXmippMovieMaxShiftLogicalOutputCreation(unittest.TestCase):
             def _getPath(self, baseName):
                 return "/tmp/xmipp-streaming-%s" % baseName
 
+            def _createSetOfMovies(self, suffix=''):
+                return _FakeOutputSet()
+
         protocol = _Harness()
 
         output = XmippProtMovieMaxShift._loadOutputSet(
             protocol,
             _FakeOutputSet,
-            "movies.sqlite",
+            "outputMovies",
         )
 
         self.assertIs(output.copiedFrom, logicalInput)
@@ -781,7 +789,7 @@ class TestXmippMovieMaxShiftLogicalPublishing(unittest.TestCase):
                 return [], 0, [], []
 
             def _loadOutputSet(self, SetClass, baseName):
-                if baseName == "movies.sqlite":
+                if baseName == "outputMovies":
                     return outputMovies
                 return None
 
@@ -934,10 +942,10 @@ class TestXmippMovieMaxShiftLateSiblingMicrograph(unittest.TestCase):
                 return self.inputMics
 
             def _loadOutputSet(self, SetClass, baseName):
-                if baseName == "movies.sqlite":
+                if baseName == "outputMovies":
                     return self.outputMovies
 
-                if baseName == "micrographs.sqlite":
+                if baseName == "outputMicrographs":
                     return self.outputMicrographs
 
                 return None
@@ -1598,6 +1606,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 pass
 
         protocol = _Harness()
+        protocol._lock = Lock()
         protocol.insertedIds = [1, 2, 3]
         protocol.batches = []
         protocol.updateCalls = 0
@@ -1774,10 +1783,10 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 )
 
             def _loadOutputSet(self, SetClass, baseName):
-                if baseName == "micrograph.sqlite":
+                if baseName == "outputMicrographs":
                     return acceptedOutput
 
-                if baseName == "micrographDISCARDED.sqlite":
+                if baseName == "discardedMicrographs":
                     return discardedOutput
 
                 raise AssertionError(
@@ -1799,6 +1808,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 pass
 
         protocol = _Harness()
+        protocol._lock = Lock()
         protocol.processedIds = [7, 8]
         protocol.stats = dict(_Harness.stats)
 
@@ -1821,8 +1831,8 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
             [mic.getObjId() for mic in discardedOutput.items],
             [8],
         )
-        self.assertEqual(acceptedOutput.getIdSetCalls, 1)
-        self.assertEqual(discardedOutput.getIdSetCalls, 1)
+        self.assertEqual(acceptedOutput.getIdSetCalls, 0)
+        self.assertEqual(discardedOutput.getIdSetCalls, 0)
 
     def testTiltAnalysisCheckNewOutputUsesLogicalInputSize(self):
         from xmipp3.protocols.protocol_streaming_base import (
@@ -1871,6 +1881,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 pass
 
         protocol = _Harness()
+        protocol._lock = Lock()
         protocol.processedIds = []
 
         XmippProtTiltAnalysis._checkNewOutput(protocol)
@@ -1987,7 +1998,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 )
 
             def _loadOutputSet(self, SetClass, baseName):
-                if baseName == "micrograph.sqlite":
+                if baseName == "outputMicrographs":
                     return acceptedOutput
 
                 raise AssertionError(
@@ -2009,6 +2020,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 pass
 
         protocol = _Harness()
+        protocol._lock = Lock()
         protocol.processedIds = [7]
         protocol.stats = dict(_Harness.stats)
 
@@ -2087,6 +2099,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 self.processed.append(micrograph.getObjId())
 
         protocol = _Harness()
+        protocol._lock = Lock()
         protocol.processed = []
 
         XmippProtTiltAnalysis.processMicrographListStep(
@@ -2183,6 +2196,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 self.infoMessages.append(message)
 
         protocol = _Harness()
+        protocol._lock = Lock()
         protocol.insertedIds = []
         protocol.batches = []
         protocol.updateCalls = 0
@@ -2281,6 +2295,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
                 pass
 
         protocol = _Harness()
+        protocol._lock = Lock()
         protocol.insertedIds = []
         protocol.batches = []
         protocol.updateCalls = 0
@@ -2316,6 +2331,9 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
         from xmipp3.protocols.protocol_tilt_analysis import (
             XmippProtTiltAnalysis,
         )
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingBase,
+        )
 
         class _LogicalInput:
             pass
@@ -2341,7 +2359,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
         pointer = _Pointer(logicalInput)
         createdOutput = _OutputSet()
 
-        class _Harness:
+        class _Harness(XmippStreamingBase):
             inputMicrographs = pointer
 
             def __init__(self):
@@ -2362,7 +2380,7 @@ class TestXmippTiltAnalysisStreamingBase(unittest.TestCase):
         output = XmippProtTiltAnalysis._loadOutputSet(
             protocol,
             SetOfMicrographs,
-            "micrograph.sqlite",
+            "outputMicrographs",
         )
 
         self.assertIs(output, createdOutput)
@@ -2768,10 +2786,10 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
 
             def _loadOutputSet(self, SetClass, baseName):
                 outputs = {
-                    "ctfs.sqlite": acceptedOutput,
-                    "micrographs.sqlite": acceptedMics,
-                    "ctfsDiscarded.sqlite": discardedOutput,
-                    "micrographsDiscarded.sqlite": discardedMics,
+                    "outputCTF": acceptedOutput,
+                    "outputMicrographs": acceptedMics,
+                    "outputCTFDiscarded": discardedOutput,
+                    "outputMicrographsDiscarded": discardedMics,
                 }
                 return outputs[baseName]
 
@@ -3133,9 +3151,17 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
         class _InputCtfSet:
             def __init__(self, micrographs):
                 self.micrographs = micrographs
+                self.loadCalls = 0
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
 
             def getMicrographs(self):
                 return self.micrographs
+
+            def close(self):
+                self.closeCalls += 1
 
         class _FactorySet:
             STREAM_OPEN = "open"
@@ -3170,6 +3196,12 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
                     "CTFConsensus must not construct "
                     "SetOfMicrographs(filename=...)."
                 )
+
+        # Preserve the production class names expected by the generic
+        # _loadOrCreateOutputSet() factory resolver while still replacing
+        # the concrete classes with test doubles.
+        _FakeSetOfCTF.__name__ = "SetOfCTF"
+        _FakeSetOfMicrographs.__name__ = "SetOfMicrographs"
 
         inputMicrographs = _InputMicrographs()
         inputCtfSet = _InputCtfSet(inputMicrographs)
@@ -3219,22 +3251,22 @@ class TestXmippCTFConsensusStreamingBase(unittest.TestCase):
             acceptedCtf = XmippProtCTFConsensus._loadOutputSet(
                 protocol,
                 _FakeSetOfCTF,
-                "ctfs.sqlite",
+                "outputCTF",
             )
             acceptedMics = XmippProtCTFConsensus._loadOutputSet(
                 protocol,
                 _FakeSetOfMicrographs,
-                "micrographs.sqlite",
+                "outputMicrographs",
             )
             discardedCtf = XmippProtCTFConsensus._loadOutputSet(
                 protocol,
                 _FakeSetOfCTF,
-                "ctfsDiscarded.sqlite",
+                "outputCTFDiscarded",
             )
             discardedMics = XmippProtCTFConsensus._loadOutputSet(
                 protocol,
                 _FakeSetOfMicrographs,
-                "micrographsDiscarded.sqlite",
+                "outputMicrographsDiscarded",
             )
 
         self.assertEqual(
@@ -3739,6 +3771,9 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
             def clone(self):
                 return _Ctf(self.objId, self.defocusU)
 
+            def getObjId(self):
+                return self.objId
+
             def getDefocusU(self):
                 return self.defocusU
 
@@ -3964,18 +3999,32 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
         class _InputCtfSet:
             def __init__(self, micrographs):
                 self.micrographs = micrographs
+                self.loadCalls = 0
+                self.closeCalls = 0
+
+            def loadAllProperties(self):
+                self.loadCalls += 1
 
             def getMicrographs(self):
                 return self.micrographs
 
+            def close(self):
+                self.closeCalls += 1
+
         class _FactorySet:
+            STREAM_OPEN = "open"
+
             def _initialize(self):
                 self.enableAppendCalls = 0
                 self.copiedInfo = None
                 self.micrographs = None
+                self.streamStates = []
 
             def enableAppend(self):
                 self.enableAppendCalls += 1
+
+            def setStreamState(self, state):
+                self.streamStates.append(state)
 
             def copyInfo(self, other):
                 self.copiedInfo = other
@@ -3996,6 +4045,11 @@ class TestXmippMicDefocusSamplerStreamingBase(unittest.TestCase):
                     "MicDefocusSampler must not construct "
                     "SetOfMicrographs(filename=...)."
                 )
+
+        # Preserve the production class names used by the generic
+        # _loadOrCreateOutputSet() factory resolver.
+        _FakeSetOfCTF.__name__ = "SetOfCTF"
+        _FakeSetOfMicrographs.__name__ = "SetOfMicrographs"
 
         inputMicrographs = _InputMicrographs()
         inputCtfSet = _InputCtfSet(inputMicrographs)
@@ -4508,6 +4562,9 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
                 self.loadInputCalls += 1
                 return 3, False
 
+            def _getPendingScreeningStep(self):
+                return None
+
             def _insertNewPartsSteps(self):
                 raise AssertionError(
                     "No batch should be inserted in this focused test."
@@ -4587,6 +4644,10 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
 
         outputSet = _OutputParticles()
 
+        class _FinishedScreeningStep:
+            def isFinished(self):
+                return True
+
         class _Harness(XmippStreamingBase):
             fnInputMd = "input.xmd"
             fnOutputMd = "output.xmd"
@@ -4595,6 +4656,12 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
             outputSize = 1
             finished = False
             inputParticles = object()
+
+            def _getPendingScreeningStep(self):
+                return _FinishedScreeningStep()
+
+            def _getScreeningStepBatchIds(self, step):
+                return [2, 3]
 
             def _loadOutputSet(self, SetClass, baseName):
                 return outputSet
@@ -4673,7 +4740,7 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
         )
         self.assertEqual(protocol.outputSize, 3)
         self.assertEqual(outputSet.getIdSetCalls, 1)
-        self.assertEqual(protocol.metadataReads, ["input.xmd"])
+        self.assertEqual(protocol.metadataReads, [])
         self.assertEqual(protocol.summaryCalls, 1)
         self.assertEqual(protocol.storeCalls, 1)
         self.assertEqual(protocol.events, ["update", "relation"])
@@ -4707,6 +4774,9 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
 
             def _loadInput(self):
                 return 0, False
+
+            def _getPendingScreeningStep(self):
+                return None
 
             def _insertNewPartsSteps(self):
                 return []
@@ -4854,6 +4924,8 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
                     "SetOfParticles(filename=...)."
                 )
 
+        _LegacySetClass.__name__ = "SetOfParticles"
+
         inputSet = _InputParticles()
         pointer = _Pointer(inputSet)
         outputSet = _FactorySet()
@@ -4889,7 +4961,7 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
         result = XmippProtScreenParticles._loadOutputSet(
             protocol,
             _LegacySetClass,
-            "outputParticles.sqlite",
+            "outputParticles",
         )
 
         self.assertIs(result, outputSet)
@@ -5219,6 +5291,10 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
         outputSet = _OutputParticles()
         batchSet = _BatchSet()
 
+        class _FinishedScreeningStep:
+            def isFinished(self):
+                return True
+
         class _Harness(XmippStreamingBase):
             fnInputMd = "input.xmd"
             fnOutputMd = "output.xmd"
@@ -5237,6 +5313,12 @@ class TestXmippScreenParticlesStreamingBase(unittest.TestCase):
             _markRejectedParticleIds = (
                 XmippProtScreenParticles._markRejectedParticleIds
             )
+
+            def _getPendingScreeningStep(self):
+                return _FinishedScreeningStep()
+
+            def _getScreeningStepBatchIds(self, step):
+                return [2, 3]
 
             def _loadOutputSet(self, SetClass, baseName):
                 return outputSet
@@ -5344,6 +5426,7 @@ class TestXmippPreprocessMicrographsLogicalInput(unittest.TestCase):
             XmippProtPreprocessMicrographs,
         )
         from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+        from xmipp3.protocols.protocol_flexalign import XmippProtFlexAlign
 
         inputSet = _PreprocessMicrographSet([3, 7], streamClosed=False)
         pointer = _Pointer(inputSet)
@@ -6216,4 +6299,137 @@ class TestXmippMovieResizeResumeCompletion(unittest.TestCase):
                 'outputMovies',
             ),
             {1, 2},
+        )
+
+
+class TestXmippStreamingFirstPublicationState(unittest.TestCase):
+
+    def testFirstPublicationClearsFirstTimeFlagBeforeTerminalClose(self):
+        from xmipp3.protocols.protocol_flexalign import XmippProtFlexAlign
+
+        from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
+        class _Movie:
+            def getObjId(self):
+                return 7
+
+        class _Harness:
+            finished = False
+            streamClosed = True
+            listOfMovies = [_Movie()]
+
+            def __init__(self):
+                self.persistedReads = 0
+                self.publicationStates = []
+
+            def _getPersistedOutputMovieIds(self):
+                self.persistedReads += 1
+                if self.persistedReads == 1:
+                    return set()
+                return {7}
+
+            def _getFinishedProcessMovieIds(self):
+                return {7}
+
+            def _updateOutputSets(self, newDone, streamMode):
+                self.publicationStates.append(
+                    (bool(newDone), self._firstTimeOutput)
+                )
+
+            def _doMovieFolderCleanUp(self):
+                return False
+
+            def _getFirstJoinStep(self):
+                return None
+
+        protocol = _Harness()
+
+        owner = next(
+            cls for cls in XmippProtFlexAlign.__mro__
+            if "_checkNewOutput" in cls.__dict__
+        )
+        owner._checkNewOutput(protocol)
+
+        self.assertTrue(protocol.finished)
+        self.assertEqual(
+            protocol.publicationStates,
+            [
+                (True, True),
+                (False, False),
+            ],
+        )
+
+class TestXmippStreamingDurableWorkspaceCleanup(unittest.TestCase):
+
+    def testProcessMovieStepDoesNotCleanWorkspaceBeforePublication(self):
+        import inspect
+
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingMoviesMixin,
+        )
+
+        source = inspect.getsource(XmippStreamingMoviesMixin.processMovieStep)
+
+        self.assertNotIn(
+            "self._cleanMovieFolder(movieFolder)",
+            source,
+            "processMovieStep must not delete the movie workspace before "
+            "the output has been confirmed durable.",
+        )
+
+    def testCheckNewOutputCleansOnlyDurablyPersistedMovieWorkspaces(self):
+        from xmipp3.protocols.protocol_streaming_base import (
+            XmippStreamingMoviesMixin,
+        )
+
+        class _Movie:
+            def __init__(self, objId):
+                self._objId = objId
+
+            def getObjId(self):
+                return self._objId
+
+        class _Harness:
+            finished = False
+            streamClosed = False
+            listOfMovies = [_Movie(7), _Movie(8)]
+
+            def __init__(self):
+                self.persistedReads = 0
+                self.cleaned = []
+
+            def _getPersistedOutputMovieIds(self):
+                self.persistedReads += 1
+                if self.persistedReads == 1:
+                    return set()
+                return {7}
+
+            def _getFinishedProcessMovieIds(self):
+                return {7, 8}
+
+            def _updateOutputSets(self, newDone, streamMode):
+                self.publishedIds = [movie.getObjId() for movie in newDone]
+
+            def _doMovieFolderCleanUp(self):
+                return True
+
+            def _getOutputMovieFolder(self, movie):
+                return "movie-%d" % movie.getObjId()
+
+            def _cleanMovieFolder(self, movieFolder):
+                self.cleaned.append(movieFolder)
+
+            def _getFirstJoinStep(self):
+                return None
+
+        protocol = _Harness()
+
+        XmippStreamingMoviesMixin._checkNewOutput(protocol)
+
+        self.assertEqual(protocol.publishedIds, [7, 8])
+        self.assertEqual(
+            protocol.cleaned,
+            ["movie-7"],
+            "Only the movie confirmed in durable output may be cleaned; "
+            "the ambiguously/unpersisted movie workspace must remain.",
         )
