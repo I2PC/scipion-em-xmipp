@@ -126,9 +126,25 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             label="Save GMM fits?",
             expertLevel=LEVEL_ADVANCED,
         )
+        form.addParam(
+            "saveLowHighWeightAverages",
+            BooleanParam,
+            default=False,
+            help="For each class, save two extra averages: the average of a certain proportion of the particles with the lowest weights and the same proportion with the highest weights.",
+            label="Save averages of particles with lowest/highest weights?",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "saveAverageDifferences",
+            BooleanParam,
+            default=False,
+            help="For each class, save the difference between the regular average and the robust average.",
+            label="Save average differences?",
+            expertLevel=LEVEL_ADVANCED,
+        )
 
         add_estimator_section(form)
-        
+
         form.addSection(label="Compute")
         form.addParam(
             "useGpu",
@@ -291,11 +307,16 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--out-original-avgs {quote(str(self._getRawConeAveragesPath()))} "
         )
 
+        if self.saveLowHighWeightAverages.get():
+            args += f"--out-low-weight-avgs {self._getLowWeightAveragesPath()} "
+            args += f"--out-high-weight-avgs {self._getHighWeightAveragesPath()} "
+
+        if self.saveAverageDifferences.get():
+            args += f"--out-difference-avgs {self._getAverageDifferencesPath()} "
+
         args += build_estimator_args(self)
 
-        self.runJob(
-            "xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1
-        )
+        self.runJob("xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1)
 
     def createOutputStep(self):
         outputMd = md.MetaData(self._getAveragingOutputStarPath())
