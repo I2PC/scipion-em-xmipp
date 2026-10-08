@@ -38,7 +38,13 @@ from pwem.objects import SetOfClasses2D
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam, EnumParam, FloatParam
+from pyworkflow.protocol.params import (
+    PointerParam,
+    IntParam,
+    BooleanParam,
+    EnumParam,
+    FloatParam,
+)
 from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
@@ -57,6 +63,7 @@ class EstimatorType(IntEnum):
     def label(self) -> str:
         """String representation used for CLI flags and protocol form choices"""
         return self.name.lower()
+
 
 ROBUST_WEIGHT_COL = "wRobust"
 STD_ROBUST_WEIGHT_COL = "wRobustStd"
@@ -94,18 +101,18 @@ def add_estimator_section(form):
         label="GMM Reweighting",
     )
     estimator_condition: Dict[EstimatorType, str] = {
-        estimator_type: f"bool(estimatorType == {estimator_type.value})" 
+        estimator_type: f"bool(estimatorType == {estimator_type.value})"
         for estimator_type in EstimatorType
     }
     gmm_condition = "bool(gmmReweighting)"
-    
+
     form.addParam(
         "estimatorIterations",
         IntParam,
         condition="not(" + gmm_condition + ")",
         default=30,
         help="Number of estimator iterations",
-        label="Estimator iterations"
+        label="Estimator iterations",
     )
     form.addParam(
         "lowpassCutoff",
@@ -115,7 +122,7 @@ def add_estimator_section(form):
         help="Normalized frequency cutoff for the estimator's low pass mask",
         label="Lowpass Cutoff",
     )
-    
+
     form.addParam(
         "internalEstimatorIterations",
         IntParam,
@@ -172,7 +179,7 @@ def add_estimator_section(form):
         default=0.05,
         help="Initial weight for the GMM component with a lower mean weight",
         expertLevel=LEVEL_ADVANCED,
-        label="Initial bad component weight"
+        label="Initial bad component weight",
     )
     form.addParam(
         "gmmInitialBadQuantile",
@@ -185,51 +192,90 @@ def add_estimator_section(form):
             "the provided quantile should be between 0 and 0.5."
         ),
         expertLevel=LEVEL_ADVANCED,
-        label="Initial bad component mean"
+        label="Initial bad component mean",
     )
-
 
     noise_condition = estimator_condition[EstimatorType.NOISE_CORRECTED_COSINE]
     form.addParam(
-        "estimateNoiseVariance", BooleanParam, condition=noise_condition,
-        default=True, label="Estimate noise variance?",
+        "estimateNoiseVariance",
+        BooleanParam,
+        condition=noise_condition,
+        default=True,
+        label="Estimate noise variance?",
         help="Estimate input pixel noise variance with checkerboard MAD inside the mask. "
-             "CTF correction and alignment interpolation can make the white-noise model approximate.",
+        "CTF correction and alignment interpolation can make the white-noise model approximate.",
     )
     form.addParam(
-        "noiseVariance", FloatParam, condition=f"{noise_condition} and not estimateNoiseVariance",
-        default=1.0, label="Input noise variance",
+        "noiseVariance",
+        FloatParam,
+        condition=f"{noise_condition} and not estimateNoiseVariance",
+        default=1.0,
+        label="Input noise variance",
         help="Known per-pixel variance in the supplied image units, before score preprocessing. "
-             "This is a variance, not a standard deviation.",
+        "This is a variance, not a standard deviation.",
     )
     form.addParam(
-        "poolNoiseVariance", BooleanParam, condition=f"{noise_condition} and estimateNoiseVariance",
-        default=False, label="Pool noise estimates?",
+        "poolNoiseVariance",
+        BooleanParam,
+        condition=f"{noise_condition} and estimateNoiseVariance",
+        default=False,
+        label="Pool noise estimates?",
         help="Use the median automatic variance for every image. Enable only for common noise variance.",
         expertLevel=LEVEL_ADVANCED,
     )
     for name, default, label, help_text in [
-        ("noiseFilterSigma", 0.0, "Score smoothing width (pixels)",
-         "Gaussian Fourier smoothing for scores only. Zero disables smoothing; averages use original images."),
-        ("noiseMinFrequency", 0.0, "Minimum score frequency",
-         "Radial frequency in cycles/pixel. Zero disables the lower cutoff."),
-        ("noiseMaxFrequency", 0.0, "Maximum score frequency",
-         "Radial frequency in cycles/pixel. Zero disables the upper cutoff. 0.25 is half axial Nyquist."),
-        ("noiseMinSignalFraction", 0.05, "Minimum resolved signal fraction",
-         "Require corrected signal energy above this fraction of expected noise energy. "
-         "Unresolved images receive cosine zero."),
+        (
+            "noiseFilterSigma",
+            0.0,
+            "Score smoothing width (pixels)",
+            "Gaussian Fourier smoothing for scores only. Zero disables smoothing; averages use original images.",
+        ),
+        (
+            "noiseMinFrequency",
+            0.0,
+            "Minimum score frequency",
+            "Radial frequency in cycles/pixel. Zero disables the lower cutoff.",
+        ),
+        (
+            "noiseMaxFrequency",
+            0.0,
+            "Maximum score frequency",
+            "Radial frequency in cycles/pixel. Zero disables the upper cutoff. 0.25 is half axial Nyquist.",
+        ),
+        (
+            "noiseMinSignalFraction",
+            0.05,
+            "Minimum resolved signal fraction",
+            "Require corrected signal energy above this fraction of expected noise energy. "
+            "Unresolved images receive cosine zero.",
+        ),
     ]:
-        form.addParam(name, FloatParam, condition=noise_condition, default=default,
-                      label=label, help=help_text, expertLevel=LEVEL_ADVANCED)
+        form.addParam(
+            name,
+            FloatParam,
+            condition=noise_condition,
+            default=default,
+            label=label,
+            help=help_text,
+            expertLevel=LEVEL_ADVANCED,
+        )
     form.addParam(
-        "clipNoiseCosine", BooleanParam, condition=noise_condition, default=False,
-        label="Clip corrected cosine?", expertLevel=LEVEL_ADVANCED,
+        "clipNoiseCosine",
+        BooleanParam,
+        condition=noise_condition,
+        default=False,
+        label="Clip corrected cosine?",
+        expertLevel=LEVEL_ADVANCED,
         help="Clip scores to [-1,1]. Disabled by default to avoid point masses in the GMM. "
-             "Direct weights always clip to [0,1].",
+        "Direct weights always clip to [0,1].",
     )
     form.addParam(
-        "noiseWeightPower", FloatParam, condition=f"{noise_condition} and not gmmReweighting",
-        default=1.0, label="Cosine weight power", expertLevel=LEVEL_ADVANCED,
+        "noiseWeightPower",
+        FloatParam,
+        condition=f"{noise_condition} and not gmmReweighting",
+        default=1.0,
+        label="Cosine weight power",
+        expertLevel=LEVEL_ADVANCED,
         help="Positive exponent applied to direct cosine weights; larger values increase contrast.",
     )
 
@@ -248,38 +294,75 @@ def build_estimator_args(protocol):
         if native:
             args += ["--estimator-max-iter", str(protocol.gmmIterations.get())]
         else:
-            args += ["--gmm", "--estimator-max-iter", str(protocol.internalEstimatorIterations.get()),
-                     "--gmm-external-max-iter", str(protocol.gmmIterations.get())]
-        args += ["--gmm-initial-bad-weight", str(protocol.gmmInitialBadWeight.get()),
-                 "--gmm-initial-bad-quantile", str(protocol.gmmInitialBadQuantile.get())]
+            args += [
+                "--gmm",
+                "--estimator-max-iter",
+                str(protocol.internalEstimatorIterations.get()),
+                "--gmm-external-max-iter",
+                str(protocol.gmmIterations.get()),
+            ]
+        args += [
+            "--gmm-initial-bad-weight",
+            str(protocol.gmmInitialBadWeight.get()),
+            "--gmm-initial-bad-quantile",
+            str(protocol.gmmInitialBadQuantile.get()),
+        ]
         if protocol.checkDegenerateGmm.get():
-            args += ["--gmm-check-degenerate", "--gmm-min-component-sep", str(protocol.gmmMinSep.get()),
-                     "--gmm-min-good-weight", str(protocol.gmmMinWeight.get())]
+            args += [
+                "--gmm-check-degenerate",
+                "--gmm-min-component-sep",
+                str(protocol.gmmMinSep.get()),
+                "--gmm-min-good-weight",
+                str(protocol.gmmMinWeight.get()),
+            ]
         else:
             args += ["--no-gmm-check-degenerate"]
         if protocol.saveGmmFits.get():
             args += ["--out-gmm-diagnostics", protocol._getGmmDiagnosticsPath()]
     else:
-        args += ["--no-gmm", "--estimator-max-iter", str(protocol.estimatorIterations.get())]
+        args += [
+            "--no-gmm",
+            "--estimator-max-iter",
+            str(protocol.estimatorIterations.get()),
+        ]
 
     if native:
-        args += [estimator.label, "--weighting", "gmm" if use_gmm else "cosine",
-                 "--filter-sigma", str(protocol.noiseFilterSigma.get()),
-                 "--min-frequency", str(protocol.noiseMinFrequency.get()),
-                 "--min-signal-fraction", str(protocol.noiseMinSignalFraction.get()),
-                 "--clip-cosine" if protocol.clipNoiseCosine.get() else "--no-clip-cosine"]
+        args += [
+            estimator.label,
+            "--weighting",
+            "gmm" if use_gmm else "cosine",
+            "--filter-sigma",
+            str(protocol.noiseFilterSigma.get()),
+            "--min-frequency",
+            str(protocol.noiseMinFrequency.get()),
+            "--min-signal-fraction",
+            str(protocol.noiseMinSignalFraction.get()),
+            "--clip-cosine" if protocol.clipNoiseCosine.get() else "--no-clip-cosine",
+        ]
         maximum = protocol.noiseMaxFrequency.get()
         if maximum != 0:
             args += ["--max-frequency", str(maximum)]
         if protocol.estimateNoiseVariance.get():
-            args += ["--pool-noise" if protocol.poolNoiseVariance.get() else "--no-pool-noise"]
+            args += [
+                (
+                    "--pool-noise"
+                    if protocol.poolNoiseVariance.get()
+                    else "--no-pool-noise"
+                )
+            ]
         else:
             args += ["--noise-variance", str(protocol.noiseVariance.get())]
         if not use_gmm:
             args += ["--weight-power", str(protocol.noiseWeightPower.get())]
     elif estimator == EstimatorType.FOURIER_MASKED:
-        args += ["fourier_irls", "--weight-approach", "per-image", "--lowpass-mask",
-                 "--lowpass-mask-cutoff", str(protocol.lowpassCutoff.get())]
+        args += [
+            "fourier_irls",
+            "--weight-approach",
+            "per-image",
+            "--lowpass-mask",
+            "--lowpass-mask-cutoff",
+            str(protocol.lowpassCutoff.get()),
+        ]
     else:
         args += [estimator.label]
     return join(args)
@@ -330,6 +413,22 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             default=False,
             help="Save extra files with information about GMM fits.",
             label="Save GMM fits?",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "saveLowHighWeightAverages",
+            BooleanParam,
+            default=False,
+            help="For each class, save two extra averages: the average of a certain proportion of the particles with the lowest weights and the same proportion with the highest weights.",
+            label="Save averages of particles with lowest/highest weights?",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "saveAverageDifferences",
+            BooleanParam,
+            default=False,
+            help="For each class, save the difference between the regular average and the robust average.",
+            label="Save average differences?",
             expertLevel=LEVEL_ADVANCED,
         )
 
@@ -516,6 +615,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getGmmDiagnosticsPath(self):
         return self._getExtraPath("gmmDiagnostics")
 
+    def _getLowWeightAveragesPath(self):
+        return self._getExtraPath("lowWeightAverages.mrcs")
+
+    def _getHighWeightAveragesPath(self):
+        return self._getExtraPath("highWeightAverages.mrcs")
+
+    def _getAverageDifferencesPath(self):
+        return self._getExtraPath("averageDifferences.mrcs")
+
     def _getEstimatorType(self) -> EstimatorType:
         return EstimatorType(self.estimatorType.get())
 
@@ -590,6 +698,13 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--out-original-avgs {quote(str(originalAveragePath))} "
             f"--device {device} "
         )
+
+        if self.saveLowHighWeightAverages.get():
+            args += f"--out-low-weight-avgs {self._getLowWeightAveragesPath()} "
+            args += f"--out-high-weight-avgs {self._getHighWeightAveragesPath()} "
+
+        if self.saveAverageDifferences.get():
+            args += f"--out-difference-avgs {self._getAverageDifferencesPath()} "
 
         args += build_estimator_args(self)
 
