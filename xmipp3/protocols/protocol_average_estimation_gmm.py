@@ -37,7 +37,13 @@ from pwem.objects import SetOfClasses2D
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, IntParam, BooleanParam, EnumParam, FloatParam
+from pyworkflow.protocol.params import (
+    PointerParam,
+    IntParam,
+    BooleanParam,
+    EnumParam,
+    FloatParam,
+)
 from pyworkflow.constants import BETA
 from xmipp3.base import XmippProtocol
 
@@ -55,6 +61,7 @@ class EstimatorType(IntEnum):
     def label(self) -> str:
         """String representation used for CLI flags and protocol form choices"""
         return self.name.lower()
+
 
 ROBUST_WEIGHT_COL = "wRobust"
 STD_ROBUST_WEIGHT_COL = "wRobustStd"
@@ -90,18 +97,18 @@ def add_estimator_section(form):
         label="GMM Reweighting",
     )
     estimator_condition: Dict[EstimatorType, str] = {
-        estimator_type: f"bool(estimatorType == {estimator_type.value})" 
+        estimator_type: f"bool(estimatorType == {estimator_type.value})"
         for estimator_type in EstimatorType
     }
     gmm_condition = "bool(gmmReweighting)"
-    
+
     form.addParam(
         "estimatorIterations",
         IntParam,
         condition="not(" + gmm_condition + ")",
         default=30,
         help="Number of estimator iterations",
-        label="Estimator iterations"
+        label="Estimator iterations",
     )
     form.addParam(
         "lowpassCutoff",
@@ -111,7 +118,7 @@ def add_estimator_section(form):
         help="Normalized frequency cutoff for the estimator's low pass mask",
         label="Lowpass Cutoff",
     )
-    
+
     form.addParam(
         "internalEstimatorIterations",
         IntParam,
@@ -168,7 +175,7 @@ def add_estimator_section(form):
         default=0.05,
         help="Initial weight for the GMM component with a lower mean weight",
         expertLevel=LEVEL_ADVANCED,
-        label="Initial bad component weight"
+        label="Initial bad component weight",
     )
     form.addParam(
         "gmmInitialBadQuantile",
@@ -181,7 +188,7 @@ def add_estimator_section(form):
             "the provided quantile should be between 0 and 0.5."
         ),
         expertLevel=LEVEL_ADVANCED,
-        label="Initial bad component mean"
+        label="Initial bad component mean",
     )
 
 
@@ -230,6 +237,22 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             default=False,
             help="Save extra files with information about GMM fits.",
             label="Save GMM fits?",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "saveLowHighWeightAverages",
+            BooleanParam,
+            default=False,
+            help="For each class, save two extra averages: the average of a certain proportion of the particles with the lowest weights and the same proportion with the highest weights.",
+            label="Save averages of particles with lowest/highest weights?",
+            expertLevel=LEVEL_ADVANCED,
+        )
+        form.addParam(
+            "saveAverageDifferences",
+            BooleanParam,
+            default=False,
+            help="For each class, save the difference between the regular average and the robust average.",
+            label="Save average differences?",
             expertLevel=LEVEL_ADVANCED,
         )
 
@@ -416,6 +439,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getGmmDiagnosticsPath(self):
         return self._getExtraPath("gmmDiagnostics")
 
+    def _getLowWeightAveragesPath(self):
+        return self._getExtraPath("lowWeightAverages.mrcs")
+
+    def _getHighWeightAveragesPath(self):
+        return self._getExtraPath("highWeightAverages.mrcs")
+
+    def _getAverageDifferencesPath(self):
+        return self._getExtraPath("averageDifferences.mrcs")
+
     def _getEstimatorType(self) -> EstimatorType:
         return EstimatorType(self.estimatorType.get())
 
@@ -490,6 +522,13 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--out-original-avgs {originalAveragePath} "
             f"--device {device} "
         )
+
+        if self.saveLowHighWeightAverages.get():
+            args += f"--out-low-weight-avgs {self._getLowWeightAveragesPath()} "
+            args += f"--out-high-weight-avgs {self._getHighWeightAveragesPath()} "
+
+        if self.saveAverageDifferences.get():
+            args += f"--out-difference-avgs {self._getAverageDifferencesPath()} "
 
         if self.gmmReweighting.get():
             args += "--gmm "
