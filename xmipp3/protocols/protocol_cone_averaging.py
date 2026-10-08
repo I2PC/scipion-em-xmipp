@@ -212,6 +212,15 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
     def _getGmmDiagnosticsPath(self):
         return self._getExtraPath("gmmDiagnostics")
+    
+    def _getLowWeightAveragesPath(self):
+        return self._getExtraPath("lowWeightAverages.mrcs")
+
+    def _getHighWeightAveragesPath(self):
+        return self._getExtraPath("highWeightAverages.mrcs")
+
+    def _getAverageDifferencesPath(self):
+        return self._getExtraPath("averageDifferences.mrcs")
 
     def _getEstimatorType(self):
         return EstimatorType(self.estimatorType.get())
