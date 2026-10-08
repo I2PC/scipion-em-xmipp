@@ -680,16 +680,20 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
         coordMicsPointer = self.getCoords().getMicrographs(asPointer=True)
         coordMicsSet = self._loadLogicalSet(coordMicsPointer)
         try:
-            newIds, self._micsWatermark = self._discoverIdsAfter(
-                coordMicsSet, self._micsWatermark,
-            )
+            newIds, self._micsWatermark = self._discoverIdsAfter(coordMicsSet, self._micsWatermark)
+            producerClosed = coordMicsSet.isStreamClosed()
+            knownMicIds = {mic.getObjId() for mic in self.micDict.values()}
+            knownMicIds.update(self._pendingMicIds)
+            if producerClosed:
+                newIds, terminalConsistent = self._reconcileClosedStreamIds(
+                    coordMicsSet, newIds, knownMicIds, True, watermarkAttr='_micsWatermark')
+            else:
+                terminalConsistent = True
             self._pendingMicIds.update(newIds)
-            candidateMics = self._loadLogicalSetItemsByIds(
-                coordMicsSet, self._pendingMicIds,
-            )
+            candidateMics = self._loadLogicalSetItemsByIds(coordMicsSet, self._pendingMicIds)
             candidateMics = [XmippStreamingBase._hydrateLogicalSetItemAcquisition(coordMicsSet, mic) for mic in candidateMics]
             micDict = {mic.getMicName(): mic for mic in candidateMics}
-            self.micsClosed = coordMicsSet.isStreamClosed()
+            self.micsClosed = producerClosed and terminalConsistent
         finally:
             coordMicsSet.close()
 
@@ -900,9 +904,7 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                 self.runJob('xmipp_transform_normalize',
                             '-i %s.mrcs %s' % (outputRoot, normalizeArgs))
         else:
-            self.warning("The micrograph %s hasn't coordinate file! "
-                         % baseMicName)
-            self.warning("Maybe you picked over a subset of micrographs")
+            raise RuntimeError("Converted coordinates are missing for micrograph %s: %s" % (mic.getMicName(), fnPosFile))
 
         # Clean exactly the temporary files this micrograph created. The
         # old pattern was a prefix glob, so finishing "mic1" also deleted
@@ -1186,6 +1188,7 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
         and update the outputParts set with new items.
         """
         p = Particle()
+        durableIds = outputParts.getIdSet() if hasattr(outputParts, 'getIdSet') else set()
         boxScale = self.getBoxScale()
         for mic in micList:
             try:
@@ -1200,6 +1203,8 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
 
                 added = set() # Keep track of added coords to avoid duplicates
                 fnMicXmd = self._getMicXmd(mic)
+                if not exists(fnMicXmd):
+                    raise RuntimeError("Extracted particle metadata is missing for micrograph %s: %s" % (mic.getMicName(), fnMicXmd))
                 if exists(fnMicXmd):
                     for row in md.iterRows(fnMicXmd):
                         pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
@@ -1222,6 +1227,8 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                             # disabled particles (in metadata) should not add to the
                             # final set
                             if row.getValue(md.MDL_ENABLED) > 0:
+                                if coord.getObjId() in durableIds:
+                                    continue
                                 outputParts.append(p)
                                 added.add(coord.getObjId())
             except Exception as e:
@@ -1234,11 +1241,12 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                     "extracted particles (%s); skipping it."
                     % (mic.getObjId(), e)
                 )
+                raise
             finally:
                 # Release the list of coordinates for this micrograph
                 # since it will not be needed again, whether or not it
                 # succeeded.
-                del self.coordDict[mic.getObjId()]
+                pass
 
     def _getMicPos(self, mic):
         """ Return the corresponding .pos file for a given micrograph. """

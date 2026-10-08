@@ -12,6 +12,7 @@ from threading import Lock
 from pwem.protocols import ProtProcessMovies
 
 from xmipp3.protocols.protocol_movie_max_shift import XmippProtMovieMaxShift
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 
 STREAMING_MODULE = "xmipp3.protocols.protocol_streaming_base"
@@ -6433,3 +6434,117 @@ class TestXmippStreamingDurableWorkspaceCleanup(unittest.TestCase):
             "Only the movie confirmed in durable output may be cleaned; "
             "the ambiguously/unpersisted movie workspace must remain.",
         )
+
+
+class _StuckClosedSet:
+    """A producer that closed declaring more items than it ever shows.
+
+    The declared size never comes down and the missing row never turns
+    up: the view is terminally inconsistent, for good.
+    """
+
+    def __init__(self, declaredSize=100, visibleIds=None):
+        self._declaredSize = declaredSize
+        self._visibleIds = list(visibleIds if visibleIds is not None
+                                else range(1, 100))
+
+    def getSize(self):
+        return self._declaredSize
+
+    def isStreamClosed(self):
+        return True
+
+    def getUniqueValues(self, attributes, where=None):
+        return list(self._visibleIds) if where is None else []
+
+    def close(self):
+        pass
+
+
+class _TerminalStallHarness(XmippStreamingBase):
+    """Reconciles a closed-but-inconsistent stream, poll after poll."""
+
+    def __init__(self, activeWork=False):
+        self._lastInputId = 0
+        self._activeWork = activeWork
+
+    def _hasActiveStreamingWork(self):
+        return self._activeWork
+
+    def poll(self, inputSet):
+        return self._reconcileClosedStreamIds(inputSet, [], set(), True, '_lastInputId')
+
+
+class TestTerminalInconsistencyDoesNotHangForever(unittest.TestCase):
+    """A closed producer whose view never becomes consistent must not
+    leave the protocol polling for the rest of time."""
+
+    def _pollUntilRaises(self, harness, inputSet, limit=200):
+        for poll in range(limit):
+            try:
+                harness.poll(inputSet)
+            except RuntimeError as error:
+                return poll + 1, str(error)
+
+        return None, None
+
+    def testAPermanentlyInconsistentViewEventuallyFails(self):
+        polls, message = self._pollUntilRaises(_TerminalStallHarness(),
+                                               _StuckClosedSet())
+
+        self.assertIsNotNone(
+            polls,
+            "The producer closed declaring 100 items and only 99 are ever "
+            "visible: polling for that hundredth row never ends.",
+        )
+        self.assertIn('99', message)
+        self.assertIn('100', message)
+
+    def testItGivesTheViewSeveralChancesFirst(self):
+        """A lagging view usually catches up; do not fail on poll one."""
+        polls, _ = self._pollUntilRaises(_TerminalStallHarness(),
+                                         _StuckClosedSet())
+
+        self.assertGreater(
+            polls,
+            3,
+            "Giving up almost immediately would turn an ordinary lag into "
+            "a failed protocol.",
+        )
+
+    def testProgressResetsTheCount(self):
+        harness = _TerminalStallHarness()
+        inputSet = _StuckClosedSet()
+
+        for _ in range(5):
+            harness.poll(inputSet)
+
+        inputSet._visibleIds.append(100)
+        harness.poll(inputSet)
+
+        self.assertEqual(
+            harness._terminalStallCount,
+            0,
+            "The view did become consistent; nothing is stalled.",
+        )
+
+    def testWorkInFlightIsAlsoProgress(self):
+        """A long scientific round must not be mistaken for a stall."""
+        polls, _ = self._pollUntilRaises(
+            _TerminalStallHarness(activeWork=True), _StuckClosedSet(),
+            limit=60)
+
+        self.assertIsNone(
+            polls,
+            "Work was in flight the whole time: that is progress, however "
+            "long it takes.",
+        )
+
+    def testAConsistentViewIsNeverAffected(self):
+        harness = _TerminalStallHarness()
+        inputSet = _StuckClosedSet(declaredSize=99)
+
+        for _ in range(50):
+            _, consistent = harness.poll(inputSet)
+
+        self.assertTrue(consistent)

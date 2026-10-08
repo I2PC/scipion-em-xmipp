@@ -71,6 +71,61 @@ class XmippStreamingBase:
 
 
 
+    # How many polls a closed producer may keep showing exactly the same
+    # incomplete view before the protocol gives up on it.
+    TERMINAL_STALL_POLLS = 10
+
+    def _hasActiveStreamingWork(self):
+        """Whether something is still in flight for this protocol.
+
+        Work in flight is progress, however long it takes, so it must
+        never be counted towards a terminal stall. A protocol that does
+        not know how to answer this says so by returning True, which
+        simply means the stall detector stays out of its way.
+        """
+        return True
+
+    def _recordTerminalProgress(self, inputSet, knownIds, watermarkAttr,
+                                terminalConsistent):
+        """Refuse to poll forever for rows that are never coming.
+
+        A producer can close declaring more items than the consumer can
+        see, and usually the rest turn up a moment later. When they do
+        not - the declared size, what is known, and the watermark all
+        stay exactly as they were, poll after poll, with nothing in
+        flight - the protocol would otherwise sit there RUNNING for the
+        rest of time. Say what is missing and fail instead.
+        """
+        if terminalConsistent:
+            self._terminalStallSignature = None
+            self._terminalStallCount = 0
+
+            return
+
+        if self._hasActiveStreamingWork():
+            self._terminalStallCount = 0
+
+            return
+
+        signature = (inputSet.getSize(), len(knownIds),
+                     getattr(self, watermarkAttr, 0))
+
+        if signature == getattr(self, '_terminalStallSignature', None):
+            self._terminalStallCount = getattr(
+                self, '_terminalStallCount', 0) + 1
+        else:
+            self._terminalStallSignature = signature
+            self._terminalStallCount = 1
+
+        if self._terminalStallCount >= self.TERMINAL_STALL_POLLS:
+            raise RuntimeError(
+                "The input stream closed declaring %d items but only %d "
+                "are visible, and that has not changed in %d polls with "
+                "nothing left to process. Refusing to wait for rows that "
+                "are not coming."
+                % (inputSet.getSize(), len(knownIds),
+                   self._terminalStallCount))
+
     def _reconcileClosedStreamIds(
         self,
         inputSet,
@@ -90,6 +145,9 @@ class XmippStreamingBase:
         visibleKnownIds = knownIds.union(discoveredIds)
 
         if len(visibleKnownIds) >= expectedSize:
+            self._recordTerminalProgress(inputSet, visibleKnownIds,
+                                         watermarkAttr, True)
+
             return discoveredIds, True
 
         reconciledIds = list(inputSet.getUniqueValues('id'))
@@ -113,9 +171,13 @@ class XmippStreamingBase:
             if itemId not in knownIds
         ]
 
+        reconciledKnownIds = knownIds.union(visibleIds)
         terminalConsistent = (
-            len(knownIds.union(visibleIds)) >= expectedSize
+            len(reconciledKnownIds) >= expectedSize
         )
+
+        self._recordTerminalProgress(inputSet, reconciledKnownIds,
+                                     watermarkAttr, terminalConsistent)
 
         return newIds, terminalConsistent
 
