@@ -234,30 +234,67 @@ class XmippStreamingBase:
 
         return item
 
-    def _loadLogicalSetItemsByIds(self, inputSet, itemIds, batchSize=500):
+    @staticmethod
+    def _selectLogicalSetItemsByIds(inputSet, itemIds, batchSize=500):
+        """Read exact logical IDs through supported Set operations.
+
+        Prefer batched membership filters. If a Set does not support them,
+        use small, bounded ID ranges and retain only the requested items.
+        Avoid disjunctions: implementations may compose filters with their
+        own scope conditions without grouping disjunctive expressions.
+
+        Return None when the available filtered and direct lookup operations
+        cannot retrieve the items; callers may use their iterable fallback.
+        """
         itemIds = sorted(set(itemIds))
         if not itemIds:
             return []
 
-
-        def cloneItem(item):
-            item = self._hydrateLogicalSetItemAcquisition(inputSet, item)
-            clone = getattr(item, "clone", None)
-            return clone() if callable(clone) else item
-
+        batchSize = max(1, int(batchSize))
         iterItems = getattr(inputSet, "iterItems", None)
         if callable(iterItems):
-            items = []
+            # Preserve the fast path for Sets supporting membership filters.
+            # Collect every chunk before returning so an unsupported filter
+            # in a later chunk cannot leak a partial result.
             try:
+                items = []
                 for offset in range(0, len(itemIds), batchSize):
                     batch = itemIds[offset:offset + batchSize]
                     where = "id IN (%s)" % ",".join(str(itemId) for itemId in batch)
-                    for item in iterItems(orderBy="id", direction="ASC", where=where):
-                        items.append(cloneItem(item))
+                    items.extend(iterItems(orderBy="id", direction="ASC", where=where))
                 return items
             except NotImplementedError:
                 pass
 
+            # Keep the requested ranges small to avoid broad reads
+            # for sparse IDs, while reducing individual lookups for dense
+            # input batches.
+            maxSpan = min(batchSize, 500)
+            ranges = []
+            lower = upper = itemIds[0]
+            wanted = {lower}
+            for itemId in itemIds[1:]:
+                if itemId - lower > maxSpan:
+                    ranges.append((lower, upper, wanted))
+                    lower = itemId
+                    wanted = {itemId}
+                else:
+                    wanted.add(itemId)
+                upper = itemId
+            ranges.append((lower, upper, wanted))
+
+            try:
+                items = []
+                for lower, upper, wanted in ranges:
+                    where = "id >= %d AND id <= %d" % (lower, upper)
+                    for item in iterItems(orderBy="id", direction="ASC", where=where):
+                        if item.getObjId() in wanted:
+                            items.append(item)
+                return items
+            except NotImplementedError:
+                pass
+
+        # Compatibility for custom Sets without either filtering syntax.
         getItem = getattr(inputSet, "getItem", None)
         if callable(getItem):
             items = []
@@ -267,11 +304,29 @@ class XmippStreamingBase:
                 except (UnboundLocalError, KeyError):
                     item = None
                 if item is not None:
-                    items.append(cloneItem(item))
+                    items.append(item)
             return items
 
-        wantedIds = set(itemIds)
-        return [cloneItem(item) for item in inputSet if item.getObjId() in wantedIds]
+        return None
+
+    def _loadLogicalSetItemsByIds(self, inputSet, itemIds, batchSize=500):
+        itemIds = sorted(set(itemIds))
+        if not itemIds:
+            return []
+
+        def cloneItem(item):
+            item = self._hydrateLogicalSetItemAcquisition(inputSet, item)
+            clone = getattr(item, "clone", None)
+            return clone() if callable(clone) else item
+
+        items = XmippStreamingBase._selectLogicalSetItemsByIds(
+            inputSet, itemIds, batchSize=batchSize,
+        )
+        if items is None:
+            # Retain compatibility with nonstandard, iterable-only Sets.
+            wantedIds = set(itemIds)
+            items = (item for item in inputSet if item.getObjId() in wantedIds)
+        return [cloneItem(item) for item in items]
 
     @staticmethod
     def _getOutputIds(outputSet):
@@ -375,28 +430,11 @@ class XmippStreamingBase:
         if callable(loadAllProperties):
             loadAllProperties()
 
-        iterItems = getattr(outputSet, "iterItems", None)
-        if callable(iterItems):
-            where = "id IN (%s)" % ", ".join(str(itemId) for itemId in candidateIds)
-            try:
-                items = iterItems(orderBy="id", direction="ASC", where=where)
-                return {item.getObjId() for item in items}
-            except NotImplementedError:
-                pass
-
-        getItem = getattr(outputSet, "getItem", None)
-        if callable(getItem):
-            persistedIds = set()
-            for itemId in candidateIds:
-                try:
-                    item = getItem("id", itemId)
-                except UnboundLocalError:
-                    # Missing logical ids may surface as UnboundLocalError
-                    # from Set.__getitem__; treat them as not persisted.
-                    item = None
-                if item is not None:
-                    persistedIds.add(itemId)
-            return persistedIds
+        items = XmippStreamingBase._selectLogicalSetItemsByIds(
+            outputSet, candidateIds,
+        )
+        if items is not None:
+            return {item.getObjId() for item in items}
 
         return self._getOutputIds(outputSet).intersection(candidateIds)
 

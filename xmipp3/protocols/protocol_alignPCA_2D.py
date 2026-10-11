@@ -461,9 +461,9 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
 
             batchRemaining = self.classificationBatch.get() - len(newParticlesSet)
             if batchRemaining <= 0:
-                # Never pass limit=0 to Set.iterItems(): Classic SQLite
-                # treats a falsy limit as no LIMIT, which would consume the
-                # rest of the stream into an already full pending batch.
+                # Avoid limit=0: some Set implementations treat it as
+                # an unbounded read, which would consume more items than
+                # the remaining capacity of the pending batch.
                 time.sleep(checkInterval)
                 sys.stdout.flush()
                 continue
@@ -1055,6 +1055,10 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
             outputSet.setStreamState(Set.STREAM_OPEN)
         else:
             outputSet.loadAllProperties()
+            # Reopened streaming classes must accept new class members.
+            enableAppend = getattr(outputSet, 'enableAppend', None)
+            if callable(enableAppend):
+                enableAppend()
             update = True
 
         return outputSet, update

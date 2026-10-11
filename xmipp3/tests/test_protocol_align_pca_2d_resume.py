@@ -8,6 +8,7 @@
 # ******************************************************************************
 
 import json
+import threading
 from unittest.mock import patch
 
 from pyworkflow.object import Set
@@ -123,6 +124,13 @@ class _ClosedLogicalParticles:
     def getStreamState(self):
         return Set.STREAM_CLOSED
 
+    def getSize(self):
+        return len(self._particles)
+
+    def getUniqueValues(self, field):
+        assert field == 'id'
+        return [particle.getObjId() for particle in self._particles]
+
     def iterItems(
             self,
             orderBy=None,
@@ -130,16 +138,13 @@ class _ClosedLogicalParticles:
             where=None,
             limit=None,
     ):
-        lastId = 0
-
-        if where:
-            lastId = int(where.split('>')[1].strip())
-
-        particles = [
-            particle
-            for particle in self._particles
-            if particle.getObjId() > lastId
-        ]
+        if where and ' IN ' in where:
+            values = where.split('(', 1)[1].rsplit(')', 1)[0]
+            wanted = {int(part.strip()) for part in values.split(',')}
+            particles = [p for p in self._particles if p.getObjId() in wanted]
+        else:
+            lastId = int(where.split('>', 1)[1].strip()) if where else 0
+            particles = [p for p in self._particles if p.getObjId() > lastId]
 
         if limit is not None and limit >= 0:
             particles = particles[:limit]
@@ -170,6 +175,20 @@ class _BatchPointer:
 
 
 class _ClosedInputBatchHarness:
+    # Exercise the real terminal reconciliation, not a simplified replacement.
+    _reconcileClosedStreamIds = XmippProtClassifyPcaStreaming._reconcileClosedStreamIds
+    _recordTerminalProgress = XmippProtClassifyPcaStreaming._recordTerminalProgress
+    _loadLogicalSetItemsByIds = XmippProtClassifyPcaStreaming._loadLogicalSetItemsByIds
+    _hydrateLogicalSetItemAcquisition = staticmethod(
+        XmippProtClassifyPcaStreaming._hydrateLogicalSetItemAcquisition
+    )
+
+    def _streamingMustStop(self):
+        return False
+
+    def _hasActiveStreamingWork(self):
+        return False
+
     def __init__(self, particleCount, batchSize):
         self.source = _ClosedLogicalParticles(particleCount)
         self.inputParticles = _BatchPointer(self.source)
@@ -190,6 +209,7 @@ class _ClosedInputBatchHarness:
     def _initialStep(self):
         self.finish = False
         self.lastInputId = 0
+        self._seenParticleIds = set()
         self.streamState = Set.STREAM_OPEN
         self.lastRound = False
         self.classificationLaunch = False
@@ -239,9 +259,22 @@ class _SyncParticle:
     def __init__(self, objId):
         self._objId = objId
         self._appendItem = True
+        self._classId = None
 
     def getObjId(self):
         return self._objId
+
+    def clone(self):
+        return _SyncParticle(self._objId)
+
+    def isEnabled(self):
+        return True
+
+    def setClassId(self, classId):
+        self._classId = classId
+
+    def getClassId(self):
+        return self._classId
 
 
 class _SyncRow:
@@ -256,58 +289,81 @@ class _SyncImages:
     def __init__(self, ids):
         self._ids = list(ids)
 
+    def getIdSet(self):
+        return set(self._ids)
+
     def close(self):
         pass
 
     def iterItems(self, **kwargs):
-        where = kwargs.get("where")
-        minimum = 0
-
-        if where:
-            minimum = int(where.split('>')[1].strip())
-
+        where = kwargs.get('where')
+        if where and ' IN ' in where:
+            values = where.split('(', 1)[1].rsplit(')', 1)[0]
+            allowed = {int(value.strip()) for value in values.split(',')}
+        elif where:
+            minimum = int(where.split('>', 1)[1].strip())
+            allowed = {itemId for itemId in self._ids if itemId > minimum}
+        else:
+            allowed = set(self._ids)
         for objId in self._ids:
-            if objId > minimum:
+            if objId in allowed:
                 yield _SyncParticle(objId)
+
+
+class _SyncClass:
+    def __init__(self):
+        self.memberIds = []
+
+    def append(self, particle):
+        self.memberIds.append(particle.getObjId())
 
 
 class _SyncClasses:
     def __init__(self, imageIds):
         self._images = _SyncImages(imageIds)
         self.pairs = []
+        self.updatedMembers = []
 
     def getImages(self):
         return self._images
 
-    def classifyItems(
-            self,
-            updateItemCallback=None,
-            updateClassCallback=None,
-            itemDataIterator=None,
-            iterParams=None,
-            doClone=False,
-            raiseOnNextFailure=False,
-            **kwargs,
-    ):
-        for item in self._images.iterItems(
-                **(iterParams or {})
-        ):
-            try:
-                row = next(itemDataIterator)
-            except StopIteration:
-                break
+    def _getExistingItems(self):
+        return {}
 
-            self.pairs.append(
-                (item.getObjId(), row.itemId)
-            )
+    def _get_or_create_class(self, classDict, classId, callback):
+        if classId not in classDict:
+            classDict[classId] = _SyncClass()
+            callback(classDict[classId])
+        return classDict[classId]
 
-            if updateItemCallback:
-                updateItemCallback(item, row)
+    def update(self, classItem):
+        self.updatedMembers.extend(classItem.memberIds)
 
+
+
+class _LegacyResumeInput:
+    def __init__(self, ids):
+        self.ids = list(ids)
+        self.closed = False
+
+    def getUniqueValues(self, field):
+        assert field == 'id'
+        return list(self.ids)
+
+    def close(self):
+        self.closed = True
 
 
 class TestXmippClassifyPcaResume(BaseTest):
     """Regression tests for PCA2D streaming Continue/Restart handling."""
+
+    @staticmethod
+    def _attachLegacyResumeInput(protocol):
+        # Step records predating exact batch IDs require one logical scan.
+        source = _LegacyResumeInput([1, 10, 20, 30, 42, 999])
+        protocol._lock = threading.RLock()
+        protocol._loadInputParticleSet = lambda: source
+        return source
 
     @classmethod
     def setUpClass(cls):
@@ -397,8 +453,11 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot._getExtraPath = lambda filename: filename
 
         def updateParticle(item, row):
+            classes.pairs.append((item.getObjId(), row.itemId))
             if item.getObjId() != row.itemId:
                 item._appendItem = False
+            else:
+                item.setClassId(1)
 
         prot._updateParticle = updateParticle
         prot._updateClass = lambda _item: None
@@ -428,6 +487,7 @@ class TestXmippClassifyPcaResume(BaseTest):
             "with the same filtered input particle ids instead of pairing "
             "new particles with rows from previous batches.",
         )
+        self.assertEqual([3, 4, 5], classes.updatedMembers)
 
     def testClassificationStepsKeepRoundSpecificInputFiles(self):
         prot = self._newPcaProtocol()
@@ -445,11 +505,11 @@ class TestXmippClassifyPcaResume(BaseTest):
 
         prot._insertFunctionStep = insertFunctionStep
 
-        firstBatch = object()
-        secondBatch = object()
+        firstBatch = [_BatchParticle(7)]
+        secondBatch = [_BatchParticle(8), _BatchParticle(9)]
 
-        prot._insertClassificationSteps(firstBatch, "first")
-        prot._insertClassificationSteps(secondBatch, "second")
+        prot._insertClassificationSteps(firstBatch, 7)
+        prot._insertClassificationSteps(secondBatch, 9)
 
         firstClassStep = insertedSteps[0]
         secondClassStep = insertedSteps[2]
@@ -465,7 +525,7 @@ class TestXmippClassifyPcaResume(BaseTest):
 
         self.assertEqual(
             (
-                firstBatch,
+                [7],
                 "/tmp/imagesInput_0.xmd",
                 "/tmp/images_0.mrc",
             ),
@@ -475,7 +535,7 @@ class TestXmippClassifyPcaResume(BaseTest):
         )
         self.assertEqual(
             (
-                secondBatch,
+                [8, 9],
                 "/tmp/imagesInput_1.xmd",
                 "/tmp/images_1.mrc",
             ),
@@ -483,9 +543,12 @@ class TestXmippClassifyPcaResume(BaseTest):
             "Each classification step must receive an immutable snapshot "
             "of its own round-specific input filenames.",
         )
+        self.assertEqual((7, Set.STREAM_OPEN, [7]), insertedSteps[1][1])
+        self.assertEqual((9, Set.STREAM_OPEN, [8, 9]), insertedSteps[3][1])
 
     def testResumeRestoresStateFromFinishedStepGraph(self):
         prot = self._newPcaProtocol()
+        legacyInput = self._attachLegacyResumeInput(prot)
         prot._iterKnownStreamingSteps = lambda: [
             _FakeStreamingStep("updateOutputSetOfClasses", [10]),
             _FakeStreamingStep("updateOutputSetOfClasses", [20]),
@@ -496,6 +559,8 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot._updateVarsToContinue()
 
         self.assertEqual(42, prot.lastInputId)
+        self.assertTrue(legacyInput.closed)
+        self.assertEqual({1, 10, 20, 30, 42}, prot._seenParticleIds)
         self.assertEqual(
             4, prot.classificationRound,
             "classificationRound must equal the number of finished "
@@ -505,6 +570,7 @@ class TestXmippClassifyPcaResume(BaseTest):
 
     def testResumeIgnoresUnfinishedUpdateStep(self):
         prot = self._newPcaProtocol()
+        legacyInput = self._attachLegacyResumeInput(prot)
         prot._iterKnownStreamingSteps = lambda: [
             _FakeStreamingStep("updateOutputSetOfClasses", [10]),
             _FakeStreamingStep("updateOutputSetOfClasses", [999], finished=False),
@@ -513,6 +579,8 @@ class TestXmippClassifyPcaResume(BaseTest):
         prot._updateVarsToContinue()
 
         self.assertEqual(10, prot.lastInputId)
+        self.assertTrue(legacyInput.closed)
+        self.assertEqual({1, 10}, prot._seenParticleIds)
         self.assertEqual(1, prot.classificationRound)
 
     def testResumeWithoutPriorRoundsStartsFromInitialState(self):
@@ -528,6 +596,7 @@ class TestXmippClassifyPcaResume(BaseTest):
 
     def testResumeUpdateClassesPreservesUpdatedReferences(self):
         prot = self._newPcaProtocol()
+        legacyInput = self._attachLegacyResumeInput(prot)
 
         prot.mode.set(prot.UPDATE_CLASSES)
         prot.firstTimeDone = False
@@ -537,6 +606,7 @@ class TestXmippClassifyPcaResume(BaseTest):
 
         prot._updateVarsToContinue()
 
+        self.assertTrue(legacyInput.closed)
         self.assertTrue(prot.firstTimeDone, "Continue in UPDATE_CLASSES mode must preserve the classes produced by previous rounds.")
 
     def testStepsGeneratorRestoresStateOnRealResume(self):
@@ -607,3 +677,5 @@ class TestXmippClassifyPcaLogicalOutputResume(BaseTest):
         self.assertTrue(update)
         self.assertTrue(outputClasses.loaded)
         self.assertTrue(outputClasses.appendEnabled)
+
+# AlignPCA resume contract GREEN 18
