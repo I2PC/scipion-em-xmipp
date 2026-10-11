@@ -17,6 +17,7 @@ class _Value:
 class _PcaStreamingHarness(XmippProtClassifyPcaStreaming):
     def __init__(self):
         self.classificationLaunch = False
+        self.classificationStarted = False
         self.classificationBatch = _Value(100)
         self.lastRound = False
 
@@ -111,7 +112,7 @@ class TestXmippPcaStreamingSafety(TestCase):
         protocol._insertFunctionStep = Mock(side_effect=lambda *a, **k: object())
 
         protocol._insertClassificationSteps(
-            newParticlesSet=[object()],
+            newParticlesSet=[Mock(getObjId=Mock(return_value=7))],
             lastInputId=7,
         )
 

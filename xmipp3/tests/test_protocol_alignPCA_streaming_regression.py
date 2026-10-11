@@ -326,7 +326,12 @@ class _LateVisibleInputSet:
         pass
 
 
-class _LateVisibleHarness:
+class _StreamingProgressHarness:
+    _recordTerminalProgress = XmippProtClassifyPcaStreaming._recordTerminalProgress
+    _hasActiveStreamingWork = XmippProtClassifyPcaStreaming._hasActiveStreamingWork
+
+
+class _LateVisibleHarness(_StreamingProgressHarness):
     def __init__(self):
         self.classificationBatch = _Value(10)
         self.inputSet = _LateVisibleInputSet()
@@ -516,7 +521,7 @@ class _AmbiguousInputSet:
         pass
 
 
-class _AmbiguousGeneratorHarness:
+class _AmbiguousGeneratorHarness(_StreamingProgressHarness):
     def __init__(self):
         self.classificationBatch = _Value(10)
         self.inputSet = _AmbiguousInputSet()
@@ -734,6 +739,9 @@ class _FirstPublicationImages:
     def getIdSet(self):
         return set(self._particleIds)
 
+    def close(self):
+        pass
+
 
 
 class _FirstPublicationClasses:
@@ -901,7 +909,7 @@ class _TerminalClosePointer:
         return self._inputSet
 
 
-class _TerminalCloseHarness:
+class _TerminalCloseHarness(_StreamingProgressHarness):
     def __init__(self):
         self.classificationBatch = _TerminalCloseValue(2)
         self.inputParticles = _TerminalClosePointer(
@@ -1070,6 +1078,7 @@ class _SerializableWorkerParticle:
 
 class _SerializableWorkerHarness:
     def __init__(self):
+        self._lock = threading.RLock()
         self.inputSet = _SerializableWorkerInput()
         self.convertCalled = False
         self.classificationCalled = False
@@ -1147,6 +1156,7 @@ class _ScientificFailureParticle:
 
 class _ScientificFailureHarness:
     def __init__(self):
+        self._lock = threading.RLock()
         self.inputSet = _ScientificFailureInput()
         self.training = _ScientificFailureValue(10)
         self.numberClasses = 3
@@ -1271,6 +1281,9 @@ class TestAlignPcaSourceRelationAmbiguousCommitRegression(unittest.TestCase):
 class _ExactBatchImages:
     def __init__(self):
         self.iterCalls = []
+
+    def close(self):
+        pass
 
     def iterItems(self, **kwargs):
         self.iterCalls.append(kwargs)
@@ -1470,6 +1483,7 @@ class _LegacyAmbiguousResumeHarness:
     UPDATE_CLASSES = XmippProtClassifyPcaStreaming.UPDATE_CLASSES
 
     def __init__(self):
+        self._lock = threading.RLock()
         self.mode = _LegacyAmbiguousValue(
             XmippProtClassifyPcaStreaming.UPDATE_CLASSES
         )

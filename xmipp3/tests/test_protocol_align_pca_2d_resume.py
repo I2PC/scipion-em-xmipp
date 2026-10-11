@@ -60,6 +60,9 @@ class _LogicalParticles:
     def loadAllProperties(self):
         self.loadCalls += 1
 
+    def close(self):
+        pass
+
 
 class _Pointer:
     def __init__(self, value):
@@ -79,6 +82,7 @@ class _EmptyParticles:
 
 class _StreamingSetContractHarness:
     def __init__(self, particles):
+        self._lock = __import__('threading').RLock()
         self.inputParticles = _Pointer(particles)
         self.emptyParticles = _EmptyParticles()
 
@@ -251,6 +255,9 @@ class _SyncRow:
 class _SyncImages:
     def __init__(self, ids):
         self._ids = list(ids)
+
+    def close(self):
+        pass
 
     def iterItems(self, **kwargs):
         where = kwargs.get("where")

@@ -468,108 +468,110 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
                 sys.stdout.flush()
                 continue
 
-            particlesSet = self._loadInputParticleSet()
-            self.streamState = particlesSet.getStreamState()
+            # Readers share the same logical Set, including its open/close state.
+            with self._lock:
+                particlesSet = self._loadInputParticleSet()
+                try:
+                    self.streamState = particlesSet.getStreamState()
 
-            where = None
-            if self.lastInputId:
-                where = 'id > %d' % self.lastInputId
-            tmp = None
-            newCount = 0
+                    where = None
+                    if self.lastInputId:
+                        where = 'id > %d' % self.lastInputId
+                    tmp = None
+                    newCount = 0
 
-            for particle in particlesSet.iterItems(orderBy='id',
-                                                   direction='ASC',
-                                                   where=where,
-                                                   limit=batchRemaining):
-                tmp = particle.getObjId()
+                    for particle in particlesSet.iterItems(orderBy='id',
+                                                           direction='ASC',
+                                                           where=where,
+                                                           limit=batchRemaining):
+                        tmp = particle.getObjId()
 
-                # Continue can legitimately restart from a watermark that is
-                # behind particles already present in the durable output
-                # (for example when publication committed but its step failed
-                # afterwards). Never enqueue such particles again.
-                if tmp in self._seenParticleIds:
-                    continue
-
-                newParticlesSet.append(particle.clone())
-                self._seenParticleIds.add(tmp)
-                newCount += 1
-
-            inputExhausted = newCount < batchRemaining
-
-            # Watermark discovery is the cheap hot path, but it is not
-            # sufficient at end-of-stream: a lower id can become visible
-            # after a higher id has already advanced lastInputId. Once the
-            # producer closes, reconcile the exact logical id set and fold
-            # any missing ids into the remaining room of this batch.
-            if self.streamState == Set.STREAM_CLOSED:
-                lateIds, terminalConsistent = self._reconcileClosedStreamIds(
-                    particlesSet,
-                    [],
-                    self._seenParticleIds,
-                    True,
-                    watermarkAttr='lastInputId',
-                )
-
-                remaining = (
-                    self.classificationBatch.get() - len(newParticlesSet)
-                )
-                if remaining > 0 and lateIds:
-                    lateParticles = self._loadLogicalSetItemsByIds(
-                        particlesSet,
-                        lateIds[:remaining],
-                    )
-                    for particle in lateParticles:
-                        particleId = particle.getObjId()
-                        if particleId in self._seenParticleIds:
+                        # Continue can legitimately restart from a watermark that is
+                        # behind particles already present in the durable output
+                        # (for example when publication committed but its step failed
+                        # afterwards). Never enqueue such particles again.
+                        if tmp in self._seenParticleIds:
                             continue
-                        newParticlesSet.append(particle)
-                        self._seenParticleIds.add(particleId)
+
+                        newParticlesSet.append(particle.clone())
+                        self._seenParticleIds.add(tmp)
                         newCount += 1
 
-                terminalPending = [
-                    particleId
-                    for particleId in lateIds
-                    if particleId not in self._seenParticleIds
-                ]
-                inputExhausted = (
-                    terminalConsistent and not terminalPending
-                )
+                    inputExhausted = newCount < batchRemaining
 
-                if terminalConsistent:
-                    terminalStallChecks = 0
-                    terminalStallSignature = None
-                elif self.classificationLaunch:
-                    # A round that is still running or publishing is valid
-                    # progress outside the input Set itself. Do not age the
-                    # terminal inconsistency guard while that work is active.
-                    terminalStallChecks = 0
-                    terminalStallSignature = None
-                else:
-                    # A closed producer should eventually expose a complete
-                    # logical Set. Allow transient reconciliation windows,
-                    # but never poll forever when the durable view stops
-                    # making progress.
-                    stallSignature = (
-                        particlesSet.getSize(),
-                        len(self._seenParticleIds),
-                        self.lastInputId,
-                    )
-                    if stallSignature != terminalStallSignature:
-                        terminalStallSignature = stallSignature
-                        terminalStallChecks = 1
-                    else:
-                        terminalStallChecks += 1
-
-                    if terminalStallChecks >= terminalStallLimit:
-                        particlesSet.close()
-                        raise RuntimeError(
-                            "closed input did not reach a consistent "
-                            "terminal state after %d consecutive checks "
-                            "without progress"
-                            % terminalStallChecks
+                    # Watermark discovery is the cheap hot path, but it is not
+                    # sufficient at end-of-stream: a lower id can become visible
+                    # after a higher id has already advanced lastInputId. Once the
+                    # producer closes, reconcile the exact logical id set and fold
+                    # any missing ids into the remaining room of this batch.
+                    if self.streamState == Set.STREAM_CLOSED:
+                        lateIds, terminalConsistent = self._reconcileClosedStreamIds(
+                            particlesSet,
+                            [],
+                            self._seenParticleIds,
+                            True,
+                            watermarkAttr='lastInputId',
                         )
 
-            particlesSet.close()
+                        remaining = (
+                            self.classificationBatch.get() - len(newParticlesSet)
+                        )
+                        if remaining > 0 and lateIds:
+                            lateParticles = self._loadLogicalSetItemsByIds(
+                                particlesSet,
+                                lateIds[:remaining],
+                            )
+                            for particle in lateParticles:
+                                particleId = particle.getObjId()
+                                if particleId in self._seenParticleIds:
+                                    continue
+                                newParticlesSet.append(particle)
+                                self._seenParticleIds.add(particleId)
+                                newCount += 1
+
+                        terminalPending = [
+                            particleId
+                            for particleId in lateIds
+                            if particleId not in self._seenParticleIds
+                        ]
+                        inputExhausted = (
+                            terminalConsistent and not terminalPending
+                        )
+
+                        if terminalConsistent:
+                            terminalStallChecks = 0
+                            terminalStallSignature = None
+                        elif self.classificationLaunch:
+                            # A round that is still running or publishing is valid
+                            # progress outside the input Set itself. Do not age the
+                            # terminal inconsistency guard while that work is active.
+                            terminalStallChecks = 0
+                            terminalStallSignature = None
+                        else:
+                            # A closed producer should eventually expose a complete
+                            # logical Set. Allow transient reconciliation windows,
+                            # but never poll forever when the durable view stops
+                            # making progress.
+                            stallSignature = (
+                                particlesSet.getSize(),
+                                len(self._seenParticleIds),
+                                self.lastInputId,
+                            )
+                            if stallSignature != terminalStallSignature:
+                                terminalStallSignature = stallSignature
+                                terminalStallChecks = 1
+                            else:
+                                terminalStallChecks += 1
+
+                            if terminalStallChecks >= terminalStallLimit:
+                                raise RuntimeError(
+                                    "closed input did not reach a consistent "
+                                    "terminal state after %d consecutive checks "
+                                    "without progress"
+                                    % terminalStallChecks
+                                )
+                finally:
+                    particlesSet.close()
 
             if tmp is not None:
                 self.lastInputId = max(self.lastInputId, tmp)
@@ -601,8 +603,6 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
                     self.finish = True
                     continue
 
-            with self._lock:  # Add this lock so it will not block the iterItems of the classify method
-                self.inputParticles.get().close()  # If this is not close then it blocks the input protocol
             time.sleep(checkInterval)
             sys.stdout.flush()
 
@@ -688,15 +688,16 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
         ]
         requestedIdSet = set(requestedIds)
 
-        inputSet = self._loadInputParticleSet()
-        try:
-            alignment = inputSet.getAlignment()
-            particles = self._loadLogicalSetItemsByIds(
-                inputSet,
-                requestedIds,
-            )
-        finally:
-            inputSet.close()
+        with self._lock:
+            inputSet = self._loadInputParticleSet()
+            try:
+                alignment = inputSet.getAlignment()
+                particles = self._loadLogicalSetItemsByIds(
+                    inputSet,
+                    requestedIds,
+                )
+            finally:
+                inputSet.close()
 
         loadedIds = {
             particle.getObjId()
@@ -889,10 +890,14 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
         return self.inputParticles
 
     def _loadEmptyParticleSet(self):
-        partSet = self.inputParticles.get()
-        partSet.loadAllProperties()
-        copyPartSet = self._createSetOfParticles()
-        copyPartSet.copyInfo(partSet)
+        with self._lock:
+            partSet = self.inputParticles.get()
+            try:
+                partSet.loadAllProperties()
+                copyPartSet = self._createSetOfParticles()
+                copyPartSet.copyInfo(partSet)
+            finally:
+                partSet.close()
 
         return copyPartSet
 
@@ -952,29 +957,32 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
             self._getExtraPath(CONTRAST_AVERAGES_FILE)
         )
 
-        images = clsSet.getImages()
+        with self._lock:
+            images = clsSet.getImages()
+            try:
+                if batchIds is None:
+                    visibleIds = images.getIdSet()
+                    if update:
+                        particleIds = sorted(
+                            particleId
+                            for particleId in visibleIds
+                            if particleId > self.lastInputIdProcessed
+                        )
+                    else:
+                        particleIds = sorted(visibleIds)
+                else:
+                    particleIds = sorted({
+                        int(particleId)
+                        for particleId in batchIds
+                    })
 
-        if batchIds is None:
-            visibleIds = images.getIdSet()
-            if update:
-                particleIds = sorted(
-                    particleId
-                    for particleId in visibleIds
-                    if particleId > self.lastInputIdProcessed
+                particles = (
+                    self._loadLogicalSetItemsByIds(images, particleIds)
+                    if particleIds
+                    else []
                 )
-            else:
-                particleIds = sorted(visibleIds)
-        else:
-            particleIds = sorted({
-                int(particleId)
-                for particleId in batchIds
-            })
-
-        particles = (
-            self._loadLogicalSetItemsByIds(images, particleIds)
-            if particleIds
-            else []
-        )
+            finally:
+                images.close()
 
         particlesById = {
             particle.getObjId(): particle
@@ -1206,22 +1214,23 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
             # persisted. Preserve their historical watermark semantics,
             # while new runs remain hole-safe.
             if finishedRounds > 0 and not exactIds:
-                inputSet = self._loadInputParticleSet()
-                try:
+                with self._lock:
+                    inputSet = self._loadInputParticleSet()
                     try:
-                        visibleIds = inputSet.getUniqueValues('id')
-                    except NotImplementedError:
-                        visibleIds = [
-                            particle.getObjId()
-                            for particle in inputSet
-                        ]
-                    self._seenParticleIds.update(
-                        int(particleId)
-                        for particleId in visibleIds
-                        if int(particleId) <= self.lastInputId
-                    )
-                finally:
-                    inputSet.close()
+                        try:
+                            visibleIds = inputSet.getUniqueValues('id')
+                        except NotImplementedError:
+                            visibleIds = [
+                                particle.getObjId()
+                                for particle in inputSet
+                            ]
+                        self._seenParticleIds.update(
+                            int(particleId)
+                            for particleId in visibleIds
+                            if int(particleId) <= self.lastInputId
+                        )
+                    finally:
+                        inputSet.close()
 
         # Step status is not enough after an ambiguous commit: a publication
         # step may fail after outputClasses has already been written. Durable
