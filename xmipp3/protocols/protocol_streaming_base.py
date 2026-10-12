@@ -235,7 +235,12 @@ class XmippStreamingBase:
         return item
 
     @staticmethod
-    def _selectLogicalSetItemsByIds(inputSet, itemIds, batchSize=500):
+    def _cloneLogicalSetItem(item):
+        clone = getattr(item, "clone", None)
+        return clone() if callable(clone) else item
+
+    @staticmethod
+    def _selectLogicalSetItemsByIds(inputSet, itemIds, batchSize=500, prepareItem=None):
         """Read exact logical IDs through supported Set operations.
 
         Prefer batched membership filters. If a Set does not support them,
@@ -243,12 +248,18 @@ class XmippStreamingBase:
         Avoid disjunctions: implementations may compose filters with their
         own scope conditions without grouping disjunctive expressions.
 
+        Native Set iteration may reuse one object for every row, so each
+        item goes through prepareItem (a clone by default) while it is the
+        current row; the returned list never holds iteration objects.
+
         Return None when the available filtered and direct lookup operations
         cannot retrieve the items; callers may use their iterable fallback.
         """
         itemIds = sorted(set(itemIds))
         if not itemIds:
             return []
+
+        prepare = prepareItem or XmippStreamingBase._cloneLogicalSetItem
 
         batchSize = max(1, int(batchSize))
         iterItems = getattr(inputSet, "iterItems", None)
@@ -261,7 +272,8 @@ class XmippStreamingBase:
                 for offset in range(0, len(itemIds), batchSize):
                     batch = itemIds[offset:offset + batchSize]
                     where = "id IN (%s)" % ",".join(str(itemId) for itemId in batch)
-                    items.extend(iterItems(orderBy="id", direction="ASC", where=where))
+                    items.extend(prepare(item) for item in
+                                 iterItems(orderBy="id", direction="ASC", where=where))
                 return items
             except NotImplementedError:
                 pass
@@ -289,7 +301,7 @@ class XmippStreamingBase:
                     where = "id >= %d AND id <= %d" % (lower, upper)
                     for item in iterItems(orderBy="id", direction="ASC", where=where):
                         if item.getObjId() in wanted:
-                            items.append(item)
+                            items.append(prepare(item))
                 return items
             except NotImplementedError:
                 pass
@@ -304,7 +316,7 @@ class XmippStreamingBase:
                 except (UnboundLocalError, KeyError):
                     item = None
                 if item is not None:
-                    items.append(item)
+                    items.append(prepare(item))
             return items
 
         return None
@@ -316,17 +328,16 @@ class XmippStreamingBase:
 
         def cloneItem(item):
             item = self._hydrateLogicalSetItemAcquisition(inputSet, item)
-            clone = getattr(item, "clone", None)
-            return clone() if callable(clone) else item
+            return XmippStreamingBase._cloneLogicalSetItem(item)
 
         items = XmippStreamingBase._selectLogicalSetItemsByIds(
-            inputSet, itemIds, batchSize=batchSize,
+            inputSet, itemIds, batchSize=batchSize, prepareItem=cloneItem,
         )
         if items is None:
             # Retain compatibility with nonstandard, iterable-only Sets.
             wantedIds = set(itemIds)
-            items = (item for item in inputSet if item.getObjId() in wantedIds)
-        return [cloneItem(item) for item in items]
+            items = [cloneItem(item) for item in inputSet if item.getObjId() in wantedIds]
+        return items
 
     @staticmethod
     def _getOutputIds(outputSet):
@@ -430,11 +441,11 @@ class XmippStreamingBase:
         if callable(loadAllProperties):
             loadAllProperties()
 
-        items = XmippStreamingBase._selectLogicalSetItemsByIds(
-            outputSet, candidateIds,
+        persistedIds = XmippStreamingBase._selectLogicalSetItemsByIds(
+            outputSet, candidateIds, prepareItem=lambda item: item.getObjId(),
         )
-        if items is not None:
-            return {item.getObjId() for item in items}
+        if persistedIds is not None:
+            return set(persistedIds)
 
         return self._getOutputIds(outputSet).intersection(candidateIds)
 
