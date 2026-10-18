@@ -1323,6 +1323,12 @@ class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtC
         if self.inputParticles.get().getDimensions()[0] > 256:
             errors.append("You should resize the particles."
                           " Sizes smaller than 128 pixels are recommended.")
+        # Without a CTF the Wiener correction turns every particle into NaN
+        # (and the PCA then fails on the GPU).
+        if self.correctCtf.get() and not self.inputParticles.get().hasCTF():
+            errors.append("The input particles have no CTF, so it cannot be corrected: "
+                          "set 'Correct CTF?' (advanced parameters) to No, or extract "
+                          "the particles with a CTF.")
         er = self.validateDLtoolkit()
         if not isinstance(er, list):
             er = [er]

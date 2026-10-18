@@ -141,3 +141,33 @@ class TestXmippPcaStreamingSafety(TestCase):
             "Once a round's external files have been fully read, the "
             "next round must be allowed to launch.",
         )
+
+
+class _Particles:
+    def __init__(self, hasCtf, size=64):
+        self._hasCtf = hasCtf
+        self._size = size
+
+    def hasCTF(self):
+        return self._hasCtf
+
+    def getDimensions(self):
+        return (self._size, self._size, 1)
+
+
+class TestXmippPcaCtfValidation(TestCase):
+    def _errors(self, hasCtf, correctCtf):
+        protocol = _PcaStreamingHarness()
+        protocol.correctCtf = _Value(correctCtf)
+        protocol.inputParticles = _Value(_Particles(hasCtf))
+        with patch.object(XmippProtClassifyPcaStreaming, "validateDLtoolkit", return_value=[]):
+            return protocol._validate()
+
+    def test_CorrectingTheCtfOfParticlesWithoutOneIsRejected(self):
+        errors = self._errors(hasCtf=False, correctCtf=True)
+        self.assertTrue(any("no CTF" in error for error in errors),
+                        "Without a CTF the Wiener correction turns every particle into NaN.")
+
+    def test_ParticlesWithACtfOrWithoutCorrectionAreAccepted(self):
+        self.assertEqual(self._errors(hasCtf=True, correctCtf=True), [])
+        self.assertEqual(self._errors(hasCtf=False, correctCtf=False), [])
