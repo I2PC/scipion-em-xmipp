@@ -26,7 +26,7 @@
 
 from pathlib import Path
 from shlex import quote
-from typing import Dict, Union, Set
+from typing import Dict, Union
 from enum import IntEnum
 
 from pwem.protocols import ProtClassify2D
@@ -125,12 +125,12 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 "Grouping mode used for clustering particles with similar viewing "
                 "directions. 'nearest' means each particle is assigned to the group "
                 "whose center is closest to the particle's viewing direction. "
-                "'threshold' means a particle gets assigned to every group where the "
+                "'threshold' means a particle gets assigned to every group where "
                 "the angular distance between its own viewing direction and the "
                 "group's center is less than or equal to a given threshold, chosen "
-                "with the 'Angular threshold' parameter). "
+                "with the 'Angular threshold' parameter. "
                 "This means that one particle can appear in several different groups, "
-                "which has the advantage of generally increasing the number of " 
+                "which has the advantage of generally increasing the number of "
                 "particles per group, thus making the estimation and weight assignment "
                 "more reliable. "
                 "On the other hand, it requires a decision: what to do when a particle "
@@ -293,13 +293,14 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         env = self.getCondaEnv()
 
         groupingArgs = (
-            f"--input-xmd {self._getInputMdPath()} "
-            f"--out-star {self._getGroupingOutputStarPath()} "
+            f"--input-xmd {quote(str(self._getInputMdPath()))} "
+            f"--out-star {quote(str(self._getGroupingOutputStarPath()))} "
             f"--out-group-column {quote(str(self._getGroupByColumn()))} "
             f"--n-groups {self.numberOfGroups.get()} "
             f"--grouping-batch-size {self.groupingBatchSize.get()} "
-            f"--symmetry-group {self.symmetryGroup.get()} "
-            f"--out-reference-md {self._getGroupingReferenceMetadataPath()} "
+            f"--symmetry-group {quote(self.symmetryGroup.get())} "
+            f"--out-reference-md "
+            f"{quote(str(self._getGroupingReferenceMetadataPath()))} "
         )
 
         groupingMode = self._getGroupingMode()
@@ -328,9 +329,9 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         if self.correctCtf.get():
             samplingRate = self.inputParticles.get().getSamplingRate()
             ctfArgs = (
-                f"-i '{geometryInput}' "
-                f"-o '{self._getCtfCorrectedStackPath()}' "
-                f"--save_metadata_stack '{self._getCtfCorrectedMdPath()}' "
+                f"-i {quote(str(geometryInput))} "
+                f"-o {quote(str(self._getCtfCorrectedStackPath()))} "
+                f"--save_metadata_stack {quote(str(self._getCtfCorrectedMdPath()))} "
                 f"--keep_input_columns "
                 f"--sampling_rate {samplingRate} "
             )
@@ -346,8 +347,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             geometryInput = self._getCtfCorrectedMdPath()
 
         geometryArgs = (
-            f"-i '{geometryInput}' "
-            f"-o '{self._getParticleStackPath()}' "
+            f"-i {quote(str(geometryInput))} "
+            f"-o {quote(str(self._getParticleStackPath()))} "
             f"--save_metadata_stack {quote(str(self._getParticleMdPath()))} "
             f"--keep_input_columns "
             f"--apply_transform "
@@ -374,11 +375,13 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         )
 
         if self.saveLowHighWeightAverages.get():
-            args += f"--out-low-weight-avgs {self._getLowWeightAveragesPath()} "
-            args += f"--out-high-weight-avgs {self._getHighWeightAveragesPath()} "
+            args += (
+                f"--out-low-weight-avgs {quote(str(self._getLowWeightAveragesPath()))} "
+            )
+            args += f"--out-high-weight-avgs {quote(str(self._getHighWeightAveragesPath()))} "
 
         if self.saveAverageDifferences.get():
-            args += f"--out-difference-avgs {self._getAverageDifferencesPath()} "
+            args += f"--out-difference-avgs {quote(str(self._getAverageDifferencesPath()))} "
 
         args += build_estimator_args(self)
 
@@ -391,7 +394,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
         weightsById: Dict[int, Dict[str, float]] = {}
         groupById: Dict[int, int] = {}
-        nonEmptyGroups: Set[int] = set()
         for row in md.iterRows(outputMd):
             itemId = row.getValue(md.MDL_ITEM_ID)
 
@@ -404,7 +406,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
             group = int(row.getValue(self._getGroupByColumn()))
             groupById[itemId] = group
-            nonEmptyGroups.add(group)
 
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(self.inputParticles.get())
@@ -431,8 +432,16 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
             outputParticles.append(outputParticle)
 
-        classValues = sorted(nonEmptyGroups)
-        classIndex = {value: classValues.index(value) + 1 for value in classValues}
+        preparedMd = md.MetaData(self._getParticleMdPath())
+        processedGroups = sorted(
+            {
+                int(row.getValue(self._getGroupByColumn()))
+                for row in md.iterRows(preparedMd)
+            }
+        )
+        classIndex = {
+            group: index for index, group in enumerate(processedGroups, start=1)
+        }
 
         standardClasses = self._createOutputClasses(
             particles=outputParticles,
