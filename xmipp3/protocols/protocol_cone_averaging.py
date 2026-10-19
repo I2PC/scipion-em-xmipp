@@ -27,6 +27,7 @@
 from pathlib import Path
 from shlex import quote
 from typing import Dict, Union, Set
+from enum import IntEnum
 
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
@@ -38,8 +39,10 @@ from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (
     PointerParam,
     IntParam,
+    FloatParam,
     BooleanParam,
     StringParam,
+    EnumParam,
 )
 from pyworkflow.constants import BETA
 
@@ -55,6 +58,16 @@ from .protocol_average_estimation_gmm import (
     add_estimator_section,
     build_estimator_args,
 )
+
+
+class GroupingModes(IntEnum):
+    NEAREST = 0
+    THRESHOLD = 1
+
+    @property
+    def label(self) -> str:
+        """String representation used for CLI flags and protocol form choices"""
+        return self.name.lower()
 
 
 class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
@@ -102,6 +115,41 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 "that will be created."
             ),
             default=100,
+        )
+        form.addParam(
+            "groupingMode",
+            EnumParam,
+            default=GroupingModes.NEAREST,
+            choices=[mode.label for mode in GroupingModes],
+            help=(
+                "Grouping mode used for clustering particles with similar viewing "
+                "directions. 'nearest' means each particle is assigned to the group "
+                "whose center is closest to the particle's viewing direction. "
+                "'threshold' means a particle gets assigned to every group where the "
+                "the angular distance between its own viewing direction and the "
+                "group's center is less than or equal to a given threshold, chosen "
+                "with the 'Angular threshold' parameter). "
+                "This means that one particle can appear in several different groups, "
+                "which has the advantage of generally increasing the number of " 
+                "particles per group, thus making the estimation and weight assignment "
+                "more reliable. "
+                "On the other hand, it requires a decision: what to do when a particle "
+                "receives different weights in two (or more) different groups. "
+                "We take the conservative approach and preserve the maximum weight in "
+                "that case."
+            ),
+            label="Grouping Mode",
+        )
+        form.addParam(
+            "angularThresholdDeg",
+            FloatParam,
+            default=5.0,
+            help=(
+                "Inclusive angular radius in degrees, between 0 and 90. "
+                "The protocol fails if any particle has no reference within this radius."
+            ),
+            condition=f"groupingMode == {GroupingModes.THRESHOLD.value}",
+            label="Angular Threshold",
         )
         form.addParam(
             "deduplicateReferences",
@@ -212,7 +260,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
     def _getGmmDiagnosticsPath(self):
         return self._getExtraPath("gmmDiagnostics")
-    
+
     def _getLowWeightAveragesPath(self):
         return self._getExtraPath("lowWeightAverages.mrcs")
 
@@ -224,6 +272,9 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
     def _getEstimatorType(self):
         return EstimatorType(self.estimatorType.get())
+
+    def _getGroupingMode(self):
+        return GroupingModes(self.groupingMode.get())
 
     def _getEstimatorWeightColumns(self):
         base_weight_columns = [ROBUST_WEIGHT_COL, STD_ROBUST_WEIGHT_COL]
@@ -250,6 +301,12 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             f"--symmetry-group {self.symmetryGroup.get()} "
             f"--out-reference-md {self._getGroupingReferenceMetadataPath()} "
         )
+
+        groupingMode = self._getGroupingMode()
+        groupingArgs += f"--grouping-mode {groupingMode.label} "
+        if groupingMode == GroupingModes.THRESHOLD:
+            groupingArgs += f"--angular-radius-deg {self.angularThresholdDeg.get()} "
+            groupingArgs += f"--unassigned-policy error "
 
         if self.deduplicateReferences.get():
             groupingArgs += "--deduplicate-references "
