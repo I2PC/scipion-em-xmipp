@@ -119,7 +119,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         form.addParam(
             "groupingMode",
             EnumParam,
-            default=GroupingModes.NEAREST,
+            default=GroupingModes.NEAREST.value,
             choices=[mode.label for mode in GroupingModes],
             help=(
                 "Grouping mode used for clustering particles with similar viewing "
