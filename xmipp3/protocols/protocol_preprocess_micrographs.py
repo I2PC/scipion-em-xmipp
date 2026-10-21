@@ -959,6 +959,49 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
         extFn = getExt(fn)
         if extFn != ".mrc":
             fn = replaceExt(fn, "mrc")
-        # Scoped by the micrograph id: two inputs from different folders
-        # can share a base name and would otherwise write the same file.
-        return self._itemScopedPath(mic, basename(fn))
+
+        # The output keeps the input's file name: other protocols find a
+        # micrograph's files by it (Xmipp's .pos coordinates, for one). Only
+        # a second micrograph with the same name, from another folder, gets
+        # its id in front instead of overwriting the first one's output.
+        baseName = basename(fn)
+        micId = mic.getObjId()
+        scoped = self._getExtraPath('%06d__%s' % (micId, baseName))
+
+        if os.path.exists(scoped):
+            # Written with its id before: by a run made while every output
+            # carried it, or because its name was already taken.
+            return scoped
+
+        owners = self.__dict__.setdefault('_outputNameOwners', {})
+        owner = owners.get(baseName)
+
+        if owner == micId or (owner is None
+                              and baseName not in self._publishedOutputNames()):
+            owners[baseName] = micId
+            return self._getExtraPath(baseName)
+
+        return scoped
+
+    def _publishedOutputNames(self):
+        """File names the micrographs published so far use (read once).
+
+        On a Continue, a micrograph still to be written must not take the
+        name of one already published: that file is the other one's.
+        """
+        names = getattr(self, '_publishedOutputNamesCache', None)
+
+        if names is None:
+            output = getattr(self, OUTPUT_MICROGRAPHS, None)
+            fileNames = []
+
+            if output is not None:
+                try:
+                    fileNames = output.getUniqueValues('_filename')
+                except (NotImplementedError, TypeError, AttributeError):
+                    fileNames = [item.getFileName() for item in output]
+
+            names = {basename(fileName) for fileName in fileNames or []}
+            self._publishedOutputNamesCache = names
+
+        return names

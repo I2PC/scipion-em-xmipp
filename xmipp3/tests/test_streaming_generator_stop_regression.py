@@ -549,8 +549,11 @@ class TestPerItemPathsAreScopedById(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as root:
             protocol = _ScopedPathHarness(root)
+            protocol._publishedOutputNames = lambda: set()
             getOut = XmippProtPreprocessMicrographs._getOutputMicrograph
 
+            # Same-named micrographs from two folders: the second one gets
+            # its id in front, the first keeps its name.
             self.assertNotEqual(
                 getOut(protocol, _Mic(1, '/data/A/mic001.mrc')),
                 getOut(protocol, _Mic(2, '/data/B/mic001.mrc')),
