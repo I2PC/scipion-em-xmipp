@@ -239,6 +239,84 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
             "everything.",
         )
 
+    def testOnceBothInputsCloseAMovieInOnlyOneIsSettled(self):
+        prot = self._newProtocol()
+        prot.processedDict = []
+        prot.insertedDict = {}
+        prot.allMovies1 = {}
+        prot.allMovies2 = {}
+        prot._movies1Watermark = 0
+        prot._movies2Watermark = 0
+        prot._pendingMovieIds1 = set()
+        prot._pendingMovieIds2 = set()
+        prot.newDeps = []
+        prot._reconcileClosedStreamIds = (
+            lambda inputSet, newIds, knownIds, closed, watermarkAttr: (
+                newIds, True))
+        prot.inputMovies1 = _FakePointer(_FakeWatermarkMovieSet(
+            [_FakeWatermarkMovieItem(1), _FakeWatermarkMovieItem(2)],
+            streamClosed=True))
+        prot.inputMovies2 = _FakePointer(_FakeWatermarkMovieSet(
+            [_FakeWatermarkMovieItem(2), _FakeWatermarkMovieItem(3)],
+            streamClosed=True))
+        prot._insertFunctionStep = lambda *args, **kwargs: 7
+        prot.updateSteps = lambda: None
+        prot.info = Mock()
+
+        prot._checkNewInput()
+
+        self.assertEqual([1], prot._decidedDiscarded,
+                         "Only in the first input: discarded.")
+        self.assertEqual({1, 2}, set(prot.processedDict))
+        self.assertNotIn(3, prot.processedDict,
+                         "Only in the second input: nothing to publish.")
+        self.assertEqual(set(), prot._pendingMovieIds1)
+        self.assertEqual(set(), prot._pendingMovieIds2)
+
+    def testAnInvisibleMovieIsNoLongerWaitedForOnceTheInputsClose(self):
+        prot = self._newProtocol()
+        prot.stats = {}
+        prot._loadInputMovieSet = lambda: _FakeIndexedSet({})
+        prot._loadInputMicrographSet = lambda: _FakeIndexedSet({})
+        prot.info = Mock()
+        prot.error = Mock()
+
+        prot.isStreamClosed = False
+        prot.fillOutput(_FakeOutputSet(), _FakeOutputSet(), [1], ACCEPTED)
+        self.assertEqual(set(), prot._droppedMovieIds())
+
+        prot.isStreamClosed = True
+        for _ in range(prot.MOVIE_VISIBILITY_MAX_CHECKS):
+            prot.fillOutput(_FakeOutputSet(), _FakeOutputSet(), [1], ACCEPTED)
+        self.assertEqual(set(), prot._droppedMovieIds())
+
+        prot.fillOutput(_FakeOutputSet(), _FakeOutputSet(), [1], ACCEPTED)
+        self.assertEqual({1}, prot._droppedMovieIds())
+
+    def testAMovieDroppedForGoodLetsTheRunFinish(self):
+        prot = self._newProtocol()
+        prot.allMovies1 = {1: object(), 2: object()}
+        prot.allMovies2 = {1: object(), 2: object()}
+        prot.processedDict = [1, 2]
+        prot.isStreamClosed = True
+        prot.samplingRate = 1.0
+        prot.acquisition = _FakeAcquisition()
+        prot._decidedAccepted = [1, 2]
+        prot._decidedDiscarded = []
+
+        def fillOutput(movieSet, micSet, newDone, label):
+            prot._droppedMovieIds().add(2)
+            return [1]
+
+        prot._loadOutputSet = lambda *args, **kwargs: _FakeOutputSet()
+        prot.fillOutput = fillOutput
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        prot._refreshOutputRelations = lambda: None
+
+        prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+
     def testResumeRestoresPersistedOutputsFromRealSets(self):
         # Regression test: Resume must reconstruct processedDict purely
         # from the real, persisted output Sets - no sidecar DONE files.

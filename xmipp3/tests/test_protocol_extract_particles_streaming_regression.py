@@ -67,6 +67,8 @@ class _OutputParts:
 
 
 class _MissingMetadataHarness:
+    _failedExtractMicIds = XmippProtExtractParticles._failedExtractMicIds
+
     def __init__(self):
         self.coordDict = {7: [_Coord(101)]}
         self._getPos = lambda coord: coord.getPosition()
@@ -97,6 +99,9 @@ class _RetryCoord:
     def scale(self, factor):
         self._x *= factor
         self._y *= factor
+
+    def clone(self):
+        return _RetryCoord(self._objId, self._x, self._y)
 
 
 class _RetryRow:
@@ -133,6 +138,11 @@ class _RetryParticle:
     def getObjId(self):
         return self._objId
 
+    def clone(self):
+        particle = _RetryParticle()
+        particle._objId = self._objId
+        return particle
+
 
 class _RetryOutputParts:
     def __init__(self, durableIds):
@@ -158,6 +168,8 @@ class _RetryMic(_Mic):
 
 
 class _RetryHarness:
+    _failedExtractMicIds = XmippProtExtractParticles._failedExtractMicIds
+
     def __init__(self):
         self.coordDict = {7: [_RetryCoord(101)]}
         self._getPos = lambda coord: coord.getPosition()
@@ -301,14 +313,16 @@ class TestXmippExtractParticlesStreamingRegression(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             XmippProtExtractParticles._extractMicrograph(protocol, mic, False, "", False)
 
-    def testMissingExtractedMetadataFailsPublication(self):
+    def testMissingExtractedMetadataLeavesTheMicrographOut(self):
+        # Not raised: pwem would drop the particles of every micrograph
+        # after this one in the batch.
         protocol = _MissingMetadataHarness()
         mic = _Mic("/tmp/mic.mrc", "mic")
         mic.getObjId = lambda: 7
 
-        with self.assertRaises(RuntimeError):
-            XmippProtExtractParticles.readPartsFromMics(protocol, [mic], _OutputParts())
+        XmippProtExtractParticles.readPartsFromMics(protocol, [mic], _OutputParts())
 
+        self.assertEqual({7}, protocol._failedExtractMicIds())
         self.assertIn(7, protocol.coordDict)
 
 
@@ -328,6 +342,59 @@ class TestXmippExtractParticlesStreamingRegression(unittest.TestCase):
 
 
 
+
+    def _read(self, protocol, outputParts, rows):
+        with patch("xmipp3.protocols.protocol_extract_particles.exists", return_value=True), \
+             patch("xmipp3.protocols.protocol_extract_particles.md.iterRows", return_value=rows), \
+             patch("xmipp3.protocols.protocol_extract_particles.Particle", _RetryParticle), \
+             patch("xmipp3.protocols.protocol_extract_particles.xmippToLocation", return_value=(1, "mic.mrcs")), \
+             patch("xmipp3.protocols.protocol_extract_particles.setXmippAttributes"):
+            XmippProtExtractParticles.readPartsFromMics(protocol, [_RetryMic()], outputParts)
+
+    def testAMicrographThatFailsHalfWayPublishesNothing(self):
+        protocol = _RetryHarness()
+        protocol.coordDict = {7: [_RetryCoord(101), _RetryCoord(102, 30, 40)]}
+        outputParts = _RetryOutputParts(set())
+
+        def rows():
+            yield _RetryRow()
+            raise ValueError("truncated metadata")
+
+        self._read(protocol, outputParts, rows())
+
+        self.assertEqual([], outputParts.appendedIds)
+        self.assertEqual({7}, protocol._failedExtractMicIds())
+
+    def testReadingAMicrographAgainDoesNotScaleItsCoordinatesTwice(self):
+        protocol = _RetryHarness()
+        protocol.getBoxScale = lambda: 2.0
+        outputParts = _RetryOutputParts(set())
+
+        self._read(protocol, outputParts, iter([_RetryRow()]))
+        self._read(protocol, outputParts, iter([_RetryRow()]))
+
+        self.assertEqual((10, 20), protocol.coordDict[7][0].getPosition())
+        self.assertEqual([101, 101], outputParts.appendedIds)
+
+    def testAnEarlierRunsStepDoesNotCountAsThisRunsExtraction(self):
+        # On Continue every unpublished micrograph gets a new step; the old
+        # finished one of a micrograph that failed would have it read, and
+        # failed again, before the new one ran.
+        import json
+        from types import SimpleNamespace
+
+        def step(micNames, finished=True):
+            return SimpleNamespace(
+                funcName=SimpleNamespace(get=lambda: 'extractMicrographListStepOwn'),
+                argsStr=SimpleNamespace(get=lambda default=None: json.dumps([micNames])),
+                isFinished=lambda: finished)
+
+        protocol = SimpleNamespace(_prevSteps=[step(['mic_001', 'mic_002'])],
+                                   _steps=[step(['mic_003'])])
+
+        self.assertEqual(
+            {'mic_003'},
+            XmippProtExtractParticles._getFinishedProcessedMicKeys(protocol))
 
     def testClosedInputRecoversLateVisibleMicBelowWatermark(self):
         protocol = _LateVisibleMicHarness()

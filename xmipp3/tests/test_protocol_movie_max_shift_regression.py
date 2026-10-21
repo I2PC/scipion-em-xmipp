@@ -495,6 +495,46 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
             'retried and would be permanently lost.',
         )
 
+    def testAMicrographThatNeverTurnsUpStopsBeingWaitedFor(self):
+        # Waited for a few checks once the input is closed; after those
+        # the run ends without it instead of polling forever.
+        prot = self._newProtocol()
+        prot.acceptedIds = [1]
+        prot.isStreamClosed = True
+        prot.inputMics = object()
+        prot.outMicName = 'outputMicrographs'
+        prot._getAllDoneIds = lambda: ([1], 1, [1], [])
+        prot._store = lambda: None
+        prot._defineTransformRelation = lambda *args, **kwargs: None
+        prot.error = lambda *args, **kwargs: None
+
+        movie = _FakeItem(1)
+        prot.inputMovies = _FakePointer(_FakeInputSet(
+            ids=[1], streamClosed=True, items={1: movie}
+        ))
+        prot._loadMicAssociatedInputSet = lambda: _FakeInputSet(
+            ids=[], streamClosed=True, items={}
+        )
+
+        movieOutput = _FakeOutputSet()
+        movieOutput.append(movie.clone())
+        micOutput = _FakeOutputSet()
+
+        def loadOutputSet(SetClass, baseName):
+            return movieOutput if SetClass is SetOfMovies else micOutput
+
+        prot._loadOutputSet = loadOutputSet
+        prot._updateOutputSet = lambda *args, **kwargs: None
+
+        polls = 0
+        while (not getattr(prot, "finished", False)
+               and polls < 3 * prot.MIC_VISIBILITY_MAX_CHECKS):
+            prot._checkNewOutput()
+            polls += 1
+
+        self.assertTrue(prot.finished)
+        self.assertGreater(polls, prot.MIC_VISIBILITY_MAX_CHECKS)
+
     def testStepsGeneratorStopsImmediatelyWhenAlreadyFinished(self):
         # The old _stepsCheck's own "finished -> no-op" short-circuit is
         # now just the while-loop condition in stepsGeneratorStep.

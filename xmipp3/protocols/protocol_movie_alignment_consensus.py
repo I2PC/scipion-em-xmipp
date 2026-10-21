@@ -321,6 +321,8 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
     """
 
     _label = 'movie alignment consensus'
+    # Checks a movie not visible in a closed input is still waited for.
+    MOVIE_VISIBILITY_MAX_CHECKS = 3
     outputName = 'consensusAlignments'
     _devStatus = PROD
 
@@ -493,12 +495,75 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
             and terminalConsistent1 and terminalConsistent2
         )
 
+        if self.isStreamClosed:
+            self._discardUnmatchedMovies()
+
         fDeps = self._insertNewMovieSteps(schedulableIds, self.insertedDict)
         if not fDeps:
             return
 
         self.newDeps.extend(fDeps)
         self.updateSteps()
+
+    def _discardUnmatchedMovies(self):
+        """Settle the movies that are in only one input once both are closed.
+
+        Only the movies in both inputs are compared. One in the first input
+        alone is discarded, without comparison values; one in the second
+        alone is only reported, its output being the first input's movie.
+        Left pending, they would be lost without a word.
+        """
+        processed = set(self.processedDict)
+        onlyFirst = sorted(set(self._pendingMovieIds1) - processed)
+        onlySecond = sorted(set(self._pendingMovieIds2) - processed)
+        self._pendingMovieIds1.clear()
+        self._pendingMovieIds2.clear()
+
+        if onlySecond:
+            self.info("Movies with ID %s exist only in the second input and "
+                      "are left out." % onlySecond)
+
+        if not onlyFirst:
+            return
+
+        self.info("Movies with ID %s have no counterpart in the second "
+                  "input and are discarded." % onlyFirst)
+        unmatched = self.__dict__.setdefault('_unmatchedMovieIds', set())
+
+        with self._lock:
+            for movieId in onlyFirst:
+                self._decidedDiscarded.append(movieId)
+                self.processedDict.append(movieId)
+                unmatched.add(movieId)
+
+    def _droppedMovieIds(self):
+        """Movies that can never be published: settled, but in no output."""
+        return self.__dict__.setdefault('_droppedMovieIdsSet', set())
+
+    def _stopWaitingFor(self, movieId):
+        """Whether a movie whose rows are not visible is waited for no more.
+
+        While the inputs are open it may still turn up. Once they are
+        closed a few more checks are given, and after those it is settled
+        without it: polling for it would never end.
+        """
+        if not self.isStreamClosed:
+            return False
+
+        checks = self.__dict__.setdefault('_invisibleMovieChecks', {})
+        checks[movieId] = checks.get(movieId, 0) + 1
+
+        return checks[movieId] > self.MOVIE_VISIBILITY_MAX_CHECKS
+
+    def _everyMovieSettled(self, publishedIds):
+        """Whether every movie taken in is published or dropped for good:
+        the ones scheduled or discarded unmatched, and every movie in both
+        inputs."""
+        expected = set(self.processedDict) | (
+            set(self.allMovies1) & set(self.allMovies2))
+
+        return self.isStreamClosed and expected <= (
+            set(publishedIds) | self._droppedMovieIds())
 
     def _insertNewMovieSteps(self, newIDs, insDict):
         deps = []
@@ -637,13 +702,11 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
         newDoneDiscarded = [movieId for movieId in movieListIdDiscarded
                             if movieId not in doneListDiscarded]
 
-        maxMovieSize = len(set(self.allMovies1).intersection(set(self.allMovies2)))
-
         if not newDoneDiscarded and not newDoneAccepted:
-            # Nothing decided since last check - done counts are exactly
+            # Nothing decided since last check - what is done is exactly
             # what's already published.
-            allDone = len(doneListAccepted) + len(doneListDiscarded)
-            self.finished = (self.isStreamClosed and allDone == maxMovieSize)
+            self.finished = self._everyMovieSettled(
+                doneListAccepted + doneListDiscarded)
             return
 
         def readOrCreateOutputs(doneList, newDone, label=''):
@@ -665,12 +728,12 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
         movieSetDiscarded, micSetDiscarded, publishedDiscarded = readOrCreateOutputs(doneListDiscarded, newDoneDiscarded, DISCARDED)
 
         # A movie whose micrograph isn't visible yet (fillOutput skipped
-        # it) must not count as done, or this poll could reach
-        # allDone == maxMovieSize and finish prematurely while that
-        # movie is still waiting to be published on a later poll.
-        allDone = (len(doneListAccepted) + len(publishedAccepted)
-                   + len(doneListDiscarded) + len(publishedDiscarded))
-        self.finished = (self.isStreamClosed and allDone == maxMovieSize)
+        # it) must not count as done, or this poll could finish
+        # prematurely while that movie is still waiting to be published
+        # on a later poll.
+        self.finished = self._everyMovieSettled(
+            doneListAccepted + publishedAccepted
+            + doneListDiscarded + publishedDiscarded)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         def updateOutputsAndClose(movieSet, micSet, label=''):
@@ -728,11 +791,21 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
                 # yet - skip it for now and retry on the next poll rather
                 # than crashing the whole protocol.
                 if movieId not in inputMovieSet or movieId not in inputMicSet:
-                    self.info(
-                        "Movie with id %d is not yet visible in the input "
-                        "movie/micrograph Set(s); deferring it to the "
-                        "next check." % movieId
+                    if not self._stopWaitingFor(movieId):
+                        self.info(
+                            "Movie with id %d is not yet visible in the "
+                            "input movie/micrograph Set(s); deferring it to "
+                            "the next check." % movieId
+                        )
+                        continue
+
+                    # A movie is published with its micrograph or not at
+                    # all; it is still settled, or the run would never end.
+                    self.error(
+                        "Movie with id %d or its micrograph never became "
+                        "visible in the input; it is left out." % movieId
                     )
+                    self._droppedMovieIds().add(movieId)
                     continue
 
                 movie = inputMovieSet[movieId].clone()
@@ -742,13 +815,17 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
                 mic.setEnabled(self._getEnable(movieId))
                 alignment1 = movie.getAlignment()
                 shiftX_1, shiftY_1 = alignment1.getShifts()
-                setAttribute(mic, '_alignment_corr', self.stats[movieId]['shift_corr'])
-                setAttribute(mic, '_alignment_rmse_error', self.stats[movieId]['rmse_error'])
-                setAttribute(mic, '_alignment_max_error', self.stats[movieId]['max_error'])
+                # A movie without its counterpart in the second input was
+                # never compared: it has no comparison values.
+                compared = movieId in self.stats
+                if compared:
+                    setAttribute(mic, '_alignment_corr', self.stats[movieId]['shift_corr'])
+                    setAttribute(mic, '_alignment_rmse_error', self.stats[movieId]['rmse_error'])
+                    setAttribute(mic, '_alignment_max_error', self.stats[movieId]['max_error'])
                 alignment = MovieAlignment(xshifts=shiftX_1, yshifts=shiftY_1)
                 movie.setAlignment(alignment)
 
-                if self.trajectoryPlot.get():
+                if compared and self.trajectoryPlot.get():
                     firstFrame, _, _ = self.inputMovies1.get().getFramesRange()
                     self._createAndSaveTrajectoriesPlot(movieId, firstFrame, self.samplingRate)
                     mic.plotCart = Image()

@@ -804,6 +804,11 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
     def _getPersistedOutputMovieIds(self):
         return self._getPersistedOutputIds("outputMovies")
 
+    def _unpublishedMovieIds(self):
+        """Movies processed in this run whose result could not be
+        published: settled, but in no output."""
+        return self.__dict__.setdefault("_unpublishedMovieIdsSet", set())
+
     def _getFinishedProcessMovieIds(self):
         return self._getFinishedInsertedIds()
 
@@ -813,13 +818,26 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
 
         persistedIds = self._getPersistedOutputMovieIds()
         finishedIds = self._getFinishedProcessMovieIds()
-        newDone = [movie for movie in self.listOfMovies if movie.getObjId() in finishedIds and movie.getObjId() not in persistedIds]
+        unpublished = self._unpublishedMovieIds()
+        newDone = [movie for movie in self.listOfMovies
+                   if movie.getObjId() in finishedIds
+                   and movie.getObjId() not in persistedIds
+                   and movie.getObjId() not in unpublished]
         self._firstTimeOutput = not persistedIds
 
         if newDone:
             self._updateOutputSets(newDone, pwobj.Set.STREAM_OPEN)
             persistedIds = self._getPersistedOutputMovieIds()
             self._firstTimeOutput = not persistedIds
+            # pwem leaves a movie out, without raising, when its result
+            # cannot be published (e.g. an empty alignment): it failed,
+            # and waiting for it to appear would never end the run.
+            unpublished = [movie.getObjId() for movie in newDone
+                           if movie.getObjId() not in persistedIds]
+            if unpublished:
+                self.error("Movie(s) %s could not be published and are left "
+                           "out." % unpublished)
+                self._unpublishedMovieIds().update(unpublished)
 
         if self._doMovieFolderCleanUp():
             for movie in self.listOfMovies:
@@ -829,7 +847,8 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
                     )
 
         inputIds = {movie.getObjId() for movie in self.listOfMovies}
-        self.finished = self.streamClosed and inputIds.issubset(persistedIds)
+        self.finished = self.streamClosed and inputIds.issubset(
+            set(persistedIds) | self._unpublishedMovieIds())
         if not self.finished:
             return
 

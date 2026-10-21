@@ -394,11 +394,15 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
         self.assertEqual(1, len(harness.errors))
 
     def testReadPartsFromMicsSkipsMicrographWhoseCoordinatesFailToParseAndKeepsProcessingOthers(self):
-        # Regression test: a single micrograph whose coordinate data
-        # fails to parse must not crash readPartsFromMics for the whole
-        # batch, and its coordDict entry must still be released so it
-        # doesn't linger and leak memory/cause stale re-processing.
+        # Regression test: a single micrograph whose data fails to parse
+        # (2), or whose extracted metadata is missing (1 and 3), must not
+        # crash readPartsFromMics for the whole batch: each one is reported
+        # and left out on its own, and the coordinates are kept so that a
+        # later attempt can read them again.
         class _ReadPartsHarness:
+            _failedExtractMicIds = (
+                extract_particles.XmippProtExtractParticles._failedExtractMicIds)
+
             def __init__(self, coordDict):
                 self.coordDict = coordDict
                 self.errors = []
@@ -427,8 +431,9 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
             harness, micList, outputParts,
         )
 
-        self.assertEqual(1, len(harness.errors))
-        self.assertEqual({}, harness.coordDict)
+        self.assertEqual(3, len(harness.errors))
+        self.assertEqual({1, 2, 3}, harness._failedExtractMicIds())
+        self.assertEqual({1, 2, 3}, set(harness.coordDict))
 
 
 if __name__ == '__main__':

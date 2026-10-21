@@ -580,6 +580,79 @@ class TestXmippCTFConsensusBase(BaseTest):
             OUTPUT_CTF, [1],
         )
 
+    def testAnInvisibleCtfIsNoLongerWaitedForOnceTheInputCloses(self):
+        # Waited for while the input is open, and for a few checks after
+        # it closes; then settled without it, or the run never ends.
+        fnCtfSet = self._createCtfSet("ctf_never_visible.sqlite", [99])
+
+        class _LogicalInputPointer:
+            def get(self):
+                return SetOfCTF(filename=fnCtfSet)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.inputCTF = _LogicalInputPointer()
+        prot.acceptedIds = {1: 'T'}
+        prot.discardedIds = {}
+
+        prot.isStreamClosed = False
+        prot.fillOutput(Mock(), Mock(), [1], 'Accepted')
+        self.assertEqual(set(), prot._droppedCtfIds())
+
+        prot.isStreamClosed = True
+        for _ in range(prot.CTF_VISIBILITY_MAX_ATTEMPTS):
+            prot.fillOutput(Mock(), Mock(), [1], 'Accepted')
+        self.assertEqual(set(), prot._droppedCtfIds())
+
+        prot.fillOutput(Mock(), Mock(), [1], 'Accepted')
+        self.assertEqual({1}, prot._droppedCtfIds())
+
+    def testACtfDroppedForGoodLetsTheRunFinish(self):
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.isStreamClosed = True
+        prot.insertedIds = [1, 2]
+        prot.acceptedIds = {1: 'T', 2: 'T'}
+        prot.discardedIds = {}
+        prot.inputCTF = Mock()
+
+        def fillOutput(ctfSet, micSet, newDone, label):
+            if 2 in newDone:
+                prot._droppedCtfIds().add(2)
+            return [ctfId for ctfId in newDone if ctfId == 1]
+
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._loadOutputSet = Mock(return_value=Mock())
+        prot.fillOutput = fillOutput
+        prot._updateOutputSet = Mock()
+        prot._defineTransformRelation = Mock()
+        prot._defineCtfRelation = Mock()
+        prot._store = Mock()
+        prot._markOutputIdsPersisted = Mock()
+
+        prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+
+    def testACtfInOnlyOneInputIsSettledOnceBothClose(self):
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = True
+        prot.insertedIds = [1]
+        prot.discardedIds = {}
+        prot._pendingInputIds1 = {1, 2}
+        prot._pendingInputIds2 = {3}
+        prot.info = Mock()
+
+        prot._discardUnmatchedCtfs()
+
+        self.assertEqual({2: 'F'}, prot.discardedIds,
+                         "Only in the first input: discarded.")
+        self.assertEqual([1, 2], prot.insertedIds)
+        self.assertNotIn(3, prot.insertedIds,
+                         "Only in the second input: nothing to publish.")
+        self.assertEqual(set(), prot._pendingInputIds1)
+        self.assertEqual(set(), prot._pendingInputIds2)
+
     def testSelectCtfStepDiscardsCtfThatNeverBecomesVisible(self):
         # Regression test: Set.getItem raises (UnboundLocalError) rather
         # than returning None for a row it cannot find. A ctfId that never

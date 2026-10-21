@@ -543,7 +543,9 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
         coordList = self.coordDict[mic.getObjId()]
         self._convertCoordinates(mic, coordList)
         self.info("Extracting micrograph: %s " % mic.getFileName())
-        self._extractMicrograph(mic, *args)
+        # One micrograph failing must not fail the step and with it the
+        # whole run: it is left out, and Continue extracts it again.
+        self._extractMicrographList([mic], *args)
 
     def extractMicrographListStepOwn(self, micKeyList, *args):
         micList = []
@@ -562,7 +564,10 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
         os.path.exists(micDoneFn) marker-file check as the durable source
         of truth for "has this mic's extraction run". """
         finishedKeys = set()
-        for step in self._iterKnownStreamingSteps():
+        # Only this run's steps: every micrograph not yet published gets a
+        # new one, and an earlier, finished step of one that failed would
+        # have it read - and failed again - before its new one has run.
+        for step in getattr(self, '_steps', []) or []:
             funcName = getattr(step, 'funcName', None)
             if hasattr(funcName, 'get'):
                 funcName = funcName.get()
@@ -592,6 +597,12 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
 
     def _checkNewInput(self):
         newMics = self._loadInputList()
+        outputMicIds = self._getOutputMicIds()
+
+        # Published by an earlier run: known, but not extracted again.
+        for micKey in [micKey for micKey, mic in newMics.items()
+                       if mic.getObjId() in outputMicIds]:
+            self.micDict[micKey] = newMics.pop(micKey)
 
         if newMics:
             fDeps = self._insertNewMicsSteps(newMics.values())
@@ -794,11 +805,19 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
 
         if newOutput:
             self._updateOutputPartSet(newOutput, streamMode)
+            # Read once: a failed one is not published, and would
+            # otherwise be read, and fail, again on every poll.
             outputMicIds.update(mic.getObjId() for mic in newOutput)
+            self.__dict__.setdefault('_handledExtractMicIds', set()).update(
+                mic.getObjId() for mic in newOutput)
         elif self.finished:
             self._updateOutputPartSet([], Set.STREAM_CLOSED)
         else:
             return
+
+        if self.finished:
+            self._failIfEveryExtractionFailed(
+                getattr(self, '_handledExtractMicIds', set()))
 
     #--------------------------- STEPS functions -------------------------------
     def _extractMicrographList(self, micList, *args):
@@ -1191,6 +1210,9 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
         durableIds = outputParts.getIdSet() if hasattr(outputParts, 'getIdSet') else set()
         boxScale = self.getBoxScale()
         for mic in micList:
+            # A micrograph is published whole or not at all: its particles
+            # are kept apart until its whole file has been read.
+            micParticles = []
             try:
                 # We need to make this dict because there is no ID in the .xmd file
                 coordDict = {}
@@ -1210,7 +1232,10 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                         pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
                         coord = coordDict.get(pos, None)
                         if coord is not None and coord.getObjId() not in added:
-                            # scale the coordinates according to particles dimension.
+                            # scale the coordinates according to particles
+                            # dimension - a copy, so reading this micrograph
+                            # again does not scale them twice.
+                            coord = coord.clone()
                             coord.scale(boxScale)
                             p.copyObjId(coord)
                             p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
@@ -1229,24 +1254,42 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
                             if row.getValue(md.MDL_ENABLED) > 0:
                                 if coord.getObjId() in durableIds:
                                     continue
-                                outputParts.append(p)
+                                micParticles.append(p.clone())
                                 added.add(coord.getObjId())
             except Exception as e:
                 # A single micrograph with a corrupted/truncated .xmd
                 # must not crash the whole batch (and hence the whole
                 # protocol) - skip just its particles and keep
                 # processing the rest.
+                # Not raised: pwem would drop the particles of every
+                # micrograph after this one in the batch.
                 self.error(
                     "Micrograph with id %d failed while reading its "
                     "extracted particles (%s); skipping it."
                     % (mic.getObjId(), e)
                 )
-                raise
-            finally:
-                # Release the list of coordinates for this micrograph
-                # since it will not be needed again, whether or not it
-                # succeeded.
-                pass
+                self._failedExtractMicIds().add(mic.getObjId())
+                continue
+
+            for particle in micParticles:
+                outputParts.append(particle)
+
+    def _failedExtractMicIds(self):
+        """Micrographs of this run whose particles could not be read; not
+        published, so Continue extracts them again."""
+        return self.__dict__.setdefault('_failedExtractMicIdsSet', set())
+
+    def _failIfEveryExtractionFailed(self, handledMicIds):
+        """A failed micrograph is left out; the run fails only when that
+        happened to every micrograph."""
+        failed = self._failedExtractMicIds()
+        output = getattr(self, 'outputParticles', None)
+
+        if (failed and set(handledMicIds) <= failed
+                and (output is None or output.getSize() == 0)):
+            raise Exception("Extraction failed for every one of the %d "
+                            "micrographs; see the errors above. Continue "
+                            "extracts them again." % len(failed))
 
     def _getMicPos(self, mic):
         """ Return the corresponding .pos file for a given micrograph. """

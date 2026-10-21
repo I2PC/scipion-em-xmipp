@@ -283,6 +283,8 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
     checked visually during workflow setup.
     """
     _label = 'movie maxshift'
+    # Checks a micrograph not in a closed input is still waited for.
+    MIC_VISIBILITY_MAX_CHECKS = 3
     _devStatus = PROD
     _lastUpdateVersion = VERSION_3_0
     _possibleOutputs = {OUTPUT_MICS: SetOfMicrographs,
@@ -577,6 +579,22 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
         finally:
             inputMovies.close()
 
+    def _stopWaitingForMic(self, movieId):
+        """Whether a movie's micrograph, not in the input, is waited for no
+        more.
+
+        While the input is open it may still turn up. Once it is closed a
+        few more checks are given, and after those the movie is settled
+        without it: polling for it would never end.
+        """
+        if not self.isStreamClosed:
+            return False
+
+        checks = self.__dict__.setdefault('_missingMicChecks', {})
+        checks[movieId] = checks.get(movieId, 0) + 1
+
+        return checks[movieId] > self.MIC_VISIBILITY_MAX_CHECKS
+
     def _checkNewOutput(self):
         """ Check for already selected Movies and update the output set. """
         # The producer may expose outputMovies before its sibling micrograph
@@ -753,6 +771,17 @@ class XmippProtMovieMaxShift(XmippStreamingBase, ProtStreamingBase, ProtProcessM
                     continue
 
                 if movieId not in inputMics:
+                    if self._stopWaitingForMic(movieId):
+                        # Waiting for it would keep the run going forever.
+                        # The movie is already published and a streaming
+                        # output cannot take it back.
+                        pendingMicIds.discard(movieId)
+                        self.error(
+                            "Movie with id %d has no micrograph in the "
+                            "input; it is left without one." % movieId
+                        )
+                        continue
+
                     pendingMicIds.add(movieId)
                     self.info(
                         "Movie with id %d has not a micrograph "

@@ -580,6 +580,61 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
             self.newDeps.extend(fDeps)
             self.updateSteps()
 
+        if self.calculateConsensus and self.isStreamClosed:
+            self._discardUnmatchedCtfs()
+
+    def _discardUnmatchedCtfs(self):
+        """Settle the CTFs that are in only one input once both are closed.
+
+        Only the CTFs in both inputs are compared. One in the first input
+        alone is discarded, without consensus values; one in the second
+        alone has no CTF to publish and is only reported. Left pending,
+        they would be lost without a word.
+        """
+        inserted = set(self.insertedIds)
+        onlyFirst = sorted(set(self._pendingInputIds1) - inserted)
+        onlySecond = sorted(set(self._pendingInputIds2) - inserted)
+        self._pendingInputIds1.clear()
+        self._pendingInputIds2.clear()
+
+        if onlySecond:
+            self.info("CTFs with ID %s exist only in the second input and "
+                      "are left out." % onlySecond)
+
+        if not onlyFirst:
+            return
+
+        self.info("CTFs with ID %s have no counterpart in the second input "
+                  "and are discarded." % onlyFirst)
+        unmatched = self.__dict__.setdefault('_unmatchedCtfIds', set())
+
+        for ctfId in onlyFirst:
+            self.discardedIds[ctfId] = 'F'
+            self.insertedIds.append(ctfId)
+            unmatched.add(ctfId)
+
+    def _droppedCtfIds(self):
+        """CTFs that can never be published: done, but in no output."""
+        return self.__dict__.setdefault('_droppedCtfIdsSet', set())
+
+    def _stopWaitingFor(self, ctfId):
+        """Whether a CTF not visible in the input(s) is waited for no more.
+
+        While the input is open it may still turn up. Once it is closed a
+        few more checks are given, and after those it is settled without
+        it: polling for it would never end.
+        """
+        if ctfId in getattr(self, '_unmatchedCtfIds', ()):
+            return True
+
+        if not self.isStreamClosed:
+            return False
+
+        checks = self.__dict__.setdefault('_invisibleCtfChecks', {})
+        checks[ctfId] = checks.get(ctfId, 0) + 1
+
+        return checks[ctfId] > self.CTF_VISIBILITY_MAX_ATTEMPTS
+
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
@@ -600,7 +655,8 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
         firstTimeDiscarded = len(doneListDiscarded) == 0
 
         if not newDoneDiscarded and not newDoneAccepted:
-            allDone = len(doneListAccepted) + len(doneListDiscarded)
+            allDone = (len(doneListAccepted) + len(doneListDiscarded)
+                       + len(self._droppedCtfIds()))
             # We have finished when the producer stream is closed and every
             # CTF scheduled by this protocol has been persisted in an output.
             self.finished = (
@@ -633,6 +689,7 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
         allDone = (
             len(doneListAccepted) + len(publishedAccepted)
             + len(doneListDiscarded) + len(publishedDiscarded)
+            + len(self._droppedCtfIds())
         )
         self.finished = (
             self.isStreamClosed
@@ -696,15 +753,28 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
                 # it cannot find, so check membership first - these ids
                 # were already read successfully once by selectCtfStep, but
                 # a momentary re-open lag is still possible.
-                if ctfId not in inputCtfSet or (
-                    self.calculateConsensus
-                    and ctfId not in inputCtfSet2
-                ):
-                    self.info(
-                        "CTF with id %d is not visible in the input Set "
-                        "right now; will retry on the next check." % ctfId
-                    )
-                    continue
+                inFirst = ctfId in inputCtfSet
+                inSecond = (not self.calculateConsensus
+                            or ctfId in inputCtfSet2)
+
+                if not (inFirst and inSecond):
+                    if not self._stopWaitingFor(ctfId):
+                        self.info(
+                            "CTF with id %d is not visible in the input "
+                            "Set right now; will retry on the next check."
+                            % ctfId
+                        )
+                        continue
+
+                    if not inFirst:
+                        # Nothing to publish without the CTF itself; it is
+                        # still done, or the run would never end.
+                        self.error(
+                            "CTF with id %d never became visible in the "
+                            "input; it is left out." % ctfId
+                        )
+                        self._droppedCtfIds().add(ctfId)
+                        continue
 
                 ctf = inputCtfSet.getItem("id", ctfId).clone()
                 mic = ctf.getMicrograph().clone()
@@ -712,7 +782,10 @@ class XmippProtCTFConsensus(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrog
                 ctf.setEnabled(self._getEnable(ctfId, label))
                 mic.setEnabled(self._getEnable(ctfId, label))
 
-                if self.calculateConsensus:
+                # A CTF without its counterpart in the second input has no
+                # consensus values: it is published without them.
+                if (self.calculateConsensus and inSecond
+                        and ctfId in self._freqResol):
                     ctf2 = inputCtfSet2.getItem("id", ctfId)
                     conRes = self._freqResol[ctfId]
 
