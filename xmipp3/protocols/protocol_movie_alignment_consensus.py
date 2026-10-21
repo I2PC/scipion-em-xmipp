@@ -547,7 +547,7 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
         closed a few more checks are given, and after those it is settled
         without it: polling for it would never end.
         """
-        if not self.isStreamClosed:
+        if not getattr(self, 'isStreamClosed', False):
             return False
 
         checks = self.__dict__.setdefault('_invisibleMovieChecks', {})
@@ -558,12 +558,19 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
     def _everyMovieSettled(self, publishedIds):
         """Whether every movie taken in is published or dropped for good:
         the ones scheduled or discarded unmatched, and every movie in both
-        inputs."""
-        expected = set(self.processedDict) | (
-            set(self.allMovies1) & set(self.allMovies2))
-
-        return self.isStreamClosed and expected <= (
+        inputs. The run fails when none could be published at all."""
+        expected = set(getattr(self, 'processedDict', ())) | (
+            set(getattr(self, 'allMovies1', ()))
+            & set(getattr(self, 'allMovies2', ())))
+        settled = getattr(self, 'isStreamClosed', False) and expected <= (
             set(publishedIds) | self._droppedMovieIds())
+
+        if settled and self._droppedMovieIds() and not publishedIds:
+            raise Exception("Every one of the %d movies failed; see the "
+                            "errors above. Continue compares them again."
+                            % len(self._droppedMovieIds()))
+
+        return settled
 
     def _insertNewMovieSteps(self, newIDs, insDict):
         deps = []
@@ -578,6 +585,17 @@ class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, Pr
         return deps
 
     def alignmentCorrelationMovieStep(self, movieId):
+        try:
+            self._alignmentCorrelationMovie(movieId)
+        except Exception as e:
+            # Not raised: the step would fail and take the whole run with
+            # it. The movie is left out of every output, and Continue
+            # compares it again.
+            self.error("Comparing the alignments of movie %s failed: %s"
+                       % (movieId, e))
+            self._droppedMovieIds().add(movieId)
+
+    def _alignmentCorrelationMovie(self, movieId):
         movie1 = self.allMovies1.get(movieId)
         movie2 = self.allMovies2.get(movieId)
 

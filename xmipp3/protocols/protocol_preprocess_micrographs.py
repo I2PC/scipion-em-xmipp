@@ -29,7 +29,7 @@ import json
 import os
 from os.path import basename
 
-from pyworkflow.utils import getExt, replaceExt
+from pyworkflow.utils import getExt, replaceExt, cleanPath
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
@@ -546,11 +546,14 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
 
         for mic in inputMics:
             micId = mic.getObjId()
-            if (
-                micId in persistedIds
-                or self._isMicPipelineDone(mic)
-            ):
+            if micId in persistedIds:
                 self.insertedDict[micId] = None
+            elif self._isMicPipelineDone(mic):
+                if os.path.exists(self._getOutputMicrograph(mic)):
+                    self.insertedDict[micId] = None
+                else:
+                    # Its step finished without a result: processed again.
+                    self.__dict__.setdefault('_retriedMicIds', set()).add(micId)
 
     def createOutputStep(self):
         pass
@@ -649,7 +652,7 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
         }
         processedIds = persistedIds.union(
             pipelineDoneIds,
-        )
+        ).union(self._failedMicIds())
 
         self.finished = (
             self.streamClosed
@@ -670,6 +673,12 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
 
         if not newDone and not self.finished:
             return
+
+        if self.finished and self._failedMicIds() and not persistedIds \
+                and not newDone:
+            raise Exception("Preprocessing failed for every one of the %d "
+                            "micrographs; see the errors above. Continue "
+                            "processes them again." % len(self._failedMicIds()))
 
         outSet = self.getOutputMics()
 
@@ -774,41 +783,68 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
 
     
     def _insertStepsForMicrograph(self, micId, inputMic, outputMic):
+        """One step runs every operation of a micrograph, in order.
+
+        Each operation used to be a step of its own, and the failure of any
+        one of them failed the whole run. Run together, a micrograph whose
+        processing fails is left out on its own instead.
+        """
         self.params['inputMic'] = inputMic
         self.params['outputMic'] = outputMic
-        self.lastStepId = None
-        self.prerequisites = [] # First operation should not depend on nothing before
-        # Crop
-        self.__insertOneStep(self.doCrop, "xmipp_transform_window",
-                            " -i %(inputMic)s --crop %(cropPixels)d -v 0")
-        # Take logarithm
-        self.__insertOneStep(self.doLog, "xmipp_transform_filter",
-                            " -i %(inputMic)s --log --fa %(logA)f --fb %(logB)f --fc %(logC)f")
-        # Remove bad pixels
-        self.__insertOneStep(self.doRemoveBadPix, "xmipp_transform_filter",
-                            " -i %(inputMic)s --bad_pixels outliers %(stddev)f -v 0")
-        # Invert
-        self.__insertOneStep(self.doInvert, "xmipp_image_operate",
-                            "-i %(inputMic)s --mult -1")
-        # Downsample
-        self.__insertOneStep(self.doDownsample, "xmipp_transform_downsample",
-                            "-i %(inputMic)s --step %(downFactor)f --method fourier")
-        # Denoise
-        self.__insertOneStep(self.doDenoise, "xmipp_transform_filter",
-                            "-i %(inputMic)s --denoiseTV --maxIterTV %(maxIterTV)d")
-        # Smooth
-        self.__insertOneStep(self.doSmooth, "xmipp_transform_filter",
-                            "-i %(inputMic)s --fourier real_gaussian %(sigmaConvolution)f")
-        # Highpass
-        self.__insertOneStep(self.doHighPass, "xmipp_transform_filter",
-                            "-i %(inputMic)s --fourier high_pass %(highCutoff)f %(highRaised)f")
-        # Lowpass
-        self.__insertOneStep(self.doLowPass, "xmipp_transform_filter",
-                            "-i %(inputMic)s --fourier low_pass %(lowCutoff)f %(lowRaised)f")
-        # Normalize
-        self.__insertOneStep(self.doNormalize, "xmipp_transform_normalize",
-                            "-i %(inputMic)s --method OldXmipp")
-        return self._insertFunctionStep('markMicDoneStep', micId, prerequisites=[self.lastStepId])
+        commands = []
+
+        for condition, program, arguments in (
+                (self.doCrop, "xmipp_transform_window",
+                 " -i %(inputMic)s --crop %(cropPixels)d -v 0"),
+                (self.doLog, "xmipp_transform_filter",
+                 " -i %(inputMic)s --log --fa %(logA)f --fb %(logB)f --fc %(logC)f"),
+                (self.doRemoveBadPix, "xmipp_transform_filter",
+                 " -i %(inputMic)s --bad_pixels outliers %(stddev)f -v 0"),
+                (self.doInvert, "xmipp_image_operate",
+                 "-i %(inputMic)s --mult -1"),
+                (self.doDownsample, "xmipp_transform_downsample",
+                 "-i %(inputMic)s --step %(downFactor)f --method fourier"),
+                (self.doDenoise, "xmipp_transform_filter",
+                 "-i %(inputMic)s --denoiseTV --maxIterTV %(maxIterTV)d"),
+                (self.doSmooth, "xmipp_transform_filter",
+                 "-i %(inputMic)s --fourier real_gaussian %(sigmaConvolution)f"),
+                (self.doHighPass, "xmipp_transform_filter",
+                 "-i %(inputMic)s --fourier high_pass %(highCutoff)f %(highRaised)f"),
+                (self.doLowPass, "xmipp_transform_filter",
+                 "-i %(inputMic)s --fourier low_pass %(lowCutoff)f %(lowRaised)f"),
+                (self.doNormalize, "xmipp_transform_normalize",
+                 "-i %(inputMic)s --method OldXmipp")):
+            if not condition.get():
+                continue
+            # If the input micrograph and output micrograph differ, add
+            # the -o option; the next operation reads what this one wrote.
+            if self.params['inputMic'] != self.params['outputMic']:
+                arguments += " -o %(outputMic)s"
+            commands.append([program, arguments % self.params])
+            self.params['inputMic'] = self.params['outputMic']
+
+        return self._insertFunctionStep('preprocessMicrographStep', micId,
+                                        commands, inputMic, outputMic,
+                                        prerequisites=[])
+
+    def preprocessMicrographStep(self, micId, commands, inputMic, outputMic):
+        """Run a micrograph's operations; a failure leaves it out alone."""
+        try:
+            for program, arguments in commands:
+                self.runJob(program, arguments)
+        except Exception as e:
+            # Not raised: the step would fail and take the whole run with
+            # it. The micrograph is left out, and Continue processes it
+            # again.
+            self.error("Preprocessing failed for micrograph %s: %s"
+                       % (micId, e))
+            if os.path.abspath(outputMic) != os.path.abspath(inputMic):
+                cleanPath(outputMic)
+            self._failedMicIds().add(micId)
+
+    def _failedMicIds(self):
+        """Micrographs whose preprocessing failed in this run."""
+        return self.__dict__.setdefault('_failedMicIdsSet', set())
 
     def markMicDoneStep(self, micId):
         """ Pure synchronization join-point for this mic's variable-length
@@ -823,11 +859,22 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
         never a filesystem marker, which would tie completion to how the
         Set happens to be persisted. """
         micId = mic.getObjId()
-        for step in self._iterKnownStreamingSteps():
+
+        if micId in self._failedMicIds():
+            return False
+
+        # A micrograph processed again in this run (it had no result) only
+        # counts once its new step has finished: its old one finished too.
+        if micId in getattr(self, '_retriedMicIds', ()):
+            steps = getattr(self, '_steps', []) or []
+        else:
+            steps = self._iterKnownStreamingSteps()
+
+        for step in steps:
             funcName = getattr(step, 'funcName', None)
             if hasattr(funcName, 'get'):
                 funcName = funcName.get()
-            if funcName != 'markMicDoneStep':
+            if funcName not in ('markMicDoneStep', 'preprocessMicrographStep'):
                 continue
             if not step.isFinished():
                 continue
@@ -844,22 +891,6 @@ class XmippProtPreprocessMicrographs(XmippStreamingBase, ProtStreamingBase,
 
         return False
 
-    def __insertOneStep(self, condition, program, arguments):
-        """Insert operation if the condition is met.
-        Possible conditions are: doDownsample, doCrop...etc"""
-        if condition.get():
-            # If the input micrograph and output micrograph differss, 
-            # add the -o option
-            if self.params['inputMic'] != self.params['outputMic']:
-                arguments += " -o %(outputMic)s"
-            # Insert the command with the formatted parameters
-            self.lastStepId = self._insertRunJobStep(program, arguments % self.params,
-                                                     prerequisites=self.prerequisites)
-            self.prerequisites = [self.lastStepId] # next should depend on this step
-            # Update inputMic for next step as outputMic
-            self.params['inputMic'] = self.params['outputMic']
-
-        
     #--------------------------- INFO functions --------------------------------
     
     def _validate(self):

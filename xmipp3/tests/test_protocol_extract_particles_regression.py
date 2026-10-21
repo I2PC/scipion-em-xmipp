@@ -9,6 +9,7 @@ import unittest
 from pyworkflow.object import Set
 
 from xmipp3.protocols import protocol_extract_particles as extract_particles
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 
 class _Mic:
@@ -91,6 +92,10 @@ class _OutputParts:
 
 
 class _InputHarness:
+    def _getOutputMicIds(self):
+        # Nothing published yet: every micrograph is extracted.
+        return set()
+
     def __init__(self):
         self.updated = 0
         self.loadCalls = 0
@@ -119,6 +124,10 @@ class _InputHarness:
 
 
 class _OutputHarness:
+    _failedExtractMicIds = extract_particles.XmippProtExtractParticles._failedExtractMicIds
+    _failIfEveryExtractionFailed = (
+        extract_particles.XmippProtExtractParticles._failIfEveryExtractionFailed)
+
     def __init__(self, micIds, processedIds, outputIds, streamClosed=False, allMicsProcessed=True):
         self.events = []
         self.micDict = {mic.getMicName(): mic for mic in [_Mic(objId) for objId in micIds]}
@@ -223,6 +232,12 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
             def isStreamClosed(self):
                 return True
 
+            def getSize(self):
+                return len(self.items)
+
+            def getUniqueValues(self, attribute):
+                return [item.getObjId() for item in self.items]
+
             def close(self):
                 return None
 
@@ -231,6 +246,10 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
                 return "coordMics"
 
         class _Harness:
+            _reconcileClosedStreamIds = XmippStreamingBase._reconcileClosedStreamIds
+            _recordTerminalProgress = XmippStreamingBase._recordTerminalProgress
+            _hasActiveStreamingWork = XmippStreamingBase._hasActiveStreamingWork
+
             def __init__(self):
                 self._micsWatermark = 0
                 self._pendingMicIds = set()
@@ -241,6 +260,7 @@ class TestXmippExtractParticlesRegression(unittest.TestCase):
                 self._pendingCtfIds = set()
                 self._ctfIdByCoordId = {}
                 self.coordDict = {}
+                self.micDict = {}
 
                 itemAcquisition = _Acquisition()
                 setAcquisition = _Acquisition(voltage=300.0, sphericalAberration=2.7, amplitudeContrast=0.1)

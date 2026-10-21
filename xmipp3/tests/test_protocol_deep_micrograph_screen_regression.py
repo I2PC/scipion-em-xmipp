@@ -49,6 +49,10 @@ class _OutputCoords:
 
 
 class _Harness:
+    _failedMicIds = deep_screen.XmippProtDeepMicrographScreen._failedMicIds
+    _failIfEveryMicrographFailed = (
+        deep_screen.XmippProtDeepMicrographScreen._failIfEveryMicrographFailed)
+
     def __init__(self, micIds, processedIds, outputIds, streamClosed=False, allMicsProcessed=True):
         self.events = []
         self.micDict = {str(objId): _Mic(objId) for objId in micIds}
@@ -705,6 +709,64 @@ class TestXmippDeepMicrographScreenInputDiscovery(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(1, harness.coordSet.closeCalls)
 
+    def testAFailedBatchLeavesItsMicrographsOutWithoutFailingTheStep(self):
+        # Raised, it would fail the step and the whole run with it.
+        class _Mic:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+            def getFileName(self):
+                return "/data/mic_%03d.mrc" % self.objId
+
+            def getMicName(self):
+                return "mic_%03d" % self.objId
+
+        class _FailingHarness:
+            _failedMicIds = deep_screen.XmippProtDeepMicrographScreen._failedMicIds
+
+            def __init__(self):
+                self.micDict = {"mic_001": _Mic(1), "mic_002": _Mic(2)}
+                self.coordDict = {1: [], 2: []}
+                self.errors = []
+
+            def _convertCoordinates(self, mic, coordList):
+                pass
+
+            def info(self, message):
+                pass
+
+            def error(self, message):
+                self.errors.append(message)
+
+            def _computeMaskForMicrographList(self, micList):
+                raise RuntimeError("cleaner crashed")
+
+        harness = _FailingHarness()
+
+        deep_screen.XmippProtDeepMicrographScreen.extractMicrographListStepOwn(
+            harness, ["mic_001", "mic_002"])
+
+        self.assertEqual({1, 2}, harness._failedMicIds())
+        self.assertTrue(harness.errors)
+
+    def testEveryMicrographFailedFailsTheRun(self):
+        harness = Mock()
+        harness._failedMicIds = lambda: {1, 2}
+        harness.getOutput = lambda: None
+        mics = [Mock(getObjId=Mock(return_value=1)),
+                Mock(getObjId=Mock(return_value=2))]
+
+        with self.assertRaisesRegex(Exception, "failed for every one"):
+            deep_screen.XmippProtDeepMicrographScreen._failIfEveryMicrographFailed(
+                harness, mics)
+
+        harness._failedMicIds = lambda: {2}
+        deep_screen.XmippProtDeepMicrographScreen._failIfEveryMicrographFailed(
+            harness, mics)
+
     def testGetFinishedProcessedMicKeysOnlyCountsFinishedExtractSteps(self):
         class _FakeFuncName:
             def __init__(self, name):
@@ -730,10 +792,15 @@ class TestXmippDeepMicrographScreenInputDiscovery(unittest.TestCase):
                 return self._finished
 
         harness = Mock()
-        harness._iterKnownStreamingSteps = lambda: [
+        harness._steps = [
             _FakeStep('extractMicrographListStepOwn', [['mic_001', 'mic_002']]),
             _FakeStep('extractMicrographListStepOwn', [['mic_003']], finished=False),
             _FakeStep('someOtherStep', [['mic_999']]),
+        ]
+        # An earlier run's step: every micrograph is scheduled again on
+        # Continue, and this one may have failed.
+        harness._prevSteps = [
+            _FakeStep('extractMicrographListStepOwn', [['mic_004']]),
         ]
 
         keys = deep_screen.XmippProtDeepMicrographScreen._getFinishedProcessedMicKeys(harness)

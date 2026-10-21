@@ -607,6 +607,10 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
 
 
 
+    def _getResumeRetryIds(self, finishedIds):
+        """Finished ids whose processing has to run again after Continue."""
+        return set()
+
     def _getResumeRepairCandidateIds(self, finishedIds):
         """Return finished ids that still need output repair after Continue."""
         return set(finishedIds)
@@ -670,6 +674,10 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
             self._acknowledgedFinishedIds = acknowledged
 
         finishedIds.difference_update(acknowledged)
+        # Finished without a result: processed again, like an unfinished
+        # step, instead of only being published.
+        self._resumeRetryIds = set(self._getResumeRetryIds(finishedIds))
+        finishedIds.difference_update(self._resumeRetryIds)
         self._streamingRestoredFinishedIds = set(finishedIds)
 
         insertedDict = getattr(self, "insertedDict", None)
@@ -804,6 +812,10 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
     def _getPersistedOutputMovieIds(self):
         return self._getPersistedOutputIds("outputMovies")
 
+    def _failedMovieIds(self):
+        """Movies whose processing failed in this run."""
+        return self.__dict__.setdefault("_failedMovieIdsSet", set())
+
     def _unpublishedMovieIds(self):
         """Movies processed in this run whose result could not be
         published: settled, but in no output."""
@@ -818,7 +830,10 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
 
         persistedIds = self._getPersistedOutputMovieIds()
         finishedIds = self._getFinishedProcessMovieIds()
+        # A movie whose processing failed is settled: not published, and
+        # aligned again on Continue.
         unpublished = self._unpublishedMovieIds()
+        unpublished.update(self._failedMovieIds() & set(finishedIds))
         newDone = [movie for movie in self.listOfMovies
                    if movie.getObjId() in finishedIds
                    and movie.getObjId() not in persistedIds
@@ -853,9 +868,18 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
             return
 
         self._updateOutputSets([], pwobj.Set.STREAM_CLOSED)
+        self._failIfEveryMovieFailed(persistedIds)
         outputStep = self._getFirstJoinStep()
         if outputStep is not None and outputStep.isWaiting():
             outputStep.setStatus(cons.STATUS_NEW)
+
+    def _failIfEveryMovieFailed(self, persistedIds):
+        """A failed movie is left out; the run fails only when that
+        happened to every movie."""
+        if self._unpublishedMovieIds() and not persistedIds:
+            raise Exception("Every one of the %d movies failed; see the "
+                            "errors above. Continue processes them again."
+                            % len(self._unpublishedMovieIds()))
 
     def processMovieStep(self, movieDict, hasAlignment):
         movie = Movie()
@@ -865,7 +889,9 @@ class XmippStreamingMoviesMixin(XmippStreamingBase):
             movie.setAlignment(MovieAlignment())
 
         movie.setAttributesFromDict(movieDict, setBasic=True, ignoreMissing=True)
-        if self.isContinued() and movie.getObjId() in getattr(self, "_persistedOutputIds", {}).get("outputMovies", set()):
+        if (self.isContinued()
+                and movie.getObjId() in getattr(self, "_persistedOutputIds", {}).get("outputMovies", set())
+                and movie.getObjId() not in getattr(self, "_resumeRetryIds", set())):
             return
 
         movieFolder = self._getOutputMovieFolder(movie)

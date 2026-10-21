@@ -417,6 +417,12 @@ class XmippParticlePickingAutomatic(XmippStreamingBase, ProtStreamingBase,
                     "Micrograph %s failed during automatic picking "
                     "(%s); skipping it." % (mic.getMicName(), e)
                 )
+                self._failedMicIds().add(mic.getObjId())
+
+    def _failedMicIds(self):
+        """Micrographs whose picking failed in this run: left out, and
+        picked again on Continue."""
+        return self.__dict__.setdefault('_failedMicIdsSet', set())
 
     def _pickMicrograph(self, mic, *args):
         micPath = mic.getFileName()
@@ -475,7 +481,9 @@ class XmippParticlePickingAutomatic(XmippStreamingBase, ProtStreamingBase,
     def pickMicrographStepOwn(self, micKey, *args):
         mic = self.micDict[micKey]
         self.info("Picking micrograph: %s " % mic.getFileName())
-        self._pickMicrograph(mic, *args)
+        # One micrograph failing must not fail the step and with it the
+        # whole run.
+        self._pickMicrographList([mic], *args)
 
     def pickMicrographListStepOwn(self, micKeyList, *args):
         micList = []
@@ -492,7 +500,10 @@ class XmippParticlePickingAutomatic(XmippStreamingBase, ProtStreamingBase,
         os.path.exists(micDoneFn) marker-file check as the durable source
         of truth for "has this mic been picked". """
         finishedKeys = set()
-        for step in self._iterKnownStreamingSteps():
+        # Only this run's steps: every micrograph not yet published gets a
+        # new one, and an earlier, finished step of one that failed would
+        # have it published, empty, before its new one has run.
+        for step in getattr(self, '_steps', []) or []:
             funcName = getattr(step, 'funcName', None)
             if hasattr(funcName, 'get'):
                 funcName = funcName.get()
@@ -550,6 +561,12 @@ class XmippParticlePickingAutomatic(XmippStreamingBase, ProtStreamingBase,
 
     def _checkNewInput(self):
         micDict = self._loadInputList()
+        outputMicIds = self._getOutputMicIds()
+
+        # Published by an earlier run: known, but not picked again.
+        for micKey in [micKey for micKey, mic in micDict.items()
+                       if mic.getObjId() in outputMicIds]:
+            self.micDict[micKey] = micDict.pop(micKey)
 
         if micDict:
             fDeps = self._insertNewMicsSteps(micDict.values())
@@ -582,21 +599,44 @@ class XmippParticlePickingAutomatic(XmippStreamingBase, ProtStreamingBase,
 
         listOfMics = list(self.micDict.values())
         finishedMicKeys = self._getFinishedProcessedMicKeys()
+        outputMicIds = self._getOutputMicIds()
         processedMics = [mic for mic in listOfMics
-                         if mic.getMicName() in finishedMicKeys]
+                         if mic.getMicName() in finishedMicKeys
+                         or mic.getObjId() in outputMicIds]
         self.finished = self.streamClosed and len(processedMics) == len(listOfMics)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
-        outputMicIds = self._getOutputMicIds()
-        newOutput = [mic for mic in processedMics if mic.getObjId() not in outputMicIds]
+        # Read once: one without particles is in no output and would be
+        # read again on every poll; a failed one is not published at all.
+        handledMicIds = self.__dict__.setdefault('_handledMicIds', set())
+        failedMicIds = self._failedMicIds()
+        newOutput = [mic for mic in processedMics
+                     if mic.getObjId() not in outputMicIds
+                     and mic.getObjId() not in handledMicIds
+                     and mic.getObjId() not in failedMicIds]
+
+        if self.finished:
+            self._failIfEveryMicrographFailed(processedMics, outputMicIds)
 
         if newOutput:
             self._updateOutputCoordSet(newOutput, streamMode)
+            handledMicIds.update(mic.getObjId() for mic in newOutput)
         elif self.finished:
             self._updateStreamState(streamMode)
         else:
             if len(processedMics) == len(listOfMics):
                 self._streamingSleepOnWait()
             return
+
+    def _failIfEveryMicrographFailed(self, processedMics, outputMicIds):
+        """A failed micrograph is left out; the run fails only when that
+        happened to every micrograph."""
+        failed = self._failedMicIds()
+
+        if (failed and not outputMicIds
+                and {mic.getObjId() for mic in processedMics} <= failed):
+            raise Exception("Automatic picking failed for every one of the "
+                            "%d micrographs; see the errors above. Continue "
+                            "picks them again." % len(failed))
 
     # --------------------------- INFO functions -------------------------------
     def _validate(self):

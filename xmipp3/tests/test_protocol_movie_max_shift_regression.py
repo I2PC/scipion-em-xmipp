@@ -244,7 +244,7 @@ class TestXmippMovieMaxShiftRegression(BaseTest):
 
         outputSet = prot._loadOutputSet(
             FreshOutputSetProbe,
-            'movies.sqlite',
+            'outputMovies',
         )
 
         self.assertIs(

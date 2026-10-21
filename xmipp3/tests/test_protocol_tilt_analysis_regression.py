@@ -9,6 +9,7 @@
 
 from unittest.mock import Mock, patch
 
+from pwem.objects import SetOfMicrographs
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from xmipp3.protocols.protocol_tilt_analysis import XmippProtTiltAnalysis
@@ -40,6 +41,9 @@ class _FakeInputSet:
         return sorted(itemId for itemId in self._ids if itemId > threshold)
 
     def getItem(self, field, value):
+        # A real Set raises for a row it cannot hand back yet.
+        if value not in self._gettableIds:
+            raise KeyError(value)
         return _FakeMicrograph(value)
 
     def getIdSet(self):
@@ -124,8 +128,8 @@ class TestXmippTiltAnalysisRegression(BaseTest):
             return_value=False,
         ):
             outputSet = prot._loadOutputSet(
-                FreshOutputSetProbe,
-                'micrograph.sqlite',
+                SetOfMicrographs,
+                'outputMicrographs',
             )
 
         self.assertIs(

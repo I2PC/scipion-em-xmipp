@@ -1207,7 +1207,11 @@ class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtra
         and update the outputParts set with new items.
         """
         p = Particle()
-        durableIds = outputParts.getIdSet() if hasattr(outputParts, 'getIdSet') else set()
+        # A Set created this round has stored nothing yet: asking it for ids
+        # fails instead of returning none.
+        durableIds = (outputParts.getIdSet()
+                      if hasattr(outputParts, 'getIdSet') and outputParts.getSize()
+                      else set())
         boxScale = self.getBoxScale()
         for mic in micList:
             # A micrograph is published whole or not at all: its particles

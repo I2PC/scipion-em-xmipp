@@ -500,7 +500,10 @@ class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicr
         os.path.exists(micDoneFn) marker-file check as the durable source
         of truth for "has this mic's CTF been estimated". """
         finishedKeys = set()
-        for step in self._iterKnownStreamingSteps():
+        # Only this run's steps: every micrograph not yet published gets a
+        # new one, and an earlier, finished step of one that failed would
+        # have it read - and failed again - before its new one has run.
+        for step in getattr(self, '_steps', []) or []:
             funcName = getattr(step, 'funcName', None)
             if hasattr(funcName, 'get'):
                 funcName = funcName.get()
@@ -566,6 +569,12 @@ class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicr
 
     def _checkNewInput(self):
         micDict, self.streamClosed = self._loadInputList()
+        persistedIds = self._getKnownPersistedOutputIds('outputCTF')
+
+        # Published by an earlier run: known, but not estimated again.
+        for micKey in [micKey for micKey, mic in micDict.items()
+                       if mic.getObjId() in persistedIds]:
+            self.micDict[micKey] = micDict.pop(micKey)
 
         if micDict:
             fDeps = self._insertNewMicsSteps(micDict.values())
@@ -583,21 +592,36 @@ class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicr
         listOfMics = list(self.micDict.values())
         persistedIds = self._getKnownPersistedOutputIds('outputCTF')
 
+        # Left out once, because no CTF was estimated: not looked at again,
+        # but done; Continue estimates them again.
+        failedIds = self._failedCtfMicIds()
         newDone = [mic for mic in listOfMics
                   if mic.getMicName() in finishedKeys
-                  and mic.getObjId() not in persistedIds]
+                  and mic.getObjId() not in persistedIds
+                  and mic.getObjId() not in failedIds]
 
         nMics = len(listOfMics)
-        allDone = len(persistedIds) + len(newDone)
+        allDone = len(persistedIds) + len(newDone) + len(failedIds)
         self.finished = self.streamClosed and allDone == nMics
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         if newDone:
-            publishedMics = self._updateOutputCTFSet(newDone, streamMode)
-            self._markOutputIdsPersisted(
-                'outputCTF',
-                [mic.getObjId() for mic in publishedMics],
-            )
+            failed = [mic for mic in newDone if not self._ctfResultExists(mic)]
+
+            if failed:
+                self.error("No CTF was estimated for micrographs %s; they "
+                           "are left out, and Continue estimates them again."
+                           % [mic.getObjId() for mic in failed])
+                failedIds.update(mic.getObjId() for mic in failed)
+
+            publishable = [mic for mic in newDone if mic not in failed]
+
+            if publishable:
+                publishedMics = self._updateOutputCTFSet(publishable, streamMode)
+                self._markOutputIdsPersisted(
+                    'outputCTF',
+                    [mic.getObjId() for mic in publishedMics],
+                )
         elif not self.finished:
             if allDone == nMics:
                 self._streamingSleepOnWait()
@@ -605,6 +629,23 @@ class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicr
 
         if self.finished:
             self._updateStreamState(streamMode)
+
+            if failedIds and not self._getKnownPersistedOutputIds('outputCTF'):
+                raise Exception("CTF estimation failed for every one of the "
+                                "%d micrographs; see the errors above. "
+                                "Continue estimates them again."
+                                % len(failedIds))
+
+    def _failedCtfMicIds(self):
+        """Micrographs of this run with no estimated CTF: in no output."""
+        return self.__dict__.setdefault('_failedCtfMicIdsSet', set())
+
+    def _ctfResultPath(self, mic):
+        return self._getFileName('ctf', micBase=self._getMicBase(mic),
+                                 root=self._getExtraPath())
+
+    def _ctfResultExists(self, mic):
+        return os.path.exists(self._ctfResultPath(mic))
 
 
     def calculateAutodownsampling(self,samplingRate, targetSampling):
@@ -1056,6 +1097,12 @@ class XmippProtCTFMicrographs(XmippStreamingBase, ProtStreamingBase, ProtCTFMicr
             root=extraPath,
         )
         failed = not os.path.exists(ctfParam)
+
+        if failed and not self.recalculate:
+            # A failed estimation is not published in streaming: left out,
+            # Continue estimates it again. Recalculating keeps marking it.
+            raise RuntimeError("No CTF was estimated for micrograph %s"
+                               % mic.getObjId())
 
         if failed:
             ctfParam = self._createErrorCtfParam(mic)

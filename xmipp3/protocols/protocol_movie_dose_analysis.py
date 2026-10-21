@@ -743,8 +743,11 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
                 self.mu = medianDoseExperimental
 
         if not hasattr(self, 'mu') and self.isStreamClosed and allDone == maxMicSize and not self.meanDoseList:
-            self.finished = True
-            self._publishFailedMovies(newDone, Set.STREAM_CLOSED)
+            # Not one movie could be analyzed. Published as discarded they
+            # would count as done, and Continue would never try them again.
+            raise Exception("Dose analysis failed for every one of the %d "
+                            "movies; see the errors above. Continue analyzes "
+                            "them again." % maxMicSize)
 
         if hasattr(self, 'mu'):
             # We have finished when there is not more input movies
@@ -870,30 +873,6 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
         self._store()
 
 # ------------------------- UTILS functions --------------------------------
-    def _publishFailedMovies(self, movieIds, streamMode):
-        if not movieIds:
-            return
-
-        inputMovies = self._loadMoviesByIds(movieIds)
-        failedMovies = []
-        for movieId in movieIds:
-            movie = inputMovies.get(movieId)
-            if movie is None:
-                self.error(
-                    'Movie with id %d could not be loaded from the input '
-                    'Set while publishing failed movies.' % movieId
-                )
-                continue
-            movie.setFramesRange(self.framesRange)
-            setAttribute(movie, '_DOSE_ANALYSIS_FAILED', True)
-            failedMovies.append(movie)
-
-        moviesSetDiscarded = self._loadOutputSet(SetOfMovies, OUTPUT_MOVIES_DISCARDED)
-        for movie in failedMovies:
-            moviesSetDiscarded.append(movie)
-        self._updateOutputSet(OUTPUT_MOVIES_DISCARDED, moviesSetDiscarded, streamMode)
-        self._registerDoneIds((movie.getObjId() for movie in failedMovies), accepted=False)
-
     def _updateDosePlots(self, doneCount, lower, upper):
         if doneCount <= self._lastPlotCount:
             return

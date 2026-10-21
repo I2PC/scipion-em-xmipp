@@ -72,5 +72,33 @@ class TestAnUnpublishableMovieDoesNotHangTheRun(unittest.TestCase):
         self.assertNotIn([2], protocol.published[1:])
 
 
+
+class TestAFailedMovieIsLeftOut(unittest.TestCase):
+    def test_ItIsNotPublishedAndTheRunEnds(self):
+        protocol = _Movies(unpublishable=())
+        protocol._failedMovieIds().add(2)
+
+        protocol._checkNewOutput()
+
+        self.assertEqual([1], protocol.published[0])
+        self.assertTrue(protocol.finished)
+
+    def test_EveryMovieFailedFailsTheRun(self):
+        protocol = _Movies(unpublishable=())
+        protocol._failedMovieIds().update({1, 2})
+
+        with self.assertRaisesRegex(Exception, "Every one of the 2 movies"):
+            protocol._checkNewOutput()
+
+    def test_AMovieFailedAmongPublishedOnesIsNoFailure(self):
+        protocol = _Movies(unpublishable=())
+        protocol.persisted = {1}
+        protocol._failedMovieIds().add(2)
+
+        protocol._checkNewOutput()
+
+        self.assertTrue(protocol.finished)
+
+
 if __name__ == '__main__':
     unittest.main()

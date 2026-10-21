@@ -537,14 +537,27 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
 
         inputGain = self.getInputGain()
 
-        if self.estimateGain.get() and not movieId in self.estimatedIds:
-                self.estimatedIds.add(movieId)
-                self.estimateGainFun(movie)
+        try:
+            if self.estimateGain.get() and not movieId in self.estimatedIds:
+                    self.estimatedIds.add(movieId)
+                    self.estimateGainFun(movie)
 
-        if self.estimateResidualGain.get() and not movieId in self.estimatedResIds:
-            self.info('\nEstimating residual gain')
-            self.estimatedResIds.add(movieId)
-            self.estimateGainFun(movie, residual=True)
+            if self.estimateResidualGain.get() and not movieId in self.estimatedResIds:
+                self.info('\nEstimating residual gain')
+                self.estimatedResIds.add(movieId)
+                self.estimateGainFun(movie, residual=True)
+        except Exception as e:
+            # Not raised: the step would fail and take the whole run with
+            # it. The movie is still published, as it came in, without
+            # its estimated gain; Continue estimates it again.
+            self.error("Gain estimation failed for movie %d: %s"
+                       % (movieId, e))
+            self.estimatedIds.discard(movieId)
+            self.estimatedResIds.discard(movieId)
+            pwutils.cleanPath(self.getEstimatedGainPath(movieId),
+                              self.getResidualGainPath(movieId))
+            self._failedMovieIds().add(movieId)
+            return
 
         # If the gain hasn't been oriented or normalized, we still need
         # orientedGain. Several movies may reach this concurrently
@@ -630,7 +643,7 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
 
         if finishedIds:
             movieIds = self._getPersistedCandidateIds(OUTPUT_MOVIES, finishedIds)
-            gainIds = {movieId for movieId in finishedIds if self.doGainProcess(movieId)}
+            gainIds = self._gainMovieIds(finishedIds)
             estimatedIds = self._getPersistedCandidateIds(OUTPUT_ESTIMATED_GAINS, gainIds) if self.estimateGain.get() else gainIds
             residualIds = self._getPersistedCandidateIds(OUTPUT_RESIDUAL_GAINS, gainIds) if self.estimateResidualGain.get() else gainIds
             missingMovieIds = finishedIds - movieIds
@@ -690,7 +703,7 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
 
         readyIds = inputIds.intersection(self._getAllFinishedInsertedIds())
         movieIds = self._getPersistedOutputIds(OUTPUT_MOVIES)
-        gainIds = {movieId for movieId in readyIds if self.doGainProcess(movieId)}
+        gainIds = self._gainMovieIds(readyIds)
         estimatedIds = self._getPersistedOutputIds(OUTPUT_ESTIMATED_GAINS) if self.estimateGain.get() else gainIds
         residualIds = self._getPersistedOutputIds(OUTPUT_RESIDUAL_GAINS) if self.estimateResidualGain.get() else gainIds
         missingMovieIds = readyIds - movieIds
@@ -737,9 +750,48 @@ class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProce
         if not self.finished:
             return
 
+        self._failIfEveryGainEstimationFailed(readyIds, estimatedIds,
+                                              residualIds)
         outputStep = self._getFirstJoinStep()
         if outputStep and outputStep.isWaiting():
             outputStep.setStatus(cons.STATUS_NEW)
+
+    def _gainMovieIds(self, movieIds):
+        """The movies whose gain is estimated, less the ones that failed:
+        those are published without it."""
+        failedIds = self._failedMovieIds()
+        return {movieId for movieId in movieIds
+                if self.doGainProcess(movieId) and movieId not in failedIds}
+
+    def _failIfEveryGainEstimationFailed(self, movieIds, estimatedIds,
+                                         residualIds):
+        """A failed estimation leaves its movie without a gain; the run
+        fails only when that happened to every movie estimated."""
+        if not (self.estimateGain.get() or self.estimateResidualGain.get()):
+            return
+
+        estimated = {movieId for movieId in movieIds
+                     if self.doGainProcess(movieId)}
+        published = ((set(estimatedIds) if self.estimateGain.get() else set())
+                     | (set(residualIds) if self.estimateResidualGain.get() else set()))
+
+        if estimated and estimated <= self._failedMovieIds() and not published:
+            raise Exception("Gain estimation failed for every one of the %d "
+                            "movies; see the errors above. Continue "
+                            "estimates them again." % len(estimated))
+
+    def _getResumeRetryIds(self, finishedIds):
+        """Movies an earlier run finished without their estimated gain."""
+        files = []
+
+        if self.estimateGain.get():
+            files.append(self.getEstimatedGainPath)
+        if self.estimateResidualGain.get():
+            files.append(self.getResidualGainPath)
+
+        return {movieId for movieId in finishedIds
+                if self.doGainProcess(movieId)
+                and not all(os.path.exists(path(movieId)) for path in files)}
 
     def _getAllDoneIds(self):
         return self._getPersistedOutputIds(OUTPUT_MOVIES)

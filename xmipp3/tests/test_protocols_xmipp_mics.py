@@ -456,6 +456,7 @@ class TestXmippCTFEstimation(TestXmippBase):
         protCTF = self.newProtocol(XmippProtCTFMicrographs)
         protCTF.micDict = {}
         protCTF.newDeps = []
+        protCTF._pendingMicIds = set()
         loadCalls = []
         protCTF._loadInputList = lambda: (loadCalls.append(True) or ({}, False))
         protCTF.updateSteps = lambda: None

@@ -62,6 +62,9 @@ class _Coord:
 
 
 class _OutputParts:
+    def getSize(self):
+        return 0
+
     def append(self, _particle):
         raise AssertionError("No particle should be appended when extracted metadata is missing.")
 
@@ -151,6 +154,9 @@ class _RetryOutputParts:
 
     def getIdSet(self):
         return set(self._durableIds)
+
+    def getSize(self):
+        return len(self._durableIds)
 
     def append(self, particle):
         self.appendedIds.append(particle.getObjId())
@@ -261,6 +267,9 @@ class _LateCoords:
 
 
 class _LateVisibleMicHarness:
+    _recordTerminalProgress = XmippStreamingBase._recordTerminalProgress
+    _hasActiveStreamingWork = XmippStreamingBase._hasActiveStreamingWork
+
     def __init__(self):
         self._micSet = _LateMicSet([1, 2, 3])
         self._coords = _LateCoords(self._micSet)

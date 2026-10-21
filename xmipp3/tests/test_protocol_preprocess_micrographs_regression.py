@@ -158,9 +158,77 @@ class TestXmippPreprocessMicrographsRegression(BaseTest):
     def testRestoreInsertedMicsUsesCompletionMarkers(self):
         prot = self._newProtocol()
         prot.insertedDict = {}
-        prot._isMicPipelineDone = lambda mic: mic.getObjId() == 1
-        prot._restoreInsertedMics([_FakeMicrograph(1), _FakeMicrograph(2)])
+        prot._isMicPipelineDone = lambda mic: mic.getObjId() in (1, 3)
+        done = prot._getOutputMicrograph(_FakeMicrograph(1))
+
+        try:
+            os.makedirs(os.path.dirname(done), exist_ok=True)
+            open(done, 'w').close()
+            prot._restoreInsertedMics([_FakeMicrograph(1), _FakeMicrograph(2),
+                                       _FakeMicrograph(3)])
+        finally:
+            os.remove(done)
+
         self.assertEqual({1}, set(prot.insertedDict))
+        # Finished without its result: processed again.
+        self.assertEqual({3}, prot._retriedMicIds)
+
+    def testAFailedOperationLeavesItsMicrographOutWithoutFailingTheStep(self):
+        prot = self._newProtocol()
+        errors = []
+        prot.error = errors.append
+
+        def runJob(program, arguments, **kwargs):
+            raise RuntimeError("bad pixels")
+
+        prot.runJob = runJob
+        output = prot._getExtraPath('failed_output.mrc')
+        os.makedirs(os.path.dirname(output), exist_ok=True)
+        open(output, 'w').close()
+
+        prot.preprocessMicrographStep(4, [['xmipp_image_operate', '-i x']],
+                                      '/data/mic_004.mrc', output)
+
+        self.assertEqual({4}, prot._failedMicIds())
+        self.assertFalse(os.path.exists(output), "No half-written result.")
+        self.assertTrue(errors)
+
+    def testAFailedMicrographIsNotDone(self):
+        prot = self._newProtocol()
+        prot._steps = [_FakeStep('preprocessMicrographStep', [5])]
+        prot._prevSteps = []
+
+        self.assertTrue(prot._isMicPipelineDone(_FakeMicrograph(5)))
+
+        prot._failedMicIds().add(5)
+        self.assertFalse(prot._isMicPipelineDone(_FakeMicrograph(5)))
+
+    def testARetriedMicrographCountsOnlyItsNewStep(self):
+        prot = self._newProtocol()
+        prot._prevSteps = [_FakeStep('preprocessMicrographStep', [6])]
+        prot._steps = []
+        prot._retriedMicIds = {6}
+
+        self.assertFalse(prot._isMicPipelineDone(_FakeMicrograph(6)))
+
+        prot._steps = [_FakeStep('preprocessMicrographStep', [6])]
+        self.assertTrue(prot._isMicPipelineDone(_FakeMicrograph(6)))
+
+    def testEachMicrographGetsOneStepRunningItsOperations(self):
+        prot = self._newProtocol()
+        prot.params = {}
+        inserted = []
+        prot._insertFunctionStep = (
+            lambda *args, **kwargs: inserted.append(args) or len(inserted))
+
+        prot._insertStepsForMicrograph(7, '/data/mic.mrc', '/out/mic.mrc')
+
+        self.assertEqual(1, len(inserted))
+        funcName, micId, commands, inputMic, outputMic = inserted[0]
+        self.assertEqual('preprocessMicrographStep', funcName)
+        self.assertEqual([['xmipp_image_operate',
+                           '-i /data/mic.mrc --mult -1 -o /out/mic.mrc']],
+                         commands)
 
     def testNewInputUsesFreshReloadedSnapshot(self):
         prot = self._newProtocol()

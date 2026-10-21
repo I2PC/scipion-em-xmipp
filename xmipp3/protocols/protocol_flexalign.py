@@ -545,9 +545,27 @@ class XmippProtFlexAlign(XmippStreamingMoviesMixin, ProtStreamingBase, ProtAlign
         try:
             self.tryProcessMovie(movie)
         except Exception as ex:
+            # Not raised: the step would fail and take the whole run with
+            # it. The movie is left out, and Continue aligns it again.
             self.error("We cannot process %s with the exception %s"
                        % (movie.getFileName(), ex))
-            raise
+            pwutils.cleanPath(self._getShiftsFile(movie))
+            self._failedMovieIds().add(movie.getObjId())
+
+    def _getResumeRetryIds(self, finishedIds):
+        """Movies an earlier run finished without aligning: no shifts."""
+        finishedIds = set(finishedIds)
+
+        if not finishedIds:
+            return set()
+
+        persistedIds = self._getPersistedCandidateIds('outputMovies',
+                                                      finishedIds)
+        movies = self._loadLogicalSetItemsByIds(self.inputMovies.get(),
+                                                finishedIds - persistedIds)
+
+        return {movie.getObjId() for movie in movies
+                if not os.path.exists(self._getShiftsFile(movie))}
 
 
     def _convertInputStep(self):

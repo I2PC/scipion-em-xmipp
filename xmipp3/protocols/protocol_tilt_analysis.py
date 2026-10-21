@@ -490,8 +490,12 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrograp
             # poll at 20k micrographs, and tens of minutes at a million.
             doneIdSet = set(doneListIds)
             processedIds = list(self.processedIds)
-            newDone = [micId for micId in processedIds if micId not in doneIdSet]
-            allDone = len(doneIdSet) + len(newDone)
+            # Left out once, because their statistics failed: not looked at
+            # again, but done.
+            excludedIds = self._excludedMicIds()
+            newDone = [micId for micId in processedIds
+                       if micId not in doneIdSet and micId not in excludedIds]
+            allDone = len(doneIdSet) + len(newDone) + len(excludedIds)
             inputMicSet = self._loadLogicalSet(self.inputMicrographs)
             try:
                 maxMicSize = inputMicSet.getSize()
@@ -505,6 +509,7 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrograp
 
             if not newDone:
                 if self.finished:
+                    self._failIfEveryMicrographFailed(doneIdSet)
                     self._store()
                 return
 
@@ -531,6 +536,7 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrograp
                             "Micrograph with id %d has no computed statistics; "
                             "excluding it from the output." % micId
                         )
+                        excludedIds.add(micId)
                         continue
 
                     mic = inputMicSet.getItem("id", micId).clone()
@@ -570,7 +576,25 @@ class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrograp
                     [mic.getObjId() for mic in micsDiscarded],
                 )
 
+            if self.finished:
+                self._failIfEveryMicrographFailed(
+                    doneIdSet | {mic.getObjId()
+                                 for mic in micsAccepted + micsDiscarded})
+
             self._store()
+
+    def _excludedMicIds(self):
+        """Micrographs of this run whose statistics could not be computed:
+        in no output, and processed again on Continue."""
+        return self.__dict__.setdefault('_excludedMicIdsSet', set())
+
+    def _failIfEveryMicrographFailed(self, publishedIds):
+        """A failed micrograph is left out; the run fails only when that
+        happened to every micrograph."""
+        if self._excludedMicIds() and not publishedIds:
+            raise Exception("Tilt analysis failed for every one of the %d "
+                            "micrographs; see the errors above. Continue "
+                            "processes them again." % len(self._excludedMicIds()))
 
     def _appendNewMicrographs(self, micSet, micrographs):
         """Append only micrographs that are not already persisted."""

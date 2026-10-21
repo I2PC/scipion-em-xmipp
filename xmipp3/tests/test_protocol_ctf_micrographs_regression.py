@@ -104,6 +104,9 @@ class TestXmippCtfStreamingFailures(unittest.TestCase):
                 def evaluateSingleMicrograph(self, mic):
                     return True
 
+                def _getMicBase(self, mic):
+                    return "mic_%03d" % mic.getObjId()
+
             class _MicWithId(_Mic):
                 def __init__(self, objId):
                     self.objId = objId
@@ -154,6 +157,8 @@ class TestXmippCtfLogicalOutputResume(unittest.TestCase):
         outputSet = _PersistedCtfOutput()
 
         class _Harness(ctf_micrographs.XmippStreamingBase):
+            _failedCtfMicIds = ctf_micrographs.XmippProtCTFMicrographs._failedCtfMicIds
+
             def __init__(self):
                 self.finished = False
                 self.streamClosed = True
@@ -178,9 +183,113 @@ class TestXmippCtfLogicalOutputResume(unittest.TestCase):
         self.assertTrue(protocol.streamUpdated)
 
 
+class _CtfPublishingHarness(ctf_micrographs.XmippStreamingBase):
+    """Publishes the micrographs it is given; some have no CTF result."""
+
+    _failedCtfMicIds = ctf_micrographs.XmippProtCTFMicrographs._failedCtfMicIds
+
+    def __init__(self, withResult, persisted=()):
+        self.finished = False
+        self.streamClosed = True
+        self.micDict = {"mic_%03d" % i: _NamedMic(i) for i in (1, 2)}
+        self._withResult = set(withResult)
+        self._persisted = set(persisted)
+        self.published = []
+        self.errors = []
+
+    def _getFinishedProcessedMicKeys(self):
+        return set(self.micDict)
+
+    def _getKnownPersistedOutputIds(self, outputName):
+        return set(self._persisted)
+
+    def _ctfResultExists(self, mic):
+        return mic.getObjId() in self._withResult
+
+    def _updateOutputCTFSet(self, micList, streamMode):
+        self.published.append([mic.getObjId() for mic in micList])
+        return micList
+
+    def _markOutputIdsPersisted(self, outputName, itemIds):
+        self._persisted.update(itemIds)
+
+    def _updateStreamState(self, streamMode):
+        pass
+
+    def error(self, message):
+        self.errors.append(message)
+
+
+class _NamedMic:
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+    def getMicName(self):
+        return "mic_%03d" % self._objId
+
+
+class TestXmippCtfFailedEstimationsAreLeftOut(unittest.TestCase):
+    def testAMicrographWithoutCtfIsNotPublishedAndTheRunEnds(self):
+        protocol = _CtfPublishingHarness(withResult={1})
+
+        ctf_micrographs.XmippProtCTFMicrographs._checkNewOutput(protocol)
+
+        self.assertEqual([[1]], protocol.published)
+        self.assertEqual({2}, protocol._failedCtfMicIds())
+        self.assertTrue(protocol.finished)
+        self.assertTrue(protocol.errors)
+
+    def testEveryEstimationFailedFailsTheRun(self):
+        protocol = _CtfPublishingHarness(withResult=())
+
+        with self.assertRaisesRegex(Exception, "failed for every one of the 2"):
+            ctf_micrographs.XmippProtCTFMicrographs._checkNewOutput(protocol)
+
+        self.assertEqual([], protocol.published)
+
+    def testAnEarlierRunsStepDoesNotCountAsThisRunsEstimation(self):
+        import json
+        from types import SimpleNamespace
+
+        def step(micNames):
+            return SimpleNamespace(
+                funcName=SimpleNamespace(get=lambda: 'estimateCtfListStepOwn'),
+                argsStr=SimpleNamespace(get=lambda default=None: json.dumps([micNames])),
+                isFinished=lambda: True)
+
+        protocol = SimpleNamespace(_prevSteps=[step(['mic_001'])],
+                                   _steps=[step(['mic_002'])])
+
+        self.assertEqual(
+            {'mic_002'},
+            ctf_micrographs.XmippProtCTFMicrographs._getFinishedProcessedMicKeys(protocol))
+
+    def testContinueDoesNotEstimateAgainWhatWasPublished(self):
+        from types import SimpleNamespace
+
+        scheduled = []
+        protocol = SimpleNamespace(
+            micDict={}, newDeps=[], _pendingMicIds=set(),
+            _loadInputList=lambda: ({"mic_001": _NamedMic(1),
+                                     "mic_002": _NamedMic(2)}, False),
+            _getKnownPersistedOutputIds=lambda name: {1},
+            _insertNewMicsSteps=lambda mics: scheduled.extend(
+                mic.getObjId() for mic in mics) or [],
+            updateSteps=lambda: None)
+
+        ctf_micrographs.XmippProtCTFMicrographs._checkNewInput(protocol)
+
+        self.assertEqual([2], scheduled)
+        self.assertIn("mic_001", protocol.micDict)
+
+
 class _CtfPlaceholderHarness:
-    def __init__(self, workdir):
+    def __init__(self, workdir, recalculate=False):
         self.workdir = workdir
+        self.recalculate = recalculate
 
     def _getMicBase(self, mic):
         return "mic_%03d" % mic.getObjId()
@@ -204,9 +313,19 @@ class _CtfPlaceholderHarness:
 
 
 class TestXmippCtfDurableFailureOutput(unittest.TestCase):
-    def testMissingCtfResultCreatesDisabledPlaceholder(self):
+    def testAMissingCtfResultIsNotPublishedInStreaming(self):
+        # Left out, and estimated again on Continue: a disabled placeholder
+        # would count as done and never be estimated again.
         with tempfile.TemporaryDirectory() as tmp:
             protocol = _CtfPlaceholderHarness(tmp)
+
+            with self.assertRaisesRegex(RuntimeError, "No CTF was estimated"):
+                ctf_micrographs.XmippProtCTFMicrographs._createCtfModel(
+                    protocol, _Mic(), updateSampling=False)
+
+    def testRecalculatingStillMarksAMissingCtfResultAsDisabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            protocol = _CtfPlaceholderHarness(tmp, recalculate=True)
             mic = _Mic()
 
             ctfModel = ctf_micrographs.XmippProtCTFMicrographs._createCtfModel(
@@ -215,17 +334,7 @@ class TestXmippCtfDurableFailureOutput(unittest.TestCase):
                 updateSampling=False,
             )
 
-            self.assertIsNotNone(
-                ctfModel,
-                "A finished CTF step with no valid result must still produce "
-                "a durable logical placeholder instead of relying on a "
-                "failure sidecar.",
-            )
-            self.assertFalse(
-                ctfModel.isEnabled(),
-                "The durable placeholder for a failed CTF estimation must "
-                "be disabled.",
-            )
+            self.assertFalse(ctfModel.isEnabled())
             self.assertIs(
                 mic,
                 ctfModel.getMicrograph(),

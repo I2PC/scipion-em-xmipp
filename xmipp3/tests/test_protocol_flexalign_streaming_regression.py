@@ -8,19 +8,46 @@ from pwem.protocols import ProtAlignMovies
 class TestFlexAlignScientificFailureRegression(unittest.TestCase):
     """Regression coverage for scientific failures inside movie workers."""
 
-    def testProcessMoviePropagatesScientificFailure(self):
+    def testAFailedMovieIsLeftOutWithoutFailingTheStep(self):
+        # Raised, it would fail the step and the whole run with it.
         protocol = XmippProtFlexAlign()
+        protocol.error = MagicMock()
+        protocol._getShiftsFile = MagicMock(return_value="/nonexistent/shifts.xmd")
         movie = MagicMock()
         movie.getFileName.return_value = "movie_000005/test.tif"
+        movie.getObjId.return_value = 5
 
-        failure = RuntimeError("GPUassert: out of memory")
-        protocol.tryProcessMovie = MagicMock(side_effect=failure)
+        protocol.tryProcessMovie = MagicMock(
+            side_effect=RuntimeError("GPUassert: out of memory"))
 
-        with self.assertRaises(RuntimeError) as raised:
-            protocol._processMovie(movie)
+        protocol._processMovie(movie)
 
-        self.assertIs(raised.exception, failure)
         protocol.tryProcessMovie.assert_called_once_with(movie)
+        self.assertEqual({5}, protocol._failedMovieIds())
+        self.assertTrue(protocol.error.called)
+
+    def testContinueAlignsAgainAFinishedMovieWithoutShifts(self):
+        import os
+        import tempfile
+
+        protocol = XmippProtFlexAlign()
+        movies = {objId: MagicMock(getObjId=MagicMock(return_value=objId))
+                  for objId in (1, 2, 3)}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            shifts = {objId: os.path.join(tmp, "shifts_%d.xmd" % objId)
+                      for objId in movies}
+            open(shifts[2], "w").close()
+            protocol._getShiftsFile = lambda movie: shifts[movie.getObjId()]
+            protocol._getPersistedCandidateIds = MagicMock(return_value={1})
+            protocol._loadLogicalSetItemsByIds = (
+                lambda inputSet, ids: [movies[objId] for objId in ids])
+            protocol.inputMovies.get = MagicMock()
+
+            retry = protocol._getResumeRetryIds({1, 2, 3})
+
+        # 1 is published, 2 has its result and only needs publishing.
+        self.assertEqual({3}, retry)
 
     def testProcessMovieKeepsSuccessfulProcessingUnchanged(self):
         protocol = XmippProtFlexAlign()

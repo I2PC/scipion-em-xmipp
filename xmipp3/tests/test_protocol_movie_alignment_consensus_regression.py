@@ -249,6 +249,7 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
         prot._movies2Watermark = 0
         prot._pendingMovieIds1 = set()
         prot._pendingMovieIds2 = set()
+        prot._decidedDiscarded = []
         prot.newDeps = []
         prot._reconcileClosedStreamIds = (
             lambda inputSet, newIds, knownIds, closed, watermarkAttr: (
@@ -292,6 +293,29 @@ class TestXmippMovieAlignmentConsensusRegression(BaseTest):
 
         prot.fillOutput(_FakeOutputSet(), _FakeOutputSet(), [1], ACCEPTED)
         self.assertEqual({1}, prot._droppedMovieIds())
+
+    def testAFailedComparisonLeavesTheMovieOutWithoutFailingTheStep(self):
+        prot = self._newProtocol()
+        prot.error = Mock()
+
+        def fail(movieId):
+            raise ValueError("shift trajectories differ in length")
+
+        prot._alignmentCorrelationMovie = fail
+
+        prot.alignmentCorrelationMovieStep(4)
+
+        self.assertEqual({4}, prot._droppedMovieIds())
+        self.assertTrue(prot.error.called)
+
+    def testEveryMovieFailedFailsTheRun(self):
+        prot = self._newProtocol()
+        prot.processedDict = [1, 2]
+        prot.isStreamClosed = True
+        prot._droppedMovieIds().update({1, 2})
+
+        with self.assertRaisesRegex(Exception, "Every one of the 2 movies"):
+            prot._everyMovieSettled([])
 
     def testAMovieDroppedForGoodLetsTheRunFinish(self):
         prot = self._newProtocol()

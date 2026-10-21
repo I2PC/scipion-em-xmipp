@@ -90,6 +90,9 @@ class _OutputCoords:
 
 
 class _InputHarness(XmippStreamingBase):
+    def _getOutputMicIds(self):
+        return set()
+
     def __init__(self, micSet):
         self._micSet = micSet
         self.micDict = {}
@@ -131,6 +134,10 @@ class _PickHarness:
 
 
 class _OutputHarness:
+    _failedMicIds = auto_pick.XmippParticlePickingAutomatic._failedMicIds
+    _failIfEveryMicrographFailed = (
+        auto_pick.XmippParticlePickingAutomatic._failIfEveryMicrographFailed)
+
     def __init__(self, micIds, processedIds, outputIds, streamClosed=False):
         self.events = []
         self.micDict = {mic.getMicName(): mic for mic in [_FakeMic(objId) for objId in micIds]}
@@ -194,6 +201,8 @@ class TestXmippAutomaticPickingRegression(unittest.TestCase):
         # (and hence the whole protocol) - the base
         # pwem._pickMicrographList loop has no per-mic isolation.
         class _BatchPickHarness:
+            _failedMicIds = auto_pick.XmippParticlePickingAutomatic._failedMicIds
+
             def __init__(self):
                 self.errors = []
                 self.picked = []
@@ -215,6 +224,7 @@ class TestXmippAutomaticPickingRegression(unittest.TestCase):
 
         self.assertEqual([1, 2, 3], protocol.picked)
         self.assertEqual(1, len(protocol.errors))
+        self.assertEqual({2}, protocol._failedMicIds())
 
     def testOutputIsPersistedFromRealOutputSetNotSidecar(self):
         # Regression test: which mics still need to be flushed to the output
@@ -230,6 +240,53 @@ class TestXmippAutomaticPickingRegression(unittest.TestCase):
         protocol = _OutputHarness([1], [1], [1])
         auto_pick.XmippParticlePickingAutomatic._checkNewOutput(protocol)
         self.assertEqual([('sleep',)], protocol.events)
+
+    def testAFailedMicrographIsNotPublished(self):
+        protocol = _OutputHarness([1, 2], [1, 2], None)
+        protocol._failedMicIds().add(2)
+
+        auto_pick.XmippParticlePickingAutomatic._checkNewOutput(protocol)
+
+        self.assertEqual([('output', [1], Set.STREAM_OPEN)], protocol.events)
+
+    def testAMicrographWithoutParticlesIsReadOnce(self):
+        protocol = _OutputHarness([1], [1], None)
+
+        def publishNothing(mics, streamMode):
+            protocol.events.append(('output', [m.getObjId() for m in mics], streamMode))
+            return mics
+
+        protocol._updateOutputCoordSet = publishNothing
+
+        auto_pick.XmippParticlePickingAutomatic._checkNewOutput(protocol)
+        auto_pick.XmippParticlePickingAutomatic._checkNewOutput(protocol)
+
+        self.assertEqual([('output', [1], Set.STREAM_OPEN), ('sleep',)],
+                         protocol.events)
+
+    def testEveryMicrographFailedFailsTheRun(self):
+        protocol = _OutputHarness([1, 2], [1, 2], None, streamClosed=True)
+        protocol._failedMicIds().update({1, 2})
+
+        with self.assertRaisesRegex(Exception, "failed for every one of the 2"):
+            auto_pick.XmippParticlePickingAutomatic._checkNewOutput(protocol)
+
+    def testAnEarlierRunsStepDoesNotCountAsThisRunsPicking(self):
+        import json
+        from types import SimpleNamespace
+
+        def step(micNames):
+            return SimpleNamespace(
+                funcName=SimpleNamespace(get=lambda: 'pickMicrographListStepOwn'),
+                argsStr=SimpleNamespace(get=lambda default=None: json.dumps([micNames])),
+                isFinished=lambda: True)
+
+        protocol = SimpleNamespace(_prevSteps=[step(['mic_001'])],
+                                   _steps=[step(['mic_002'])])
+
+        self.assertEqual(
+            {'mic_002'},
+            auto_pick.XmippParticlePickingAutomatic._getFinishedProcessedMicKeys(protocol))
 
     def testFinishedReplayClosesExistingOutput(self):
         protocol = _OutputHarness([1], [1], [1], streamClosed=True)

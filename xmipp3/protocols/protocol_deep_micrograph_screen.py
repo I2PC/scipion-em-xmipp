@@ -593,7 +593,16 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
             # hundreds of millions of live Coordinate objects.
             del self.coordDict[mic.getObjId()]
 
-        self._computeMaskForMicrographList(micList, *args)
+        try:
+            self._computeMaskForMicrographList(micList, *args)
+        except Exception as e:
+            # Not raised: the step would fail and take the whole run with
+            # it. Its micrographs are left out, and Continue screens them
+            # again.
+            self.error("Deep micrograph screening failed for micrographs "
+                       "%s: %s" % ([mic.getObjId() for mic in micList], e))
+            self._failedMicIds().update(mic.getObjId() for mic in micList)
+            return
 
         thumbnailCounter = 0
         for mic in micList:
@@ -672,7 +681,11 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
         the old os.path.exists(micDoneFn) marker-file check as the durable
         source of truth for "has this mic's extraction run". """
         finishedKeys = set()
-        for step in self._iterKnownStreamingSteps():
+        # Only this run's steps: every micrograph is scheduled again on
+        # Continue (the ones already screened are skipped by their .pos),
+        # and an earlier, finished step of one that failed would have it
+        # read before its new one has run.
+        for step in getattr(self, '_steps', []) or []:
             funcName = getattr(step, 'funcName', None)
             if hasattr(funcName, 'get'):
                 funcName = funcName.get()
@@ -708,7 +721,12 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         outputMicIds = self._getOutputMicIds()
-        newOutput = [m for m in processedMics if m.getObjId() not in outputMicIds]
+        failedMicIds = self._failedMicIds()
+        newOutput = [m for m in processedMics if m.getObjId() not in outputMicIds
+                     and m.getObjId() not in failedMicIds]
+
+        if self.finished:
+            self._failIfEveryMicrographFailed(processedMics)
 
         self.debug('_checkNewOutput: input=%s, processed=%s, output=%s'
                    % (inputLen, len(processedMics), len(outputMicIds)))
@@ -728,6 +746,22 @@ class XmippProtDeepMicrographScreen(XmippStreamingBase, ProtStreamingBase, ProtE
             self._updateOutputCoordSet([], Set.STREAM_CLOSED)
         else:
             return
+
+    def _failedMicIds(self):
+        """Micrographs whose screening failed in this run: left out."""
+        return self.__dict__.setdefault('_failedMicIdsSet', set())
+
+    def _failIfEveryMicrographFailed(self, processedMics):
+        """A failed micrograph is left out; the run fails only when that
+        happened to every micrograph."""
+        failed = self._failedMicIds()
+        output = self.getOutput()
+
+        if (failed and {mic.getObjId() for mic in processedMics} <= failed
+                and (output is None or output.getSize() == 0)):
+            raise Exception("Deep micrograph screening failed for every one "
+                            "of the %d micrographs; see the errors above. "
+                            "Continue screens them again." % len(failed))
 
     def _getScale(self):
       if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
