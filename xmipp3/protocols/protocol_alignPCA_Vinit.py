@@ -91,7 +91,12 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('classes', IntParam, default=10,
                       label='Number of classes',
                       help='The number of classes for a multi reference refinement')
-        form.addParam('particleRadius', FloatParam, default=-1,
+        form.addParam('contrastMask', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
+                     label='contrast mask', 
+                     help='Apply a mask based on local contrast to the images and to the reconstructed '
+                         'volumes during the first iterations. It keeps the regions with the highest '
+                         'contrast and intensity.' )
+        form.addParam('particleRadius', FloatParam, default=-1, expertLevel=LEVEL_ADVANCED,
                      label='Radius of particle (px)', 
                      help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')
         form.addParam('symmetryGroup', StringParam, default="c1",
@@ -100,9 +105,9 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('classify', BooleanParam, default=False, condition='classes > 1',
                       label='Do you want clasify?',
                       help='If you set to *Yes*, the particles are divided between volume')
-        form.addParam('correctCtf', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
-                      label='Correct CTF?',
-                      help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
+        # form.addParam('correctCtf', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
+        #               label='Correct CTF?',
+        #               help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
        
                   
         form.addSection(label='Pca training')
@@ -122,6 +127,11 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         form.addParam('filter',FloatParam, label="Final Volume Resolution (Å)", default=8,
               help='Final resolution of volume filtering')
+        form.addParam('annealing', BooleanParam, default=True, 
+              label="deterministic annealing",
+              help='Enable deterministic annealing during the first iterations: '
+              ' each class average is assigned several candidate orientations, '
+               ' weighted by their matching score, instead of only the best one.')
         form.addParam('positivity', BooleanParam, default=False, 
                       label="Enforce non-negativity",
                       help='Enforce non-negativity of structures in real space during optimization. '
@@ -242,6 +252,10 @@ class XmippProtReconstructInitVolPca(ProtRefine3D, xmipp3.XmippProtocol):
             args += ' --save_class '
         if self.positivity:
             args += ' --posit '
+        if self.annealing:
+            args += ' --da '
+        if self.contrastMask:
+            args += ' --contrast_mask '
             
         if self.inputVolumes.get():
             refVol = self._getTmpPath('initVol.mrc')
