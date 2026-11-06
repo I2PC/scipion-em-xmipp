@@ -1,3 +1,18 @@
+## Release 29.1.0
+- Protocols updated
+    - Streaming protocols (CTF estimation and consensus, picking and picking consensus, extraction, preprocessing, screen particles, movie gain, FlexAlign, max shift, alignment consensus, movie dose analysis, deep micrograph cleaner, deep consensus, tilt analysis, trigger data, defocus sampler, eliminate empty images, 2D PCA classification) resume where they stopped: Continue/Resume reruns what an interrupted run left unfinished, without hanging, losing or repeating items
+    - A failed item no longer fails the whole run: it is left out of the outputs and retried on Continue; a run fails only if every item failed
+    - Streaming protocols no longer wait forever for rows that never arrive, and discard what has no counterpart
+    - Extraction no longer loses or half-publishes micrographs, and restores the acquisition metadata on resume
+    - Preprocess micrographs keeps the micrographs' file names; only a second micrograph with the same name gets its id
+    - Picking consensus with three or more pickers no longer drops micrographs found only by the third and later ones
+    - 2D PCA classification refuses to correct the CTF of particles that have none instead of failing on NaN images
+    - Movie dose analysis: fixed sampling order, window boundaries, plot ids and the configured threshold in its plots
+    - Movie dose analysis supports EER movies (by Mikel Izeta)
+- More scipion-em-xmipp
+    - Streaming no longer depends on the database backend (shared streaming lifecycle, logical sets, outputs read from the persisted sets instead of DONE files)
+    - Regression tests for streaming and resume of every migrated protocol
+
 ## Release 29.0.1
 - More scipion-em-xmipp
     - Hotfix: Revert hot plugin reload
