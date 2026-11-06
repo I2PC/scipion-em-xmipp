@@ -196,6 +196,7 @@ class XmippProtCTFDefocusGroup(ProtProcessParticles):
     filtering or correction procedure.
     """
     _label = 'defocus group'
+    _possibleOutputs = {'outputDefocusGroups': SetOfDefocusGroup}
     
     #--------------------------- DEFINE param functions --------------------------------------------   
     def _defineParams(self, form):
@@ -240,9 +241,8 @@ class XmippProtCTFDefocusGroup(ProtProcessParticles):
               
     def createOutputStep(self, ctfGroupMaxDiff):
         """ Create defocus groups and generate the output set """
-        fnScipion = self._getPath('defocus_groups.sqlite')
-        fnXmipp   = self._getPath('defocus_groups.xmd')
-        setOfDefocus = SetOfDefocusGroup(filename=fnScipion)
+        fnXmipp = self._getPath('defocus_groups.xmd')
+        setOfDefocus = SetOfDefocusGroup.create(self._getPath(), prefix='defocus_groups')
         df = DefocusGroup()
         mdImages    = emlib.MetaData(self.imgsFn)
         if not mdImages.containsLabel(emlib.MDL_CTF_SAMPLING_RATE):

@@ -25,8 +25,8 @@
 # *
 # *****************************************************************************
 
+import json
 import os, sys
-from datetime import datetime
 
 import pwem.emlib.metadata as md
 import pyworkflow.protocol.constants as cons
@@ -39,12 +39,14 @@ from pyworkflow.utils.properties import Message
 from pwem import ALIGN_NONE
 from pwem.protocols import ProtClassify2D
 from pwem.objects import SetOfParticles, SetOfAverages, SetOfClasses2D, Class2D, SetOfClasses, SetOfImages
+from pyworkflow.protocol import ProtStreamingBase
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 from xmipp3.convert import (writeSetOfParticles, readSetOfParticles,
                             setXmippAttributes)
 
 
-class XmippProtEliminateEmptyBase(ProtClassify2D):
+class XmippProtEliminateEmptyBase(XmippStreamingBase, ProtStreamingBase, ProtClassify2D):
     """ Base to eliminate images using statistical methods
     (variance of variances of sub-parts of input image) eliminates those samples,
     where there is no object/particle (only noise is presented there).
@@ -321,144 +323,190 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
                            'Higher value applies stronger denoising, '
                            'could be more precise but also slower.')
 
+        self._defineStreamingParams(form)
+        form.addParallelSection(threads=3, mpi=1)
+
     # --------------------------- INSERT steps functions ----------------------
-    def _insertAllSteps(self):
-        self.lenPartsSet = 0  # inputSize after checkNewInput
-        self.outputSize = 0  # outputSize after checkNewOutput
-        self.check = None  # last creationTime of the processed images
-        self.stepCount = 0  # to label the input.xmd
-        self.fnInputMd = self._getExtraPath("input%d.xmd")  # to feed the bin
-        self.fnOutMdTmp = self._getExtraPath("outTemp.xmd")  # partial out
-        self.fnElimMdTmp = self._getExtraPath("elimTemp.xmd")  # partial out2
-        self.fnOutputMd = self._getExtraPath("output.xmd")  # final out
-        self.fnElimMd = self._getExtraPath("eliminated.xmd")  # final out2
+    def _prepareStreamingGenerator(self):
+        self.lenPartsSet = 0
+        self.outputSize = 0
+        self.stepCount = 0
+        self.streamClosed = False
+        self.finished = False
+        self._lastInputId = 0
+        self._scheduledBatchIds = set()
+        self._activeBatchIndexes = set()
+        self.fnInputMd = self._getExtraPath("input%d.xmd")
+        originalRunMode = getattr(self, '_originalRunMode', self.getRunMode())
+        existingInfos = [self._getEliminationStepInfo(step) for step in self._iterEliminationSteps()]
+        self.stepCount = max([info[0] for info in existingInfos if info] or [0])
+        if originalRunMode == cons.MODE_RESUME:
+            self._restoreStreamingState(existingInfos)
 
-        checkStep = self._insertNewPartsSteps()
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=checkStep, wait=True)
+    def stepsGeneratorStep(self) -> None:
+        self._prepareStreamingGenerator()
+        self.newDeps = []
+        while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
 
-    def _insertNewPartsSteps(self):
-        deps = []
+            self._checkNewInput()
+            self._checkNewOutput()
+            if getattr(self, 'finished', False):
+                break
+            self._streamingSleepOnWait()
+        self._insertFunctionStep(self.createOutputStep, prerequisites=self.newDeps, needsGPU=False)
+
+    @staticmethod
+    def _getEliminationStepInfo(step):
+        funcName = getattr(step, 'funcName', None)
+        if hasattr(funcName, 'get'):
+            funcName = funcName.get()
+        if funcName != 'eliminationStep':
+            return None
+        argsStr = getattr(step, 'argsStr', None)
+        if hasattr(argsStr, 'get'):
+            argsStr = argsStr.get('[]')
+        try:
+            args = json.loads(argsStr or '[]')
+        except (TypeError, ValueError):
+            return None
+        if len(args) < 2 or not isinstance(args[1], list):
+            return None
+        return int(args[0]), [int(itemId) for itemId in args[1]]
+
+    def _iterEliminationSteps(self):
+        for step in self._iterKnownStreamingSteps():
+            if self._getEliminationStepInfo(step) is not None:
+                yield step
+
+    def _getPersistedProcessedIds(self):
+        processedIds = set()
+        for outputName in self._getResumeOutputNames():
+            processedIds.update(self._getPersistedOutputIds(outputName))
+        return processedIds
+
+    def _getReadyEliminationBatches(self):
+        processedIds = self._getPersistedProcessedIds()
+        ready = []
+        for step in self._iterEliminationSteps():
+            info = self._getEliminationStepInfo(step)
+            if info is None or info[0] not in self._activeBatchIndexes or not step.isFinished():
+                continue
+            batchIndex, batchIds = info
+            if not set(batchIds).issubset(processedIds):
+                ready.append((batchIndex, batchIds))
+        return ready
+
+    def _restoreStreamingState(self, existingInfos=None):
+        existingInfos = existingInfos if existingInfos is not None else [self._getEliminationStepInfo(step) for step in self._iterEliminationSteps()]
+        processedIds = self._getPersistedProcessedIds()
+        for info in existingInfos:
+            if info:
+                self._activeBatchIndexes.add(info[0])
+                self._scheduledBatchIds.update(info[1])
+        knownIds = processedIds.union(self._scheduledBatchIds)
+        self.outputSize = len(processedIds)
+        self._lastInputId = max(knownIds) if knownIds else 0
+        inputSet = self.getInput()
+        inputSet.loadAllProperties()
+        self.lenPartsSet = inputSet.getSize()
+        self.streamClosed = inputSet.isStreamClosed()
+        inputSet.close()
+        self.info("Restored streaming state: %d persisted of %d input images" % (self.outputSize, self.lenPartsSet))
+
+    def _insertNewPartsSteps(self, batchIds):
+        batchIds = sorted(set(batchIds))
+        if not batchIds:
+            return []
         self.stepCount += 1
-        stepId = self._insertFunctionStep('eliminationStep',
-                                          self.stepCount,
-                                          prerequisites=[])
-        deps.append(stepId)
-        return deps
+        batchIndex = self.stepCount
+        stepId = self._insertFunctionStep('eliminationStep', batchIndex, batchIds, prerequisites=[])
+        self._activeBatchIndexes.add(batchIndex)
+        self._scheduledBatchIds.update(batchIds)
+        return [stepId]
 
-    def eliminationStep(self, stepId):
-        """ Common code for particles and classes/averages """
-        fnInputMd = self.fnInputMd % stepId
-        partsSet = self.prepareImages()
+    def _getResumeOutputNames(self):
+        return ()
 
-        if self.check == None:  # if no previous, get all
-            writeSetOfParticles(partsSet, fnInputMd,
-                                alignType=ALIGN_NONE, orderBy='creation')
-        else:  # if previous, take the last ones
-            writeSetOfParticles(partsSet, fnInputMd,
-                                alignType=ALIGN_NONE, orderBy='creation',
-                                where='creation>"' + str(self.check) + '"')
+    def specialBehavoir(self, inSet):
+        pass
 
-        # special use of partSet before closing it
+    def eliminationStep(self, batchIndex, batchIds):
+        fnInputMd = self.fnInputMd % batchIndex
+        inputSet = self.getInput()
+        inputSet.loadAllProperties()
+        batchItems = self._loadLogicalSetItemsByIds(inputSet, batchIds)
+        inputSet.close()
+        partsSet = self.prepareImages(batchItems, batchIndex)
+        writeSetOfParticles(partsSet, fnInputMd, alignType=ALIGN_NONE, orderBy='id')
         self.specialBehavoir(partsSet)
-
-        args = "-i %s -o %s -e %s -t %f" % (fnInputMd, self.fnOutputMd,
-                                            self.fnElimMd, self.threshold.get())
+        fnOutputMd = self._getExtraPath("output%d.xmd" % batchIndex)
+        fnElimMd = self._getExtraPath("eliminated%d.xmd" % batchIndex)
+        args = "-i %s -o %s -e %s -t %f" % (fnInputMd, fnOutputMd, fnElimMd, self.threshold.get())
         if self.addFeatures:
             args += " --addFeatures"
         if self.useDenoising:
             args += " --useDenoising -d %f" % self.denoising.get()
         self.runJob("xmipp_image_eliminate_empty_particles", args)
 
-    def specialBehavoir(self, inSet):
-        """ To be implemented by child. Must set self.check and inSet.close()
-        """
-        pass
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all particles
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
     def createOutputStep(self):
         pass
 
-    def _stepsCheck(self):
-        # Input particles set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
-
     def _checkNewInput(self):
-        # Check if there are new particles to process from the input set
-        partsFile = self.getInput().getFileName()
-        self.lastmTime = getattr(self, 'lastmTime', None)
-        mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastmTime == mTime:
-            return
+        inputSet = self.getInput()
+        inputSet.loadAllProperties()
+        knownIds = self._getPersistedProcessedIds().union(self._scheduledBatchIds)
+        newIds, self._lastInputId = self._discoverIdsAfter(inputSet, self._lastInputId)
+        producerClosed = inputSet.isStreamClosed()
+        newIds, terminalConsistent = self._reconcileClosedStreamIds(inputSet, newIds, knownIds, producerClosed)
+        newIds = [itemId for itemId in newIds if itemId not in knownIds]
+        self.lenPartsSet = inputSet.getSize()
+        self.streamClosed = producerClosed and terminalConsistent
+        inputSet.close()
+        if newIds:
+            self.newDeps.extend(self._insertNewPartsSteps(newIds))
+            self.updateSteps()
 
-        self.lastmTime = mTime
-
-        outputStep = self._getFirstJoinStep()
-
-        self.prepareImages()
-
-        fDeps = self._insertNewPartsSteps()
-        if outputStep is not None:
-            outputStep.addPrerequisites(*fDeps)
-        self.updateSteps()
-
-    def prepareImages(self):
-        """ Must set:
-         - self.inputImages:  Images to process in a SetOfImages.
-         - self.streamClosed: Streaming state of the input.
-         - self.lenPartsSet:  Size of the input set.
-        """
+    def prepareImages(self, batchItems, batchIndex):
         pass
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-
-        self.finished = self.inputImages.isStreamClosed() and self.outputSize == self.lenPartsSet
-
         self.createOutputs()
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            cleanPath(self._getPath('particlesAUX.sqlite'))
-            cleanPath(self._getPath('averagesAUX.sqlite'))
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
+        self.outputSize = len(self._getPersistedProcessedIds())
+        self.finished = self.streamClosed and self.outputSize == self.lenPartsSet and not self._getReadyEliminationBatches()
+        if self.finished:
+            self.createOutputs()
 
     def createOutputs(self):
         """ To be implemented by child. (create, fill and close the outputSet)
         """
         pass
 
-    def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
+    def _loadOrCreateOutputSet(self, outputName, SetClass, suffix=''):
+        if SetClass is not SetOfClasses2D:
+            return XmippStreamingBase._loadOrCreateOutputSet(self, outputName, SetClass, suffix)
+        outputSet = getattr(self, outputName, None)
+        if outputSet is not None:
             outputSet.loadAllProperties()
             outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+            return outputSet, False
+        outputSet = self._createSetOfClasses2D(self.getInput(), suffix)
+        outputSet.setStreamState(outputSet.STREAM_OPEN)
+        return outputSet, True
 
-        inputs = self.inputImages
-        outputSet.copyInfo(inputs)
-
+    def _loadOutputSet(self, SetClass, outputName):
+        suffixByOutputName = {'outputParticles': '', 'eliminatedParticles': 'Eliminated', 'outputAverages': '', 'eliminatedAverages': 'Eliminated'}
+        if outputName not in suffixByOutputName:
+            raise ValueError("Unknown EliminateEmpty output: %s" % outputName)
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffixByOutputName[outputName])
+        if created:
+            outputSet.copyInfo(self.inputImages)
         return outputSet
 
     def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
@@ -477,6 +525,21 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
         # Close set databaset to avoid locking it
         outputSet.close()
+
+    def _validate(self):
+        return self._validateParallelProcessing()
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for eliminationStep.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     # --------------------------- UTILS functions -----------------------------
     def _updateParticle(self, item, row):
@@ -520,50 +583,45 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         self.addAdvancedParams(form)
 
     # --------------------------- INSERT steps functions ----------------------
+    def _getResumeOutputNames(self):
+        return ('outputParticles', 'eliminatedParticles')
+
     def specialBehavoir(self, partsSet):
-        """ Just setting the self.check """
-        for p in partsSet.iterItems(orderBy='creation', direction='DESC'):
-            self.check = p.getObjCreation()
-            break
         partsSet.close()
 
     def createOutputs(self):
-        streamMode = (Set.STREAM_CLOSED if getattr(self, 'finished', False)
-                      else Set.STREAM_OPEN)
-
-        def updateOutputs(mdFn, suffix):
-            """ Common use for accepted and discarded output. """
-            newData = os.path.exists(mdFn)  # new data if partial out exists
-            lastToClose = (getattr(self, 'finished', False) and    # last if fisished
-                           hasattr(self, '%sParticles' % suffix))  #  and exists
-            if newData or lastToClose:
-                outSet = self._loadOutputSet(SetOfParticles,
-                                             '%sParticles.sqlite' % suffix)
-                if newData:
-                    partsSet = self._createSetOfParticles("AUX")
-                    readSetOfParticles(mdFn, partsSet)
-                    outSet.copyItems(partsSet,
-                                     updateItemCallback=self._updateParticle,
-                                     itemDataIterator=md.iterRows(mdFn,
-                                                    sortByLabel=md.MDL_ITEM_ID))
-                    self.outputSize = self.outputSize + len(partsSet)
-                self._updateOutputSet('%sParticles'%suffix, outSet, streamMode)
+        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) else Set.STREAM_OPEN
+        for batchIndex, batchIds in self._getReadyEliminationBatches():
+            for mdFn, outputName, auxSuffix in ((self._getExtraPath("output%d.xmd" % batchIndex), 'outputParticles', "AUXOUT%d" % batchIndex), (self._getExtraPath("eliminated%d.xmd" % batchIndex), 'eliminatedParticles', "AUXELIM%d" % batchIndex)):
+                if not os.path.exists(mdFn):
+                    continue
+                outSet = self._loadOutputSet(SetOfParticles, outputName)
+                partsSet = self._createSetOfParticles(auxSuffix)
+                readSetOfParticles(mdFn, partsSet)
+                existingIds = self._getOutputIds(outSet)
+                def updateItem(item, row):
+                    self._updateParticle(item, row)
+                    if item.getObjId() in existingIds:
+                        item._appendItem = False
+                outSet.copyItems(partsSet, updateItemCallback=updateItem, itemDataIterator=md.iterRows(mdFn, sortByLabel=md.MDL_ITEM_ID))
+                self._updateOutputSet(outputName, outSet, streamMode)
                 cleanPath(mdFn)
-
-        updateOutputs(self.fnOutMdTmp, 'output')
-        updateOutputs(self.fnElimMdTmp, 'eliminated')
+            self.outputSize = len(self._getPersistedProcessedIds())
+        if self.finished:
+            for outputName in self._getResumeOutputNames():
+                if hasattr(self, outputName):
+                    self._updateOutputSet(outputName, self._loadOutputSet(SetOfParticles, outputName), Set.STREAM_CLOSED)
 
     def getInput(self):
         return self.inputParticles.get()
 
-    def prepareImages(self):
-        self.inputImages = self.getInput()
-        partsSet = self.inputImages
-        partsSet.loadAllProperties()
-        self.streamClosed = partsSet.isStreamClosed()
-        self.lenPartsSet = len(partsSet)
+    def prepareImages(self, batchItems, batchIndex):
+        self.inputImages = self._createSetOfParticles("AUX%d" % batchIndex)
+        self.inputImages.copyInfo(self.getInput())
+        for item in batchItems:
+            self.inputImages.append(item)
+        return self.inputImages
 
-        return partsSet
 
 
 DISCARDED = 0
@@ -614,7 +672,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
     # --------------------------- INSERT steps functions ----------------------
     def _validate(self):
-        errors = []
+        errors = super()._validate()
         if (not isinstance(self.getInput(), SetOfClasses)
                 and self.usePopulation.get()):
             errors.append("Using population to reject classes is not possible "
@@ -623,88 +681,72 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                           "population_ option.")
         return errors
 
-    def specialBehavoir(self, partSet):
-        idsToCheck = []
-        for p in partSet.iterItems(orderBy='creation', direction='ASC'):
-            self.check = p.getObjCreation()
-            idsToCheck.append(p.getObjId())
-        partSet.close()
+    def _getResumeOutputNames(self):
+        return ('outputAverages', 'eliminatedAverages')
 
+    def specialBehavoir(self, partSet):
+        idsToCheck = [item.getObjId() for item in partSet]
+        partSet.close()
         self.rejectByPopulation(idsToCheck)
 
     def createOutputs(self):
-        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
-            else (Set.STREAM_CLOSED if self.streamClosed else Set.STREAM_OPEN)
-
-        def updateOutputs(mdFn, suffix):
-            lastToClose = getattr(self, 'finished', False) and \
-                          hasattr(self, '%sClasses' % suffix)
-            newData = os.path.exists(mdFn)
-            enableOut = {}
-            if newData or lastToClose:
-                outSet = self._loadOutputSet(SetOfAverages,
-                                             '%sAverages.sqlite' % suffix)
-                if newData:
-                    # if new data, we read it
-                    partsSet = self._createSetOfParticles("AUX")
+        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) else Set.STREAM_OPEN
+        for batchIndex, batchIds in self._getReadyEliminationBatches():
+            enableByOutput = {}
+            # The metadata files are this batch's only way back: nothing is
+            # deleted until every output of the batch, classes included, is
+            # published. Removing them earlier left a batch that
+            # _getReadyEliminationBatches still offers but whose files are
+            # gone, so its classes could never be created.
+            consumedFiles = []
+            for mdFn, outputName, auxSuffix in ((self._getExtraPath("output%d.xmd" % batchIndex), 'outputAverages', "AUXOUT%d" % batchIndex), (self._getExtraPath("eliminated%d.xmd" % batchIndex), 'eliminatedAverages', "AUXELIM%d" % batchIndex)):
+                enableOut = {}
+                if os.path.exists(mdFn):
+                    outSet = self._loadOutputSet(SetOfAverages, outputName)
+                    partsSet = self._createSetOfParticles(auxSuffix)
                     readSetOfParticles(mdFn, partsSet)
-                    # updating the enableCls dictionary
-                    # print(" - %s Averages:" % ("ACCEPTED" if suffix == 'output' else "DISCARTDED"))
+                    accepted = outputName == 'outputAverages'
+                    existingIds = self._getOutputIds(outSet)
                     for part in partsSet:
                         partId = part.getObjId()
-                        if partId not in self.enableCls:
-                            # this happends when a classifier give an empty class
-                            continue
-                        # - accept if we are in accepted and the current is accepted
-                        # - discard if we are in the discarted scope and any
-                        currentStatus = self.enableCls[partId]
-                        decision = suffix == 'output' and currentStatus == ACCEPTED
-                        enableOut[partId] = ACCEPTED if decision else DISCARDED
-                        # print("%d: %s -> %s" % (partId, currentStatus, decision))
-                    # updating the Averages set
-                    outSet.copyItems(partsSet,
-                                     updateItemCallback=self._updateParticle,
-                                     itemDataIterator=md.iterRows(mdFn,
-                                                    sortByLabel=md.MDL_ITEM_ID))
-                    self.outputSize = self.outputSize + len(partsSet)
+                        currentStatus = self.enableCls.get(partId, ACCEPTED)
+                        enableOut[partId] = ACCEPTED if accepted and currentStatus == ACCEPTED else DISCARDED
+                    def updateItem(item, row):
+                        self._updateParticle(item, row)
+                        if item.getObjId() in existingIds:
+                            item._appendItem = False
+                    outSet.copyItems(partsSet, updateItemCallback=updateItem, itemDataIterator=md.iterRows(mdFn, sortByLabel=md.MDL_ITEM_ID))
+                    self._updateOutputSet(outputName, outSet, streamMode)
+                    consumedFiles.append(mdFn)
+                enableByOutput[outputName] = enableOut
+            self.createOutputClasses('output', streamMode, enableByOutput.get('outputAverages', {}))
+            self.createOutputClasses('eliminated', streamMode, enableByOutput.get('eliminatedAverages', {}))
 
-                self._updateOutputSet('%sAverages' % suffix, outSet, streamMode)
+            # Everything this batch had to produce is durable now.
+            for mdFn in consumedFiles:
                 cleanPath(mdFn)
 
-            return enableOut
-
-        accOut = updateOutputs(self.fnOutMdTmp, 'output')
-        discOut = updateOutputs(self.fnElimMdTmp, 'eliminated')
-
-        self.createOutputClasses('output', streamMode, accOut)
-        self.createOutputClasses('eliminated', streamMode, discOut)
+            self.outputSize = len(self._getPersistedProcessedIds())
 
     # ------------- UTILS Fuctions ------------------------------------
-    def prepareImages(self):
+    def prepareImages(self, batchItems, batchIndex):
         inSet = self.getInput()
-
-        if isinstance(inSet, SetOfImages):
-            firstRep = inSet.getFirstItem()
-            getImage = lambda item: item.clone()
-            self.classesDict = None
-        else:  # SetOfClasses
-            firstRep = inSet.getFirstItem().getFirstItem()
-            getImage = lambda item: item.getRepresentative().clone()
-            self.classesDict = {cls.getObjId(): cls.getSize() for cls in inSet}
-
-        self.inputImages = self._createSetOfAverages("AUX")
+        isImages = isinstance(inSet, SetOfImages)
+        self.inputImages = self._createSetOfAverages("AUX%d" % batchIndex)
         self.inputImages.enableAppend()
-        self.inputImages.copyAttributes(firstRep, '_samplingRate')
+        self.classesDict = getattr(self, 'classesDict', {}) if not isImages else None
+        if batchItems:
+            firstRep = batchItems[0] if isImages else batchItems[0].getRepresentative()
+            self.inputImages.copyAttributes(firstRep, '_samplingRate')
+        for item in batchItems:
+            image = item.clone() if isImages else item.getRepresentative().clone()
+            if not isImages:
+                image.setObjId(item.getObjId())
+                self.classesDict[item.getObjId()] = item.getSize()
+            self.inputImages.append(image)
         self.inputImages.copyAttributes(inSet, '_streamState')
         self.streamClosed = self.inputImages.isStreamClosed()
-
-        for item in inSet:
-            self.inputImages.append(getImage(item))
-        self.lenPartsSet = len(self.inputImages)
-
-        self.inputImages.write()
-        self._store(self.inputImages)
-
+        self.lenPartsSet = inSet.getSize()
         return self.inputImages
 
     def rejectByPopulation(self, ids):
@@ -724,42 +766,29 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
     def createOutputClasses(self, suffix, streamingState, enableDict):
         if not self.classesDict or not enableDict:
-            # If there are no classes, nothing to do
             return
 
-        baseName = '%sClasses.sqlite' % suffix
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetOfClasses2D(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetOfClasses2D(filename=setFile)
-            outputSet.setStreamState(streamingState)
-
-        outputSet.copyInfo(self.getInput())  # if fails, delete
+        outputName = '%sClasses' % suffix
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetOfClasses2D, '' if suffix == 'output' else 'Eliminated')
+        if created:
+            outputSet.copyInfo(self.getInput())
 
         decision = ACCEPTED if suffix == 'output' else DISCARDED
-        desiredIds = [ids for ids, enable in enableDict.items()
-                      if enable == decision]
-        enableFunc = lambda cls: cls.getObjId() in desiredIds
-        outputSet.appendFromClasses(self.getInput(), enableFunc)
-
+        desiredIds = [objId for objId, enable in enableDict.items() if enable == decision]
+        outputSet.appendFromClasses(self.getInput(), lambda cls: cls.getObjId() in desiredIds)
         outputSet.setStreamState(streamingState)
-        outputName = '%sClasses' % suffix
+
         if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
+            outputSet.write()
             outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protocol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
+            if outputAttr is not outputSet:
+                outputAttr.copy(outputSet, copyId=False)
             self._store(outputAttr)
         else:
             self._defineOutputs(**{outputName: outputSet})
             self._defineSourceRelation(self.inputClasses, outputSet)
             self._store(outputSet)
 
-        # Close set databaset to avoid locking it
         outputSet.close()
 
     def getInput(self):

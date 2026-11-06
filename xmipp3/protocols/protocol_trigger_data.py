@@ -30,16 +30,31 @@ import os
 import time
 from datetime import datetime
 
-import pyworkflow.protocol.constants as cons
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol import Protocol
+from pyworkflow.protocol import Protocol, ProtStreamingBase
 from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+
 SIGNAL_FILENAME = "STOP_STREAM.TXT"
 
-class XmippProtTriggerData(EMProtocol, Protocol):
+
+class _PersistedImagePlaceholder:
+    """ Minimal stand-in for an item already published to a real output,
+    restored on Resume. Only getObjId() is needed by the processed-id
+    filter in _checkNewInput; the item's real content already lives in
+    the persisted output. """
+
+    def __init__(self, objId):
+        self._objId = objId
+
+    def getObjId(self):
+        return self._objId
+
+
+class XmippProtTriggerData(XmippStreamingBase, ProtStreamingBase, EMProtocol, Protocol):
     """
     Waits until certain number of images is prepared and then
     send them to output.
@@ -359,69 +374,106 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                       validators=[GT(3, "must be larger than 3sec.")],
                       help="Delay in seconds before checking new output")
 
+        form.addParallelSection(threads=3, mpi=0)
+
     # --------------------------- INSERT steps functions ----------------------
-    def _insertAllSteps(self):
+    def _prepareStreamingGenerator(self):
         # initializing variables
         self.finished = False
-        self.images = []
-        self.splitedImages = []
-        self.outputCount = 0
         self.setImagesClass()
         self.setImagesType()
 
-        # steps
-        imsSteps = self._insertFunctionStep('delayStep')
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=[imsSteps], wait=True)
+        if self.isContinued():
+            self._restoreStreamingState()
+        else:
+            self.images = []
+            self.splitedImages = []
+            self.outputCount = 0
 
-    def _stepsCheck(self):
-        self._checkNewInput()
-        self._checkNewOutput()
+    def stepsGeneratorStep(self) -> None:
+        self.newDeps = []
+        self._prepareStreamingGenerator()
+
+        while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
+
+    def _streamingSleepOnWait(self):
+        # Reuse the existing, already-validated 'delay' param instead of
+        # also adding the generic streamingSleepOnWait form param, which
+        # would duplicate the same "how long to sleep" concept in the UI.
+        time.sleep(self.delay.get())
+
+    def _restoreStreamingState(self):
+        """Restore durable streaming state from persisted logical outputs."""
+        persistedIds, batchCount = self._getPersistedOutputIds()
+        self.outputCount = batchCount
+        self.images = [_PersistedImagePlaceholder(itemId) for itemId in sorted(persistedIds)]
+        self.splitedImages = []
+        self._lastInputId = max(persistedIds) if persistedIds else 0
+
+    def _getPersistedOutputIds(self):
+        """ Ids already published to the real output(s), plus - in
+        semi-streaming/batch mode - how many batches already exist. """
+        outputName = self.getOututName()
+
+        if self.allImages.get() and self.splitImages.get():
+            persistedIds = set()
+            batchCount = 0
+            while True:
+                splitOutputName = '%s%d' % (outputName, batchCount + 1)
+                if getattr(self, splitOutputName, None) is None:
+                    break
+                persistedIds.update(
+                    XmippStreamingBase._getPersistedOutputIds(
+                        self, splitOutputName
+                    )
+                )
+                batchCount += 1
+            return persistedIds, batchCount
+
+        # Static output or full streaming: a single named output.
+        return (
+            XmippStreamingBase._getPersistedOutputIds(self, outputName),
+            0,
+        )
 
     def createOutputStep(self):
         self._closeOutputSet()
 
     def _checkNewInput(self):
-        imsFile = self.inputImages.get().getFileName()
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(imsFile))
+        self.imsSet = self._loadLogicalSet(self.inputImages)
+        processedIds = {image.getObjId() for image in self.images}
 
-        # If the input's sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and hasattr(self, 'newImages'):
-            return None
+        try:
+            newIds, self._lastInputId = self._discoverIdsAfter(self.imsSet, getattr(self, '_lastInputId', 0))
+            producerClosed = self.imsSet.isStreamClosed()
+            newIds, terminalConsistent = self._reconcileClosedStreamIds(self.imsSet, newIds, processedIds, producerClosed)
+            newIds = [itemId for itemId in newIds if itemId not in processedIds]
+            remaining = None if self.allImages.get() else max(0, self.outputSize.get() - len(self.images))
+            if remaining is not None:
+                newIds = newIds[:remaining]
+            self.newImages = self._loadLogicalSetItemsByIds(self.imsSet, newIds)
+            self.streamClosed = producerClosed and terminalConsistent
+        finally:
+            self.imsSet.close()
 
-        # loading the input set in a dynamic way
-        inputClass = self.getImagesClass()
-        self.imsSet = inputClass(filename=imsFile)
-        self.imsSet.loadAllProperties()
-
-        # loading new images to process
-        if len(self.images) > 0:  # taking the non-processed yet
-            extraLimitLen = -1 if self.allImages.get() else self.outputSize.get() - len(self.images)
-            self.newImages = [m.clone() for m in self.imsSet.iterItems(
-                orderBy='creation',
-                where='creation>"' + str(self.check) + '"',
-                limit=extraLimitLen)]
-        else:  # first time
-            limitLen = -1 if self.allImages.get() else self.outputSize.get()
-            self.newImages = [m.clone() for m in self.imsSet.iterItems(
-                orderBy='creation',
-                limit=limitLen)]
-
-        self.splitedImages = self.splitedImages + self.newImages
-        self.images = self.images + self.newImages
-        if len(self.newImages) > 0:
-            for item in self.imsSet.iterItems(orderBy='creation',
-                                              direction='DESC'):
-                self.check = item.getObjCreation()
-                break
-
-        self.lastCheck = datetime.now()
-        self.streamClosed = self.imsSet.isStreamClosed()
-        self.imsSet.close()
-
-        # filling the output if needed
+        self.splitedImages += self.newImages
+        self.images += self.newImages
         self._fillingOutput()
 
     def _checkNewOutput(self):
@@ -447,77 +499,52 @@ class XmippProtTriggerData(EMProtocol, Protocol):
                 self.info('Stopped by received signal from a trigger data protocol')
                 self.finished = True
 
-        outputStep = self._getFirstJoinStep()
-        deps = []
-        if self.finished:  # Unlock createOutputStep if finished all jobs
+        if self.finished:
             self._fillingOutput()  # To do the last filling
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
-        else:
-            delayId = self._insertFunctionStep('delayStep', prerequisites=[])
-            deps.append(delayId)
-
-        if outputStep is not None:
-            outputStep.addPrerequisites(*deps)
-        self.updateSteps()
 
     def _fillingOutput(self):
-        imsSqliteFn = '%s.sqlite' % self.getImagesType('lower')
         outputName = self.getOututName()
-        if len(self.images) >= self.outputSize or self.finished:
-            if self.allImages:  # Streaming and semi-streaming
-                if self.splitImages:  # Semi-streaming: Splitting the input
-                    if len(self.splitedImages) >= self.outputSize or \
-                            (self.finished and len(self.splitedImages) > 0):
-                        splitLimIndex = self.outputSize.get() if not self.finished else None
-                        numIter = 1 if len(self.splitedImages) < self.outputSize.get() \
-                            else int(len(self.splitedImages) / self.outputSize.get())
-                        for _ in range(numIter):
-                            self.outputCount += 1
-                            imageSet = self._loadOutputSet(self.getImagesClass(),
-                                                           '%s%d.sqlite'
-                                                           % (self.getImagesType('lower'),
-                                                              self.outputCount),
-                                                           self.splitedImages[:splitLimIndex
-                                                                              or len(self.splitedImages)])
-                            # The splitted outputSets are always closed
-                            self._updateOutputSet("%s%d" % (outputName, self.outputCount),
-                                                  imageSet, Set.STREAM_CLOSED)
-                            self.splitedImages = self.splitedImages[splitLimIndex:] if splitLimIndex else []
-                else:  # Full streaming case
-                    if not os.path.exists(self._getPath(imsSqliteFn)):
-                        imageSet = self._loadOutputSet(self.getImagesClass(),
-                                                       imsSqliteFn,
-                                                       self.images)
-                    else:
-                        # if finished no images to add, but we need to close the set
-                        imagesToAdd = self.newImages if not self.finished else []
-                        imageSet = self._loadOutputSet(self.getImagesClass(),
-                                                       imsSqliteFn,
-                                                       imagesToAdd)
-                    streamMode = Set.STREAM_CLOSED if self.finished else \
-                        Set.STREAM_OPEN
-                    self._updateOutputSet(outputName, imageSet, streamMode)
+        if len(self.images) < self.outputSize and not self.finished:
+            return
 
-            elif not os.path.exists(self._getPath(imsSqliteFn)):
-                imageSet = self._loadOutputSet(self.getImagesClass(), imsSqliteFn,
-                                               self.images)
-                # The outputSet is always closed here
-                self._updateOutputSet(outputName, imageSet, Set.STREAM_CLOSED)
-
-    def _loadOutputSet(self, SetClass, baseName, newImages):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
+        if self.allImages:
+            if self.splitImages:
+                if len(self.splitedImages) < self.outputSize and not (self.finished and self.splitedImages):
+                    return
+                splitLimIndex = self.outputSize.get() if not self.finished else None
+                numIter = 1 if len(self.splitedImages) < self.outputSize.get() else int(len(self.splitedImages) / self.outputSize.get())
+                for _ in range(numIter):
+                    self.outputCount += 1
+                    splitOutputName = "%s%d" % (outputName, self.outputCount)
+                    imagesToAdd = self.splitedImages[:splitLimIndex or len(self.splitedImages)]
+                    imageSet = self._loadOutputSet(self.getImagesClass(), splitOutputName, imagesToAdd)
+                    self._updateOutputSet(splitOutputName, imageSet, Set.STREAM_CLOSED)
+                    self.splitedImages = self.splitedImages[splitLimIndex:] if splitLimIndex else []
+            else:
+                imagesToAdd = self.images if getattr(self, outputName, None) is None else (self.newImages if not self.finished else [])
+                imageSet = self._loadOutputSet(self.getImagesClass(), outputName, imagesToAdd)
+                self._updateOutputSet(outputName, imageSet, Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN)
         else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+            imageSet = self._loadOutputSet(self.getImagesClass(), outputName, self.images)
+            self._updateOutputSet(outputName, imageSet, Set.STREAM_CLOSED)
 
-        inputs = self.inputImages.get()
-        outputSet.copyInfo(inputs)
-        outputSet.copyItems(newImages)
+    def _loadOutputSet(self, SetClass, outputName, newImages):
+        baseOutputName = self.getOututName()
+        if outputName != baseOutputName and not outputName.startswith(baseOutputName):
+            raise ValueError("Unknown TriggerData output: %s" % outputName)
+
+        suffix = outputName[len(baseOutputName):]
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffix)
+        if created:
+            outputSet.copyInfo(self.inputImages.get())
+
+        outputIds = set(outputSet.getIdSet()) if outputSet.getSize() else set()
+        for image in newImages:
+            imageId = image.getObjId()
+            if imageId not in outputIds:
+                outputSet.append(image)
+                outputIds.add(imageId)
+
         return outputSet
 
     # --------------------------- INFO functions ------------------------------
@@ -562,23 +589,22 @@ class XmippProtTriggerData(EMProtocol, Protocol):
             if not isinstance(self.triggerProt.get(), XmippProtTriggerData):
                 errors.append("There is not a Trigger protocol connected to send a stop signal.")
 
+        errors.extend(self._validateParallelProcessing())
+        return errors
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
     # --------------------------- UTILS functions -----------------------------
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
-    def delayStep(self):
-        time.sleep(self.delay)
-
     def setImagesClass(self):
         self._inputClass = self.inputImages.get().getClass()
 

@@ -24,16 +24,20 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import json
 from os.path import exists, basename, join
 
 from pyworkflow.protocol.params import STEPS_PARALLEL, PointerParam, EnumParam, FileParam
+from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils.path import *
+from pyworkflow.object import Set
 
 from pwem.protocols import ProtParticlePickingAuto
 
 from pwem import emlib
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import readSetOfCoordinates
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
@@ -43,7 +47,8 @@ SRC_MANUAL_PICKING = 0
 SRC_DIR = 1
 
 
-class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
+class XmippParticlePickingAutomatic(XmippStreamingBase, ProtStreamingBase,
+                                    ProtParticlePickingAuto, XmippProtocol):
     """Automatically picks particles from a set of micrographs using a
     previously trained model. This protocol speeds up particle selection by
     identifying particles consistently without manual intervention, improving
@@ -324,14 +329,56 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
 
         self._defineStreamingParams(form)
 
-        form.addParallelSection(threads=1, mpi=1)
-        
+        form.addParallelSection(threads=3, mpi=1)
+
     # --------------------------- INSERT steps functions -----------------------
+    def _prepareStreamingGenerator(self):
+        # Reproduces ProtParticlePickingAuto._insertAllSteps' own
+        # initialization (pwem, shared across every auto-picking protocol)
+        # now that ProtStreamingBase._insertAllSteps replaces it with a
+        # single resumableStepGeneratorStep.
+        self.micDict = {}
+        self.initialIds = self._insertInitialSteps()
+
+        # Watermark-based discovery state (replaces pwem's _loadInputList,
+        # which reconstructs a fresh Set from inputSet.getFileName() and
+        # does a full Python-side scan every poll). A mic discovered via
+        # the watermark but not yet folded into self.micDict (because the
+        # batch isn't full and the stream isn't closed) stays pending and
+        # is retried every poll until it is actually scheduled.
+        self._micsWatermark = 0
+        self._pendingMicIds = set()
+
+    def stepsGeneratorStep(self) -> None:
+        self._prepareStreamingGenerator()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
+
     def _insertInitialSteps(self):
         # Get pointer to input micrographs
         self.particlePickingRun = self.xmippParticlePicking.get()
 
-        copyId = self._insertFunctionStep('copyInputFilesStep')
+        copyId = self._insertFunctionStep(
+            'copyInputFilesStep',
+            prerequisites=[],
+        )
 
         return [copyId]
 
@@ -349,11 +396,33 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
             createLink(os.path.join(srcDir, f), self._getExtraPath(f))
         copyFile(os.path.join(srcDir, "config.xmd"), self._getExtraPath("config.xmd"))
 
-        # Get the box size
         mdInfo = emlib.MetaData("properties@"+self._getExtraPath("config.xmd"))
-        self.boxSize = mdInfo.getValue(emlib.MDL_PICKING_PARTICLE_SIZE,mdInfo.firstObject())
         mdInfo.setValue(emlib.MDL_PICKING_MANUALPARTICLES_SIZE,0,mdInfo.firstObject())
         mdInfo.write("properties@"+self._getExtraPath("config.xmd"),emlib.MD_APPEND)
+
+    def _getBoxSize(self):
+        mdInfo = emlib.MetaData("properties@"+self._getExtraPath("config.xmd"))
+        return mdInfo.getValue(emlib.MDL_PICKING_PARTICLE_SIZE, mdInfo.firstObject())
+
+    def _pickMicrographList(self, micList, *args):
+        """ Pick micrographs one at a time, isolating a corrupted/failing
+        micrograph so it does not crash the whole batch (and hence the
+        whole protocol). Only relevant when streamingBatchSize > 1.
+        """
+        for mic in micList:
+            try:
+                self._pickMicrograph(mic, *args)
+            except Exception as e:
+                self.error(
+                    "Micrograph %s failed during automatic picking "
+                    "(%s); skipping it." % (mic.getMicName(), e)
+                )
+                self._failedMicIds().add(mic.getObjId())
+
+    def _failedMicIds(self):
+        """Micrographs whose picking failed in this run: left out, and
+        picked again on Continue."""
+        return self.__dict__.setdefault('_failedMicIdsSet', set())
 
     def _pickMicrograph(self, mic, *args):
         micPath = mic.getFileName()
@@ -381,19 +450,194 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
 
         if proceed:
             args = "-i %s " % micPath
-            args += "--particleSize %d " % self.boxSize
+            args += "--particleSize %d " % self._getBoxSize()
             args += "--model %s " % modelRoot
             args += "--outputRoot %s " % self._getExtraPath(micName)
             args += "--mode autoselect --thr %d" % self.numberOfThreads
 
             self.runJob("xmipp_micrograph_automatic_picking", args)
 
+    def _insertNewMicsSteps(self, inputMics):
+        """ Own step hook (not pwem's pickMicrographStep/
+        pickMicrographListStep) so completion tracking comes from the
+        persisted step graph instead of pwem's os.path.exists(micDoneFn)
+        marker file. """
+        return self._insertNewMics(inputMics,
+                                   lambda mic: mic.getMicName(),
+                                   self._insertPickMicrographStepOwn,
+                                   self._insertPickMicrographListStepOwn,
+                                   *self._getPickArgs())
+
+    def _insertPickMicrographStepOwn(self, mic, prerequisites, *args):
+        return self._insertFunctionStep('pickMicrographStepOwn',
+                                        mic.getMicName(), *args,
+                                        prerequisites=prerequisites)
+
+    def _insertPickMicrographListStepOwn(self, micList, prerequisites, *args):
+        return self._insertFunctionStep('pickMicrographListStepOwn',
+                                        [mic.getMicName() for mic in micList],
+                                        *args, prerequisites=prerequisites)
+
+    def pickMicrographStepOwn(self, micKey, *args):
+        mic = self.micDict[micKey]
+        self.info("Picking micrograph: %s " % mic.getFileName())
+        # One micrograph failing must not fail the step and with it the
+        # whole run.
+        self._pickMicrographList([mic], *args)
+
+    def pickMicrographListStepOwn(self, micKeyList, *args):
+        micList = []
+        for micKey in micKeyList:
+            mic = self.micDict[micKey]
+            self.info("Picking micrograph: %s " % mic.getFileName())
+            micList.append(mic)
+
+        self._pickMicrographList(micList, *args)
+
+    def _getFinishedProcessedMicKeys(self):
+        """ Mic keys whose own picking step has actually FINISHED, read
+        from the persisted step graph - replaces the old
+        os.path.exists(micDoneFn) marker-file check as the durable source
+        of truth for "has this mic been picked". """
+        finishedKeys = set()
+        # Only this run's steps: every micrograph not yet published gets a
+        # new one, and an earlier, finished step of one that failed would
+        # have it published, empty, before its new one has run.
+        for step in getattr(self, '_steps', []) or []:
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName not in ('pickMicrographStepOwn',
+                                'pickMicrographListStepOwn'):
+                continue
+            if not step.isFinished():
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+            if not args:
+                continue
+
+            if funcName == 'pickMicrographListStepOwn':
+                if isinstance(args[0], list):
+                    finishedKeys.update(args[0])
+            else:
+                finishedKeys.add(args[0])
+
+        return finishedKeys
+
     def readSetOfCoordinates(self, workingDir, coordSet):
         readSetOfCoordinates(workingDir, self.getInputMicrographs(), coordSet)
 
     def readCoordsFromMics(self, workingDir, micList, coordSet):
         readSetOfCoordinates(workingDir, micList, coordSet)
-        
+
+    def _loadInputList(self):
+        """ Backend-agnostic replacement for
+        ProtParticlePickingAuto._loadInputList (pwem): discovers only mics
+        above their logical id watermark instead of reconstructing a fresh
+        Set from a filename and scanning it whole. """
+        inputMicsPointer = self.getInputMicrographsPointer()
+        inputMicsSet = self._loadLogicalSet(inputMicsPointer)
+        try:
+            newIds, self._micsWatermark = self._discoverIdsAfter(
+                inputMicsSet, self._micsWatermark,
+            )
+            self._pendingMicIds.update(newIds)
+            candidateMics = self._loadLogicalSetItemsByIds(
+                inputMicsSet, self._pendingMicIds,
+            )
+            micDict = {mic.getMicName(): mic for mic in candidateMics}
+            self.streamClosed = inputMicsSet.isStreamClosed()
+        finally:
+            inputMicsSet.close()
+
+        return micDict
+
+    def _checkNewInput(self):
+        micDict = self._loadInputList()
+        outputMicIds = self._getOutputMicIds()
+
+        # Published by an earlier run: known, but not picked again.
+        for micKey in [micKey for micKey, mic in micDict.items()
+                       if mic.getObjId() in outputMicIds]:
+            self.micDict[micKey] = micDict.pop(micKey)
+
+        if micDict:
+            fDeps = self._insertNewMicsSteps(micDict.values())
+            self.newDeps.extend(fDeps)
+            self.updateSteps()
+
+        # Only ids pwem's own batching actually folded into self.micDict
+        # this round are truly scheduled - anything else discovered stays
+        # pending and gets retried next poll (see _loadInputList).
+        scheduledIds = {mic.getObjId() for mic in self.micDict.values()}
+        self._pendingMicIds.difference_update(scheduledIds)
+
+    def _getOutputMicIds(self):
+        outputCoords = getattr(self, 'outputCoordinates', None)
+        if outputCoords is None:
+            return set()
+
+        outputCoords.loadAllProperties()
+        if outputCoords.getSize() == 0:
+            return set()
+
+        return {
+            int(micId)
+            for micId in outputCoords.getUniqueValues('_micId')
+        }
+
+    def _checkNewOutput(self):
+        if getattr(self, 'finished', False):
+            return
+
+        listOfMics = list(self.micDict.values())
+        finishedMicKeys = self._getFinishedProcessedMicKeys()
+        outputMicIds = self._getOutputMicIds()
+        processedMics = [mic for mic in listOfMics
+                         if mic.getMicName() in finishedMicKeys
+                         or mic.getObjId() in outputMicIds]
+        self.finished = self.streamClosed and len(processedMics) == len(listOfMics)
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        # Read once: one without particles is in no output and would be
+        # read again on every poll; a failed one is not published at all.
+        handledMicIds = self.__dict__.setdefault('_handledMicIds', set())
+        failedMicIds = self._failedMicIds()
+        newOutput = [mic for mic in processedMics
+                     if mic.getObjId() not in outputMicIds
+                     and mic.getObjId() not in handledMicIds
+                     and mic.getObjId() not in failedMicIds]
+
+        if self.finished:
+            self._failIfEveryMicrographFailed(processedMics, outputMicIds)
+
+        if newOutput:
+            self._updateOutputCoordSet(newOutput, streamMode)
+            handledMicIds.update(mic.getObjId() for mic in newOutput)
+        elif self.finished:
+            self._updateStreamState(streamMode)
+        else:
+            if len(processedMics) == len(listOfMics):
+                self._streamingSleepOnWait()
+            return
+
+    def _failIfEveryMicrographFailed(self, processedMics, outputMicIds):
+        """A failed micrograph is left out; the run fails only when that
+        happened to every micrograph."""
+        failed = self._failedMicIds()
+
+        if (failed and not outputMicIds
+                and {mic.getObjId() for mic in processedMics} <= failed):
+            raise Exception("Automatic picking failed for every one of the "
+                            "%d micrographs; see the errors above. Continue "
+                            "picks them again." % len(failed))
+
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         validateMsgs = []
@@ -435,8 +679,22 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
             validateMsgs.append("You cannot take the model from a directory and indicate that the set of micrograohs "
                                 "is the same as picking. If you take the model from a directory, probably you want "
                                 "to pick from a different set.")
+
+        validateMsgs.extend(self._validateParallelProcessing())
         return validateMsgs
-    
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for picking.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
     def getSummary(self, coordSet):
         summary = []
         if self.modelSource == SRC_MANUAL_PICKING:

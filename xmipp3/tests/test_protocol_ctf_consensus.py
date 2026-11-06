@@ -21,7 +21,12 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # ***************************************************************************
 
+import os
 import time
+from unittest.mock import Mock, patch
+from datetime import datetime
+
+from pyworkflow.protocol.constants import MODE_RESTART, MODE_RESUME
 
 from pyworkflow.tests import BaseTest, DataSet
 import pyworkflow.tests as tests
@@ -34,6 +39,95 @@ from pwem.protocols.protocol_create_stream_data import SET_OF_MICROGRAPHS
 
 from pwem import emlib
 from xmipp3.protocols import XmippProtCTFConsensus, XmippProtCTFMicrographs
+from xmipp3.protocols.protocol_ctf_consensus import OUTPUT_CTF
+
+
+
+class TestCTFConsensusBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        tests.setupTestProject(cls)
+
+    def testLoadOutputSetUsesLogicalFactoryWithoutPhysicalStorage(self):
+        class MicSet:
+            pass
+
+        class InputCTFSet:
+            def loadAllProperties(self):
+                pass
+
+            def getMicrographs(self):
+                return MicSet()
+
+            def close(self):
+                pass
+
+        class Pointer:
+            def get(self):
+                return InputCTFSet()
+
+        class OutputSet:
+            STREAM_OPEN = 1
+            def setMicrographs(self, micSet):
+                self.micSet = micSet
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        outputSet = OutputSet()
+        calls = []
+        prot.inputCTF = Pointer()
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+        result = prot._loadOutputSet(SetOfCTF, OUTPUT_CTF)
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls, [(OUTPUT_CTF, SetOfCTF, '')])
+        self.assertIsInstance(outputSet.micSet, MicSet)
+
+    def testOutputPublishingDoesNotUsePhysicalSqliteNames(self):
+        import inspect
+        source = '\n'.join((inspect.getsource(XmippProtCTFConsensus._loadOutputSet), inspect.getsource(XmippProtCTFConsensus._checkNewOutput)))
+        self.assertNotIn('.sqlite', source)
+        self.assertIn('_loadOrCreateOutputSet(', source)
+
+
+    def testNewOutputLoadsLogicalInputBeforeUsingMicrographs(self):
+        class InputCtfSet:
+            def __init__(self):
+                self.loaded = False
+                self.closed = False
+
+            def loadAllProperties(self):
+                self.loaded = True
+
+            def getMicrographs(self):
+                if not self.loaded:
+                    raise AssertionError('Logical input must be refreshed before reading its micrographs.')
+                return object()
+
+            def close(self):
+                self.closed = True
+
+        class InputPointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class OutputSet:
+            def setMicrographs(self, micrographs):
+                self.micrographs = micrographs
+
+        inputSet = InputCtfSet()
+        outputSet = OutputSet()
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.inputCTF = InputPointer(inputSet)
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': (outputSet, True)
+
+        result = prot._loadOutputSet(SetOfCTF, OUTPUT_CTF)
+
+        self.assertIs(result, outputSet)
+        self.assertTrue(inputSet.loaded)
+        self.assertTrue(inputSet.closed)
+        self.assertIsNotNone(outputSet.micrographs)
 
 
 class TestXmippCTFConsensusBase(BaseTest):
@@ -52,6 +146,77 @@ class TestXmippCTFConsensusBase(BaseTest):
         ctf.setPsdFile(psdFile)
 
         return ctf
+
+    def _createCtfSet(self, name, ctfIds):
+        fnCtfSet = self.proj.getTmpPath(name)
+        ctfSet = SetOfCTF(filename=fnCtfSet)
+
+        for ctfId in ctfIds:
+            ctf = CTFModel()
+            ctf.setObjId(ctfId)
+            ctfSet.append(ctf)
+
+        ctfSet.write()
+        ctfSet.close()
+
+        return fnCtfSet
+
+    def _appendCtf(self, fnCtfSet, ctfId):
+        ctfSet = SetOfCTF(filename=fnCtfSet)
+        ctfSet.loadAllProperties()
+        ctfSet.enableAppend()
+
+        ctf = CTFModel()
+        ctf.setObjId(ctfId)
+        ctfSet.append(ctf)
+
+        ctfSet.write()
+        ctfSet.close()
+
+    def _prepareStreamingCheck(
+            self,
+            fnCtfSet,
+            insertedIds=None,
+            originalRunMode=MODE_RESTART,
+            doneIds=None,
+    ):
+        class _LogicalInputPointer:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def get(self):
+                return SetOfCTF(filename=self.filename)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.inputCTF = _LogicalInputPointer(fnCtfSet)
+        prot.insertedIds = list(insertedIds or [])
+        prot.newDeps = []
+        prot._lastInputId = max(prot.insertedIds, default=0)
+        prot.isStreamClosed = False
+        prot._originalRunMode = originalRunMode
+
+        # Scipion changes runMode to MODE_RESUME before executing the steps.
+        prot.runMode.set(MODE_RESUME)
+
+        scheduledIds = []
+
+        def insertNewCtfsSteps(newIds):
+            scheduledIds.extend(newIds)
+            prot.insertedIds.extend(newIds)
+            return []
+
+        prot._insertNewCtfsSteps = insertNewCtfsSteps
+        prot.updateSteps = lambda: None
+
+        if doneIds is not None:
+            prot._getAllDoneIds = lambda: (
+                list(doneIds),
+                len(doneIds),
+                list(doneIds),
+                [],
+            )
+
+        return prot, scheduledIds
 
     def checkOutputSize(self, ctfConsensusProt):
         inSize = ctfConsensusProt.inputCTF.get().getSize()
@@ -232,3 +397,365 @@ class TestXmippCTFConsensusBase(BaseTest):
                   resol > kwargsCons1["resolution"])
             self.assertFalse(ok, "A CTF without the correct parameters"
                                  " is included in the output set")
+
+    def testStreamingCtfOutputReusesLogicalSetWithoutLegacySqlite(self):
+        class LogicalOutputSet:
+            def __init__(self):
+                self.enableAppendCalls = 0
+
+            def enableAppend(self):
+                self.enableAppendCalls += 1
+
+        class FreshOutputSet:
+            pass
+
+        class InputCtfSet:
+            def getMicrographs(self):
+                return object()
+
+        class InputPointer:
+            def get(self):
+                return InputCtfSet()
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        logicalOutput = LogicalOutputSet()
+        prot.outputCTF = logicalOutput
+        prot.inputCTF = InputPointer()
+
+        outputSet = prot._loadOutputSet(
+            FreshOutputSet,
+            OUTPUT_CTF,
+        )
+
+        self.assertIs(
+            outputSet,
+            logicalOutput,
+            "Streaming CTF output must reuse the logical Set without "
+            "depending on a legacy SQLite path.",
+        )
+        self.assertEqual(
+            1,
+            logicalOutput.enableAppendCalls,
+        )
+
+    def testStreamingInputDoesNotDependOnSqliteMtime(self):
+        fnCtfSet = self._createCtfSet(
+            "ctf_streaming_mtime.sqlite",
+            [1],
+        )
+
+        originalMtime = os.path.getmtime(fnCtfSet)
+
+        prot, scheduledIds = self._prepareStreamingCheck(
+            fnCtfSet,
+            insertedIds=[1],
+        )
+
+        # Reproduce the old mtime optimisation:
+        # lastCheck is newer than the SQLite mtime.
+        prot.lastCheck = datetime.fromtimestamp(originalMtime + 60)
+
+        # New data arrives in the backing Set.
+        self._appendCtf(fnCtfSet, 2)
+
+        # Keep the backing SQLite mtime unchanged. Discovery must still happen
+        # through the logical Set API, not through filesystem timestamps.
+        os.utime(fnCtfSet, (originalMtime, originalMtime))
+
+        prot._checkNewInput()
+
+        self.assertEqual(
+            [2],
+            sorted(scheduledIds),
+            "A new CTF must be detected even if the backing SQLite mtime "
+            "does not change.",
+        )
+
+    def testResumeSkipsAlreadyProcessedCtfs(self):
+        fnCtfSet = self._createCtfSet(
+            "ctf_resume.sqlite",
+            [1, 2, 3],
+        )
+
+        prot, scheduledIds = self._prepareStreamingCheck(
+            fnCtfSet,
+            insertedIds=[],
+            originalRunMode=MODE_RESUME,
+            doneIds=[1],
+        )
+
+        prot._checkNewInput()
+
+        self.assertEqual(
+            [2, 3],
+            sorted(scheduledIds),
+            "Continue must only schedule CTFs not already present in "
+            "the persisted outputs.",
+        )
+
+        self.assertEqual(
+            [1, 2, 3],
+            sorted(prot.insertedIds),
+            "Persisted and newly scheduled CTFs must be tracked after "
+            "Continue.",
+        )
+
+    def testRestartDoesNotReusePreviousDoneCtfs(self):
+        fnCtfSet = self._createCtfSet(
+            "ctf_restart.sqlite",
+            [1, 2, 3],
+        )
+
+        prot, scheduledIds = self._prepareStreamingCheck(
+            fnCtfSet,
+            insertedIds=[],
+            originalRunMode=MODE_RESTART,
+            doneIds=[1],
+        )
+
+        prot._checkNewInput()
+
+        self.assertEqual(
+            [1, 2, 3],
+            sorted(scheduledIds),
+            "Restart must schedule all input CTFs instead of restoring "
+            "previous outputs.",
+        )
+
+
+    def testFinishedCheckDoesNotReloadOutputsWithoutNewCtfs(self):
+        # The final streaming check must not reopen persisted CTF outputs.
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.isStreamClosed = True
+        prot.insertedIds = [1]
+        prot.acceptedIds = [1]
+        prot.discardedIds = []
+
+        prot._getAllDoneIds = lambda: ([1], 1, [1], [])
+
+        prot._loadOutputSet = Mock()
+        prot.fillOutput = Mock()
+        prot._updateOutputSet = Mock()
+        prot._store = Mock()
+
+        prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+        prot._loadOutputSet.assert_not_called()
+        prot.fillOutput.assert_not_called()
+
+    def testCheckNewOutputDoesNotCountCtfSkippedByFillOutput(self):
+        # Regression test: fillOutput may skip a ctfId that is momentarily
+        # not visible in the input Set (Set.getItem raises rather than
+        # returning None for a missing row). self.finished must only count
+        # ids fillOutput actually published, or it could latch True while
+        # a ctf is silently never persisted.
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.isStreamClosed = True
+        prot.insertedIds = [1, 2]
+        prot.acceptedIds = {1: 'T', 2: 'T'}
+        prot.discardedIds = {}
+        prot.inputCTF = Mock()
+
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._loadOutputSet = Mock(return_value=Mock())
+        # ctf 2 is still not visible; fillOutput only publishes ctf 1.
+        prot.fillOutput = Mock(return_value=[1])
+        prot._updateOutputSet = Mock()
+        prot._defineTransformRelation = Mock()
+        prot._defineCtfRelation = Mock()
+        prot._store = Mock()
+        prot._markOutputIdsPersisted = Mock()
+
+        prot._checkNewOutput()
+
+        self.assertFalse(
+            prot.finished,
+            "A ctf skipped by fillOutput must prevent finished from "
+            "latching True, or it would never be retried.",
+        )
+        prot._markOutputIdsPersisted.assert_called_once_with(
+            OUTPUT_CTF, [1],
+        )
+
+    def testAnInvisibleCtfIsNoLongerWaitedForOnceTheInputCloses(self):
+        # Waited for while the input is open, and for a few checks after
+        # it closes; then settled without it, or the run never ends.
+        fnCtfSet = self._createCtfSet("ctf_never_visible.sqlite", [99])
+
+        class _LogicalInputPointer:
+            def get(self):
+                return SetOfCTF(filename=fnCtfSet)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.inputCTF = _LogicalInputPointer()
+        prot.acceptedIds = {1: 'T'}
+        prot.discardedIds = {}
+
+        prot.isStreamClosed = False
+        prot.fillOutput(Mock(), Mock(), [1], 'Accepted')
+        self.assertEqual(set(), prot._droppedCtfIds())
+
+        prot.isStreamClosed = True
+        for _ in range(prot.CTF_VISIBILITY_MAX_ATTEMPTS):
+            prot.fillOutput(Mock(), Mock(), [1], 'Accepted')
+        self.assertEqual(set(), prot._droppedCtfIds())
+
+        prot.fillOutput(Mock(), Mock(), [1], 'Accepted')
+        self.assertEqual({1}, prot._droppedCtfIds())
+
+    def testACtfDroppedForGoodLetsTheRunFinish(self):
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.isStreamClosed = True
+        prot.insertedIds = [1, 2]
+        prot.acceptedIds = {1: 'T', 2: 'T'}
+        prot.discardedIds = {}
+        prot.inputCTF = Mock()
+
+        def fillOutput(ctfSet, micSet, newDone, label):
+            if 2 in newDone:
+                prot._droppedCtfIds().add(2)
+            return [ctfId for ctfId in newDone if ctfId == 1]
+
+        prot._getAllDoneIds = lambda: ([], 0, [], [])
+        prot._loadOutputSet = Mock(return_value=Mock())
+        prot.fillOutput = fillOutput
+        prot._updateOutputSet = Mock()
+        prot._defineTransformRelation = Mock()
+        prot._defineCtfRelation = Mock()
+        prot._store = Mock()
+        prot._markOutputIdsPersisted = Mock()
+
+        prot._checkNewOutput()
+
+        self.assertTrue(prot.finished)
+
+    def testACtfInOnlyOneInputIsSettledOnceBothClose(self):
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = True
+        prot.insertedIds = [1]
+        prot.discardedIds = {}
+        prot._pendingInputIds1 = {1, 2}
+        prot._pendingInputIds2 = {3}
+        prot.info = Mock()
+
+        prot._discardUnmatchedCtfs()
+
+        self.assertEqual({2: 'F'}, prot.discardedIds,
+                         "Only in the first input: discarded.")
+        self.assertEqual([1, 2], prot.insertedIds)
+        self.assertNotIn(3, prot.insertedIds,
+                         "Only in the second input: nothing to publish.")
+        self.assertEqual(set(), prot._pendingInputIds1)
+        self.assertEqual(set(), prot._pendingInputIds2)
+
+    def testSelectCtfStepDiscardsCtfThatNeverBecomesVisible(self):
+        # Regression test: Set.getItem raises (UnboundLocalError) rather
+        # than returning None for a row it cannot find. A ctfId that never
+        # becomes visible must be recorded as discarded (not silently
+        # skipped), or it would never contribute to the "done" accounting
+        # and the protocol would never reach finished=True.
+        fnCtfSet = self._createCtfSet("ctf_visibility_missing.sqlite", [99])
+
+        class _LogicalInputPointer:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def get(self):
+                return SetOfCTF(filename=self.filename)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.inputCTF = _LogicalInputPointer(fnCtfSet)
+        prot.acceptedIds = {}
+        prot.discardedIds = {}
+        prot.initializeRejDict()
+
+        with patch(
+                'xmipp3.protocols.protocol_ctf_consensus.time.sleep',
+                return_value=None,
+        ):
+            prot.selectCtfStep([1])
+
+        self.assertEqual('F', prot.discardedIds.get(1))
+        self.assertNotIn(1, prot.acceptedIds)
+
+    def testSelectCtfStepRetriesUntilCtfBecomesVisible(self):
+        fnCtfSet = self._createCtfSet("ctf_visibility_retry.sqlite", [99])
+
+        class _LogicalInputPointer:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def get(self):
+                return SetOfCTF(filename=self.filename)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.inputCTF = _LogicalInputPointer(fnCtfSet)
+        prot.acceptedIds = {}
+        prot.discardedIds = {}
+        prot.initializeRejDict()
+
+        def appendCtfOnSleep(_delay):
+            ctfSet = SetOfCTF(filename=fnCtfSet)
+            ctfSet.loadAllProperties()
+            ctfSet.enableAppend()
+            ctf = self._getCTFModel(15000, 15000, 0, 5.0, '')
+            ctf.setObjId(1)
+            ctfSet.append(ctf)
+            ctfSet.write()
+            ctfSet.close()
+
+        with patch(
+                'xmipp3.protocols.protocol_ctf_consensus.time.sleep',
+                side_effect=appendCtfOnSleep,
+        ):
+            prot.selectCtfStep([1])
+
+        self.assertIn(1, prot.acceptedIds)
+
+    def testSelectCtfStepDiscardsCtfWithCorruptedDataAndKeepsProcessingOthers(self):
+        # Regression test: a genuine processing failure while evaluating
+        # one CTF's consensus criteria (e.g. missing/corrupted defocus
+        # values) must not crash the whole batch step - and hence the
+        # whole protocol via pyworkflow's fail-on-any-exception step
+        # boundary. It must be discarded with a clear message while the
+        # rest of the batch is still evaluated.
+        fnCtfSet = self.proj.getTmpPath("ctf_corrupted_and_good.sqlite")
+        ctfSet = SetOfCTF(filename=fnCtfSet)
+
+        corruptedCtf = CTFModel()  # no defocus values set -> None
+        corruptedCtf.setObjId(1)
+        ctfSet.append(corruptedCtf)
+
+        goodCtf = self._getCTFModel(15000, 15000, 0, 5.0, '')
+        goodCtf.setObjId(2)
+        ctfSet.append(goodCtf)
+
+        ctfSet.write()
+        ctfSet.close()
+
+        class _LogicalInputPointer:
+            def __init__(self, filename):
+                self.filename = filename
+
+            def get(self):
+                return SetOfCTF(filename=self.filename)
+
+        prot = self.newProtocol(XmippProtCTFConsensus)
+        prot.calculateConsensus = False
+        prot.inputCTF = _LogicalInputPointer(fnCtfSet)
+        prot.acceptedIds = {}
+        prot.discardedIds = {}
+        prot.initializeRejDict()
+
+        prot.selectCtfStep([1, 2])
+
+        self.assertEqual('F', prot.discardedIds.get(1))
+        self.assertNotIn(1, prot.acceptedIds)
+        self.assertIn(2, prot.acceptedIds)

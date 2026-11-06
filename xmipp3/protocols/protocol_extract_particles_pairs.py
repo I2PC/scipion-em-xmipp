@@ -368,6 +368,9 @@ class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):
     on tilted and untilted views.
     """
     _label = 'extract particle pairs'
+    _possibleOutputs = {
+        'outputParticlesTiltPair': ParticlesTiltPair,
+    }
 
     def __init__(self, **kwargs):
         ProtExtractParticlesPair.__init__(self, **kwargs)
@@ -745,8 +748,11 @@ class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):
         imgSetU.write()
         imgSetT.write()
 
-        # Define output ParticlesTiltPair
-        outputset = ParticlesTiltPair(filename=self._getPath('particles_pairs.sqlite'))
+        # Define output ParticlesTiltPair through the logical Set factory.
+        outputset = ParticlesTiltPair.create(
+            self._getPath(),
+            prefix='particles_pairs',
+        )
         outputset.setTilted(imgSetT)
         outputset.setUntilted(imgSetU)
         for imgU, imgT in izip(imgSetU, imgSetT):

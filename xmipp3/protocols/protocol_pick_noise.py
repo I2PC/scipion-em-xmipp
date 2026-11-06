@@ -259,7 +259,6 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
 
         setOfCoords= self.inputCoordinates.get()
         boxSize = setOfCoords.getBoxSize()
-        inCoordsFname= setOfCoords.getFileName()
         outPath = self._getExtraPath()
         inCoordsPosDir= os.path.join(outPath,  IN_COORDS_POS_DIR_BASENAME)
         outCoordsPosDir=os.path.join(outPath, OUT_COORDS_POS_DIR_BASENAME)
@@ -329,7 +328,6 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
 def pickNoise_prepareInput(setOfCoords, outPath, outCoordsPosDir=None): 
 
   boxSize = setOfCoords.getBoxSize()
-  inCoordsFname= setOfCoords.getFileName()
 
   inCoordsPosDir= os.path.join(outPath,  IN_COORDS_POS_DIR_BASENAME)
   if not os.path.isdir(inCoordsPosDir):   os.mkdir(inCoordsPosDir) 

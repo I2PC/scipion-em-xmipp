@@ -24,27 +24,26 @@
 # *
 # **************************************************************************
 
-import os
-from datetime import datetime
 import numpy as np
 import random
+import time
 from collections import defaultdict
 
 from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
-from pyworkflow.object import Pointer
+from pyworkflow.object import Pointer, CsvList
 import pyworkflow.protocol.params as params
-import pyworkflow.utils as pwutils
 
 from pwem.protocols import ProtCTFMicrographs
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol import ProtStreamingBase
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
+from pyworkflow.protocol.constants import MODE_RESUME, MODE_RESTART
 from pyworkflow import UPDATED, NEW
-
 
 OUTPUT_CTF =  "outputCTF"
 OUTPUT_MICS = "outputMicrographs"
 
-class XmippProtMicDefocusSampler(ProtCTFMicrographs):
+class XmippProtMicDefocusSampler(XmippStreamingBase, ProtStreamingBase, ProtCTFMicrographs):
     """
     Protocol to make a balanced subsample of meaningful CTFs in basis of the
     defocus values. Both CTFs and micrographs will be output. CTFs with
@@ -276,9 +275,13 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
     _possibleOutputs = {OUTPUT_MICS: SetOfMicrographs,
                         OUTPUT_CTF: SetOfCTF}
 
+    CTF_VISIBILITY_MAX_ATTEMPTS = 3
+    CTF_VISIBILITY_RETRY_DELAY = 1  # seconds
+
 
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
+        self.sampledIds = CsvList(pType=int)
 
 
     def _defineParams(self, form):
@@ -294,36 +297,73 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
                       default=100, label='Minimum number of images to make sampling',
                       help='Minimum number of images to make the defocus balanced sampling.')
 
+        self._defineStreamingParams(form)
+        form.addParallelSection(threads=3, mpi=1)
+
+    def _validate(self):
+        errors = []
+        if self.numImages.get() <= 0:
+            errors.append('Sample size must be greater than zero.')
+        if self.minImages.get() <= 0:
+            errors.append('Minimum number of images must be greater than zero.')
+        errors.extend(self._validateParallelProcessing())
+        return errors
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for extractBalancedDefocus.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
 # --------------------------- INSERT steps functions -------------------------
-    def _insertAllSteps(self):
+    def stepsGeneratorStep(self) -> None:
         self.initializeParams()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
         self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True, needsGPU=False)
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def createOutputStep(self):
         self._closeOutputSet()
 
     def initializeParams(self):
         self.finished = False
-        # Important to have both:
-        self.insertedIds = []   # Contains images that have been inserted in a Step (checkNewInput).
-        self.sampled_images = [] # Ids to be sample
-        # Contains images that have been processed in a Step (checkNewOutput).
-        self.ctfFn = self.inputCTF.get().getFileName()
+        self.insertedIds = []
+        self._lastInputId = 0
+        self._pendingInputIds = set()
 
-    def _getFirstJoinStepName(self):
-        ''' This function will be used for streaming, to check which is
-        the first function that need to wait for all ctfs
-        to have completed, this can be overriden in subclasses
-        (e.g., in Xmipp 'sortPSDStep')
-        '''
-        return 'createOutputStep'
+        # initializeParams now runs as part of the streaming generator
+        # step, i.e. AFTER Protocol._runSteps() has already forced
+        # runMode to MODE_RESUME (unlike the old _insertAllSteps, which
+        # ran before that override) - so self.runMode.get() alone can no
+        # longer tell Restart and Continue apart here.
+        originalRunMode = getattr(self, '_originalRunMode', self.getRunMode())
+        if originalRunMode == MODE_RESTART and self.sampledIds:
+            self.sampledIds.clear()
+            self._store()
 
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
+        self.sampled_images = list(self.sampledIds)
 
     def _insertNewCtfsSteps(self, newIds):
         deps = []
@@ -333,150 +373,257 @@ class XmippProtMicDefocusSampler(ProtCTFMicrographs):
 
         return deps
 
-    def _stepsCheck(self):
-        self._checkNewInput()
-        self._checkNewOutput()
-
     def _checkNewInput(self):
-        # Check if there are new ctf to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(self.ctfFn))
-        self.debug('Last check: %s, modification: %s'
-                    % (pwutils.prettyTime(self.lastCheck),
-                        pwutils.prettyTime(mTime)))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.insertedIds:  # If this is empty it is dut to a static "continue" action or it is the first round
-            return None
+        if self.sampled_images:
+            return
 
-        ctfsSet = self._loadInputCtfSet(self.ctfFn)
-        ctfSetIds = ctfsSet.getIdSet()
-        newIds = [idCTF for idCTF in ctfSetIds if idCTF not in self.insertedIds]
+        isResume = (
+            getattr(
+                self,
+                '_originalRunMode',
+                self.runMode.get(),
+            )
+            == MODE_RESUME
+        )
 
-        self.lastCheck = datetime.now()
-        isStreamClosed = ctfsSet.isStreamClosed()
-
-        ctfsSet.close()
-
-        outputStep = self._getFirstJoinStep()
-
-        if self.isContinued() and not self.insertedIds:  # For "Continue" action and the first round
+        if isResume and not self.insertedIds:
             doneIds, _ = self._getAllDoneIds()
+
             if doneIds:
-                self.finished = True
-                self.info('The sampling images are already created.')
+                self.sampled_images = doneIds
+                self.sampledIds.set(doneIds)
+                self._store()
+                self.info(
+                    'Restoring the previously selected CTFs.'
+                )
                 return
 
-        if (newIds and len(newIds) >= self.minImages.get()) or isStreamClosed:
-            fDeps = self._insertNewCtfsSteps(newIds)
+        if self.insertedIds:
+            return
 
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+        ctfsSet = self._loadLogicalSet(self.inputCTF)
+
+        try:
+            newIds, self._lastInputId = self._discoverIdsAfter(
+                ctfsSet,
+                self._lastInputId,
+            )
+            producerClosed = ctfsSet.isStreamClosed()
+
+            knownIds = set(self.insertedIds).union(
+                self._pendingInputIds,
+            )
+            newIds, terminalConsistent = (
+                self._reconcileClosedStreamIds(
+                    ctfsSet,
+                    newIds,
+                    knownIds,
+                    producerClosed,
+                )
+            )
+        finally:
+            ctfsSet.close()
+
+        self._pendingInputIds.update(newIds)
+
+        streamClosed = (
+            producerClosed
+            and terminalConsistent
+        )
+
+        if self._pendingInputIds and (
+            len(self._pendingInputIds) >= self.minImages.get()
+            or streamClosed
+        ):
+            pendingIds = sorted(self._pendingInputIds)
+            fDeps = self._insertNewCtfsSteps(pendingIds)
+            self._pendingInputIds.clear()
+
+            self.newDeps.extend(fDeps)
             self.updateSteps()
 
-    def _loadInputCtfSet(self, ctfFn):
-        self.debug("Loading input db: %s" % ctfFn)
-        ctfSet = SetOfCTF(filename=ctfFn)
-        ctfSet.loadAllProperties()
-        return ctfSet
+        elif streamClosed and not self.insertedIds:
+            self.finished = True
+            self.info(
+                'Input stream is closed and no CTFs are available '
+                'for sampling.'
+            )
 
     def extractBalancedDefocus(self, ctfIds):
-        inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+        pendingIds = sorted(set(ctfIds))
         ctfDefocus = {}
 
-        for ctfId in ctfIds:
-            ctf = inputCtfSet.getItem("id", ctfId).clone()
-            defocusU = ctf.getDefocusU()
-            ctfDefocus[ctfId] = defocusU
+        for attempt in range(self.CTF_VISIBILITY_MAX_ATTEMPTS):
+            if not pendingIds:
+                break
+
+            if attempt > 0:
+                time.sleep(self.CTF_VISIBILITY_RETRY_DELAY)
+
+            inputCtfSet = self._loadLogicalSet(self.inputCTF)
+            try:
+                visibleCtfs = self._loadLogicalSetItemsByIds(inputCtfSet, pendingIds)
+            finally:
+                inputCtfSet.close()
+
+            visibleIds = set()
+            for ctf in visibleCtfs:
+                ctfId = ctf.getObjId()
+                visibleIds.add(ctfId)
+                try:
+                    defocusU = ctf.getDefocusU()
+                    if defocusU is None:
+                        raise ValueError("CTF has no defocusU value")
+                except Exception as e:
+                    self.error("CTF with id %d failed while reading its defocus value (%s); excluding it from the defocus sampling pool." % (ctfId, e))
+                    continue
+                ctfDefocus[ctfId] = defocusU
+
+            pendingIds = [ctfId for ctfId in pendingIds if ctfId not in visibleIds]
+
+        if pendingIds:
+            self.error("CTF(s) with id %s never became visible in the input Set after %d attempts; excluding them from the defocus sampling pool." % (pendingIds, self.CTF_VISIBILITY_MAX_ATTEMPTS))
 
         self.sampled_images = balanced_sampling(image_dict=ctfDefocus, N=self.numImages.get(), bins=10)
-        self.info('The number of CTFs selected for defocus balanced sampling is the following: %d'
-                  %len(self.sampled_images))
+        self.info('The number of CTFs selected for defocus balanced sampling is the following: %d' % len(self.sampled_images))
 
         stats = compute_statistics(list(ctfDefocus.values()))
-        message = ("The defocus statistics are the following: range %d   min %d   max %d   mean %d   std %.1f"
-                   %(stats["range"], stats["min"], stats["max"],stats["mean"], stats["std"]))
+        message = ("The defocus statistics are the following: range %d   min %d   max %d   mean %d   std %.1f" % (stats["range"], stats["min"], stats["max"], stats["mean"], stats["std"]))
         self.summaryVar.set(message)
+        self.sampledIds.set(self.sampled_images)
+
+        # Persist the selected ids before output creation so Resume can reuse
+        # exactly the same sample.
+        self._store()
+
 
     def _checkNewOutput(self):
         """ Check for already selected CTF and update the output set. """
-        # Check for results: we have finished when there is results in sample_images list
-        if not self.finished:
-            if self.sampled_images:
-                ctfSet, micSet = self.createOutputs(self.sampled_images)
-                self.updateRelations(ctfSet, micSet)
-                self.finished = True
-                self._store()  # Update the summary dictionary
-        else:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
+        if self.finished:
+            return
+
+        if self.sampled_images:
+            ctfSet, micSet = self.createOutputs(self.sampled_images)
+            self.updateRelations(ctfSet, micSet)
+            self.finished = True
+            self._store()  # Update the summary dictionary
 
     def createOutputs(self, newDone):
-        cSet = self._loadOutputSet(SetOfCTF, 'ctfs.sqlite')
-        mSet = self._loadOutputSet(SetOfMicrographs,
-                                   'micrographs.sqlite')
+        cSet = self._loadOutputSet(SetOfCTF, OUTPUT_CTF)
+        mSet = self._loadOutputSet(SetOfMicrographs, OUTPUT_MICS)
         self.fillOutput(cSet, mSet, newDone)
 
         return cSet, mSet
 
-    def _loadOutputSet(self, SetClass, baseName):
-        """
-        Create the output set.
-        """
-        setFile = self._getPath(baseName)
-        outputSet = SetClass(filename=setFile)
+    def _loadOutputSet(self, SetClass, outputName):
+        outputSet, created = XmippStreamingBase._loadOrCreateOutputSet(self, outputName, SetClass)
+        if not created:
+            return outputSet
 
-        micSet = self.inputCTF.get().getMicrographs()
-
-        if isinstance(outputSet, SetOfMicrographs):
-            outputSet.copyInfo(micSet)
-        elif isinstance(outputSet, SetOfCTF):
-            outputSet.setMicrographs(micSet)
+        inputCtfSet = self._loadLogicalSet(self.inputCTF)
+        try:
+            micSet = inputCtfSet.getMicrographs()
+            if isinstance(outputSet, SetOfMicrographs):
+                outputSet.copyInfo(micSet)
+            elif isinstance(outputSet, SetOfCTF):
+                outputSet.setMicrographs(micSet)
+        finally:
+            inputCtfSet.close()
 
         return outputSet
 
     def fillOutput(self, ctfSet, micSet, newDone):
-        inputCtfSet = self._loadInputCtfSet(self.ctfFn)
+        inputCtfSet = self._loadLogicalSet(self.inputCTF)
+        try:
+            visibleCtfs = self._loadLogicalSetItemsByIds(inputCtfSet, newDone)
+        finally:
+            inputCtfSet.close()
+
+        visibleById = {ctf.getObjId(): ctf for ctf in visibleCtfs}
+        missingIds = sorted(set(newDone).difference(visibleById))
+        for ctfId in missingIds:
+            self.error("CTF with id %d is not visible in the input Set; excluding it from the output." % ctfId)
+
+        ctfIds = self._getOutputIds(ctfSet) if ctfSet.getSize() else set()
+        micIds = self._getOutputIds(micSet) if micSet.getSize() else set()
+        persistedCtfIds = []
+        persistedMicIds = []
 
         for ctfId in newDone:
-            ctf = inputCtfSet[ctfId].clone()
-            mic = ctf.getMicrograph().clone()
-            ctfSet.append(ctf)
-            micSet.append(mic)
+            ctf = visibleById.get(ctfId)
+            if ctf is None:
+                continue
 
-        inputCtfSet.close()
+            mic = ctf.getMicrograph().clone()
+
+            if ctf.getObjId() not in ctfIds:
+                ctfSet.append(ctf)
+                ctfIds.add(ctf.getObjId())
+            persistedCtfIds.append(ctf.getObjId())
+
+            if mic.getObjId() not in micIds:
+                micSet.append(mic)
+                micIds.add(mic.getObjId())
+            persistedMicIds.append(mic.getObjId())
+
+        self._markOutputIdsPersisted(OUTPUT_CTF, persistedCtfIds)
+        self._markOutputIdsPersisted(OUTPUT_MICS, persistedMicIds)
+
 
     def updateRelations(self, cSet, mSet):
         micsAttrName = OUTPUT_MICS
         self._updateOutputSet(micsAttrName, mSet)
-        # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Booelan,...)
+        # Set micrograph as pointer to protocol to prevent pointer end up as another attribute (String, Boolean,...)
         # that happens somewhere while scheduling.
         cSet.setMicrographs(Pointer(self, extended=micsAttrName))
         self._updateOutputSet(OUTPUT_CTF, cSet)
+
+        # Rebuild relations atomically from the protocol point of view. This makes
+        # repeating updateRelations on Resume safe after a partial output publication.
+        if self.mapper is not None:
+            self.mapper.deleteRelations(self)
+
         self._defineTransformRelation(self.inputCTF.get().getMicrographs(), mSet)
         self._defineTransformRelation(self.inputCTF, cSet)
         self._defineCtfRelation(mSet, cSet)
 
     def _getAllDoneIds(self):
-        doneIds = []
-        sizeOutput = 0
-
         if hasattr(self, OUTPUT_CTF):
-            sizeOutput = self.outputCTF.getSize()
-            doneIds.extend(list(self.outputCTF.getIdSet()))
+            doneIds = sorted(self._getKnownPersistedOutputIds(OUTPUT_CTF))
+            return doneIds, len(doneIds)
 
-        return doneIds, sizeOutput
+        if hasattr(self, OUTPUT_MICS):
+            cached = getattr(self, "_micFallbackCtfIds", None)
+            if cached is None:
+                micIds = self._getKnownPersistedOutputIds(OUTPUT_MICS)
+                doneIds = []
+
+                if micIds:
+                    inputCtfSet = self._loadLogicalSet(self.inputCTF)
+                    try:
+                        for ctf in inputCtfSet:
+                            mic = ctf.getMicrograph()
+                            if mic is not None and mic.getObjId() in micIds:
+                                doneIds.append(ctf.getObjId())
+                    finally:
+                        inputCtfSet.close()
+
+                cached = set(doneIds)
+                self._micFallbackCtfIds = cached
+
+            doneIds = sorted(cached)
+            return doneIds, len(doneIds)
+
+        return [], 0
+
 
     def _summary(self):
         summary = []
         if not hasattr(self, OUTPUT_MICS):
             summary.append("Output set not ready yet.")
         else:
-            populationSize = self.minImages.get()
             outputSize = self.outputMicrographs.getSize()
-            summary.append("From %d micrographs extract a balanced defocus sample of: %d micrographs"
-                           % (populationSize, outputSize))
+            summary.append("Balanced defocus sample: %d micrographs" % outputSize)
             summary.append(self.summaryVar.get())
 
         return summary
@@ -495,41 +642,100 @@ def balanced_sampling(image_dict, N, bins=10):
     - sampled_images (list): List of sampled image IDs.
     """
 
+    if not image_dict or N <= 0:
+        return []
 
-    # Step 1: Get all defocus values and determine the bin edges
+    target = min(N, len(image_dict))
+    bins = max(1, bins)
     defocus_values = list(image_dict.values())
+
+    if min(defocus_values) == max(defocus_values):
+        return random.sample(list(image_dict.keys()), target)
+
     bin_edges = np.linspace(min(defocus_values), max(defocus_values), bins + 1)
 
-    # Step 2: Organize image IDs by bins
     binned_images = defaultdict(list)
     for image_id, defocus in image_dict.items():
-        # Find the bin index for the current defocus value
         bin_index = np.digitize(defocus, bin_edges) - 1
-        # Avoid indexing beyond the available bins
-        bin_index = min(bin_index, bins - 1)
+        bin_index = max(0, min(bin_index, bins - 1))
         binned_images[bin_index].append(image_id)
 
-    # Step 3: Calculate how many images to sample per bin
-    images_per_bin = max(1, N // bins)
+    non_empty_bins = sorted(
+        bin_index for bin_index, images in binned_images.items() if images
+    )
+
+    if target <= len(non_empty_bins):
+        return _sampleAcrossBins(
+            binned_images,
+            non_empty_bins,
+            target,
+        )
+
+    return _sampleRoundRobin(
+        binned_images,
+        non_empty_bins,
+        target,
+    )
+
+
+def _sampleAcrossBins(binned_images, non_empty_bins, target):
+    if target == 1:
+        selected_positions = [len(non_empty_bins) // 2]
+    else:
+        selected_positions = [
+            round(i * (len(non_empty_bins) - 1) / (target - 1))
+            for i in range(target)
+        ]
+
+    return [
+        random.choice(binned_images[non_empty_bins[position]])
+        for position in selected_positions
+    ]
+
+
+def _sampleRoundRobin(binned_images, non_empty_bins, target):
+    available_by_bin = {}
+
+    for bin_index in non_empty_bins:
+        available = list(binned_images[bin_index])
+        random.shuffle(available)
+        available_by_bin[bin_index] = available
+
     sampled_images = []
 
-    for bin_index in range(bins):
-        images_in_bin = binned_images[bin_index]
+    while len(sampled_images) < target:
+        added = _appendRoundRobinPass(
+            sampled_images,
+            available_by_bin,
+            non_empty_bins,
+            target,
+        )
+        if not added:
+            break
 
-        if len(images_in_bin) > images_per_bin:
-            # Randomly sample from the bin if there are more images than needed
-            sampled_images.extend(random.sample(images_in_bin, images_per_bin))
-        else:
-            # If fewer images than needed, take all images in this bin
-            sampled_images.extend(images_in_bin)
+    return sampled_images
 
-    # If we have fewer than N images, randomly sample additional images to reach N
-    if len(sampled_images) < N:
-        remaining_images = list(set(image_dict.keys()) - set(sampled_images))
-        sampled_images.extend(random.sample(remaining_images, N - len(sampled_images)))
 
-    # Limit to N images in case there are extra
-    return sampled_images[:N]
+def _appendRoundRobinPass(
+    sampled_images,
+    available_by_bin,
+    non_empty_bins,
+    target,
+):
+    added = False
+
+    for bin_index in non_empty_bins:
+        available = available_by_bin[bin_index]
+        if not available:
+            continue
+
+        sampled_images.append(available.pop())
+        added = True
+
+        if len(sampled_images) == target:
+            break
+
+    return added
 
 
 def compute_statistics(values):
@@ -543,17 +749,19 @@ def compute_statistics(values):
     - dict: A dictionary containing the statistics: min, max, mean, median, std, variance, and range.
     """
 
-    # Convert to a NumPy array for efficient computation
     values = np.array(values)
+    if values.size == 0:
+        raise ValueError('Cannot compute statistics for an empty collection.')
 
-    # Compute statistics
+    ddof = 1 if values.size > 1 else 0
+
     stats = {
         "min": np.min(values),
         "max": np.max(values),
         "mean": np.mean(values),
         "median": np.median(values),
-        "std": np.std(values, ddof=1),  # Sample standard deviation
-        "variance": np.var(values, ddof=1),  # Sample variance
+        "std": np.std(values, ddof=ddof),
+        "variance": np.var(values, ddof=ddof),
         "range": np.max(values) - np.min(values),
     }
 

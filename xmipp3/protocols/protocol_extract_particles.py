@@ -28,13 +28,14 @@
 # *
 # **************************************************************************
 
+import json
 from os.path import exists
 
 import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.object import Integer
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
-                                           STATUS_FINISHED)
+from pyworkflow.object import Integer, Set, String
+from pyworkflow.protocol import ProtStreamingBase
+from pyworkflow.protocol.constants import STEPS_PARALLEL, LEVEL_ADVANCED, STATUS_FINISHED
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
 from pwem.objects import Particle
@@ -43,11 +44,13 @@ from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes)
 from xmipp3.constants import OTHER
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 FACTOR_BOXSIZE = 1.5
+BULK_COORD_LOAD_MIN_MICS = 100
 
-class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
+class XmippProtExtractParticles(XmippStreamingBase, ProtStreamingBase, ProtExtractParticles, XmippProtocol):
     """Extracts particle images from micrographs based on provided coordinates.
     This essential step prepares particle stacks for further processing such as
     classification and reconstruction.
@@ -449,8 +452,56 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                            '(it adds the ScoreGini and ScoreVar variables).')
 
         form.addParallelSection(threads=4, mpi=1)
-    
+        self._defineStreamingParams(form)
+
     #--------------------------- INSERT steps functions ------------------------
+    def _prepareStreamingGenerator(self):
+        # Reproduces ProtExtractParticles._insertAllSteps' own
+        # initialization (pwem, shared across every extraction protocol)
+        # now that ProtStreamingBase._insertAllSteps replaces it with a
+        # single resumableStepGeneratorStep.
+        self.micDict = {}
+        self.coordDict = {}
+        self.initialIds = self._insertInitialSteps()
+
+        # Watermark-based discovery state (replaces pwem's _loadInputList,
+        # which reconstructs a fresh Set from inputSet.getFileName() and
+        # does a full Python-side scan every poll). A mic/CTF/other-mic
+        # discovered via the watermark but not yet folded into
+        # self.micDict (because the batch isn't full and the stream
+        # isn't closed) stays pending and is retried every poll until it
+        # is actually scheduled.
+        self._micsWatermark = 0
+        self._pendingMicIds = set()
+        self._otherMicsWatermark = 0
+        self._pendingOtherMicIds = set()
+        self._otherIdByCoordId = {}
+        self._ctfWatermark = 0
+        self._pendingCtfIds = set()
+        self._ctfIdByCoordId = {}
+
+    def stepsGeneratorStep(self) -> None:
+        self._prepareStreamingGenerator()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
+
     def _insertInitialSteps(self):
         # Just overwrite this function to load some info
         # before the actual processing
@@ -465,8 +516,324 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return [self.doInvert.get(),
                 self._getNormalizeArgs(),
                 self.doBorders.get()]
-    
+
+    def _insertNewMicsSteps(self, inputMics):
+        """ Own step hook (not pwem's extractMicrographStep/
+        extractMicrographListStep) so completion tracking comes from the
+        persisted step graph instead of pwem's os.path.exists(micDoneFn)
+        marker file. """
+        return self._insertNewMics(inputMics,
+                                   lambda mic: mic.getMicName(),
+                                   self._insertExtractMicrographStepOwn,
+                                   self._insertExtractMicrographListStepOwn,
+                                   *self._getExtractArgs())
+
+    def _insertExtractMicrographStepOwn(self, mic, prerequisites, *args):
+        return self._insertFunctionStep('extractMicrographStepOwn',
+                                        mic.getMicName(), *args,
+                                        prerequisites=prerequisites)
+
+    def _insertExtractMicrographListStepOwn(self, micList, prerequisites, *args):
+        return self._insertFunctionStep('extractMicrographListStepOwn',
+                                        [mic.getMicName() for mic in micList],
+                                        *args, prerequisites=prerequisites)
+
+    def extractMicrographStepOwn(self, micKey, *args):
+        mic = self.micDict[micKey]
+        coordList = self.coordDict[mic.getObjId()]
+        self._convertCoordinates(mic, coordList)
+        self.info("Extracting micrograph: %s " % mic.getFileName())
+        # One micrograph failing must not fail the step and with it the
+        # whole run: it is left out, and Continue extracts it again.
+        self._extractMicrographList([mic], *args)
+
+    def extractMicrographListStepOwn(self, micKeyList, *args):
+        micList = []
+        for micName in micKeyList:
+            mic = self.micDict[micName]
+            coordList = self.coordDict[mic.getObjId()]
+            self._convertCoordinates(mic, coordList)
+            self.info("Extracting micrograph: %s " % mic.getFileName())
+            micList.append(mic)
+
+        self._extractMicrographList(micList, *args)
+
+    def _getFinishedProcessedMicKeys(self):
+        """ Mic keys whose own extraction step has actually FINISHED, read
+        from the persisted step graph - replaces the old
+        os.path.exists(micDoneFn) marker-file check as the durable source
+        of truth for "has this mic's extraction run". """
+        finishedKeys = set()
+        # Only this run's steps: every micrograph not yet published gets a
+        # new one, and an earlier, finished step of one that failed would
+        # have it read - and failed again - before its new one has run.
+        for step in getattr(self, '_steps', []) or []:
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName not in ('extractMicrographStepOwn',
+                                'extractMicrographListStepOwn'):
+                continue
+            if not step.isFinished():
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+            if not args:
+                continue
+
+            if funcName == 'extractMicrographListStepOwn':
+                if isinstance(args[0], list):
+                    finishedKeys.update(args[0])
+            else:
+                finishedKeys.add(args[0])
+
+        return finishedKeys
+
+    def _checkNewInput(self):
+        newMics = self._loadInputList()
+        outputMicIds = self._getOutputMicIds()
+
+        # Published by an earlier run: known, but not extracted again.
+        for micKey in [micKey for micKey, mic in newMics.items()
+                       if mic.getObjId() in outputMicIds]:
+            self.micDict[micKey] = newMics.pop(micKey)
+
+        if newMics:
+            fDeps = self._insertNewMicsSteps(newMics.values())
+            self.newDeps.extend(fDeps)
+            self.updateSteps()
+
+        # Only ids pwem's own batching actually folded into self.micDict
+        # this round are truly scheduled - anything else discovered stays
+        # pending and gets retried next poll (see _loadInputList).
+        scheduledIds = {mic.getObjId() for mic in self.micDict.values()}
+        self._pendingMicIds.difference_update(scheduledIds)
+        if self._micsOther():
+            consumedOtherIds = {
+                self._otherIdByCoordId.pop(coordId)
+                for coordId in scheduledIds
+                if coordId in self._otherIdByCoordId
+            }
+            self._pendingOtherMicIds.difference_update(consumedOtherIds)
+        if self._useCTF():
+            consumedCtfIds = {
+                self._ctfIdByCoordId.pop(coordId)
+                for coordId in scheduledIds
+                if coordId in self._ctfIdByCoordId
+            }
+            self._pendingCtfIds.difference_update(consumedCtfIds)
+
+    def _getOutputMicIds(self):
+        if not hasattr(self, '_outputMicIds'):
+            outputParts = getattr(self, 'outputParticles', None)
+            self._outputMicIds = set() if outputParts is None or outputParts.getSize() == 0 else {int(micId) for micId in outputParts.getUniqueValues('_micId')}
+        return self._outputMicIds
+
+    def _shouldBulkLoadCoords(self, micDict):
+        micCount = len(micDict)
+        totalMicCount = self.getCoords().getMicrographs().getSize()
+        return micCount >= BULK_COORD_LOAD_MIN_MICS and totalMicCount > 0 and micCount * 2 >= totalMicCount
+
+    def _loadCoordsForMics(self, coordSet, micDict):
+        micList = {}
+
+        if self._shouldBulkLoadCoords(micDict):
+            micById = {mic.getObjId(): (micKey, mic) for micKey, mic in micDict.items()}
+            coordsByMic = {}
+            for coord in coordSet.iterItems():
+                micId = coord.getMicId()
+                if micId in micById:
+                    coordsByMic.setdefault(micId, []).append(coord.clone())
+
+            for micId, coordList in coordsByMic.items():
+                micKey, mic = micById[micId]
+                self.coordDict[micId] = coordList
+                micList[micKey] = mic
+        else:
+            for micKey, mic in micDict.items():
+                micId = mic.getObjId()
+                coordList = [coord.clone() for coord in coordSet.iterItems(where='_micId=%s' % micId)]
+                if coordList:
+                    self.coordDict[micId] = coordList
+                    micList[micKey] = mic
+
+        return micList
+
+    def _loadInputCoords(self, micDict):
+        # Load via the logical input's own Pointer instead of
+        # reconstructing a fresh SetOfCoordinates from a raw storage
+        # filename, which ties discovery to how the Set is persisted.
+        coordSet = self.inputCoordinates.get()
+        if not hasattr(coordSet, '_xmippMd'):
+            # Mirrors pwem's own defensive patch for this xmipp-specific
+            # attribute, needed before loadAllProperties() on some
+            # SetOfCoordinates instances.
+            coordSet._xmippMd = String()
+        coordSet.loadAllProperties()
+        try:
+            micList = self._loadCoordsForMics(coordSet, micDict)
+            self.coordsClosed = coordSet.isStreamClosed()
+        finally:
+            coordSet.close()
+        return micList
+
+    def _loadInputList(self):
+        """ Backend-agnostic replacement for ProtExtractParticles._loadInputList
+        (pwem): discovers only mics/CTFs/other-mics above their logical id
+        watermark instead of reconstructing a fresh Set from a filename
+        and scanning it whole. """
+        coordMicsPointer = self.getCoords().getMicrographs(asPointer=True)
+        coordMicsSet = self._loadLogicalSet(coordMicsPointer)
+        try:
+            newIds, self._micsWatermark = self._discoverIdsAfter(coordMicsSet, self._micsWatermark)
+            producerClosed = coordMicsSet.isStreamClosed()
+            knownMicIds = {mic.getObjId() for mic in self.micDict.values()}
+            knownMicIds.update(self._pendingMicIds)
+            if producerClosed:
+                newIds, terminalConsistent = self._reconcileClosedStreamIds(
+                    coordMicsSet, newIds, knownMicIds, True, watermarkAttr='_micsWatermark')
+            else:
+                terminalConsistent = True
+            self._pendingMicIds.update(newIds)
+            candidateMics = self._loadLogicalSetItemsByIds(coordMicsSet, self._pendingMicIds)
+            candidateMics = [XmippStreamingBase._hydrateLogicalSetItemAcquisition(coordMicsSet, mic) for mic in candidateMics]
+            micDict = {mic.getMicName(): mic for mic in candidateMics}
+            self.micsClosed = producerClosed and terminalConsistent
+        finally:
+            coordMicsSet.close()
+
+        if self._micsOther():
+            otherMicsSet = self._loadLogicalSet(self.inputMicrographs)
+            try:
+                newOtherIds, self._otherMicsWatermark = self._discoverIdsAfter(
+                    otherMicsSet, self._otherMicsWatermark,
+                )
+                self._pendingOtherMicIds.update(newOtherIds)
+                candidateOtherMics = self._loadLogicalSetItemsByIds(
+                    otherMicsSet, self._pendingOtherMicIds,
+                )
+                oMicDict = {mic.getMicName(): mic for mic in candidateOtherMics}
+                otherClosed = otherMicsSet.isStreamClosed()
+            finally:
+                otherMicsSet.close()
+            self.micsClosed = self.micsClosed and otherClosed
+
+            micDictNew = {}
+            for micKey, mic in micDict.items():
+                if micKey in oMicDict:
+                    oMic = oMicDict[micKey]
+                    # Track the other-set id this match consumed before
+                    # copyObjId() overwrites it, so _checkNewInput can
+                    # prune it from _pendingOtherMicIds once (and only
+                    # once) the coord side actually gets scheduled.
+                    self._otherIdByCoordId[mic.getObjId()] = oMic.getObjId()
+                    oMic.copyObjId(mic)
+                    micDictNew[micKey] = oMic
+            micDict = micDictNew
+
+        if self._useCTF():
+            ctfSet = self._loadLogicalSet(self.ctfRelations)
+            try:
+                newCtfIds, self._ctfWatermark = self._discoverIdsAfter(
+                    ctfSet, self._ctfWatermark,
+                )
+                self._pendingCtfIds.update(newCtfIds)
+                candidateCtfs = self._loadLogicalSetItemsByIds(
+                    ctfSet, self._pendingCtfIds,
+                )
+                ctfDict = {
+                    ctf.getMicrograph().getMicName(): ctf
+                    for ctf in candidateCtfs
+                }
+                ctfClosed = ctfSet.isStreamClosed()
+            finally:
+                ctfSet.close()
+
+            micDictNew = {}
+            for micKey, mic in micDict.items():
+                if micKey in ctfDict:
+                    ctf = ctfDict[micKey]
+                    self._ctfIdByCoordId[mic.getObjId()] = ctf.getObjId()
+                    mic.setCTF(ctf)
+                    micDictNew[micKey] = mic
+            micDict = micDictNew
+            self.ctfsClosed = ctfClosed
+        else:
+            self.ctfsClosed = True
+
+        micDict = self._loadInputCoords(micDict)
+
+        return micDict
+
+    def _areAllMicsProcessed(self):
+        """
+        This condition determines if the processing is complete when all the
+        micrographs associated with the input coordinates have been processed.
+        """
+        coordSet = self._loadLogicalSet(self.inputCoordinates)
+        try:
+            currentPicsMics = coordSet.getUniqueValues("_micName")
+        finally:
+            coordSet.close()
+
+        return len(self.micDict) == len(currentPicsMics)
+
+    def _checkNewOutput(self):
+        if getattr(self, 'finished', False):
+            return
+
+        outputMicIds = self._getOutputMicIds()
+        finishedMicKeys = self._getFinishedProcessedMicKeys()
+        processedMics = [
+            mic for micKey, mic in self.micDict.items()
+            if mic.getObjId() in outputMicIds or micKey in finishedMicKeys
+        ]
+        inputLen = len(self.micDict)
+        streamClosed = self._isStreamClosed()
+        allKnownProcessed = len(processedMics) == inputLen
+        allMicsProcessed = self._areAllMicsProcessed() if streamClosed and allKnownProcessed else False
+        self.finished = streamClosed and allKnownProcessed and allMicsProcessed
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        newOutput = [mic for mic in processedMics if mic.getObjId() not in outputMicIds]
+
+        if newOutput:
+            self._updateOutputPartSet(newOutput, streamMode)
+            # Read once: a failed one is not published, and would
+            # otherwise be read, and fail, again on every poll.
+            outputMicIds.update(mic.getObjId() for mic in newOutput)
+            self.__dict__.setdefault('_handledExtractMicIds', set()).update(
+                mic.getObjId() for mic in newOutput)
+        elif self.finished:
+            self._updateOutputPartSet([], Set.STREAM_CLOSED)
+        else:
+            return
+
+        if self.finished:
+            self._failIfEveryExtractionFailed(
+                getattr(self, '_handledExtractMicIds', set()))
+
     #--------------------------- STEPS functions -------------------------------
+    def _extractMicrographList(self, micList, *args):
+        """ Extract particles one micrograph at a time, isolating a
+        corrupted/failing micrograph so it does not crash the whole
+        batch (and hence the whole protocol).
+        """
+        for mic in micList:
+            try:
+                self._extractMicrograph(mic, *args)
+            except Exception as e:
+                self.error(
+                    "Micrograph %s failed during particle extraction "
+                    "(%s); skipping it." % (mic.getMicName(), e)
+                )
+
     def _extractMicrograph(self, mic, doInvert, normalizeArgs, doBorders):
         """ Extract particles from one micrograph """
         fnLast = mic.getFileName()
@@ -479,6 +846,10 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                     else int(boxSize*1.5*downFactor)
 
         particlesMd = 'particles@%s' % fnPosFile
+        # Every temporary file this micrograph creates, so cleanup can
+        # name them instead of globbing a prefix.
+        micTmpFiles = []
+
         # If it has coordinates extract the particles
         if exists(fnPosFile):
             # Create a list with micrographs operations (programs in xmipp) and
@@ -497,7 +868,9 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                           "%s micrograph. We continue..." % mic.getMicName())
 
             def getMicTmp(suffix):
-                return self._getTmpPath(baseMicName + suffix)
+                fn = self._getTmpPath(baseMicName + suffix)
+                micTmpFiles.append(fn)
+                return fn
 
             # Check if it is required to downsample our micrographs
             if self.notOne(downFactor):
@@ -518,6 +891,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 # We need to write a Xmipp ctfparam file
                 # to perform the phase flip on the micrograph
                 fnCTF = self._getTmpPath("%s.ctfParam" % baseMicName)
+                micTmpFiles.append(fnCTF)
                 micrographToCTFParam(mic, fnCTF)
                 # Insert step to flip micrograph
                 if self.doFlip:
@@ -549,13 +923,15 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 self.runJob('xmipp_transform_normalize',
                             '-i %s.mrcs %s' % (outputRoot, normalizeArgs))
         else:
-            self.warning("The micrograph %s hasn't coordinate file! "
-                         % baseMicName)
-            self.warning("Maybe you picked over a subset of micrographs")
+            raise RuntimeError("Converted coordinates are missing for micrograph %s: %s" % (mic.getMicName(), fnPosFile))
 
-        # Let's clean the temporary mrc micrographs
+        # Clean exactly the temporary files this micrograph created. The
+        # old pattern was a prefix glob, so finishing "mic1" also deleted
+        # "mic10"'s working files while that micrograph was still being
+        # extracted in a parallel step.
         if not pwutils.envVarOn("SCIPION_DEBUG_NOCLEAN"):
-            pwutils.cleanPattern(self._getTmpPath(baseMicName) + '*')
+            for fn in micTmpFiles:
+                pwutils.cleanPath(fn)
 
     def _getNormalizeArgs(self):
         if not self.doNormalize:
@@ -611,8 +987,21 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         if not self._micsOther():
             self.inputMicrographs.set(None)
 
+        errors.extend(self._validateParallelProcessing())
         return errors
-    
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for extraction.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
     def _citations(self):
         return ['Vargas2013b']
     
@@ -668,6 +1057,11 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     def _micsOther(self):
         """ Return True if other micrographs are used for extract. """
         return self.downsampleType == OTHER
+
+    def _isStreamClosed(self):
+        # All required streaming inputs must be closed before flushing the
+        # final partial batch. ctfsClosed is True when CTF is not used.
+        return self.coordsClosed and self.micsClosed and self.ctfsClosed
 
     def _useCTF(self):
         return self.ctfRelations.hasValue()
@@ -813,54 +1207,103 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         and update the outputParts set with new items.
         """
         p = Particle()
+        # A Set created this round has stored nothing yet: asking it for ids
+        # fails instead of returning none.
+        durableIds = (outputParts.getIdSet()
+                      if hasattr(outputParts, 'getIdSet') and outputParts.getSize()
+                      else set())
+        boxScale = self.getBoxScale()
         for mic in micList:
-            # We need to make this dict because there is no ID in the .xmd file
-            coordDict = {}
-            for coord in self.coordDict[mic.getObjId()]:
-                pos = self._getPos(coord)
-                if pos in coordDict:
-                    print("WARNING: Ignoring duplicated coordinate: %s, id=%s" %
-                          (coord.getObjId(), pos))
-                coordDict[pos] = coord
+            # A micrograph is published whole or not at all: its particles
+            # are kept apart until its whole file has been read.
+            micParticles = []
+            try:
+                # We need to make this dict because there is no ID in the .xmd file
+                coordDict = {}
+                for coord in self.coordDict[mic.getObjId()]:
+                    pos = self._getPos(coord)
+                    if pos in coordDict:
+                        print("WARNING: Ignoring duplicated coordinate: %s, id=%s" %
+                              (coord.getObjId(), pos))
+                    coordDict[pos] = coord
 
-            added = set() # Keep track of added coords to avoid duplicates
-            fnMicXmd = self._getMicXmd(mic)
-            if exists(fnMicXmd):
-                for row in md.iterRows(fnMicXmd):
-                    pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
-                    coord = coordDict.get(pos, None)
-                    if coord is not None and coord.getObjId() not in added:
-                        # scale the coordinates according to particles dimension.
-                        coord.scale(self.getBoxScale())
-                        p.copyObjId(coord)
-                        p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
-                        p.setCoordinate(coord)
-                        p.setMicId(mic.getObjId())
-                        p.setCTF(mic.getCTF())
-                        # adding the variance and Gini coeff. value of the mic zone
-                        setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
-                        setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
-                        setXmippAttributes(p, row, md.MDL_LOCAL_AVERAGE)
-                        if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
-                            setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
+                added = set() # Keep track of added coords to avoid duplicates
+                fnMicXmd = self._getMicXmd(mic)
+                if not exists(fnMicXmd):
+                    raise RuntimeError("Extracted particle metadata is missing for micrograph %s: %s" % (mic.getMicName(), fnMicXmd))
+                if exists(fnMicXmd):
+                    for row in md.iterRows(fnMicXmd):
+                        pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
+                        coord = coordDict.get(pos, None)
+                        if coord is not None and coord.getObjId() not in added:
+                            # scale the coordinates according to particles
+                            # dimension - a copy, so reading this micrograph
+                            # again does not scale them twice.
+                            coord = coord.clone()
+                            coord.scale(boxScale)
+                            p.copyObjId(coord)
+                            p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
+                            p.setCoordinate(coord)
+                            p.setMicId(mic.getObjId())
+                            p.setCTF(mic.getCTF())
+                            # adding the variance and Gini coeff. value of the mic zone
+                            setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
+                            setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                            setXmippAttributes(p, row, md.MDL_LOCAL_AVERAGE)
+                            if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
+                                setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
-                        # disabled particles (in metadata) should not add to the
-                        # final set
-                        if row.getValue(md.MDL_ENABLED) > 0:
-                            outputParts.append(p)
-                            added.add(coord.getObjId())
+                            # disabled particles (in metadata) should not add to the
+                            # final set
+                            if row.getValue(md.MDL_ENABLED) > 0:
+                                if coord.getObjId() in durableIds:
+                                    continue
+                                micParticles.append(p.clone())
+                                added.add(coord.getObjId())
+            except Exception as e:
+                # A single micrograph with a corrupted/truncated .xmd
+                # must not crash the whole batch (and hence the whole
+                # protocol) - skip just its particles and keep
+                # processing the rest.
+                # Not raised: pwem would drop the particles of every
+                # micrograph after this one in the batch.
+                self.error(
+                    "Micrograph with id %d failed while reading its "
+                    "extracted particles (%s); skipping it."
+                    % (mic.getObjId(), e)
+                )
+                self._failedExtractMicIds().add(mic.getObjId())
+                continue
 
-            # Release the list of coordinates for this micrograph since it
-            # will not be longer needed
-            del self.coordDict[mic.getObjId()]
+            for particle in micParticles:
+                outputParts.append(particle)
+
+    def _failedExtractMicIds(self):
+        """Micrographs of this run whose particles could not be read; not
+        published, so Continue extracts them again."""
+        return self.__dict__.setdefault('_failedExtractMicIdsSet', set())
+
+    def _failIfEveryExtractionFailed(self, handledMicIds):
+        """A failed micrograph is left out; the run fails only when that
+        happened to every micrograph."""
+        failed = self._failedExtractMicIds()
+        output = getattr(self, 'outputParticles', None)
+
+        if (failed and set(handledMicIds) <= failed
+                and (output is None or output.getSize() == 0)):
+            raise Exception("Extraction failed for every one of the %d "
+                            "micrographs; see the errors above. Continue "
+                            "extracts them again." % len(failed))
 
     def _getMicPos(self, mic):
         """ Return the corresponding .pos file for a given micrograph. """
         micBase = pwutils.removeBaseExt(mic.getFileName())
-        return self._getExtraPath(micBase + ".pos")
+        # Scoped by id: two micrographs from different folders can share
+        # a base name and would otherwise write the same file.
+        return self._itemScopedPath(mic, micBase + ".pos")
 
     def _getMicXmd(self, mic):
         """ Return the corresponding .xmd with extracted particles
         for this micrograph. """
         micBase = pwutils.removeBaseExt(mic.getFileName())
-        return self._getExtraPath(micBase + ".xmd")
+        return self._itemScopedPath(mic, micBase + ".xmd")

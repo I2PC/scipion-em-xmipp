@@ -375,6 +375,72 @@ class TestXmippApplyMask2D(TestXmippBase):
         
 
 
+class TestScreenParticlesStreamingState(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testPrepareStreamingGeneratorDoesNotUseOutputMetadataExistenceAsResumeState(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtScreenParticles)
+        prot.newDeps = []
+        prot._initializeZscores = lambda: None
+        prot.isContinued = lambda: True
+        prot._getKnownProcessedParticleIds = lambda: set()
+        prot._loadInput = lambda: (0, False)
+        prot._insertNewPartsSteps = lambda: []
+        with patch('xmipp3.protocols.protocol_screen_particles.os.path.exists', side_effect=AssertionError('output.xmd existence must not be workflow state')), patch('xmipp3.protocols.protocol_screen_particles.isEmpty', return_value=True):
+            prot._prepareStreamingGenerator()
+
+    def testCheckNewInputDoesNotUseOutputMetadataExistenceAsPendingWorkState(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtScreenParticles)
+        prot.fnInputMd = 'input.xmd'
+        prot.fnOutputMd = 'output.xmd'
+        prot.newDeps = []
+        prot._loadInput = lambda: (0, False)
+        prot._insertNewPartsSteps = lambda: []
+        prot.updateSteps = lambda: None
+        with patch('xmipp3.protocols.protocol_screen_particles.os.path.exists', side_effect=AssertionError('output.xmd existence must not gate input discovery')), patch('xmipp3.protocols.protocol_screen_particles.isEmpty', return_value=True):
+            prot._checkNewInput()
+
+    def testCheckNewOutputDoesNotUseOutputMetadataExistenceAsCompletionState(self):
+        from unittest.mock import patch
+
+        prot = self.newProtocol(XmippProtScreenParticles)
+        prot.finished = False
+        prot.streamClosed = False
+        prot.outputSize = 0
+        prot.inputSize = 1
+        prot.fnOutputMd = 'output.xmd'
+        with patch('xmipp3.protocols.protocol_screen_particles.os.path.exists', side_effect=AssertionError('output.xmd existence must not signal step completion')):
+            prot._checkNewOutput()
+
+    def testCheckNewOutputRequestsLogicalOutputName(self):
+        from unittest.mock import patch
+
+        class OutputSet:
+            pass
+
+        prot = self.newProtocol(XmippProtScreenParticles)
+        prot.finished = False
+        prot.streamClosed = True
+        prot.outputSize = 1
+        prot.inputSize = 1
+        prot.fnOutputMd = 'output.xmd'
+        prot.outputParticles = OutputSet()
+        requested = []
+        prot._getPendingScreeningStep = lambda: None
+        prot._loadOutputSet = lambda setClass, outputName: requested.append(outputName) or prot.outputParticles
+        prot._updateOutputSet = lambda *args, **kwargs: None
+        with patch('xmipp3.protocols.protocol_screen_particles.os.path.exists', return_value=False):
+            prot._checkNewOutput()
+        self.assertEqual(requested, ['outputParticles'])
+
+
+
 class TestXmippScreenParticles(TestXmippBase):
     """This class check if the protocol to classify particles by their
     similarity to discard outliers work properly"""
@@ -539,6 +605,144 @@ class TestXmippPreprocessParticles(TestXmippBase):
 
         self.assertIsNotNone(protPreproc.outputParticles,
                              "There was a problem with preprocess particles")
+
+class TestTriggerDataBackendIndependence(BaseTest):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testLoadOutputSetUsesLogicalFactoryWithoutPhysicalStorage(self):
+        class Pointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class OutputSet:
+            def copyInfo(self, inputSet):
+                self.inputSet = inputSet
+
+            def getSize(self):
+                return 0
+
+        class SetClass:
+            pass
+
+        prot = self.newProtocol(XmippProtTriggerData)
+        inputSet = object()
+        outputSet = OutputSet()
+        calls = []
+        prot.inputImages = Pointer(inputSet)
+        prot.getOututName = lambda: 'outputParticles'
+        prot._loadOrCreateOutputSet = lambda outputName, setClass, suffix='': calls.append((outputName, setClass, suffix)) or (outputSet, True)
+        prot._getPath = lambda *args, **kwargs: self.fail('TriggerData output loading must not consult a physical .sqlite path.')
+
+        result = prot._loadOutputSet(SetClass, 'outputParticles', [])
+
+        self.assertIs(result, outputSet)
+        self.assertEqual(calls, [('outputParticles', SetClass, '')])
+        self.assertIs(outputSet.inputSet, inputSet)
+
+    def testOutputPublishingDoesNotUseSqliteNames(self):
+        import inspect
+
+        self.assertNotIn('.sqlite', inspect.getsource(XmippProtTriggerData._fillingOutput))
+        self.assertNotIn('.sqlite', inspect.getsource(XmippProtTriggerData._loadOutputSet))
+
+    def testCheckNewInputUsesIdWatermarkDiscovery(self):
+        class Pointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class Image:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+            def clone(self):
+                return Image(self.objId)
+
+        class InputSet:
+            def loadAllProperties(self):
+                pass
+
+            def isStreamClosed(self):
+                return False
+
+            def close(self):
+                pass
+
+            def iterItems(self, *args, **kwargs):
+                raise AssertionError('TriggerData must not use creation-based iterItems() discovery.')
+
+        prot = self.newProtocol(XmippProtTriggerData)
+        prot.inputImages = Pointer(InputSet())
+        prot.images = [Image(1)]
+        prot.splitedImages = []
+        prot._lastInputId = 1
+        prot._discoverIdsAfter = lambda inputSet, lastId: ([2, 3], 3)
+        prot._reconcileClosedStreamIds = lambda inputSet, newIds, knownIds, producerClosed: (newIds, True)
+        prot._loadLogicalSetItemsByIds = lambda inputSet, itemIds: [Image(itemId) for itemId in itemIds]
+        prot._fillingOutput = lambda: None
+
+        prot._checkNewInput()
+
+        self.assertEqual([item.getObjId() for item in prot.newImages], [2, 3])
+        self.assertEqual(prot._lastInputId, 3)
+
+    def testResumeRestoresIdWatermarkFromPersistedOutputs(self):
+        prot = self.newProtocol(XmippProtTriggerData)
+        prot._getPersistedOutputIds = lambda: ({2, 5, 9}, 0)
+
+        prot._restoreStreamingState()
+
+        self.assertEqual(prot._lastInputId, 9)
+
+    def testDiscoverIdsAfterFallsBackWhenBackendRejectsWhereExpression(self):
+        class InputSet:
+            def getUniqueValues(self, attribute, where=None):
+                if where is not None:
+                    raise NotImplementedError()
+                return [1, 2, 4, 7]
+
+        prot = self.newProtocol(XmippProtTriggerData)
+        ids, lastId = prot._discoverIdsAfter(InputSet(), 2)
+        self.assertEqual(ids, [4, 7])
+        self.assertEqual(lastId, 7)
+
+    def testLoadLogicalSetItemsFallsBackWhenBackendRejectsWhereExpression(self):
+        class Item:
+            def __init__(self, objId):
+                self.objId = objId
+
+            def getObjId(self):
+                return self.objId
+
+            def clone(self):
+                return Item(self.objId)
+
+        class InputSet:
+            def loadAllProperties(self):
+                pass
+
+            def iterItems(self, orderBy=None, direction=None, where=None):
+                if where is not None:
+                    raise NotImplementedError()
+                return iter([Item(1), Item(2), Item(4), Item(7)])
+
+        prot = self.newProtocol(XmippProtTriggerData)
+        items = prot._loadLogicalSetItems(InputSet(), 2)
+        self.assertEqual([item.getObjId() for item in items], [4, 7])
+
+
+
+
 
 from pyworkflow.protocol import getProtocolFromDb
 class TestXmippTriggerParticles(TestXmippBase):
