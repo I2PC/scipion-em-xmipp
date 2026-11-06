@@ -33,7 +33,7 @@ import time
 from pyworkflow import VERSION_3_0
 from pyworkflow.object import Set
 from pyworkflow.protocol import ProtStreamingBase
-from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
+from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED, GT)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
 from pyworkflow import UPDATED, PROD
@@ -359,10 +359,16 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label=Message.LABEL_INPUT)
+
+        EER_CONDITION = 'bool(inputMovies) and next(iter(inputMovies.getFiles())).endswith(".eer")'
+
         form.addParam('inputMovies', PointerParam, pointerClass='SetOfMovies',
                       label=Message.LABEL_INPUT_MOVS,
                       help='Select one or several movies. Dose analysis '
                            'be calculated for each one of them.')
+        form.addParam('nFrames', IntParam, label='Number of EER frames',
+                      condition=EER_CONDITION, default=40, validators=[GT(0, "Number of EER frames must be a positive integer (> 0).")],
+                      help='Number of frames to be generated. EER files contain subframes, that will be grouped into the selected number of frames.')
         form.addParam('percentage_threshold', FloatParam, default=5,
                       label="Maximum percentage difference (%)",
                       help='By default, a difference of 5% against the median dose is used to '
@@ -646,12 +652,19 @@ class XmippProtMovieDoseAnalysis(XmippStreamingMoviesMixin, ProtStreamingBase, P
             self.processedIds.append(movieId)
 
     def estimatePoissonCount(self, movie):
+        
         mean_frames = []
-        n = movie.getNumberOfFrames()
+        filename = movie.getFileName()
+        if filename.endswith(".eer"):
+            # EER movies hold subframes: read them grouped into nFrames frames
+            n = self.nFrames.get()
+            filename += "#%d,4K,uint16" % n
+        else:
+            n = movie.getNumberOfFrames()
         frames = [1, (n + 1) // 2, n]
         try:
             for frame in frames:
-                frame_image = ImageHandler().read("%d@%s" % (frame, movie.getFileName())).getData()
+                frame_image = ImageHandler().read("%d@%s" % (frame, filename)).getData()
                 mean_dose_per_pixel = np.mean(frame_image)
                 mean_dose_per_angstrom2 = mean_dose_per_pixel/ self.samplingRate**2
                 mean_frames.append(mean_dose_per_angstrom2)
