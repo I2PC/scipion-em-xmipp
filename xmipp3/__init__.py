@@ -88,7 +88,7 @@ class Plugin(pwem.Plugin):
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
 
-        if not cls.__check_INSTALL_CONDA_DEPENDENCIES:
+        if not cls.__check_INSTALL_CONDA_DEPENDENCIES():
             cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
             environ.addLibrary(cudaLib)
 
@@ -159,7 +159,7 @@ class Plugin(pwem.Plugin):
             )
 
         varsToEnv = {}
-        if cls.__check_INSTALL_CONDA_DEPENDENCIES:
+        if cls.__check_INSTALL_CONDA_DEPENDENCIES():
             cls.__create_xmipp3_environment()
         else:
             CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
