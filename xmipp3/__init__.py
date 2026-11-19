@@ -141,7 +141,7 @@ class Plugin(pwem.Plugin):
         develMode = bundleDir is not None
         COMPILE_TARGETS = ['dist/bin/xmipp_image_header',  'dist/xmipp.bashrc']
 
-        if Config.isCondaInstallation() and (not cls.__checkxmipp3EnvExist() or not cls.__check_INSTALL_CONDA_DEPENDENCIES):
+        if Config.isCondaInstallation() and (not cls.__checkxmipp3EnvExist() or not cls.__check_INSTALL_CONDA_DEPENDENCIES()):
             CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
             CONDA_ICU_PACKAGE = 'icu=72'
             condaEnvPath = os.environ['CONDA_PREFIX']
@@ -161,6 +161,7 @@ class Plugin(pwem.Plugin):
         varsToEnv = {}
         if cls.__check_INSTALL_CONDA_DEPENDENCIES():
             cls.__create_xmipp3_environment()
+            varsToEnv['XMIPP3_INSTALL_CONDA_DEPENDENCIES'] = 'ON' #Pass the variable through conda
         else:
             CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
             if CUDA_BIN:
@@ -173,7 +174,8 @@ class Plugin(pwem.Plugin):
                     f'rm -rf {xmippSrc} && '
                     f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
                     f'cd {xmippSrc} && '
-                    f'conda run --no-capture-output -n xmipp3 ./xmipp all',
+                    f'conda run -n {xmipp3_env_name} pip install xmipp3-installer &&'
+                    f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all',
                     COMPILE_TARGETS)]
             env.addPackage(
 	            'xmippDev',
@@ -189,7 +191,8 @@ class Plugin(pwem.Plugin):
                 (f'cd .. && rm -rf {xmippSrc} && '
                  f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                  f'cd {xmippSrc} && '
-                 f'conda run --no-capture-output -n xmipp3 ./xmipp all',
+                 f'conda run -n {xmipp3_env_name} pip install xmipp3-installer &&'
+                 f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all',
                  COMPILE_TARGETS)
             ]
             env.addPackage(
@@ -228,9 +231,9 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def __check_INSTALL_CONDA_DEPENDENCIES(cls):
-        return os.environ.get("INSTALL_CONDA_DEPENDENCIES", "OFF").upper() == "ON"
+        return os.environ.get("XMIPP3_INSTALL_CONDA_DEPENDENCIES", "OFF").upper() == "ON"
 
-
+    @classmethod
     def __create_xmipp3_environment(cls):
         result = subprocess.run(
             ["conda", "env", "list", "--json"],
@@ -245,6 +248,7 @@ class Plugin(pwem.Plugin):
             return False
 
         subprocess.run(["conda", "create", "-n", "xmipp3", "python=3.11.4", "-y"],check=True)
+
 
 def getNvidiaDriverVersion(plugin):
     """Attempt to retrieve the NVIDIA driver version using different methods.
