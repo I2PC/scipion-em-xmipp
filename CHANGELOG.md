@@ -1,3 +1,7 @@
+## Release 29.1.0
+- More scipion-em-xmipp
+  - Adaptations to the new xmipp3 environment 
+
 ## Release 29.0.1
 - More scipion-em-xmipp
     - Hotfix: Revert hot plugin reload
