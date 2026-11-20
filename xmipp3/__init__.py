@@ -165,35 +165,18 @@ class Plugin(pwem.Plugin):
             varsToEnv['XMIPP3_INSTALL_CONDA_DEPENDENCIES'] = 'ON' #Pass the variable through conda
             cmd_compile_xmipp = f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all',
             cmd_xmipp3_installer = f'conda run -n {xmipp3_env_name} pip install xmipp3-installer>=2.2.0,<3'
+            neededProgs = ''
             if cls.__create_xmipp3_environment():
                 cmd_create_xmipp3 = f'conda create -y -n {xmipp3_env_name} python={xmipp3_python_version}'
         else:
             CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
             cmd_compile_xmipp = f'./xmipp'
             cmd_xmipp3_installer = ' ' #Installed on Scipion env because requirements.txt
+            neededProgs = ['git', 'gcc', 'g++', 'cmake', 'make']
             if CUDA_BIN:
                 varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(CUDA_BIN, 'nvcc')
 
-        if develMode:
-            xmippSrc = 'xmippDev'
-            installCommands = [ (
-                    f'cd {pwem.Config.EM_ROOT} && '
-                    f'rm -rf {xmippSrc} && '
-                    f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
-                    f'cd {xmippSrc} && '
-                    f'{cmd_create_xmipp3} &&',
-                    f'{cmd_xmipp3_installer}  &&'
-                    f'{cmd_compile_xmipp}',
-                    COMPILE_TARGETS)]
-            env.addPackage(
-	            'xmippDev',
-	            tar='void.tgz',
-	            commands=installCommands,
-	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-	            updateCuda=True,
-	            default=False,
-                vars=varsToEnv)
-        else:
+        if not develMode: # PRODUCTION
             xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
                 (f'cd .. && rm -rf {xmippSrc} && '
@@ -208,9 +191,9 @@ class Plugin(pwem.Plugin):
 	                'xmipp3', version=version._binVersion,
 	                tar='void.tgz',
 	                commands=installCommands,
-	                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+	                neededProgs=neededProgs,
 	                updateCuda=True,
-	                default=not develMode,
+	                default=True,
                     vars=varsToEnv
 	            )
 
