@@ -52,6 +52,7 @@ _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
 _xmipp3_installerV = "v2.0.4"
 xmipp3_env_name = 'xmipp3'
+xmipp3_python_version = '3.11'
 
 class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
@@ -141,7 +142,7 @@ class Plugin(pwem.Plugin):
         develMode = bundleDir is not None
         COMPILE_TARGETS = ['dist/bin/xmipp_image_header',  'dist/xmipp.bashrc']
 
-        if Config.isCondaInstallation() and (not cls.__checkxmipp3EnvExist() or not cls.__check_INSTALL_CONDA_DEPENDENCIES()):
+        if Config.isCondaInstallation() and not cls.__check_INSTALL_CONDA_DEPENDENCIES():
             CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
             CONDA_ICU_PACKAGE = 'icu=72'
             condaEnvPath = os.environ['CONDA_PREFIX']
@@ -159,11 +160,17 @@ class Plugin(pwem.Plugin):
             )
 
         varsToEnv = {}
+        cmd_create_xmipp3 = ' '
         if cls.__check_INSTALL_CONDA_DEPENDENCIES():
-            cls.__create_xmipp3_environment()
             varsToEnv['XMIPP3_INSTALL_CONDA_DEPENDENCIES'] = 'ON' #Pass the variable through conda
+            cmd_compile_xmipp = f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all',
+            cmd_xmipp3_installer = f'conda run -n {xmipp3_env_name} pip install xmipp3-installer>=2.2.0,<3'
+            if cls.__create_xmipp3_environment():
+                cmd_create_xmipp3 = f'conda create -y -n {xmipp3_env_name} python={xmipp3_python_version}'
         else:
             CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
+            cmd_compile_xmipp = f'./xmipp'
+            cmd_xmipp3_installer = ' ' #Installed on Scipion env because requirements.txt
             if CUDA_BIN:
                 varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(CUDA_BIN, 'nvcc')
 
@@ -174,8 +181,9 @@ class Plugin(pwem.Plugin):
                     f'rm -rf {xmippSrc} && '
                     f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
                     f'cd {xmippSrc} && '
-                    f'conda run -n {xmipp3_env_name} pip install xmipp3-installer &&'
-                    f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all',
+                    f'{cmd_create_xmipp3} &&',
+                    f'{cmd_xmipp3_installer}  &&'
+                    f'{cmd_compile_xmipp}',
                     COMPILE_TARGETS)]
             env.addPackage(
 	            'xmippDev',
@@ -191,8 +199,9 @@ class Plugin(pwem.Plugin):
                 (f'cd .. && rm -rf {xmippSrc} && '
                  f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                  f'cd {xmippSrc} && '
-                 f'conda run -n {xmipp3_env_name} pip install xmipp3-installer &&'
-                 f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all',
+                 f'{cmd_create_xmipp3} &&',
+                 f'{cmd_xmipp3_installer}  &&'
+                 f'{cmd_compile_xmipp} &&',
                  COMPILE_TARGETS)
             ]
             env.addPackage(
@@ -247,7 +256,7 @@ class Plugin(pwem.Plugin):
             print("Conda environment xmipp3 already exists. Skipping creation.")
             return False
 
-        subprocess.run(["conda", "create", "-n", "xmipp3", "python=3.11.4", "-y"],check=True)
+        return True
 
 
 def getNvidiaDriverVersion(plugin):
