@@ -37,7 +37,7 @@ import pyworkflow.utils as pwutils
 from scipion.install.funcs import CondaCommandDef
 from .base import *
 from .version import *
-from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL, XMIPP3_INSTALL_CONDA_DEPENDENCIES
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _currentDepVersion = '1.0'
@@ -82,12 +82,15 @@ class Plugin(pwem.Plugin):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
         cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
         cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
+        cls._defineVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, pwem.Config.XMIPP3_INSTALL_CONDA_DEPENDENCIES)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
         """ Create the needed environment for Xmipp programs. """
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
+        condaInstallDep = cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, pwem.Config.XMIPP3_INSTALL_CONDA_DEPENDENCIES)
+        environ.addLibrary(condaInstallDep)
 
         if not cls.__check_INSTALL_CONDA_DEPENDENCIES():
             cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
@@ -223,7 +226,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def __check_INSTALL_CONDA_DEPENDENCIES(cls):
-        return os.environ.get("XMIPP3_INSTALL_CONDA_DEPENDENCIES", "OFF").upper() == "ON"
+        return os.environ.get(XMIPP3_INSTALL_CONDA_DEPENDENCIES, "OFF").upper() == "ON"
 
     @classmethod
     def __create_xmipp3_environment(cls):
