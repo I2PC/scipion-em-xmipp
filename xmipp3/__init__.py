@@ -164,6 +164,7 @@ class Plugin(pwem.Plugin):
         varsToEnv = {}
         cmd_create_xmipp3 = ''
         if cls.__check_INSTALL_CONDA_DEPENDENCIES():
+            print(f'Installation with {xmipp3_env_name} environment')
             varsToEnv['XMIPP3_INSTALL_CONDA_DEPENDENCIES'] = 'ON' #Pass the variable through conda
             cmd_compile_xmipp = f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all ',
             cmd_xmipp3_installer = f'conda run -n {xmipp3_env_name} pip install {xmipp3_installer_version} &&'
@@ -171,6 +172,7 @@ class Plugin(pwem.Plugin):
             if cls.__create_xmipp3_environment():
                 cmd_create_xmipp3 = f'conda create -y -n {xmipp3_env_name} python={xmipp3_python_version} &&'
         else:
+            print(f'Installation without {xmipp3_env_name} environment')
             CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
             cmd_compile_xmipp = f'./xmipp all'
             cmd_xmipp3_installer = '' #Installed on Scipion env because requirements.txt
@@ -179,6 +181,7 @@ class Plugin(pwem.Plugin):
                 varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(CUDA_BIN, 'nvcc')
 
         if not develMode: # PRODUCTION
+            print('\nPRODUCTION INSTALLATION')
             xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
                 (f'cd .. && rm -rf {xmippSrc} && '
