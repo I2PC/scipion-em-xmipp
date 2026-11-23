@@ -23,31 +23,28 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
-from pathlib import Path
-from typing import Union, Dict, List
+from __future__ import annotations
+
 from enum import IntEnum
+from pathlib import Path
 
-
-from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_2D
 from pwem.objects import SetOfClasses2D
-
-
+from pwem.protocols import ProtClassify2D
 from pyworkflow import VERSION_3_0
+from pyworkflow.constants import BETA
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (
-    PointerParam,
-    IntParam,
     BooleanParam,
     EnumParam,
     FloatParam,
+    IntParam,
+    PointerParam,
 )
-from pyworkflow.constants import BETA
+
 from xmipp3.base import XmippProtocol
-
-
 from xmipp3.convert import particleToRow
 
 
@@ -63,10 +60,12 @@ class EstimatorType(IntEnum):
         return self.name.lower()
 
 
+# Column names assigned by xmipp_robust_estimation_gmm
 ROBUST_WEIGHT_COL = "wRobust"
 STD_ROBUST_WEIGHT_COL = "wRobustStd"
 GMM_WEIGHT_COL = "wRobustGmm"
 
+# Map every xmipp column to the name this protocol should assign to it
 WEIGHT_COLUMN_TO_ATTRIBUTE = {
     ROBUST_WEIGHT_COL: "_xmippRobustWeight",
     STD_ROBUST_WEIGHT_COL: "_xmippRobustWeightStandardized",
@@ -75,6 +74,9 @@ WEIGHT_COLUMN_TO_ATTRIBUTE = {
 
 
 def add_estimator_section(form):
+    """
+    Add all parameters related to estimator selection and configuration to the protocol form.
+    """
     form.addSection(label="Estimator")
     form.addParam(
         "estimatorType",
@@ -96,12 +98,13 @@ def add_estimator_section(form):
         ),
         label="GMM Reweighting",
     )
-    estimator_condition: Dict[EstimatorType, str] = {
+    estimator_condition: dict[EstimatorType, str] = {
         estimator_type: f"bool(estimatorType == {estimator_type.value})"
         for estimator_type in EstimatorType
     }
     gmm_condition = "bool(gmmReweighting)"
 
+    # Non-GMM parameters: number of iterations and low pass filter cutoff
     form.addParam(
         "estimatorIterations",
         IntParam,
@@ -119,6 +122,7 @@ def add_estimator_section(form):
         label="Lowpass Cutoff",
     )
 
+    # GMM parameters
     form.addParam(
         "internalEstimatorIterations",
         IntParam,
@@ -135,6 +139,7 @@ def add_estimator_section(form):
         help="Number of GMM iterations",
         label="GMM iterations",
     )
+    # Degeneracy conditions
     form.addParam(
         "checkDegenerateGmm",
         BooleanParam,
@@ -168,6 +173,7 @@ def add_estimator_section(form):
         label="Minimum GMM good weight",
         expertLevel=LEVEL_ADVANCED,
     )
+    # Initialization parameters
     form.addParam(
         "gmmInitialBadWeight",
         FloatParam,
@@ -231,6 +237,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             "will be applied to all classes",
             expertLevel=LEVEL_ADVANCED,
         )
+
+        # Saving parameters
         form.addParam(
             "saveGmmFits",
             BooleanParam,
@@ -258,6 +266,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         add_estimator_section(form)
 
+        # TODO: instead of this, use the standard way to choose GPU ID in xmipp protocols
         form.addSection(label="Compute")
         form.addParam(
             "useGpu",
@@ -278,7 +287,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         self._insertFunctionStep("createOutputStep")
 
     # --------------------------- UTILS functions -----------------------------
-    def _getSelectedClassIds(self) -> List[int]:
+    def _getSelectedClassIds(self) -> list[int]:
         """Return the class identifiers selected for processing."""
         available_ids = sorted(int(cls.getObjId()) for cls in self.inputClasses.get())
 
@@ -289,7 +298,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         if requested_id not in available_ids:
             raise ValueError(
-                "Requested class ID is unavailable " "in the input classes object."
+                "Requested class ID is unavailable in the input classes object."
             )
 
         return [requested_id]
@@ -297,8 +306,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _buildMetadataStack(
         self,
         classes2D: SetOfClasses2D,
-        classIds: List[int],
-        outputMdPath: Union[str, Path],
+        classIds: list[int],
+        outputMdPath: str | Path,
     ):
         """
         Write particles from selected 2D classes to a single Xmipp metadata file.
@@ -343,9 +352,9 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     def _prepareParticleStack(
         self,
-        inputMetadataPath: Union[str, Path],
-        outputParticlesPath: Union[str, Path],
-        outputMetadataPath: Union[str, Path],
+        inputMetadataPath: str | Path,
+        outputParticlesPath: str | Path,
+        outputMetadataPath: str | Path,
     ):
         """
         If CTF correction is enabled, the images are corrected with
@@ -392,9 +401,9 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     def _applyAlignment(
         self,
-        inputMetadataPath: Union[str, Path],
-        outputParticlesPath: Union[str, Path],
-        outputMetadataPath: Union[str, Path],
+        inputMetadataPath: str | Path,
+        outputParticlesPath: str | Path,
+        outputMetadataPath: str | Path,
     ):
         """
         Apply the 2D transforms stored in a particle metadata file.
@@ -574,7 +583,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         weightColumns = self._getEstimatorWeightColumns()
 
-        weightsById: Dict[int, Dict[str, float]] = {}
+        weightsById: dict[int, dict[str, float]] = {}
         for row in md.iterRows(outputParticlesMd):
             itemId = row.getValue(md.MDL_ITEM_ID)
 
@@ -596,7 +605,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 itemId = particle.getObjId()
 
                 try:
-                    weightsDict = weightsById[itemId]
+                    weightsdict = weightsById[itemId]
                 except KeyError as exc:
                     raise RuntimeError(
                         f"Weights were not found for particle with itemId={itemId}."
@@ -607,7 +616,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
                 for col in weightColumns:
                     outputParticle.__setattr__(
-                        WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsDict[col])
+                        WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsdict[col])
                     )
 
                 outputParticles.append(outputParticle)
@@ -645,8 +654,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _createOutputClasses(
         self,
         particles,
-        classIndex: Dict[int, int],
-        averagesPath: Union[str, Path],
+        classIndex: dict[int, int],
+        averagesPath: str | Path,
         suffix: str,
     ) -> SetOfClasses2D:
         """
