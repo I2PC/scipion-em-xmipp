@@ -342,8 +342,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
                 row.addToMd(particlesMd)
 
-        outputMdPath = str(Path(outputMdPath))
-        particlesMd.write(outputMdPath)
+        particlesMd.write(str(outputMdPath))
 
     def _correctCtf(
         self,
@@ -407,14 +406,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputMetadataPath : str or pathlib.Path
             Path of the metadata file referencing the aligned images.
         """
-        inputMetadataPath = str(Path(inputMetadataPath))
-        outputParticlesPath = str(Path(outputParticlesPath))
-        outputMetadataPath = str(Path(outputMetadataPath))
-
         args = [
-            f"-i {quote(inputMetadataPath)}",
-            f"-o {quote(outputParticlesPath)}",
-            f"--save_metadata_stack {quote(outputMetadataPath)}",
+            f"-i {quote(str(inputMetadataPath))}",
+            f"-o {quote(str(outputParticlesPath))}",
+            f"--save_metadata_stack {quote(str(outputMetadataPath))}",
             "--keep_input_columns",
             "--apply_transform",
         ]
@@ -628,7 +623,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 itemId = particle.getObjId()
 
                 try:
-                    weightsdict = weightsById[itemId]
+                    weights = weightsById[itemId]
                 except KeyError as exc:
                     raise RuntimeError(
                         f"Weights were not found for particle with itemId={itemId}."
@@ -638,8 +633,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 outputParticle.setClassId(classId)
 
                 for col in weightColumns:
-                    outputParticle.__setattr__(
-                        WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsdict[col])
+                    setattr(
+                        outputParticle,
+                        WEIGHT_COLUMN_TO_ATTRIBUTE[col],
+                        Float(weights[col]),
                     )
 
                 outputParticles.append(outputParticle)
@@ -700,7 +697,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputClasses = self._createSetOfClasses2D(particles, suffix)
 
         samplingRate = particles.getSamplingRate()
-        averagesPath = str(Path(averagesPath))
+        averagesPath = str(averagesPath)
 
         def updateClass(classItem):
             classId = classItem.getObjId()
