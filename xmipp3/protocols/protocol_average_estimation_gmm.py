@@ -594,12 +594,20 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
             weightsById[itemId] = {col: row.getValue(col) for col in weightColumns}
 
+        # The estimation script writes averages following sorted class IDs
+        classIds = self._getSelectedClassIds()
+        classIndex = {classId: index for index, classId in enumerate(classIds, start=1)}
+
         outputParticles = self._createSetOfParticles()
         inputClasses = self.inputClasses.get()
         outputParticles.copyInfo(inputClasses.getImages())
 
         for cl in inputClasses:
             classId = cl.getObjId()
+
+            # Skip classes that were not requested by the user
+            if classId not in classIndex:
+                continue
 
             for particle in cl:
                 itemId = particle.getObjId()
@@ -620,10 +628,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                     )
 
                 outputParticles.append(outputParticle)
-
-        # The estimation script writes averages following sorted class IDs.
-        classIds = self._getSelectedClassIds()
-        classIndex = {classId: index for index, classId in enumerate(classIds, start=1)}
 
         # Create classes with robust averages as representatives
         robustClasses = self._createOutputClasses(
