@@ -530,6 +530,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             f"--out-corrected-avgs {correctedAveragePath} "
             f"--out-original-avgs {originalAveragePath} "
             f"--device {device} "
+            "--overwrite " # allow the protocol to continue if some files have already been written
+
         )
 
         if self.saveLowHighWeightAverages.get():
