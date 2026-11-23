@@ -53,6 +53,7 @@ __version__ = version.__version__
 _xmipp3_installerV = "v2.0.4"
 xmipp3_env_name = 'xmipp3'
 xmipp3_python_version = '3.11'
+xmipp3_installer_version =  "xmipp3-installer>=2.2.0,<3"
 
 class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
@@ -82,15 +83,13 @@ class Plugin(pwem.Plugin):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
         cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
         cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
-        cls._defineVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, pwem.Config.XMIPP3_INSTALL_CONDA_DEPENDENCIES)
+        cls._defineVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, 'OFF')
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
         """ Create the needed environment for Xmipp programs. """
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
-        condaInstallDep = cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, pwem.Config.XMIPP3_INSTALL_CONDA_DEPENDENCIES)
-        environ.addLibrary(condaInstallDep)
 
         if not cls.__check_INSTALL_CONDA_DEPENDENCIES():
             cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
@@ -163,18 +162,18 @@ class Plugin(pwem.Plugin):
             )
 
         varsToEnv = {}
-        cmd_create_xmipp3 = ' '
+        cmd_create_xmipp3 = ''
         if cls.__check_INSTALL_CONDA_DEPENDENCIES():
             varsToEnv['XMIPP3_INSTALL_CONDA_DEPENDENCIES'] = 'ON' #Pass the variable through conda
-            cmd_compile_xmipp = f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all',
-            cmd_xmipp3_installer = f'conda run -n {xmipp3_env_name} pip install xmipp3-installer>=2.2.0,<3'
-            neededProgs = ''
+            cmd_compile_xmipp = f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all ',
+            cmd_xmipp3_installer = f'conda run -n {xmipp3_env_name} pip install {xmipp3_installer_version} &&'
+            neededProgs = ['git', 'conda']
             if cls.__create_xmipp3_environment():
-                cmd_create_xmipp3 = f'conda create -y -n {xmipp3_env_name} python={xmipp3_python_version}'
+                cmd_create_xmipp3 = f'conda create -y -n {xmipp3_env_name} python={xmipp3_python_version} &&'
         else:
             CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
-            cmd_compile_xmipp = f'./xmipp'
-            cmd_xmipp3_installer = ' ' #Installed on Scipion env because requirements.txt
+            cmd_compile_xmipp = f'./xmipp all'
+            cmd_xmipp3_installer = '' #Installed on Scipion env because requirements.txt
             neededProgs = ['git', 'gcc', 'g++', 'cmake', 'make']
             if CUDA_BIN:
                 varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(CUDA_BIN, 'nvcc')
@@ -185,9 +184,9 @@ class Plugin(pwem.Plugin):
                 (f'cd .. && rm -rf {xmippSrc} && '
                  f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                  f'cd {xmippSrc} && '
-                 f'{cmd_create_xmipp3} &&',
-                 f'{cmd_xmipp3_installer}  &&'
-                 f'{cmd_compile_xmipp} &&',
+                 f'{cmd_create_xmipp3} '
+                 f'{cmd_xmipp3_installer} '
+                 f'{cmd_compile_xmipp} ',
                  COMPILE_TARGETS)
             ]
             env.addPackage(
@@ -216,17 +215,9 @@ class Plugin(pwem.Plugin):
         return bundleDir if isBundle else None
 
     @classmethod
-    def __checkxmipp3EnvExist(cls):
-        result = subprocess.run(
-            ['conda', 'env', 'list'],
-            capture_output=True,
-            text=True
-        )
-        return xmipp3_env_name in result.stdout
-
-    @classmethod
     def __check_INSTALL_CONDA_DEPENDENCIES(cls):
-        return os.environ.get(XMIPP3_INSTALL_CONDA_DEPENDENCIES, "OFF").upper() == "ON"
+        #return os.environ.get(XMIPP3_INSTALL_CONDA_DEPENDENCIES, "OFF").upper() == "ON"
+        return cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, "OFF").upper() == "ON"
 
     @classmethod
     def __create_xmipp3_environment(cls):
@@ -238,7 +229,7 @@ class Plugin(pwem.Plugin):
 
         envs = json.loads(result.stdout)["envs"]
 
-        if any(env.rstrip("/").endswith("/xmipp3") for env in envs):
+        if any(env.rstrip("/").endswith(f"/{xmipp3_env_name}") for env in envs):
             print("Conda environment xmipp3 already exists. Skipping creation.")
             return False
 
