@@ -98,9 +98,8 @@ class Plugin(pwem.Plugin):
             cudaInclude = os.path.join(
                 os.environ['CONDA_PREFIX'],
                 'targets', 'x86_64-linux', 'include' )
-            currentCpath = environ.get('CPATH', '')
-            environ['CPATH'] = os.pathsep.join(
-                filter(None, [cudaInclude, currentCpath])
+            environ['NVCC_PREPEND_FLAGS'] = (
+                f'-I{cudaInclude}'
             )
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
