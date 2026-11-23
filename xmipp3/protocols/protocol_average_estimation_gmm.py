@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from enum import IntEnum
 from pathlib import Path
+from shlex import quote
 
 import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_2D
@@ -350,17 +351,14 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputMdPath = str(Path(outputMdPath))
         particlesMd.write(outputMdPath)
 
-    def _prepareParticleStack(
+    def _correctCtf(
         self,
         inputMetadataPath: str | Path,
         outputParticlesPath: str | Path,
         outputMetadataPath: str | Path,
     ):
         """
-        If CTF correction is enabled, the images are corrected with
-        ``xmipp_ctf_correct_wiener2d``. Otherwise, they are copied to a standalone
-        stack with ``xmipp_image_convert``. In both cases, an accompanying metadata
-        file referencing the newly generated stack is written.
+        Apply Wiener CTF correction and write metadata for the corrected stack.
 
         Parameters
         ----------
@@ -376,28 +374,22 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         This method does not apply the class alignment. Alignment is handled
         separately by ``_applyAlignment``.
         """
-        inputMetadataPath = str(Path(inputMetadataPath))
-        outputParticlesPath = str(Path(outputParticlesPath))
-        outputMetadataPath = str(Path(outputMetadataPath))
+        inputClasses = self.inputClasses.get()
+        args = [
+            f"-i {quote(str(inputMetadataPath))}",
+            f"-o {quote(str(outputParticlesPath))}",
+            f"--save_metadata_stack {quote(str(outputMetadataPath))}",
+            "--keep_input_columns",
+            f"--sampling_rate {inputClasses.getSamplingRate()}",
+        ]
+        if inputClasses.getImages().isPhaseFlipped():
+            args.append("--phase_flipped")
 
-        args = (
-            f"-i {inputMetadataPath} "
-            f"-o {outputParticlesPath} "
-            f"--save_metadata_stack {outputMetadataPath} "
-            f"--keep_input_columns "
+        self.runJob(
+            "xmipp_ctf_correct_wiener2d",
+            " ".join(args),
+            numberOfMpi=self.numberOfMpi.get(),
         )
-
-        if self.correctCtf.get():
-            args += f"--sampling_rate {self.inputClasses.get().getSamplingRate()} "
-
-            if self.inputClasses.get().getImages().isPhaseFlipped():
-                args += "--phase_flipped "
-
-            self.runJob(
-                "xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()
-            )
-        else:
-            self.runJob("xmipp_image_convert", args, numberOfMpi=1)
 
     def _applyAlignment(
         self,
@@ -425,15 +417,17 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputParticlesPath = str(Path(outputParticlesPath))
         outputMetadataPath = str(Path(outputMetadataPath))
 
-        args = (
-            f"-i {inputMetadataPath} "
-            f"-o {outputParticlesPath} "
-            f"--save_metadata_stack {outputMetadataPath} "
-            f"--keep_input_columns "
-            f"--apply_transform"
-        )
+        args = [
+            f"-i {quote(inputMetadataPath)}",
+            f"-o {quote(outputParticlesPath)}",
+            f"--save_metadata_stack {quote(outputMetadataPath)}",
+            "--keep_input_columns",
+            "--apply_transform",
+        ]
         self.runJob(
-            "xmipp_transform_geometry", args, numberOfMpi=self.numberOfMpi.get()
+            "xmipp_transform_geometry",
+            " ".join(args),
+            numberOfMpi=self.numberOfMpi.get(),
         )
 
     def _getInputParticlesPath(self):
@@ -490,18 +484,20 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         The particles are optionally CTF-corrected, collected into a single
         image stack, and transformed according to their stored 2D alignments.
         """
-        particlesMdPath = self._getInputParticlesPath()
+        alignmentInputPath = self._getInputParticlesPath()
 
-        # Correct CTF (if requested), align particles and extract particle stack
-        self._prepareParticleStack(
-            inputMetadataPath=particlesMdPath,
-            outputMetadataPath=self._getTmpPath("corrected.xmd"),
-            outputParticlesPath=self._getTmpPath("corrected.mrcs"),
-        )
+        if self.correctCtf.get():
+            correctedMetadataPath = self._getTmpPath("corrected.xmd")
+            self._correctCtf(
+                inputMetadataPath=alignmentInputPath,
+                outputMetadataPath=correctedMetadataPath,
+                outputParticlesPath=self._getTmpPath("corrected.mrcs"),
+            )
+            alignmentInputPath = correctedMetadataPath
 
         # Apply alignment to all images in the extracted stack
         self._applyAlignment(
-            inputMetadataPath=self._getTmpPath("corrected.xmd"),
+            inputMetadataPath=alignmentInputPath,
             outputMetadataPath=self._getPreprocessedMetadataPath(),
             outputParticlesPath=self._getPreprocessedParticlesPath(),
         )
@@ -522,56 +518,79 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         correctedAveragePath = self._getExtraPath("corrected_avgs.mrcs")
         originalAveragePath = self._getExtraPath("original_avgs.mrcs")
 
-        # Run the GMM average estimation script for all classes
-        args = (
-            f"--input-xmd {self._getPreprocessedMetadataPath()} "
-            f"--base-xmd {self._getInputParticlesPath()} "
-            f"--out-star {outputStarPath} "
-            f"--out-corrected-avgs {correctedAveragePath} "
-            f"--out-original-avgs {originalAveragePath} "
-            f"--device {device} "
-            "--overwrite " # allow the protocol to continue if some files have already been written
-
-        )
+        args = [
+            f"--input-xmd {quote(self._getPreprocessedMetadataPath())}",
+            f"--base-xmd {quote(self._getInputParticlesPath())}",
+            f"--out-star {quote(outputStarPath)}",
+            f"--out-corrected-avgs {quote(correctedAveragePath)}",
+            f"--out-original-avgs {quote(originalAveragePath)}",
+            f"--device {device}",
+            "--overwrite",  # allow retries to replace any average stacks written by a previous attempt
+        ]
 
         if self.saveLowHighWeightAverages.get():
-            args += f"--out-low-weight-avgs {self._getLowWeightAveragesPath()} "
-            args += f"--out-high-weight-avgs {self._getHighWeightAveragesPath()} "
+            args.extend(
+                [
+                    f"--out-low-weight-avgs {quote(self._getLowWeightAveragesPath())}",
+                    f"--out-high-weight-avgs {quote(self._getHighWeightAveragesPath())}",
+                ]
+            )
 
         if self.saveAverageDifferences.get():
-            args += f"--out-difference-avgs {self._getAverageDifferencesPath()} "
+            args.append(
+                f"--out-difference-avgs {quote(self._getAverageDifferencesPath())}"
+            )
 
         if self.gmmReweighting.get():
-            args += "--gmm "
-            args += f"--estimator-max-iter {self.internalEstimatorIterations.get()} "
-            args += f"--gmm-external-max-iter {self.gmmIterations.get()} "
-
-            args += f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()} "
-            args += f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()} "
+            args.extend(
+                [
+                    "--gmm",
+                    f"--estimator-max-iter {self.internalEstimatorIterations.get()}",
+                    f"--gmm-external-max-iter {self.gmmIterations.get()}",
+                    f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()}",
+                    f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()}",
+                ]
+            )
 
             if self.checkDegenerateGmm.get():
-                args += "--gmm-check-degenerate "
-                args += f"--gmm-min-component-sep {self.gmmMinSep.get()} "
-                args += f"--gmm-min-good-weight {self.gmmMinWeight.get()} "
+                args.extend(
+                    [
+                        "--gmm-check-degenerate",
+                        f"--gmm-min-component-sep {self.gmmMinSep.get()}",
+                        f"--gmm-min-good-weight {self.gmmMinWeight.get()}",
+                    ]
+                )
             else:
-                args += "--no-gmm-check-degenerate "
+                args.append("--no-gmm-check-degenerate")
 
             if self.saveGmmFits.get():
-                args += f"--out-gmm-diagnostics {self._getGmmDiagnosticsPath()} "
+                args.append(
+                    f"--out-gmm-diagnostics {quote(self._getGmmDiagnosticsPath())}"
+                )
         else:
-            args += "--no-gmm "
-            args += f"--estimator-max-iter {self.estimatorIterations.get()} "
+            args.extend(
+                [
+                    "--no-gmm",
+                    f"--estimator-max-iter {self.estimatorIterations.get()}",
+                ]
+            )
 
         estimatorType = self._getEstimatorType()
         if estimatorType == EstimatorType.FOURIER_MASKED:
-            args += "fourier_irls "
-            args += "--weight-approach per-image "
-            args += "--lowpass-mask "
-            args += f"--lowpass-mask-cutoff {self.lowpassCutoff.get()} "
+            args.extend(
+                [
+                    "fourier_irls",
+                    "--weight-approach per-image",
+                    "--lowpass-mask",
+                    f"--lowpass-mask-cutoff {self.lowpassCutoff.get()}",
+                ]
+            )
         else:
-            args += f"{estimatorType.label} "
+            args.append(estimatorType.label)
 
-        self.runJob("xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1)
+        self.runJob(
+            "xmipp_gmm_average_estimation", " ".join(args), env=env, numberOfMpi=1
+        )
 
     def createOutputStep(self):
         """
