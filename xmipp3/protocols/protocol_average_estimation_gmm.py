@@ -388,7 +388,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
         if self.correctCtf.get():
-            args += f"--sampling_rate {self.inputClasses.get().getSamplingRate()}"
+            args += f"--sampling_rate {self.inputClasses.get().getSamplingRate()} "
 
             if self.inputClasses.get().getImages().isPhaseFlipped():
                 args += "--phase_flipped "
