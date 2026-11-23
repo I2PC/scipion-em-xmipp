@@ -84,7 +84,7 @@ def add_estimator_section(form):
         EnumParam,
         default=EstimatorType.IRLS.value,
         choices=[e.label for e in EstimatorType],
-        help=("Type of robust estimator to use to compute the new class averages."),
+        help="Type of robust estimator to use to compute the new class averages.",
         label="Estimator type",
     )
     form.addParam(
@@ -92,24 +92,18 @@ def add_estimator_section(form):
         BooleanParam,
         default=True,
         help=(
-            "Apply GMM reweighting to the results of the estimator."
+            "Apply GMM reweighting to the results of the estimator. "
             "GMM reweighting makes the estimator more aggressive in "
             "rejecting possibly misaligned or corrupted particles. This means "
             "it can slightly improve performance on more contaminated datasets."
         ),
         label="GMM Reweighting",
     )
-    estimator_condition: dict[EstimatorType, str] = {
-        estimator_type: f"bool(estimatorType == {estimator_type.value})"
-        for estimator_type in EstimatorType
-    }
-    gmm_condition = "bool(gmmReweighting)"
 
-    # Non-GMM parameters: number of iterations and low pass filter cutoff
     form.addParam(
         "estimatorIterations",
         IntParam,
-        condition="not(" + gmm_condition + ")",
+        condition="not gmmReweighting",
         default=30,
         help="Number of estimator iterations",
         label="Estimator iterations",
@@ -117,7 +111,7 @@ def add_estimator_section(form):
     form.addParam(
         "lowpassCutoff",
         FloatParam,
-        condition=estimator_condition[EstimatorType.FOURIER_MASKED],
+        condition=f"estimatorType == {EstimatorType.FOURIER_MASKED.value}",
         default=0.25,
         help="Normalized frequency cutoff for the estimator's low pass mask",
         label="Lowpass Cutoff",
@@ -127,7 +121,7 @@ def add_estimator_section(form):
     form.addParam(
         "internalEstimatorIterations",
         IntParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=1,
         help="Number of iterations for the internal estimator",
         label="Internal iterations",
@@ -135,7 +129,7 @@ def add_estimator_section(form):
     form.addParam(
         "gmmIterations",
         IntParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=10,
         help="Number of GMM iterations",
         label="GMM iterations",
@@ -144,11 +138,10 @@ def add_estimator_section(form):
     form.addParam(
         "checkDegenerateGmm",
         BooleanParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=True,
         help=(
-            "If using a GMM-type estimator, this option makes sure the GMM model "
-            "is checked for degeneracy after the last iteration in each class. "
+            "Check the GMM model for degeneracy during fitting. "
             "The model is considered degenerate if the two GMM components are too "
             "close together, or if the component associated with good particles "
             "has too little weight."
@@ -159,7 +152,7 @@ def add_estimator_section(form):
     form.addParam(
         "gmmMinSep",
         FloatParam,
-        condition=gmm_condition,
+        condition="gmmReweighting and checkDegenerateGmm",
         default=0.05,
         help="Minimum relative separation between GMM components.",
         label="Minimum GMM separation",
@@ -168,7 +161,7 @@ def add_estimator_section(form):
     form.addParam(
         "gmmMinWeight",
         FloatParam,
-        condition=gmm_condition,
+        condition="gmmReweighting and checkDegenerateGmm",
         default=0.6,
         help="Minimum weight for the good component of the GMM.",
         label="Minimum GMM good weight",
@@ -178,7 +171,7 @@ def add_estimator_section(form):
     form.addParam(
         "gmmInitialBadWeight",
         FloatParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=0.05,
         help="Initial weight for the GMM component with a lower mean weight",
         expertLevel=LEVEL_ADVANCED,
@@ -187,7 +180,7 @@ def add_estimator_section(form):
     form.addParam(
         "gmmInitialBadQuantile",
         FloatParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=0.05,
         help=(
             "Quantile used to calculate the mean for the GMM component with a "
@@ -196,6 +189,15 @@ def add_estimator_section(form):
         ),
         expertLevel=LEVEL_ADVANCED,
         label="Initial bad component mean",
+    )
+    form.addParam(
+        "saveGmmFits",
+        BooleanParam,
+        condition="gmmReweighting",
+        default=False,
+        help="Save extra files with information about GMM fits.",
+        label="Save GMM fits?",
+        expertLevel=LEVEL_ADVANCED,
     )
 
 
@@ -240,14 +242,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
         # Saving parameters
-        form.addParam(
-            "saveGmmFits",
-            BooleanParam,
-            default=False,
-            help="Save extra files with information about GMM fits.",
-            label="Save GMM fits?",
-            expertLevel=LEVEL_ADVANCED,
-        )
         form.addParam(
             "saveLowHighWeightAverages",
             BooleanParam,
