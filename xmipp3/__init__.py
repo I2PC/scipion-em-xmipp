@@ -94,6 +94,14 @@ class Plugin(pwem.Plugin):
         if not cls.__check_INSTALL_CONDA_DEPENDENCIES():
             cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
             environ.addLibrary(cudaLib)
+        else:
+            cudaInclude = os.path.join(
+                os.environ['CONDA_PREFIX'],
+                'targets', 'x86_64-linux', 'include' )
+            currentCpath = environ.get('CPATH', '')
+            environ['CPATH'] = os.pathsep.join(
+                filter(None, [cudaInclude, currentCpath])
+            )
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
