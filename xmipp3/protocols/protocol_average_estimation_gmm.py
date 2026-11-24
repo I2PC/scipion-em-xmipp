@@ -190,15 +190,6 @@ def add_estimator_section(form):
         expertLevel=LEVEL_ADVANCED,
         label="Initial bad component mean",
     )
-    form.addParam(
-        "saveGmmFits",
-        BooleanParam,
-        condition="gmmReweighting",
-        default=False,
-        help="Save extra files with information about GMM fits.",
-        label="Save GMM fits?",
-        expertLevel=LEVEL_ADVANCED,
-    )
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -420,9 +411,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getPreprocessedMetadataPath(self):
         return self._getExtraPath("preprocessed.xmd")
 
-    def _getGmmDiagnosticsPath(self):
-        return self._getExtraPath("gmmDiagnostics")
-
     def _getLowWeightAveragesPath(self):
         return self._getExtraPath("lowWeightAverages.mrcs")
 
@@ -536,10 +524,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             else:
                 args.append("--no-gmm-check-degenerate")
 
-            if self.saveGmmFits.get():
-                args.append(
-                    f"--out-gmm-diagnostics {quote(self._getGmmDiagnosticsPath())}"
-                )
         else:
             args.extend(
                 [
