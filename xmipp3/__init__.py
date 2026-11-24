@@ -144,9 +144,8 @@ class Plugin(pwem.Plugin):
         """
         print(f'Environment: {__import__("os").environ.get(XMIPP3_INSTALL_CONDA_DEPENDENCIES)}')
         print(f'getVar: {cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)}')
-        print(f'{Config.getVars()}')
-        value = Config.getVars().get("XMIPP3_INSTALL_CONDA_DEPENDENCIES",INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)
-        print(f'scipion_conf {value.upper() == "ON"}')
+        value = Config.getVars().get(XMIPP3_INSTALL_CONDA_DEPENDENCIES,INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)
+        print(f'scipion_conf XMIPP3_INSTALL_CONDA_DEPENDENCIES={value}')
 
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
