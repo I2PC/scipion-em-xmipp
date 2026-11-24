@@ -38,7 +38,8 @@ from scipion.install.funcs import CondaCommandDef
 from .base import *
 from .version import *
 from .constants import (XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN,
-        XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL, XMIPP3_INSTALL_CONDA_DEPENDENCIES)
+        XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL,
+        XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _currentDepVersion = '1.0'
@@ -84,7 +85,7 @@ class Plugin(pwem.Plugin):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
         cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
         cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
-        cls._defineVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, 'OFF')
+        cls._defineVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -95,6 +96,8 @@ class Plugin(pwem.Plugin):
         if not cls.__check_INSTALL_CONDA_DEPENDENCIES():
             cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
             environ.addLibrary(cudaLib)
+        else:
+            print('INSTALL_CONDA_DEPENDENCIES TRUE')
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
@@ -139,6 +142,11 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
+        print(f'Environment: {__import__("os").environ.get(XMIPP3_INSTALL_CONDA_DEPENDENCIES)}')
+        print(f'getVar: {cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)}')
+        print(f'{Config.getVars()}')
+        value = Config.getVars().get("XMIPP3_INSTALL_CONDA_DEPENDENCIES",INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)
+        print(f'scipion_conf {value.upper() == "ON"}')
 
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
@@ -166,7 +174,7 @@ class Plugin(pwem.Plugin):
         varsToEnv = {}
         cmd_create_xmipp3 = ''
         if cls.__check_INSTALL_CONDA_DEPENDENCIES():
-            varsToEnv['XMIPP3_INSTALL_CONDA_DEPENDENCIES'] = 'ON' #Pass the variable through conda
+            varsToEnv[XMIPP3_INSTALL_CONDA_DEPENDENCIES] = 'ON' #Pass the variable through conda
             cmd_compile_xmipp = f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all '
             cmd_xmipp3_installer = f'conda run -n {xmipp3_env_name} pip install "{xmipp3_installer_version}" &&'
             neededProgs = ['git', 'conda']
@@ -218,7 +226,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def __check_INSTALL_CONDA_DEPENDENCIES(cls):
-        return cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, "OFF").upper() == "ON"
+        return cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE).upper() == "ON"
 
     @classmethod
     def __create_xmipp3_environment(cls):
