@@ -250,14 +250,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             label="Save averages of particles with lowest/highest weights?",
             expertLevel=LEVEL_ADVANCED,
         )
-        form.addParam(
-            "saveAverageDifferences",
-            BooleanParam,
-            default=False,
-            help="For each class, save the difference between the regular average and the robust average.",
-            label="Save average differences?",
-            expertLevel=LEVEL_ADVANCED,
-        )
 
         add_estimator_section(form)
 
@@ -437,9 +429,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getHighWeightAveragesPath(self):
         return self._getExtraPath("highWeightAverages.mrcs")
 
-    def _getAverageDifferencesPath(self):
-        return self._getExtraPath("averageDifferences.mrcs")
-
     def _getEstimatorType(self) -> EstimatorType:
         return EstimatorType(self.estimatorType.get())
 
@@ -523,11 +512,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                     f"--out-low-weight-avgs {quote(self._getLowWeightAveragesPath())}",
                     f"--out-high-weight-avgs {quote(self._getHighWeightAveragesPath())}",
                 ]
-            )
-
-        if self.saveAverageDifferences.get():
-            args.append(
-                f"--out-difference-avgs {quote(self._getAverageDifferencesPath())}"
             )
 
         if self.gmmReweighting.get():
