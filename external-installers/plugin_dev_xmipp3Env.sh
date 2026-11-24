@@ -20,7 +20,7 @@
 
 
 set -Ee
-trap 'echo "ERROR: Script failed at line $LINENO: $BASH_COMMAND" >&2' ERR
+trap 'status=$?; echo "ERROR: Installation failed at line $LINENO (exit code: $status)." >&2' ERR
 
 #------------------------------------------------
 BUNDLE_DIR="xmipp-TestEnv"
