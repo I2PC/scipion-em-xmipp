@@ -142,10 +142,7 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        print(f'Environment: {__import__("os").environ.get(XMIPP3_INSTALL_CONDA_DEPENDENCIES)}')
-        print(f'getVar: {cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)}')
-        value = Config.getVars().get(XMIPP3_INSTALL_CONDA_DEPENDENCIES,INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)
-        print(f'scipion_conf XMIPP3_INSTALL_CONDA_DEPENDENCIES={value}')
+        print(f'{XMIPP3_INSTALL_CONDA_DEPENDENCIES}: {cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)}')
 
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
