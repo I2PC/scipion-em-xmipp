@@ -95,13 +95,6 @@ class Plugin(pwem.Plugin):
         if not cls.__check_INSTALL_CONDA_DEPENDENCIES():
             cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
             environ.addLibrary(cudaLib)
-        # else:
-        #     cudaInclude = os.path.join(
-        #         os.environ['CONDA_PREFIX'],
-        #         'targets', 'x86_64-linux', 'include' )
-        #     environ['NVCC_PREPEND_FLAGS'] = (
-        #         f'-I{cudaInclude}'
-        #     )
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
@@ -225,7 +218,6 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def __check_INSTALL_CONDA_DEPENDENCIES(cls):
-        #return os.environ.get(XMIPP3_INSTALL_CONDA_DEPENDENCIES, "OFF").upper() == "ON"
         return cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, "OFF").upper() == "ON"
 
     @classmethod
