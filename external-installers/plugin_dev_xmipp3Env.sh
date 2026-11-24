@@ -8,7 +8,7 @@
 # - Make the script executable before running it:
 #       chmod +x xmippPluginInstall.sh
 # - Run it using:
-#       ./xmippPluginInstall.sh
+#       ./plugin_dev_xmipp3Env.sh
 
 #------------------------------------------------
 # User configuration

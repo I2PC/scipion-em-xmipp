@@ -8,7 +8,7 @@
 # - Make the script executable before running it:
 #       chmod +x xmippPluginInstall.sh
 # - Run it using:
-#       ./xmippPluginInstall.sh
+#       ./plugin_dev_systemEnv.sh
 
 #------------------------------------------------
 # User configuration
@@ -23,8 +23,8 @@ trap 'echo "ERROR: Script failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 #------------------------------------------------
 BUNDLE_DIR="xmipp-TestEnv"
-XMIPP_BRANCH="${XMIPP_BRANCH:-omad_xmipp3_env}" #-main
-SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-$XMIPP_BRANCH}" # -main
+XMIPP_BRANCH="${XMIPP_BRANCH:-main}" #-main or -omad_xmipp3_env or ...
+SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-main}" # -main or -$XMIPP_BRANCH ...
 ENV_NAME="xmipp3"
 PYTHON_VERSION="3.11"
 XMIPP3_ENV_VERSION="xmipp3-installer>=2.2.0,<3"
