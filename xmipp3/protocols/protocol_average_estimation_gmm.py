@@ -38,11 +38,14 @@ from pyworkflow.constants import BETA
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (
+    GPU_LIST,
+    USE_GPU,
     BooleanParam,
     EnumParam,
     FloatParam,
     IntParam,
     PointerParam,
+    StringParam,
 )
 
 from xmipp3.base import XmippProtocol
@@ -206,6 +209,26 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
+        form.addHidden(
+            USE_GPU,
+            BooleanParam,
+            default=True,
+            label="Use GPU for execution",
+            help="Select *Yes* to run the averaging estimator on a GPU or *No* to run it on the CPU.",
+        )
+        form.addHidden(
+            GPU_LIST,
+            StringParam,
+            default="0",
+            expertLevel=LEVEL_ADVANCED,
+            label="Choose GPU IDs",
+            help=(
+                "GPU IDs available for local execution. The estimator uses the "
+                "first visible GPU. For queued jobs, GPU allocation is handled "
+                "by the scheduler."
+            ),
+        )
+
         form.addSection(label="Input")
         form.addParam(
             "inputClasses",
@@ -243,18 +266,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
         add_estimator_section(form)
-
-        # TODO: instead of this, use the standard way to choose GPU ID in xmipp protocols
-        form.addSection(label="Compute")
-        form.addParam(
-            "useGpu",
-            BooleanParam,
-            default=True,
-            label="Use GPU?",
-            help="If you set to *Yes*, the estimation process will try to use the GPU "
-            "for hardware acceleration. This might speed up the process if CUDA is available.",
-        )
-
         form.addParallelSection(threads=0, mpi=4)
 
     # --------------------------- INSERT steps functions -----------------------
@@ -477,7 +488,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         average stacks.
         """
         env = self.getCondaEnv()
-        device = "cuda" if self.useGpu.get() else "cpu"
+        use_gpu = self.usesGpu()
+        device = "cuda" if use_gpu else "cpu"
+        if use_gpu and not self.useQueue():
+            env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, self.getGpuList()))
 
         # Prepare output paths for the star file with weights and averages
         outputStarPath = self._getExtraPath("particles.star")
