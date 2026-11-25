@@ -40,8 +40,9 @@ import pyworkflow.utils as pwutils
 
 from pwem.protocols import ProtCTFMicrographs
 import pwem.emlib.metadata as md
+from pwem import emlib
 
-from xmipp3.base import isMdEmpty
+#from xmipp3.base import isMdEmpty
 from xmipp3.convert import readCTFModel
 
 from pwem.emlib import Image
@@ -748,7 +749,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                     '-i %s --query select "%s" -o %s'
                     % (fnEval, criterion, fnRejected))
 
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             mdCTFparam = md.MetaData(fnEval)
             mdCTFparam.setValue(md.MDL_ENABLED, -1, mdCTFparam.firstObject())
             mdCTFparam.write(fnEval)
@@ -764,7 +765,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                     % (fnEval, criterion, fnRejected))
 
         retval = True
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             retval = False
             mdCTFparam = md.MetaData(fnEval)
             mdCTFparam.setValue(md.MDL_ENABLED, -1, mdCTFparam.firstObject())
@@ -780,62 +781,62 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritFirstZero<5" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritFirstZero<5")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritMaxFreq>20" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritMaxFreq>20")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritfirstZeroRatio<0.9" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritfirstZeroRatio<0.9")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritfirstZeroRatio>1.1" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritfirstZeroRatio>1.1")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritFirstMinFirstZeroRatio>10" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritFirstMinFirstZeroRatio>10")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritCorr13<0.27" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritCorr13<0.27")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritCtfMargin<1" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritCtfMargin<1")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritNonAstigmaticValidty<0" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritNonAstigmaticValidty<0")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritNonAstigmaticValidty>6.5" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritNonAstigmaticValidty>6.5")
         #self.runJob("xmipp_metadata_utilities",
         #            '-i %s --query select "ctfBgGaussianSigmaU<1000" -o %s'
         #            % (fnEval, fnRejected))
-        #if not isMdEmpty(fnRejected):
+        #if not emlib.isMdEmpty(fnRejected):
         #    print("Rejected ctfBgGaussianSigmaU<1000")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritIceness>1.03" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritIceness>1.03")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritPsdCorr90<0.1" -o %s'
                     % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
+        if not emlib.isMdEmpty(fnRejected):
             print("Rejected ctfCritPsdCorr90<0.1")
 
     def _createCtfModel(self, mic, updateSampling=True):

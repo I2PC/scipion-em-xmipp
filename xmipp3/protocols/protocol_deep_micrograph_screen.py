@@ -43,7 +43,6 @@ from matplotlib.patches import Circle
 from matplotlib.collections import PatchCollection
 
 from xmipp3.base import XmippProtocol
-from xmipp_base import createMetaDataFromPattern
 from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 from pyworkflow import BETA, UPDATED, NEW, PROD
@@ -445,7 +444,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
     def _computeMaskForMicrographList(self, micList):
         """ Functional Step. Overrided in general protExtracParticle """
-
+        from xmipp3.base import createMetaDataFromPattern
         micsFnDone = self.getDoneMics()
         micLisfFn = [mic.getFileName() for mic in micList
                      if not pwutils.removeBaseExt(mic.getFileName()) in micsFnDone]

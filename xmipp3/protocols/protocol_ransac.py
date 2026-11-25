@@ -32,7 +32,6 @@ from pyworkflow.utils.path import cleanPath, copyFile
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam,
                                         STEPS_PARALLEL, LEVEL_ADVANCED, USE_GPU, GPU_LIST)
-
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtInitialVolume
 from pwem.objects import SetOfClasses2D
@@ -40,7 +39,7 @@ from pwem.objects import SetOfClasses2D
 from pwem import emlib
 from xmipp3.convert import (writeSetOfClasses2D, readSetOfVolumes,
                             writeSetOfParticles)
-from xmipp3.base import isMdEmpty, isXmippCudaPresent
+from xmipp3.base import  isXmippCudaPresent
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
@@ -713,7 +712,7 @@ class XmippProtRansac(ProtInitialVolume):
             self._log.info("Best volume %d = %s" % (indx, fnBestAngles))
             if not self.useAll:
                 self.runJob("xmipp_metadata_utilities","-i %s -o %s --query select \"maxCC>%f \" --mode append" %(fnBestAnglesOut,fnBestAnglesOut,threshold))
-                if not isMdEmpty(fnBestAnglesOut):
+                if not emlib.isMdEmpty(fnBestAnglesOut):
                     indx += 1
             else:
                 indx += 1
