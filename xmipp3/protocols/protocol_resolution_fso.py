@@ -33,7 +33,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
 
 from pyworkflow import BETA, UPDATED, NEW, PROD
-from pwem.objects import Volume
+from pwem.objects import Volume, FSC
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
@@ -263,6 +263,8 @@ class XmippProtFSO(ProtAnalysis3D):
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
+        self.fsc05 = Float()
+        self.fsc0143 = Float()
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -400,11 +402,22 @@ class XmippProtFSO(ProtAnalysis3D):
 
 
     def createOutputStep(self):
-        """
-        There is no output for this method. The result is a plot similar to the FSC, but Scipion has no object for it
-        This method is left with a pass to leave flexible enought in a possible future
-        """
-        pass
+        fscXmdPath= self._getExtraPath("GlobalFSC.xmd")
+        fsc = FSC()
+        fsc.loadFromMd(mdObj=fscXmdPath, labelX="resolutionFreqFourier", labelY="resolutionFRC")
+        self.fsc05.set(Float(fsc.calculateResolution(threshold = 0.5)))
+        self._store(self.fsc05)
+        self.fsc0143.set(Float(fsc.calculateResolution(threshold = 0.143)))
+        self._store(self.fsc0143)
+        print(self.fsc0143)
+
+        # Send to Scipion Output
+        self._defineOutputs(outputFSC=fsc)
+        if self.halfVolumesFile.get():
+            self._defineSourceRelation(self.inputHalves.get(), fsc)
+        else:
+            self._defineSourceRelation(self.half1.get(), fsc)
+            self._defineSourceRelation(self.half2.get(), fsc)
 
     # --------------------------- INFO functions ------------------------------
     def _methods(self):
@@ -427,8 +440,12 @@ class XmippProtFSO(ProtAnalysis3D):
         return errors
 
     def _summary(self):
-        summary = []
-        summary.append(" ")
+        summary = [""]
+        if self.fsc05.hasValue():
+            summary.append(f"FSC at 0.5: *{self.fsc05.get():.4f}*")
+        if self.fsc0143.hasValue():
+            summary.append(f"FSC at 0.143: *{self.fsc0143.get():.4f}*")
+
         return summary
 
     def _citations(self):

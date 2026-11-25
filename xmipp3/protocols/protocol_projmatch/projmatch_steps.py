@@ -39,8 +39,6 @@ from pyworkflow.utils import getMemoryAvailable, removeExt, cleanPath, makePath,
 
 from pwem import emlib
 from xmipp3.convert import createClassesFromImages, convertToMrc
-from xmipp3.base import isMdEmpty
-
 
 ctfBlockName = 'ctfGroup'
 refBlockName = 'refGroup'
@@ -579,7 +577,7 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
         if self.useGpu.get():
             args += ' --thr %d' % threads
     
-    if isMdEmpty(mdFn):
+    if emlib.isMdEmpty(mdFn):
         img = emlib.Image()
         img.read(maskFn)
         #(x,y,z,n) = img.getDimensions()
