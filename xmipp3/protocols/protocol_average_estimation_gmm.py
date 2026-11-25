@@ -563,28 +563,41 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             "xmipp_gmm_average_estimation", " ".join(args), env=env, numberOfMpi=1
         )
 
-    def createOutputStep(self):
+    def _readOutputWeights(self, weightColumns):
         """
-        Create the particle and class outputs of the protocol.
-
-        Particle robust weights and class assignments are restored from the
-        estimator metadata. Two sets of 2D classes are created using the robust
-        and conventional class averages as representatives.
+        Read aligned weight columns from STAR and index them by particle ID. 
+        Returns a dictionary keyed by item ID whose values are tuples with the weight column
+        values for each particle. The tuples follow the same order as ``weightColumns``.
         """
         outputParticlesMd = md.MetaData(self._getExtraPath("particles.star"))
+        columnNames = ["itemId", *weightColumns]
+        labels = [md.MDL_ITEM_ID, *(md.str2Label(col) for col in weightColumns)]
+        for name, label in zip(columnNames, labels):
+            if label < 0 or not outputParticlesMd.containsLabel(label):
+                raise RuntimeError(
+                    f"Missing column {name} in robust averaging output metadata."
+                )
 
-        weightColumns = self._getEstimatorWeightColumns()
-
-        weightsById: dict[int, dict[str, float]] = {}
-        for row in md.iterRows(outputParticlesMd):
-            itemId = row.getValue(md.MDL_ITEM_ID)
-
+        columns = [outputParticlesMd.getColumnValues(label) for label in labels]
+        weightsById = {}
+        for itemId, weights in zip(columns[0], zip(*columns[1:])):
             if itemId in weightsById:
                 raise RuntimeError(
                     f"Duplicated itemId={itemId} in robust averaging output metadata."
                 )
+            weightsById[itemId] = weights
+        return weightsById
 
-            weightsById[itemId] = {col: row.getValue(col) for col in weightColumns}
+    def createOutputStep(self):
+        """
+        Create the particle and class outputs of the protocol.
+
+        Apply the estimator's particle weights and build two sets of 2D
+        classes using the robust and conventional averages as representatives.
+        """
+        weightColumns = self._getEstimatorWeightColumns()
+        weightsById = self._readOutputWeights(weightColumns)
+        weightAttributes = [WEIGHT_COLUMN_TO_ATTRIBUTE[col] for col in weightColumns]
 
         # The estimation script writes averages following sorted class IDs
         classIds = self._getSelectedClassIds()
@@ -614,12 +627,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 outputParticle = particle.clone()
                 outputParticle.setClassId(classId)
 
-                for col in weightColumns:
-                    setattr(
-                        outputParticle,
-                        WEIGHT_COLUMN_TO_ATTRIBUTE[col],
-                        Float(weights[col]),
-                    )
+                for attribute, weight in zip(weightAttributes, weights):
+                    setattr(outputParticle, attribute, Float(weight))
 
                 outputParticles.append(outputParticle)
 
@@ -688,6 +697,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             representative.setLocation(classIndex[classId], averagesPath)
             representative.setSamplingRate(samplingRate)
 
-        outputClasses.classifyItems(updateClassCallback=updateClass)
+        outputClasses.classifyItems(updateClassCallback=updateClass, doClone=False)
 
         return outputClasses
