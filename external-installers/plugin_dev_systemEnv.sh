@@ -72,13 +72,7 @@ if [ -z "$CONDA_BASE" ] || [ ! -f "$CONDA_BASE/etc/profile.d/conda.sh" ]; then
 fi
 
 source "$CONDA_BASE/etc/profile.d/conda.sh"
-
 echo "Conda initialized from: $CONDA_BASE"
-
-echo "- Configuring environment variable"
-
-export XMIPP3_INSTALL_CONDA_DEPENDENCIES=OFF
-echo "XMIPP3_INSTALL_CONDA_DEPENDENCIES=$XMIPP3_INSTALL_CONDA_DEPENDENCIES"
 
 echo "- Cloning and install Xmipp bundle"
 
@@ -91,7 +85,7 @@ echo "Cloning Xmipp bundle..."
 git clone --branch "$XMIPP_BRANCH" https://github.com/I2PC/xmipp3 "$BUNDLE_DIR"
 cd "$BUNDLE_DIR"
 echo "Running Xmipp installer..."
-./xmipp
+scipion3_cmd  run ./xmipp
 
 # Clone Scipion Xmipp plugin
 

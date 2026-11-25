@@ -148,7 +148,6 @@ class Plugin(pwem.Plugin):
         COMPILE_TARGETS = ['dist/bin/xmipp_image_header',  'dist/xmipp.bashrc']
 
         if Config.isCondaInstallation() and not cls.__check_INSTALL_CONDA_DEPENDENCIES():
-            print('Installing icu and libstdcxx-ng on scipion env')
             CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
             CONDA_ICU_PACKAGE = 'icu=72'
             condaEnvPath = os.environ['CONDA_PREFIX']

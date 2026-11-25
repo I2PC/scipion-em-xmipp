@@ -24,8 +24,8 @@ trap 'status=$?; echo "ERROR: Installation failed at line $LINENO (exit code: $s
 
 #------------------------------------------------
 BUNDLE_DIR="xmipp-TestEnv"
-XMIPP_BRANCH="${XMIPP_BRANCH:-omad_xmipp3_env}" #-main
-SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-$XMIPP_BRANCH}" # -main
+XMIPP_BRANCH="${XMIPP_BRANCH:-main}" #-main or omad_xmipp3_env
+SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-main}" # -main or $XMIPP_BRANCH
 ENV_NAME="xmipp3"
 PYTHON_VERSION="3.11"
 XMIPP3_ENV_VERSION="xmipp3-installer>=2.2.0,<3"
@@ -95,18 +95,13 @@ echo "Activated Conda environment: $ENV_NAME"
 # Install xmipp3-installer
 
 echo "- Installing xmipp3-installer..."
-#pip install "xmipp3-installer>=2.2.0,<3" "$XMIPP3_ENV_VERSION"
+pip install  "$XMIPP3_ENV_VERSION"
 # Temporary solution until 2.2.0 is released
-if [ ! -d "xmipp3-installer" ]; then
-    git clone https://github.com/I2PC/xmipp3-installer.git
-fi
-pip install -e ./xmipp3-installer
+#if [ ! -d "xmipp3-installer" ]; then
+#    git clone https://github.com/I2PC/xmipp3-installer.git
+#fi
+#pip install -e ./xmipp3-installer
 
-
-echo "- Configuring environment variable"
-
-export XMIPP3_INSTALL_CONDA_DEPENDENCIES=ON
-echo "XMIPP3_INSTALL_CONDA_DEPENDENCIES=$XMIPP3_INSTALL_CONDA_DEPENDENCIES"
 
 echo "- Cloning and install Xmipp bundle"
 
