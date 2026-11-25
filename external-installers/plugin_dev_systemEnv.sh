@@ -6,7 +6,7 @@
 # - This script must be located in the Scipion root directory, alongside the
 #   scipion3 executable.
 # - Make the script executable before running it:
-#       chmod +x xmippPluginInstall.sh
+#       chmod +x plugin_dev_systemEnv.sh
 # - Run it using:
 #       ./plugin_dev_systemEnv.sh
 
@@ -19,15 +19,12 @@
 #                       Defaults to XMIPP_BRANCH if not specified.
 
 set -Ee
-trap 'echo "ERROR: Script failed at line $LINENO: $BASH_COMMAND" >&2' ERR
+trap 'echo "ERROR: Script failed at line $LINENO: $BASH_COMMAND" >&2; exit 1' ERR
 
 #------------------------------------------------
 BUNDLE_DIR="xmipp-TestEnv"
 XMIPP_BRANCH="${XMIPP_BRANCH:-main}" #-main or -omad_xmipp3_env or ...
 SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-main}" # -main or -$XMIPP_BRANCH ...
-ENV_NAME="xmipp3"
-PYTHON_VERSION="3.11"
-XMIPP3_ENV_VERSION="xmipp3-installer>=2.2.0,<3"
 #------------------------------------------------
 echo "=========================================="
 echo "Xmipp installation configuration"

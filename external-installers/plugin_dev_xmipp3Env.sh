@@ -6,7 +6,7 @@
 # - This script must be located in the Scipion root directory, alongside the
 #   scipion3 executable.
 # - Make the script executable before running it:
-#       chmod +x xmippPluginInstall.sh
+#       chmod +x plugin_dev_xmipp3Env.sh
 # - Run it using:
 #       ./plugin_dev_xmipp3Env.sh
 
