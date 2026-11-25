@@ -28,26 +28,27 @@ import numpy as np
 from itertools import combinations
 import os
 import math
+import time
 from datetime import datetime
 from pyworkflow import VERSION_3_0
-from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol import STEPS_PARALLEL, ProtStreamingBase
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED, FloatParam, GE, GT, Range)
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
-import pyworkflow.protocol.constants as cons
 from pwem.objects import SetOfMicrographs, Image, Set, Float
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
 from pwem.emlib import Image
 from xmipp3.convert import getScipionObj
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 from pyworkflow import UPDATED, PROD
 
 OUTPUT_MICS = "outputMicrographs"
 OUTPUT_MICS_DISCARDED = "discardedMicrographs"
 AUTOMATIC_WINDOW_SIZES = [4096, 2048, 1024, 512, 256]
 
-class XmippProtTiltAnalysis(ProtMicrographs):
+class XmippProtTiltAnalysis(XmippStreamingBase, ProtStreamingBase, ProtMicrographs):
     """ Estimates the tilt angle of a micrograph by analyzing power spectral
     density correlations across different image quadrants. This helps discard
     the ones that have a tilt so high it could negatively affect the posterior
@@ -367,6 +368,8 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                         OUTPUT_MICS_DISCARDED: SetOfMicrographs
                         }
     PARALLEL_BATCH_SIZE = 8
+    MIC_VISIBILITY_MAX_ATTEMPTS = 3
+    MIC_VISIBILITY_RETRY_DELAY = 1  # seconds
 
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)
@@ -408,154 +411,199 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                       help='''By default, micrographs will be divided into an output set and a discarded set based'''
                            ''' on the mean and std threshold.''')
 
+        self._defineStreamingParams(form)
+
         form.addParallelSection(threads=4, mpi=1)
 
     # -------------------------- STEPS functions ------------------------------
-    def _insertAllSteps(self):
-        """ Insert the steps to perform CTF estimation, or re-estimation,
-        on a set of micrographs.
-        """
+    def stepsGeneratorStep(self) -> None:
+        self.newDeps = []
         self.initializeStep()
-        self._insertFunctionStep(self.createOutputStep,
-                                 prerequisites=[], wait=True, needsGPU=False)
+
+        while not getattr(self, 'finished', False):
+            self._raiseIfProcessingStepFailed()
+            self._checkNewInput()
+            self._checkNewOutput()
+            self._raiseIfProcessingStepFailed()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep, prerequisites=self.newDeps, needsGPU=False)
+
 
     def initializeStep(self):
-        self.samplingRate = self.inputMicrographs.get().getSamplingRate()
-        self.micsFn = self.inputMicrographs.get().getFileName()
+        inputMicrographs = self.inputMicrographs.get()
+
+        self.samplingRate = inputMicrographs.getSamplingRate()
         self.stats = {}
         # Important to have both:
         self.insertedIds = [] # Contains images that have been inserted in a Step (checkNewInput).
         self.processedIds = [] # Contains images that have been processed in a Step (checkNewOutput).
-        self.isStreamClosed = self.inputMicrographs.get().isStreamClosed()
+        self._lastInputId = 0
+        self.isStreamClosed = inputMicrographs.isStreamClosed()
         self.windowSize = self.getWindowSize()
 
     def createOutputStep(self):
         self._closeOutputSet()
 
-    def _loadInputSet(self, micsFn):
-        """ Load the input set of mics and create a list. """
-        self.debug("Loading input db: %s" % micsFn)
-        micSet = SetOfMicrographs(filename=micsFn)
-        micSet.loadAllProperties()
-        self.isStreamClosed = micSet.isStreamClosed()
-        micSet.close()
-        self.debug("Closed db.")
-        return micSet
-
-    def _stepsCheck(self):
-        # Input micrograph set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
-
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
     def _checkNewInput(self):
-        # Check if there are new micrographs to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(self.micsFn))
-        self.debug('Last check: %s, modification: %s'
-                   % (pwutils.prettyTime(self.lastCheck),
-                      pwutils.prettyTime(mTime)))
-        # If the input micrographs.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.insertedIds: # If this is empty it is dut to a static "continue" action or it is the first round
-            return None
+        with self._lock:
+            micSet = self._loadLogicalSet(self.inputMicrographs)
 
-        # Open input micrographs.sqlite and close it as soon as possible
-        micSet = self._loadInputSet(self.micsFn)
-        micSetIds = micSet.getIdSet()
-        newIds = [idMic for idMic in micSetIds if idMic not in self.insertedIds]
+            try:
+                newIds, self._lastInputId = self._discoverIdsAfter(
+                    micSet,
+                    self._lastInputId,
+                )
+                producerClosed = micSet.isStreamClosed()
+                newIds, terminalConsistent = self._reconcileClosedStreamIds(
+                    micSet,
+                    newIds,
+                    set(self.insertedIds),
+                    producerClosed,
+                )
+                self.isStreamClosed = producerClosed and terminalConsistent
+            finally:
+                micSet.close()
 
-        self.isStreamClosed = micSet.isStreamClosed()
-        self.lastCheck = datetime.now()
-        micSet.close()
+            if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
+                doneIds, _, _, _ = self._getAllDoneIds()
+                doneIdsSet = set(doneIds)
+                skipIds = [micId for micId in newIds if micId in doneIdsSet]
+                newIds = [micId for micId in newIds if micId not in doneIdsSet]
+                self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
+                self.insertedIds = list(doneIds) # During the first round of "Continue" action it has to be filled
 
-        outputStep = self._getFirstJoinStep()
-
-        if self.isContinued() and not self.insertedIds: # For "Continue" action and the first round
-            doneIds, _, _, _ = self._getAllDoneIds()
-            skipIds = list(set(newIds).intersection(set(doneIds)))
-            newIds = list(set(newIds).difference(set(doneIds)))
-            self.info("Skipping Mics with ID: %s, seems to be done" % skipIds)
-            self.insertedIds = doneIds # During the first round of "Continue" action it has to be filled
-
-        if newIds:
-            fDeps = self._insertNewMicrographSteps(newIds)
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-            self.updateSteps()
+            if newIds:
+                fDeps = self._insertNewMicrographSteps(newIds)
+                self.newDeps.extend(fDeps)
+                self.updateSteps()
 
     def _checkNewOutput(self):
-        doneListIds, _, _, _ = self._getAllDoneIds()
-        processedIds = self.processedIds
-        newDone = [micId for micId in processedIds if micId not in doneListIds]
-        allDone = len(doneListIds) + len(newDone)
-        maxMicSize = self._loadInputSet(self.micsFn).getSize()
-        # We have finished when there is not more input movies
-        # (stream closed) and the number of processed movies is
-        # equal to the number of inputs
-        self.finished = self.isStreamClosed and allDone == maxMicSize
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        with self._lock:
+            doneListIds, _, _, _ = self._getAllDoneIds()
+            # Membership against a list is linear, so this comprehension
+            # costs O(done x processed) on every single poll: a second per
+            # poll at 20k micrographs, and tens of minutes at a million.
+            doneIdSet = set(doneListIds)
+            processedIds = list(self.processedIds)
+            # Left out once, because their statistics failed: not looked at
+            # again, but done.
+            excludedIds = self._excludedMicIds()
+            newDone = [micId for micId in processedIds
+                       if micId not in doneIdSet and micId not in excludedIds]
+            allDone = len(doneIdSet) + len(newDone) + len(excludedIds)
+            inputMicSet = self._loadLogicalSet(self.inputMicrographs)
+            try:
+                maxMicSize = inputMicSet.getSize()
+            finally:
+                inputMicSet.close()
+            # We have finished when there is not more input movies
+            # (stream closed) and the number of processed movies is
+            # equal to the number of inputs
+            self.finished = self.isStreamClosed and allDone == maxMicSize
+            streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
-        if not self.finished and not newDone:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
-            return
+            if not newDone:
+                if self.finished:
+                    self._failIfEveryMicrographFailed(doneIdSet)
+                    self._store()
+                return
 
-        micsAccepted = []
-        micsDiscarded = []
+            micsAccepted = []
+            micsDiscarded = []
 
-        inputMicSet = self._loadInputSet(self.micsFn)
+            inputMicSet = self._loadLogicalSet(self.inputMicrographs)
+            try:
+                for micId in newDone:
+                    # Set.getItem raises rather than returning None for a row
+                    # it cannot find, so check membership first - and a mic
+                    # marked processed without stats (its worker step gave up
+                    # on visibility) has nothing to report here either.
+                    if micId not in inputMicSet:
+                        self.info(
+                            "Micrograph with id %d is not visible in the "
+                            "input Set right now; will retry on the next "
+                            "check." % micId
+                        )
+                        continue
 
-        for micId in newDone:
-            mic = inputMicSet.getItem("id", micId).clone()
-            corr_mean = Float(self.stats[micId]['mean'])
-            corr_std = Float(self.stats[micId]['std'])
-            corr_min = Float(self.stats[micId]['min'])
-            corr_max = Float(self.stats[micId]['max'])
-            psdImage = Image(location=self.getPSDs(self._getExtraPath(), micId))
-            setAttribute(mic, '_tilt_mean_corr', corr_mean)
-            setAttribute(mic, '_tilt_std_corr', corr_std)
-            setAttribute(mic, '_tilt_min_corr', corr_min)
-            setAttribute(mic, '_tilt_max_corr', corr_max)
-            setAttribute(mic, '_tilt_psds_image', psdImage)
-            # Double threshold
-            if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():
-                micsAccepted.append(mic)
-            else:
-                micsDiscarded.append(mic)
+                    if micId not in self.stats:
+                        self.error(
+                            "Micrograph with id %d has no computed statistics; "
+                            "excluding it from the output." % micId
+                        )
+                        excludedIds.add(micId)
+                        continue
 
-        if len(micsAccepted) > 0:
-            micSet = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
-            for mic in micsAccepted:
+                    mic = inputMicSet.getItem("id", micId).clone()
+                    corr_mean = Float(self.stats[micId]['mean'])
+                    corr_std = Float(self.stats[micId]['std'])
+                    corr_min = Float(self.stats[micId]['min'])
+                    corr_max = Float(self.stats[micId]['max'])
+                    psdImage = Image(location=self.getPSDs(self._getExtraPath(), micId))
+                    setAttribute(mic, '_tilt_mean_corr', corr_mean)
+                    setAttribute(mic, '_tilt_std_corr', corr_std)
+                    setAttribute(mic, '_tilt_min_corr', corr_min)
+                    setAttribute(mic, '_tilt_max_corr', corr_max)
+                    setAttribute(mic, '_tilt_psds_image', psdImage)
+                    # Double threshold
+                    if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():
+                        micsAccepted.append(mic)
+                    else:
+                        micsDiscarded.append(mic)
+            finally:
+                inputMicSet.close()
+
+            if len(micsAccepted) > 0:
+                micSet = self._loadOutputSet(SetOfMicrographs, OUTPUT_MICS)
+                self._appendNewMicrographs(micSet, micsAccepted)
+                self._updateOutputSet('outputMicrographs', micSet, streamMode)
+                self._markOutputIdsPersisted(
+                    OUTPUT_MICS,
+                    [mic.getObjId() for mic in micsAccepted],
+                )
+
+            if len(micsDiscarded) > 0:
+                micSet_discarded = self._loadOutputSet(SetOfMicrographs, OUTPUT_MICS_DISCARDED)
+                self._appendNewMicrographs(micSet_discarded, micsDiscarded)
+                self._updateOutputSet('discardedMicrographs', micSet_discarded, streamMode)
+                self._markOutputIdsPersisted(
+                    OUTPUT_MICS_DISCARDED,
+                    [mic.getObjId() for mic in micsDiscarded],
+                )
+
+            if self.finished:
+                self._failIfEveryMicrographFailed(
+                    doneIdSet | {mic.getObjId()
+                                 for mic in micsAccepted + micsDiscarded})
+
+            self._store()
+
+    def _excludedMicIds(self):
+        """Micrographs of this run whose statistics could not be computed:
+        in no output, and processed again on Continue."""
+        return self.__dict__.setdefault('_excludedMicIdsSet', set())
+
+    def _failIfEveryMicrographFailed(self, publishedIds):
+        """A failed micrograph is left out; the run fails only when that
+        happened to every micrograph."""
+        if self._excludedMicIds() and not publishedIds:
+            raise Exception("Tilt analysis failed for every one of the %d "
+                            "micrographs; see the errors above. Continue "
+                            "processes them again." % len(self._excludedMicIds()))
+
+    def _appendNewMicrographs(self, micSet, micrographs):
+        """Append only micrographs that are not already persisted."""
+        micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
+        for mic in micrographs:
+            micId = mic.getObjId()
+            if micId not in micIds:
                 micSet.append(mic)
-            self._updateOutputSet('outputMicrographs', micSet, streamMode)
-
-        if len(micsDiscarded) > 0:
-            micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
-            for mic in micsDiscarded:
-                micSet_discarded.append(mic)
-            self._updateOutputSet('discardedMicrographs', micSet_discarded, streamMode)
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
-
-        self._store()
+                micIds.add(micId)
 
     def _insertNewMicrographSteps(self, newIds):
         """ Insert steps to process new micrographs (from streaming)
@@ -575,18 +623,91 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         return deps
 
+    def _raiseIfProcessingStepFailed(self):
+        for step in getattr(self, "_steps", []) or []:
+            funcName = getattr(step, "funcName", None)
+            if hasattr(funcName, "get"):
+                funcName = funcName.get()
+            if funcName == "processMicrographListStep" and step.isFailed():
+                raise RuntimeError("TiltAnalysis processing step failed; aborting streaming generator instead of waiting forever.")
+
+
     def processMicrographListStep(self, micIds):
-        inputMicSet = self._loadInputSet(self.micsFn)
+        pendingIds = sorted(set(micIds))
+        micrographsById = {}
+
+        for attempt in range(self.MIC_VISIBILITY_MAX_ATTEMPTS):
+            if not pendingIds:
+                break
+
+            if attempt > 0:
+                time.sleep(self.MIC_VISIBILITY_RETRY_DELAY)
+
+            with self._lock:
+                inputMicSet = self._loadLogicalSet(self.inputMicrographs)
+                try:
+                    visibleMicrographs = self._loadLogicalSetItemsByIds(
+                        inputMicSet,
+                        pendingIds,
+                    )
+                finally:
+                    inputMicSet.close()
+
+            for micrograph in visibleMicrographs:
+                micrographsById[micrograph.getObjId()] = micrograph
+
+            pendingIds = [
+                micId
+                for micId in pendingIds
+                if micId not in micrographsById
+            ]
 
         for micId in micIds:
-            micrograph = inputMicSet.getItem("id", micId).clone()
-            self._processMicrograph(micrograph)
+            micrograph = micrographsById.get(micId)
+
+            if micrograph is None:
+                self.error(
+                    "Micrograph with id %d never became visible in the input "
+                    "Set after %d attempts; marking it processed with no "
+                    "statistics."
+                    % (micId, self.MIC_VISIBILITY_MAX_ATTEMPTS)
+                )
+                if micId not in self.processedIds:
+                    self.processedIds.append(micId)
+                continue
+
+            try:
+                self._processMicrograph(micrograph)
+            except Exception as e:
+                self.error(
+                    "Micrograph with id %d failed while computing its tilt "
+                    "correlation statistics (%s); marking it processed with "
+                    "no statistics."
+                    % (micId, e)
+                )
+                if micId not in self.processedIds:
+                    self.processedIds.append(micId)
+
 
     def _processMicrograph(self, micrograph):
         micFolderTmp = self._getOutputMicFolder(micrograph)
+        # The folder is named after the micrograph id, so a retry or a
+        # Continue finds whatever a previous attempt left inside. The
+        # window files are written under fixed names, so a failed
+        # xmipp_transform_filter would otherwise leave the PSD of the
+        # earlier attempt in place and the correlation would be computed
+        # from it without any error being raised.
+        pwutils.cleanPath(micFolderTmp)
         pwutils.makePath(micFolderTmp)
         micrographId = micrograph.getObjId()
         correlations = self.calculateTiltCorrelationStep(micrograph)
+
+        # The correlations are in memory and the PSD image this protocol
+        # publishes already lives in extra/, so the working folder - about
+        # twenty .mrc windows - has been consumed. One per micrograph was
+        # being kept for the whole run.
+        pwutils.cleanPath(micFolderTmp)
+
         # Numpy array to compute all the
         correlations = np.asarray(correlations)
         # Calculate the mean, dev of the correlation
@@ -695,48 +816,42 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         correlations.extend(autocorrelations)
         return correlations
 
-    def _loadOutputSet(self, SetClass, baseName):
-        """
-        Load the output set if it exists or create a new one.
-        """
-        setFile = self._getPath(baseName)
-        # -----------------Si no lo pones asi no funciona
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            if outputSet.__len__() == 0:
-                pwutils.path.cleanPath(setFile)
-        # ----------------
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+    def _loadOutputSet(self, SetClass, outputName):
+        suffixByOutputName = {OUTPUT_MICS: '', OUTPUT_MICS_DISCARDED: 'DISCARDED'}
+        if outputName not in suffixByOutputName:
+            raise ValueError("Unsupported TiltAnalysis output Set: %s" % outputName)
+        if SetClass is not SetOfMicrographs:
+            raise TypeError("Unsupported TiltAnalysis output Set class: %s" % SetClass)
 
-        inputMicrographs = self.inputMicrographs.get()
-        outputSet.copyInfo(inputMicrographs)
-
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffixByOutputName[outputName])
+        if created:
+            outputSet.copyInfo(self.inputMicrographs.get())
         return outputSet
+
+
 
     # ------------------------- UTILS functions --------------------------------
     def _getAllDoneIds(self):
-        doneIds = []
-        acceptedIds = []
-        discardedIds = []
-        sizeOutput = 0
+        acceptedIds = sorted(
+            self._getKnownPersistedOutputIds(
+                OUTPUT_MICS,
+            )
+        )
+        discardedIds = sorted(
+            self._getKnownPersistedOutputIds(
+                OUTPUT_MICS_DISCARDED,
+            )
+        )
 
-        if hasattr(self, OUTPUT_MICS):
-            sizeOutput += self.outputMicrographs.getSize()
-            acceptedIds.extend(list(self.outputMicrographs.getIdSet()))
-            doneIds.extend(acceptedIds)
+        doneIds = acceptedIds + discardedIds
+        sizeOutput = len(acceptedIds) + len(discardedIds)
 
-        if hasattr(self, OUTPUT_MICS_DISCARDED):
-            sizeOutput += self.discardedMicrographs.getSize()
-            discardedIds.extend(list(self.discardedMicrographs.getIdSet()))
-            doneIds.extend(discardedIds)
-
-        return doneIds, sizeOutput, acceptedIds, discardedIds
+        return (
+            doneIds,
+            sizeOutput,
+            acceptedIds,
+            discardedIds,
+        )
 
     def getWindowSize(self):
         """ Function to get the window size, automatically or the one set by the user. """
@@ -769,6 +884,21 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         return os.path.join(micFolder, filename)
 
     # --------------------------- INFO functions -------------------------------
+    def _validate(self):
+        return self._validateParallelProcessing()
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for the tilt-analysis batches.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
+
     def _summary(self):
         fnSummary = self._getPath("summary.txt")
         if not os.path.exists(fnSummary):

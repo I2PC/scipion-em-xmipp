@@ -26,33 +26,32 @@
 # *
 # ******************************************************************************
 import enum
+import json
 import sys
 import emtable
 import os
-from datetime import datetime
+
+import pyworkflow.utils as pwutils
 import time
 import numpy as np
 
 from pwem.protocols import ProtClassify2D
-from pyworkflow.utils import prettyTime
 from pyworkflow import VERSION_3_0
-from pyworkflow.object import Set
+from pyworkflow.object import Set, RELATION_SOURCE
 from pyworkflow.protocol.params import IntParam, StringParam, PointerParam, EnumParam, BooleanParam, FloatParam
-from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED
+from pyworkflow.protocol import ProtStreamingBase, STEPS_PARALLEL, GPU_LIST, LEVEL_ADVANCED, MODE_RESUME
 from pyworkflow.constants import BETA
 
-from pwem.objects import SetOfClasses2D, SetOfAverages, SetOfParticles, Transform
+from pwem.objects import SetOfClasses2D, SetOfAverages, Transform
 from pwem.constants import ALIGN_NONE, ALIGN_2D, ALIGN_PROJ, ALIGN_3D
 from xmipp3.base import XmippProtocol
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 from xmipp3.convert import (readSetOfParticles, writeSetOfParticles,
                             writeSetOfClasses2D, xmippToLocation, matrixFromGeometry)
 
 OUTPUT_CLASSES = "outputClasses"
 OUTPUT_AVERAGES = "outputAverages"
-PCA_FILE = "pca_done.txt"
-CLASSIFICATION_FILE = "classification_done.txt"
-LAST_DONE_FILE = "last_done.txt"
 
 
 class XMIPPCOLUMNS(enum.Enum):
@@ -109,7 +108,25 @@ CONTRAST_AVERAGES_FILE = 'classes_classes.star'
 AVERAGES_IMAGES_FILE = 'classes_images.star'
 
 
-class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProtocol):
+
+class _LogicalParticleBatchView:
+    """In-memory view of one logically reconstructed particle batch."""
+
+    def __init__(self, particles, alignment):
+        self._particles = particles
+        self._alignment = alignment
+
+    def __iter__(self):
+        return iter(self._particles)
+
+    def __len__(self):
+        return len(self._particles)
+
+    def getAlignment(self):
+        return self._alignment
+
+
+class XmippProtClassifyPcaStreaming(XmippStreamingBase, ProtStreamingBase, ProtClassify2D, XmippProtocol):
     """ Performs a 2D classification of particles using PCA. This method is optimized to run in streaming,
         enabling efficient processing of large datasets.
 
@@ -410,7 +427,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
                             ' If multiple processors are available, it is recommended'
                             ' to set this value as high as possible (e.g., 24, 32...).')
 
-        form.addParallelSection(threads=3, mpi=1)
+        form.addParallelSection(threads=3, mpi=4)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -418,40 +435,155 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.newDeps = []
         newParticlesSet = self._loadEmptyParticleSet()
 
-        if self.isContinued() and False:
+        isResume = getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME
+        if isResume:
             self.info('Continue protocol')
             self._updateVarsToContinue()
 
         checkInterval = 5
+        terminalStallLimit = 12
+        terminalStallChecks = 0
+        terminalStallSignature = None
 
         while not self.finish:
-            particlesSet = self._loadInputParticleSet()
-            self.streamState = particlesSet.getStreamState()
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
 
-            where = None
-            if self.lastCreationTime:
-                where = 'creation>"' + str(self.lastCreationTime) + '"'
-            tmp = None
-            newCount = 0
+            # A batch may have become full while the previous
+            # classification round was still running. Launch it as soon as
+            # that round releases the slot, even if no new input arrives.
+            if len(newParticlesSet) and self._doClassification(newParticlesSet):
+                self._insertClassificationSteps(newParticlesSet, self.lastInputId)
+                newParticlesSet = self._loadEmptyParticleSet()
 
-            for particle in particlesSet.iterItems(orderBy='creation', direction='ASC', where=where):
-                tmp = particle.getObjCreation()
-                newParticlesSet.append(particle.clone())
-                newCount += 1
+            batchRemaining = self.classificationBatch.get() - len(newParticlesSet)
+            if batchRemaining <= 0:
+                # Avoid limit=0: some Set implementations treat it as
+                # an unbounded read, which would consume more items than
+                # the remaining capacity of the pending batch.
+                time.sleep(checkInterval)
+                sys.stdout.flush()
+                continue
 
-            particlesSet.close()
+            # Readers share the same logical Set, including its open/close state.
+            with self._lock:
+                particlesSet = self._loadInputParticleSet()
+                try:
+                    self.streamState = particlesSet.getStreamState()
+
+                    where = None
+                    if self.lastInputId:
+                        where = 'id > %d' % self.lastInputId
+                    tmp = None
+                    newCount = 0
+
+                    for particle in particlesSet.iterItems(orderBy='id',
+                                                           direction='ASC',
+                                                           where=where,
+                                                           limit=batchRemaining):
+                        tmp = particle.getObjId()
+
+                        # Continue can legitimately restart from a watermark that is
+                        # behind particles already present in the durable output
+                        # (for example when publication committed but its step failed
+                        # afterwards). Never enqueue such particles again.
+                        if tmp in self._seenParticleIds:
+                            continue
+
+                        newParticlesSet.append(particle.clone())
+                        self._seenParticleIds.add(tmp)
+                        newCount += 1
+
+                    inputExhausted = newCount < batchRemaining
+
+                    # Watermark discovery is the cheap hot path, but it is not
+                    # sufficient at end-of-stream: a lower id can become visible
+                    # after a higher id has already advanced lastInputId. Once the
+                    # producer closes, reconcile the exact logical id set and fold
+                    # any missing ids into the remaining room of this batch.
+                    if self.streamState == Set.STREAM_CLOSED:
+                        lateIds, terminalConsistent = self._reconcileClosedStreamIds(
+                            particlesSet,
+                            [],
+                            self._seenParticleIds,
+                            True,
+                            watermarkAttr='lastInputId',
+                        )
+
+                        remaining = (
+                            self.classificationBatch.get() - len(newParticlesSet)
+                        )
+                        if remaining > 0 and lateIds:
+                            lateParticles = self._loadLogicalSetItemsByIds(
+                                particlesSet,
+                                lateIds[:remaining],
+                            )
+                            for particle in lateParticles:
+                                particleId = particle.getObjId()
+                                if particleId in self._seenParticleIds:
+                                    continue
+                                newParticlesSet.append(particle)
+                                self._seenParticleIds.add(particleId)
+                                newCount += 1
+
+                        terminalPending = [
+                            particleId
+                            for particleId in lateIds
+                            if particleId not in self._seenParticleIds
+                        ]
+                        inputExhausted = (
+                            terminalConsistent and not terminalPending
+                        )
+
+                        if terminalConsistent:
+                            terminalStallChecks = 0
+                            terminalStallSignature = None
+                        elif self.classificationLaunch:
+                            # A round that is still running or publishing is valid
+                            # progress outside the input Set itself. Do not age the
+                            # terminal inconsistency guard while that work is active.
+                            terminalStallChecks = 0
+                            terminalStallSignature = None
+                        else:
+                            # A closed producer should eventually expose a complete
+                            # logical Set. Allow transient reconciliation windows,
+                            # but never poll forever when the durable view stops
+                            # making progress.
+                            stallSignature = (
+                                particlesSet.getSize(),
+                                len(self._seenParticleIds),
+                                self.lastInputId,
+                            )
+                            if stallSignature != terminalStallSignature:
+                                terminalStallSignature = stallSignature
+                                terminalStallChecks = 1
+                            else:
+                                terminalStallChecks += 1
+
+                            if terminalStallChecks >= terminalStallLimit:
+                                raise RuntimeError(
+                                    "closed input did not reach a consistent "
+                                    "terminal state after %d consecutive checks "
+                                    "without progress"
+                                    % terminalStallChecks
+                                )
+                finally:
+                    particlesSet.close()
 
             if tmp is not None:
-                self.lastCreationTime = tmp
+                self.lastInputId = max(self.lastInputId, tmp)
 
             if newCount == 0:
                 self.info('No new particles')
             else:
                 self.info('%d new particles in batch' % len(newParticlesSet))
-                self.info('Last creation time REGISTER %s' % self.lastCreationTime)
+                self.info('Last input id REGISTER %s' % self.lastInputId)
 
                 if self._doClassification(newParticlesSet):
-                    self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
+                    self._insertClassificationSteps(newParticlesSet, self.lastInputId)
                     newParticlesSet = self._loadEmptyParticleSet()
 
             if self.streamState == Set.STREAM_CLOSED:
@@ -462,17 +594,15 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
                     # Force one more iteration to flush last batch
                     if self._doClassification(newParticlesSet):
-                        self._insertClassificationSteps(newParticlesSet, self.lastCreationTime)
+                        self._insertClassificationSteps(newParticlesSet, self.lastInputId)
                         newParticlesSet = self._loadEmptyParticleSet()
-                else:
+                elif inputExhausted:
                     self._insertFunctionStep(self.closeOutputStep,
                                              prerequisites=self.newDeps,
                                              needsGPU=False)
                     self.finish = True
                     continue
 
-            with self._lock:  # Add this lock so it will not block the iterItems of the classify method
-                self.inputParticles.get().close()  # If this is not close then it blocks the input protocol
             time.sleep(checkInterval)
             sys.stdout.flush()
 
@@ -481,21 +611,23 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
     # --------------------------- STEPS functions -------------------------------
     def _initialStep(self):
         self.finish = False
-        self.lastCreationTime = 0
-        self.lastCreationTimeProcessed = 0
+        self.lastInputId = 0
+        self.lastInputIdProcessed = 0
+        self._seenParticleIds = set()
         self.streamState = Set.STREAM_OPEN
         self.lastRound = False
         self.pcaLaunch = False
         self.classificationLaunch = False
         self.classificationRound = 0
+        self.classificationStarted = False
         self.firstTimeDone = False
+        self._sourceRelationPublished = False
         self.staticRun = False
         # Initialize files
         self._initFnStep()
 
     def _initFnStep(self):
         updateEnviron(self.gpuList.get())
-        self.inputFn = self.inputParticles.get().getFileName()
         self.imgsOrigXmd = self._getExtraPath('imagesInput_.xmd')
         self.imgsXmd = self._getTmpPath('images_.xmd')  # Wiener
         self.imgsFn = self._getTmpPath('images_.mrc') # Wiener
@@ -516,27 +648,107 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         else:
             self.numberClasses = self.numberOfClasses.get()
 
-    def _insertClassificationSteps(self, newParticlesSet, lastCreationTime):
+    def _insertClassificationSteps(self, newParticlesSet, lastInputId):
+        # A classification round writes to fixed (non round-versioned)
+        # external files. Keep only one round active at a time.
+        self.classificationLaunch = True
         self._updateFnClassification()
-        classStep = self._insertFunctionStep(self.runClassificationSteps,
-                                             newParticlesSet,
-                                             prerequisites=[],
-                                             needsGPU=True)
-        updateStep = self._insertFunctionStep(self.updateOutputSetOfClasses,
-                                              lastCreationTime, Set.STREAM_OPEN, prerequisites=classStep,
-                                              needsGPU=False)
+
+        imgsOrigXmd = self.imgsOrigXmd
+        imgsFn = self.imgsFn
+        batchIds = [
+            particle.getObjId()
+            for particle in newParticlesSet
+        ]
+
+        # Persist only logical, serializable identity in dynamic steps.
+        classStep = self._insertFunctionStep(
+            self.runClassificationSteps,
+            batchIds,
+            imgsOrigXmd,
+            imgsFn,
+            prerequisites=[],
+            needsGPU=True,
+        )
+        updateStep = self._insertFunctionStep(
+            self.updateOutputSetOfClasses,
+            lastInputId,
+            Set.STREAM_OPEN,
+            batchIds,
+            prerequisites=classStep,
+            needsGPU=False,
+        )
         self.newDeps.append(updateStep)
 
-    def runClassificationSteps(self, newParticlesSet):
-        
-        self.convertInputStep(newParticlesSet, self.imgsOrigXmd, self.imgsFn)
-        
-        numTrain = min(len(newParticlesSet), self.training.get())
-        self.classification(self.imgsFn, self.numberClasses, self.imgsOrigXmd,
-                            self.mask.get(), self.sigmaProt, numTrain, self.resolutionPca)
-        # self.classificationLaunch = False
+    def runClassificationSteps(self, particleIds, imgsOrigXmd, imgsFn):
+        """Run one round from serializable logical particle ids."""
+        requestedIds = [
+            int(particleId)
+            for particleId in particleIds
+        ]
+        requestedIdSet = set(requestedIds)
+
+        with self._lock:
+            inputSet = self._loadInputParticleSet()
+            try:
+                alignment = inputSet.getAlignment()
+                particles = self._loadLogicalSetItemsByIds(
+                    inputSet,
+                    requestedIds,
+                )
+            finally:
+                inputSet.close()
+
+        loadedIds = {
+            particle.getObjId()
+            for particle in particles
+        }
+        if loadedIds != requestedIdSet:
+            missingIds = sorted(requestedIdSet - loadedIds)
+            unexpectedIds = sorted(loadedIds - requestedIdSet)
+            raise RuntimeError(
+                "Could not reconstruct the complete AlignPCA "
+                "classification batch from the logical input. "
+                "Missing ids: %s. Unexpected ids: %s."
+                % (missingIds, unexpectedIds)
+            )
+
+        batchView = _LogicalParticleBatchView(
+            particles,
+            alignment,
+        )
+        self.convertInputStep(batchView, imgsOrigXmd, imgsFn)
+
+        numTrain = min(len(batchView), self.training.get())
+        self.classification(
+            imgsFn,
+            self.numberClasses,
+            imgsOrigXmd,
+            self.mask.get(),
+            self.sigmaProt,
+            numTrain,
+            self.resolutionPca,
+        )
+
+        # Keep retry evidence on scientific failure. Clean only after the
+        # external classification has returned successfully.
+        pwutils.cleanPath(imgsFn)
 
     def convertInputStep(self, input, outputOrig, outputMRC):
+        referenceMustExist = (
+            self.classificationStarted
+            or (
+                self.mode.get() == self.UPDATE_CLASSES
+                and self.firstTimeDone
+            )
+        )
+        if referenceMustExist and not os.path.exists(self.ref):
+            raise RuntimeError(
+                "Classification reference is missing after durable "
+                "classification state was restored: %s"
+                % self.ref
+            )
+
         writeSetOfParticles(input, outputOrig)
 
         if self.correctCtf.get():
@@ -545,7 +757,7 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
             
             args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputMRC, self.sampling)
-            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.classificationMPIs.get())
+            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())
             
         else:
             args = ' -i  %s -o %s  ' % (outputOrig, outputMRC)
@@ -584,47 +796,108 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         args = ' -i %s  --operate  sort itemId'%(self._getExtraPath(AVERAGES_IMAGES_FILE))
         self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
 
-    def updateOutputSetOfClasses(self, lastCreationTime, streamMode):
+    def updateOutputSetOfClasses(self, lastInputId, streamMode,
+                                   batchIds=None):
         outputName = OUTPUT_CLASSES
         outputClasses, update = self._loadOutputSet(outputName)
 
-        self._fillClassesFromLevel(outputClasses, update)
+        self._fillClassesFromLevel(
+            outputClasses,
+            update,
+            batchIds=batchIds,
+        )
         self._updateOutputSet(outputName, outputClasses, streamMode)
         # self._updateOutputAverages(update)
 
         if not update:  # First time
-            self._defineSourceRelation(self._getInputPointer(), outputClasses)
-            self._setClassificationDone()
+            XmippProtClassifyPcaStreaming._ensureSourceRelation(
+                self,
+                outputClasses,
+            )
+            self.classificationStarted = True
             self.numberClasses = len(outputClasses)  # In case the original number of classes is not reached
+        elif getattr(self, '_sourceRelationPublished', None) is False:
+            XmippProtClassifyPcaStreaming._ensureSourceRelation(
+                self,
+                outputClasses,
+            )
 
-        self.lastCreationTimeProcessed = lastCreationTime
-        self.info(r'Last creation time processed UPDATED is %s' % str(self.lastCreationTimeProcessed))
-        self._writeLastDone(str(self.lastCreationTimeProcessed))
-        self._writeLastClassificationRound(self.classificationRound)
-
+        self.lastInputIdProcessed = lastInputId
+        self.info(r'Last input id processed UPDATED is %s' % str(self.lastInputIdProcessed))
         self.info(r'Last classification round processed is %d' % self.classificationRound)
-        self.classificationRound += 1
+
+        # Durable truth for Continue/Resume is this step's own persisted
+        # record (funcName + args) in the step graph, reconstructed by
+        # _restoreStreamingStateFromSteps - not a last_done.txt/
+        # classification_done.txt sidecar. classificationRound already
+        # advanced exactly once for this round, inside
+        # _updateFnClassification (incrementing it again here would just
+        # make every other round number unused, with no effect on
+        # uniqueness - _updateFnClassification's own increment already
+        # guarantees the next round gets a fresh file-name suffix).
+
+        # This round's external files (classes_classes.star,
+        # classes_images.star) have now been fully read - it is safe for
+        # stepsGeneratorStep to launch the next round, which will
+        # overwrite those same fixed filenames.
+        self.classificationLaunch = False
 
     def closeOutputStep(self):
         self._closeOutputSet()
 
     # --------------------------- UTILS functions -----------------------------
     def _loadInputParticleSet(self):
-        """ Returns te input set of particles"""
-        self.debug("Loading input db: %s" % self.inputFn)
-        partSet = SetOfParticles(filename=self.inputFn)
+        """Return the logical input particle Set with refreshed state."""
+        partSet = self.inputParticles.get()
         partSet.loadAllProperties()
 
         return partSet
+
+    def _ensureSourceRelation(self, outputClasses):
+        """Ensure that the durable output keeps its source provenance."""
+        sourcePointer = self._getInputPointer()
+        relationExists = False
+
+        mapper = getattr(self, 'mapper', None)
+        getRelationParents = getattr(
+            mapper, 'getRelationParents', None
+        )
+
+        if callable(getRelationParents):
+            sourceObject = sourcePointer
+            isPointer = getattr(sourcePointer, 'isPointer', None)
+            if callable(isPointer) and isPointer():
+                sourceObject = sourcePointer.getObjValue()
+
+            sourceId = sourceObject.getObjId()
+            relationExists = any(
+                parent.getObjId() == sourceId
+                for parent in getRelationParents(
+                    RELATION_SOURCE,
+                    outputClasses,
+                )
+            )
+
+        if not relationExists:
+            self._defineSourceRelation(
+                sourcePointer,
+                outputClasses,
+            )
+
+        self._sourceRelationPublished = True
 
     def _getInputPointer(self):
         return self.inputParticles
 
     def _loadEmptyParticleSet(self):
-        partSet = SetOfParticles(filename=self.inputFn)
-        partSet.loadAllProperties()
-        copyPartSet = self._createSetOfParticles()
-        copyPartSet.copyInfo(partSet)
+        with self._lock:
+            partSet = self.inputParticles.get()
+            try:
+                partSet.loadAllProperties()
+                copyPartSet = self._createSetOfParticles()
+                copyPartSet.copyInfo(partSet)
+            finally:
+                partSet.close()
 
         return copyPartSet
 
@@ -644,45 +917,132 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         self.info('Starts classification round: %d' % self.classificationRound)
         self.classificationRound += 1
 
-    def _newParticlesToProcess(self):
-        particlesFile = self.inputFn
-        now = datetime.now()
+    def _classifyLogicalParticles(self, clsSet, particles, mdIter):
+        """Classify one exact logical particle batch into the output classes."""
+        clsDict = clsSet._getExistingItems()
 
-        lastCheck = getattr(self, "lastCheck", now)
-        self.lastCheck = lastCheck
+        for particle in particles:
+            if particle.isEnabled():
+                row = next(mdIter)
+                self._updateParticle(particle, row)
 
-        mTime = datetime.fromtimestamp(os.path.getmtime(particlesFile))
-        self.debug("Last check: %s, modification: %s"
-                   % (lastCheck, prettyTime(mTime)))
+                if not getattr(particle, "_appendItem", True):
+                    continue
 
-        fileUnchanged = lastCheck > mTime
-        alreadyProcessedSomething = bool(getattr(self, "lastCreationTime", None))
-        isLastRound = bool(getattr(self, "lastRound", False))
+                classId = particle.getClassId()
+                if classId is None:
+                    raise RuntimeError(
+                        "Particle %s has no class assignment."
+                        % particle.getObjId()
+                    )
+                if classId == 0:
+                    continue
 
-        hasNewParticles = not (fileUnchanged and alreadyProcessedSomething and not isLastRound)
+                classItem = clsSet._get_or_create_class(
+                    clsDict,
+                    classId,
+                    self._updateClass,
+                )
+                classItem.append(particle)
+            else:
+                next(mdIter)
 
-        self.lastCheck = now
-        return hasNewParticles
+        for classItem in clsDict.values():
+            clsSet.update(classItem)
 
-    def _fillClassesFromLevel(self, clsSet, update=False):
-        """ Create the SetOfClasses2D from a given iteration. """
+    def _fillClassesFromLevel(self, clsSet, update=False, batchIds=None):
+        """Create or update the output classes from one logical batch."""
         self._createModelFile()
-        
-        self._loadClassesInfo(self._getExtraPath(CONTRAST_AVERAGES_FILE))
-        mdIter = emtable.Table.iterRows('particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE))
-
-        params = {}
-        if update:
-            self.info(r'Last creation time processed is %s' % str(self.lastCreationTimeProcessed))
-            params = {"where": 'creation>"' + str(self.lastCreationTimeProcessed) + '"'}
+        self._loadClassesInfo(
+            self._getExtraPath(CONTRAST_AVERAGES_FILE)
+        )
 
         with self._lock:
-            clsSet.classifyItems(updateItemCallback=self._updateParticle,
-                                 updateClassCallback=self._updateClass,
-                                 itemDataIterator=mdIter,  # relion style
-                                 iterParams=params,
-                                 doClone=False,  # So the creation time is maintained
-                                 raiseOnNextFailure=False)  # So streaming can happen
+            images = clsSet.getImages()
+            try:
+                if batchIds is None:
+                    visibleIds = images.getIdSet()
+                    if update:
+                        particleIds = sorted(
+                            particleId
+                            for particleId in visibleIds
+                            if particleId > self.lastInputIdProcessed
+                        )
+                    else:
+                        particleIds = sorted(visibleIds)
+                else:
+                    particleIds = sorted({
+                        int(particleId)
+                        for particleId in batchIds
+                    })
+
+                particles = (
+                    self._loadLogicalSetItemsByIds(images, particleIds)
+                    if particleIds
+                    else []
+                )
+            finally:
+                images.close()
+
+        particlesById = {
+            particle.getObjId(): particle
+            for particle in particles
+        }
+        loadedIds = set(particlesById)
+        expectedIds = set(particleIds)
+
+        if (
+                loadedIds != expectedIds
+                or len(particlesById) != len(particles)
+        ):
+            missingIds = sorted(expectedIds - loadedIds)
+            unexpectedIds = sorted(loadedIds - expectedIds)
+            raise RuntimeError(
+                "Could not reconstruct the exact logical publication batch. "
+                "Missing ids: %s. Unexpected ids: %s."
+                % (missingIds, unexpectedIds)
+            )
+
+        orderedParticles = [
+            particlesById[particleId]
+            for particleId in particleIds
+        ]
+
+        mdRows = emtable.Table.iterRows(
+            'particles@' + self._getExtraPath(AVERAGES_IMAGES_FILE)
+        )
+        mdIter = self._iterRowsForParticleIds(
+            mdRows,
+            particleIds,
+        )
+
+        with self._lock:
+            self._classifyLogicalParticles(
+                clsSet,
+                orderedParticles,
+                mdIter,
+            )
+
+    @staticmethod
+    def _iterRowsForParticleIds(rows, particleIds):
+        rowIter = iter(rows)
+        row = next(rowIter, None)
+
+        for particleId in particleIds:
+            while (
+                    row is not None
+                    and row.get(XMIPPCOLUMNS.itemId.value) < particleId
+            ):
+                row = next(rowIter, None)
+
+            if (
+                    row is not None
+                    and row.get(XMIPPCOLUMNS.itemId.value) == particleId
+            ):
+                yield row
+                row = next(rowIter, None)
+            else:
+                yield None
 
     def _loadOutputSet(self, outputName):
         """
@@ -694,22 +1054,14 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
             outputSet = self._createSetOfClasses2D(self._getInputPointer())
             outputSet.setStreamState(Set.STREAM_OPEN)
         else:
+            outputSet.loadAllProperties()
+            # Reopened streaming classes must accept new class members.
+            enableAppend = getattr(outputSet, 'enableAppend', None)
+            if callable(enableAppend):
+                enableAppend()
             update = True
 
         return outputSet, update
-
-    def _loadOutputAverageSet(self):
-        """
-        Load an empty output setOfAverages
-        """
-        outputRefs = self._createSetOfAverages()  # We need to create always an empty set since we need to rebuild it
-        partSet = SetOfParticles(filename=self.inputFn)
-        partSet.loadAllProperties()
-        outputRefs.copyInfo(partSet)
-        outputRefs.setSamplingRate(self.sampling)
-        outputRefs.setAlignment(ALIGN_2D)
-
-        return outputRefs
 
     def _doClassification(self, newParticlesSet):
         """ Three cases for launching Classification
@@ -729,52 +1081,236 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
 
 
     def _isClassificationDone(self):
-        done = False
-        if os.path.exists(self._getExtraPath(CLASSIFICATION_FILE)):
-            done = True
+        return self.classificationStarted or self.mode.get() == self.UPDATE_CLASSES
 
-        if self.mode == self.UPDATE_CLASSES:
-            done = True
+    def _restoreStreamingStateFromSteps(self):
+        """ Reconstruct lastInputId/classificationRound/classificationStarted
+        from the persisted step graph instead of last_done.txt/
+        classification_done.txt sidecars - the step graph pyworkflow
+        already maintains durably is the source of truth, same principle
+        as XmippStreamingBase's own _isFunctionStepFinished for other
+        protocols. Only FINISHED updateOutputSetOfClasses steps count:
+        an interrupted round's particles are simply rediscovered as new
+        input on the next check (self.lastInputId stays at the last
+        completed round's value) and reprocessed into a fresh round,
+        safely overwriting that round's half-written fixed filenames.
+        """
+        lastInputId = 0
+        finishedRounds = 0
 
-        return done
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, "funcName", None)
+            if hasattr(funcName, "get"):
+                funcName = funcName.get()
+            if funcName != "updateOutputSetOfClasses" or not step.isFinished():
+                continue
 
-    def _setClassificationDone(self):
-        with open(self._getExtraPath(CLASSIFICATION_FILE), "w"):
-            self.debug("Creating Classification DONE file")
+            argsStr = getattr(step, "argsStr", None)
+            if hasattr(argsStr, "get"):
+                argsStr = argsStr.get("[]")
+            try:
+                args = json.loads(argsStr or "[]")
+            except (TypeError, ValueError):
+                continue
+            if not args:
+                continue
 
-    def _writeLastClassificationRound(self, classificationRound):
-        with open(self._getExtraPath(CLASSIFICATION_FILE), "w") as file:
-            file.write('%d' % classificationRound)
+            finishedRounds += 1
+            try:
+                stepLastInputId = int(args[0])
+            except (TypeError, ValueError, IndexError):
+                continue
+            lastInputId = max(lastInputId, stepLastInputId)
 
-    def _getLastClassificationRound(self):
-        with open(self._getExtraPath(CLASSIFICATION_FILE), "r") as file:
-            content = file.read()
-            return int(content)
+        return lastInputId, finishedRounds
 
-    def _writeLastDone(self, creationTime):
-        """ Write to a text file the last item creation time done. """
-        with open(self._getExtraPath(LAST_DONE_FILE), 'w') as file:
-            file.write('%s' % creationTime)
+    def _restoreProcessedParticleIdsFromSteps(self):
+        """Return exact particle ids owned by durable publication steps.
 
-    def _getLastDone(self):
-        # Open the file in read mode and read the number
-        with open(self._getExtraPath(LAST_DONE_FILE), "r") as file:
-            content = file.read()
-        return str(content)
+        New AlignPCA publication steps persist the batch ids as their third
+        argument. Older runs did not, so return ``exact=False`` when at
+        least one FINISHED publication step lacks that information; the
+        caller then falls back to the legacy watermark semantics for those
+        already-finished rounds.
+        """
+        processedIds = set()
+        exact = True
+
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if (
+                    funcName != 'updateOutputSetOfClasses'
+                    or not step.isFinished()
+            ):
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                exact = False
+                continue
+
+            if len(args) < 3 or not isinstance(args[2], list):
+                exact = False
+                continue
+
+            for particleId in args[2]:
+                try:
+                    processedIds.add(int(particleId))
+                except (TypeError, ValueError):
+                    exact = False
+
+        return processedIds, exact
 
     def _updateVarsToContinue(self):
-        """ Method to if needed and the protocol is set to continue then it will see in which state it was stopped """
+        """ If the protocol is set to continue, reconstruct where it was
+        stopped from the persisted step graph. """
+        lastInputId, finishedRounds = self._restoreStreamingStateFromSteps()
 
-        if self._isClassificationDone():
-            self.lastCreationTime = self._getLastDone()
-            self.classificationRound = self._getLastClassificationRound() + 1  # Since this is the last processed
-        else:
-            self.lastCreationTime = ''
-            self.classificationRound = 1
+        self.lastInputId = lastInputId
+        # _updateFnClassification advances classificationRound exactly
+        # once per round (before that round even runs) - after N rounds
+        # have finished, the in-memory counter sits at N, so resuming
+        # with classificationRound = finishedRounds reproduces the same
+        # value and the next round gets a fresh, never-before-used
+        # file-name suffix.
+        self.classificationRound = finishedRounds
+        self.classificationStarted = finishedRounds > 0
+        if finishedRounds > 0:
+            if self.mode.get() == self.UPDATE_CLASSES:
+                self.firstTimeDone = True
+            else:
+                # In CREATE_CLASSES the first classification round may
+                # produce fewer classes than the user originally requested.
+                # Continue must therefore restore the effective class count
+                # from the durable output, not from numberOfClasses.
+                outputClasses = getattr(self, OUTPUT_CLASSES, None)
+                if outputClasses is not None:
+                    loadAllProperties = getattr(
+                        outputClasses, 'loadAllProperties', None
+                    )
+                    if callable(loadAllProperties):
+                        loadAllProperties()
 
-        self.lastCreationTimeProcessed = self.lastCreationTime
-        # Convert the string to a datetime object
-        self.lastCheck = datetime.strptime(self.lastCreationTime, '%Y-%m-%d %H:%M:%S')
+                    getSize = getattr(outputClasses, 'getSize', None)
+                    persistedClassCount = (
+                        getSize() if callable(getSize)
+                        else len(outputClasses)
+                    )
+                    if persistedClassCount:
+                        self.numberClasses = persistedClassCount
+
+        processedIds = set()
+        exactIds = False
+        restoreIds = getattr(
+            self, '_restoreProcessedParticleIdsFromSteps', None
+        )
+        if callable(restoreIds):
+            processedIds, exactIds = restoreIds()
+            self._seenParticleIds = set(processedIds)
+
+            # Compatibility with runs created before exact batch ids were
+            # persisted. Preserve their historical watermark semantics,
+            # while new runs remain hole-safe.
+            if finishedRounds > 0 and not exactIds:
+                with self._lock:
+                    inputSet = self._loadInputParticleSet()
+                    try:
+                        try:
+                            visibleIds = inputSet.getUniqueValues('id')
+                        except NotImplementedError:
+                            visibleIds = [
+                                particle.getObjId()
+                                for particle in inputSet
+                            ]
+                        self._seenParticleIds.update(
+                            int(particleId)
+                            for particleId in visibleIds
+                            if int(particleId) <= self.lastInputId
+                        )
+                    finally:
+                        inputSet.close()
+
+        # Step status is not enough after an ambiguous commit: a publication
+        # step may fail after outputClasses has already been written. Durable
+        # class membership is therefore authoritative on Continue.
+        outputClasses = getattr(self, OUTPUT_CLASSES, None)
+        durableIds = set()
+        persistedClassCount = 0
+
+        if outputClasses is not None:
+            loadAllProperties = getattr(
+                outputClasses, 'loadAllProperties', None
+            )
+            if callable(loadAllProperties):
+                loadAllProperties()
+
+            getSize = getattr(outputClasses, 'getSize', None)
+            persistedClassCount = (
+                getSize() if callable(getSize)
+                else len(outputClasses)
+            )
+
+            iterClassItems = getattr(outputClasses, 'iterClassItems', None)
+            if callable(iterClassItems):
+                durableIds = {
+                    particle.getObjId()
+                    for particle in iterClassItems()
+                    if particle.getObjId() is not None
+                }
+                self._seenParticleIds.update(durableIds)
+
+        if durableIds:
+            # Durable output also implies that its provenance must exist.
+            # Re-check it on Continue so an interrupted first publication
+            # cannot leave a permanent provenance gap.
+            if getattr(self, 'mapper', None) is not None:
+                XmippProtClassifyPcaStreaming._ensureSourceRelation(
+                    self,
+                    outputClasses,
+                )
+
+            # A non-empty durable output proves that the initial
+            # classification exists, even if its publication step failed
+            # after committing the output.
+            self.classificationStarted = True
+
+            if self.mode.get() == self.CREATE_CLASSES:
+                if persistedClassCount:
+                    self.numberClasses = persistedClassCount
+            elif self.mode.get() == self.UPDATE_CLASSES:
+                self.firstTimeDone = True
+
+            # With exact ids from FINISHED publication steps, any durable
+            # particle not owned by those steps proves one additional
+            # ambiguous-but-committed round. Only one round can be in flight
+            # because classificationLaunch serializes publication.
+            if exactIds and durableIds.difference(processedIds):
+                self.classificationRound = max(
+                    self.classificationRound,
+                    finishedRounds + 1,
+                )
+            elif (
+                    not exactIds
+                    and any(
+                        int(particleId) > self.lastInputId
+                        for particleId in durableIds
+                    )
+            ):
+                # Older persisted steps may not identify their exact batch.
+                # Durable ids beyond the last completed watermark prove that
+                # one additional serialized publication round committed.
+                self.classificationRound = max(
+                    self.classificationRound,
+                    finishedRounds + 1,
+                )
+
+        self.lastInputIdProcessed = self.lastInputId
 
     def _validate(self):
         """ Check if the installation of this protocol is correct.
@@ -787,6 +1323,12 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
         if self.inputParticles.get().getDimensions()[0] > 256:
             errors.append("You should resize the particles."
                           " Sizes smaller than 128 pixels are recommended.")
+        # Without a CTF the Wiener correction turns every particle into NaN
+        # (and the PCA then fails on the GPU).
+        if self.correctCtf.get() and not self.inputParticles.get().hasCTF():
+            errors.append("The input particles have no CTF, so it cannot be corrected: "
+                          "set 'Correct CTF?' (advanced parameters) to No, or extract "
+                          "the particles with a CTF.")
         er = self.validateDLtoolkit()
         if not isinstance(er, list):
             er = [er]
@@ -817,16 +1359,24 @@ class XmippProtClassifyPcaStreaming(ProtStreamingBase, ProtClassify2D, XmippProt
     # #--------------------------- UTILS functions -------------------------------
     # EMTABLE IMPLEMENTATION
     def _updateParticle(self, item, row):
+        particleId = item.getObjId()
+
         if row is None:
-            self.info('Row is none finish updating particle')
-            setattr(item, "_appendItem", False)
-        else:
-            if item.getObjId() == row.get(XMIPPCOLUMNS.itemId.value):
-                item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
-                item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
-            else:
-                self.error('The particles ids are not synchronized')
-                setattr(item, "_appendItem", False)
+            raise RuntimeError(
+                "Missing AlignPCA classification metadata row for "
+                "particle %s." % particleId
+            )
+
+        rowParticleId = row.get(XMIPPCOLUMNS.itemId.value)
+        if particleId != rowParticleId:
+            raise RuntimeError(
+                "AlignPCA classification metadata is not synchronized: "
+                "particle %s received metadata for particle %s."
+                % (particleId, rowParticleId)
+            )
+
+        item.setClassId(row.get(XMIPPCOLUMNS.ref.value))
+        item.setTransform(rowToAlignmentEmtable(row, ALIGN_2D))
 
     def _updateClass(self, item):
         classId = item.getObjId()

@@ -25,8 +25,6 @@
 # *
 # **************************************************************************
 
-import os
-from datetime import datetime
 from pyworkflow.gui.plotter import Plotter
 import numpy as np
 from math import ceil
@@ -37,11 +35,11 @@ except ImportError:
 from pwem.objects import SetOfMovies, SetOfMicrographs, MovieAlignment, Image
 from pyworkflow.object import Set
 import pyworkflow.protocol.params as params
-from pyworkflow.protocol import STEPS_PARALLEL, Protocol
-import pyworkflow.utils as pwutils
+from pyworkflow.protocol import STEPS_PARALLEL, Protocol, ProtStreamingBase
 from pwem.protocols import ProtAlignMovies
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol.constants import MODE_RESUME
 from xmipp3.convert import getScipionObj
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 from pwem.constants import ALIGN_NONE
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
@@ -49,7 +47,7 @@ ACCEPTED = 'Accepted'
 DISCARDED = 'Discarded'
 
 
-class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
+class XmippProtConsensusMovieAlignment(XmippStreamingBase, ProtStreamingBase, ProtAlignMovies, Protocol):
     """
     The protocol compares two sets of aligned movies (reference and secondary)
     to evaluate their alignment consistency. It calculates the correlation
@@ -323,6 +321,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
     """
 
     _label = 'movie alignment consensus'
+    # Checks a movie not visible in a closed input is still waited for.
+    MOVIE_VISIBILITY_MAX_CHECKS = 3
     outputName = 'consensusAlignments'
     _devStatus = PROD
 
@@ -361,12 +361,30 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                            "will be plot in the same graph with its correlation value.")
 
         form.addParallelSection(threads=4)
+        self._defineStreamingParams(form)
 
 # --------------------------- INSERT steps functions -------------------------
-    def _insertAllSteps(self):
+    def stepsGeneratorStep(self) -> None:
         self.initializeParams()
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=[], wait=True)
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def createOutputStep(self):
         self._closeOutputSet()
@@ -375,86 +393,187 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         self.finished = False
         self.insertedDict = {}
         self.processedDict = []
-        self.movieFn1 = self.inputMovies1.get().getFileName()
-        self.movieFn2 = self.inputMovies2.get().getFileName()
-        self.micsFn = self._getMicsPath()
+        self._micsOutputName = self._resolveMicsOutputName()
+        if self._micsOutputName is None:
+            raise RuntimeError('Could not resolve the micrographs produced by the reference movie alignment.')
+
         self.stats = {}
-        self.isStreamClosed = self.inputMovies1.get().isStreamClosed() and \
-                              self.inputMovies2.get().isStreamClosed()
+        # Decisions computed by worker steps, pending publication into the
+        # real output Sets. Snapshotted (never drained) in _checkNewOutput,
+        # so a decision is never lost even if a poll's publish step fails.
+        self._decidedAccepted = []
+        self._decidedDiscarded = []
+        self.isStreamClosed = False
         self.samplingRate = self.inputMovies1.get().getSamplingRate()
         self.acquisition = self.inputMovies1.get().getAcquisition()
-        self.allMovies1 = {movie.getObjId(): movie.clone() for movie
-                           in self._loadInputMovieSet(self.movieFn1).iterItems()}
-        self.allMovies2 = {movie.getObjId(): movie.clone() for movie
-                           in self._loadInputMovieSet(self.movieFn2).iterItems()}
-        pwutils.makePath(self._getExtraPath('DONE'))
+        self.allMovies1 = {}
+        self.allMovies2 = {}
 
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all movies
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
+        # Watermark-based discovery state (replaces reconstructing a
+        # fresh SetOfMovies from a filename and doing a full Python-side
+        # scan of both input Sets on every poll). A movie id seen on one
+        # side but not yet matched on the other stays pending and is
+        # retried every poll until both sides have it, mirroring
+        # XmippProtCTFConsensus's dual-input consensus pattern.
+        self._movies1Watermark = 0
+        self._movies2Watermark = 0
+        self._pendingMovieIds1 = set()
+        self._pendingMovieIds2 = set()
 
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
+        originalRunMode = getattr(self, '_originalRunMode', self.getRunMode())
+        if originalRunMode == MODE_RESUME:
+            self._restoreStreamingState()
 
-    def _stepsCheck(self):
-        self._checkNewInput()
-        self._checkNewOutput()
+    def _restoreStreamingState(self):
+        # The real output Sets are the durable source of truth for what
+        # was already processed - no sidecar file needed. Pending
+        # decisions (_decidedAccepted/_decidedDiscarded) start empty on
+        # every fresh process, so there is nothing stale to prune here:
+        # any movie not yet reflected in the outputs is simply not in
+        # processedDict, and _checkNewInput will naturally re-schedule it.
+        doneAccepted, doneDiscarded = self._getAllDoneIds()
+        self.processedDict = sorted(set(doneAccepted) | set(doneDiscarded))
+
+    def _getAllDoneIds(self):
+        """ Movie ids already reflected in the real, persisted outputs. """
+        acceptedIds = sorted(
+            self._getPersistedOutputIds('outputMovies')
+        )
+        discardedIds = sorted(
+            self._getPersistedOutputIds('outputMoviesDiscarded')
+        )
+        return acceptedIds, discardedIds
+
+    def _isMovieOutputDone(self, movieId):
+        acceptedIds, discardedIds = self._getAllDoneIds()
+        return movieId in acceptedIds or movieId in discardedIds
 
     def _checkNewInput(self):
-        # Check if there are new movies to process from the input set
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = max(datetime.fromtimestamp(os.path.getmtime(self.movieFn1)),
-                    datetime.fromtimestamp(os.path.getmtime(self.movieFn2)))
+        movieSet1 = self._loadLogicalSet(self.inputMovies1)
+        try:
+            newIds1, self._movies1Watermark = self._discoverIdsAfter(
+                movieSet1, self._movies1Watermark,
+            )
+            producerClosed1 = movieSet1.isStreamClosed()
+            knownIds1 = set(self.processedDict).union(self._pendingMovieIds1)
+            newIds1, terminalConsistent1 = self._reconcileClosedStreamIds(
+                movieSet1, newIds1, knownIds1, producerClosed1,
+                watermarkAttr='_movies1Watermark',
+            )
+            newMovies1 = self._loadLogicalSetItemsByIds(movieSet1, newIds1)
+            self.allMovies1.update({m.getObjId(): m for m in newMovies1})
+        finally:
+            movieSet1.close()
 
-        self.debug('Last check: %s, modification: %s'
-                   % (pwutils.prettyTime(self.lastCheck),
-                      pwutils.prettyTime(mTime)))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and self.processedDict: # If this is empty it is due to a static "continue" action or it is the first round
-            return None
+        movieSet2 = self._loadLogicalSet(self.inputMovies2)
+        try:
+            newIds2, self._movies2Watermark = self._discoverIdsAfter(
+                movieSet2, self._movies2Watermark,
+            )
+            producerClosed2 = movieSet2.isStreamClosed()
+            knownIds2 = set(self.processedDict).union(self._pendingMovieIds2)
+            newIds2, terminalConsistent2 = self._reconcileClosedStreamIds(
+                movieSet2, newIds2, knownIds2, producerClosed2,
+                watermarkAttr='_movies2Watermark',
+            )
+            newMovies2 = self._loadLogicalSetItemsByIds(movieSet2, newIds2)
+            self.allMovies2.update({m.getObjId(): m for m in newMovies2})
+        finally:
+            movieSet2.close()
 
-        movieSet1 = self._loadInputMovieSet(self.movieFn1)
-        movieSet2 = self._loadInputMovieSet(self.movieFn2)
+        self._pendingMovieIds1.update(newIds1)
+        self._pendingMovieIds2.update(newIds2)
 
-        movieDict1 = {movie.getObjId(): movie.clone() for movie in movieSet1.iterItems()}
-        movieDict2 = {movie.getObjId(): movie.clone() for movie in movieSet2.iterItems()}
+        schedulableIds = sorted(
+            self._pendingMovieIds1.intersection(self._pendingMovieIds2)
+        )
+        self._pendingMovieIds1.difference_update(schedulableIds)
+        self._pendingMovieIds2.difference_update(schedulableIds)
 
-        newIds1 = [idMovie for idMovie in movieDict1.keys() if idMovie not in self.processedDict]
-        self.allMovies1.update(movieDict1)
+        self.isStreamClosed = (
+            producerClosed1 and producerClosed2
+            and terminalConsistent1 and terminalConsistent2
+        )
 
-        newIds2 = [idMovie for idMovie in movieDict2.keys() if idMovie not in self.processedDict]
-        self.allMovies2.update(movieDict2)
+        if self.isStreamClosed:
+            self._discardUnmatchedMovies()
 
-        self.lastCheck = datetime.now()
-        self.isStreamClosed = movieSet1.isStreamClosed() and \
-                              movieSet2.isStreamClosed()
+        fDeps = self._insertNewMovieSteps(schedulableIds, self.insertedDict)
+        if not fDeps:
+            return
 
-        movieSet1.close()
-        movieSet2.close()
+        self.newDeps.extend(fDeps)
+        self.updateSteps()
 
-        outputStep = self._getFirstJoinStep()
+    def _discardUnmatchedMovies(self):
+        """Settle the movies that are in only one input once both are closed.
 
-        if len(set(self.allMovies1)) > len(set(self.processedDict)) and \
-           len(set(self.allMovies2)) > len(set(self.processedDict)):
+        Only the movies in both inputs are compared. One in the first input
+        alone is discarded, without comparison values; one in the second
+        alone is only reported, its output being the first input's movie.
+        Left pending, they would be lost without a word.
+        """
+        processed = set(self.processedDict)
+        onlyFirst = sorted(set(self._pendingMovieIds1) - processed)
+        onlySecond = sorted(set(self._pendingMovieIds2) - processed)
+        self._pendingMovieIds1.clear()
+        self._pendingMovieIds2.clear()
 
-            fDeps = self._insertNewMovieSteps(newIds1, newIds2, self.insertedDict)
+        if onlySecond:
+            self.info("Movies with ID %s exist only in the second input and "
+                      "are left out." % onlySecond)
 
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+        if not onlyFirst:
+            return
 
-            self.updateSteps()
+        self.info("Movies with ID %s have no counterpart in the second "
+                  "input and are discarded." % onlyFirst)
+        unmatched = self.__dict__.setdefault('_unmatchedMovieIds', set())
 
-    def _insertNewMovieSteps(self, movies1Dict, movies2Dict, insDict):
+        with self._lock:
+            for movieId in onlyFirst:
+                self._decidedDiscarded.append(movieId)
+                self.processedDict.append(movieId)
+                unmatched.add(movieId)
+
+    def _droppedMovieIds(self):
+        """Movies that can never be published: settled, but in no output."""
+        return self.__dict__.setdefault('_droppedMovieIdsSet', set())
+
+    def _stopWaitingFor(self, movieId):
+        """Whether a movie whose rows are not visible is waited for no more.
+
+        While the inputs are open it may still turn up. Once they are
+        closed a few more checks are given, and after those it is settled
+        without it: polling for it would never end.
+        """
+        if not getattr(self, 'isStreamClosed', False):
+            return False
+
+        checks = self.__dict__.setdefault('_invisibleMovieChecks', {})
+        checks[movieId] = checks.get(movieId, 0) + 1
+
+        return checks[movieId] > self.MOVIE_VISIBILITY_MAX_CHECKS
+
+    def _everyMovieSettled(self, publishedIds):
+        """Whether every movie taken in is published or dropped for good:
+        the ones scheduled or discarded unmatched, and every movie in both
+        inputs. The run fails when none could be published at all."""
+        expected = set(getattr(self, 'processedDict', ())) | (
+            set(getattr(self, 'allMovies1', ()))
+            & set(getattr(self, 'allMovies2', ())))
+        settled = getattr(self, 'isStreamClosed', False) and expected <= (
+            set(publishedIds) | self._droppedMovieIds())
+
+        if settled and self._droppedMovieIds() and not publishedIds:
+            raise Exception("Every one of the %d movies failed; see the "
+                            "errors above. Continue compares them again."
+                            % len(self._droppedMovieIds()))
+
+        return settled
+
+    def _insertNewMovieSteps(self, newIDs, insDict):
         deps = []
-
-        newIDs = list(set(movies1Dict).intersection(set(movies2Dict)))
 
         for movieID in newIDs:
             if movieID not in insDict:
@@ -466,16 +585,24 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         return deps
 
     def alignmentCorrelationMovieStep(self, movieId):
+        try:
+            self._alignmentCorrelationMovie(movieId)
+        except Exception as e:
+            # Not raised: the step would fail and take the whole run with
+            # it. The movie is left out of every output, and Continue
+            # compares it again.
+            self.error("Comparing the alignments of movie %s failed: %s"
+                       % (movieId, e))
+            self._droppedMovieIds().add(movieId)
+
+    def _alignmentCorrelationMovie(self, movieId):
         movie1 = self.allMovies1.get(movieId)
         movie2 = self.allMovies2.get(movieId)
-        doneFn = self._getMovieDone(movieId)
 
-        if self.isContinued() and self._isMovieDone(movieId):
-            self.info("Skipping movie with ID: %s, seems to be done" % movieId)
+        if getattr(self, '_originalRunMode', self.getRunMode()) == MODE_RESUME and \
+           self._isMovieOutputDone(movieId):
+            self.info("Skipping movie with ID: %s, output already persisted" % movieId)
             return
-
-        # Clean old finished files
-        pwutils.cleanPath(doneFn)
 
         if (movie1 is None) or (movie2 is None):
             self.info('AlignmentCorrelationMovieStep movie1 or movie2 are None')
@@ -516,9 +643,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             self.info('Root Mean Squared Error %f' % rmse_cart)
             self.info('General Corr min(corrX, corrY) %f' % corr_cart)
 
-            fn = self._getMovieSelecFileAccepted()
-            with open(fn, 'a') as f:
-                f.write('%d T\n' % movieId)
+            with self._lock:
+                self._decidedAccepted.append(movieId)
 
             stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
                          'max_error': maxe_cart, 'rmse_error': rmse_cart, 'S1_cart': S1_cart, 'S2_p_cart': S2_p_cart}
@@ -560,105 +686,146 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
             self.info('Root Mean Squared Error %f' % rmse_cart)
             self.info('General Corr min(corrX, corrY) %f' % corr_cart)
 
-            if corr_cart >= self.minConsCorrelation.get():
+            threshold = self.minConsCorrelation.get()
+            accepted = threshold == -1 or (np.isfinite(corr_cart) and corr_cart >= threshold)
+
+            if accepted:
                 self.info('Movie with id %d has a correlated alignment shift trajectory' % movieId)
-                fn = self._getMovieSelecFileAccepted()
-                with open(fn, 'a') as f:
-                    f.write('%d T\n' % movieId)
-            elif corr_cart < self.minConsCorrelation.get():
+                with self._lock:
+                    self._decidedAccepted.append(movieId)
+            else:
                 self.info('Movie with id %d has discrepancy in the alignment with correlation %f' % (movieId, corr_cart))
-                fn = self._getMovieSelecFileDiscarded()
-                with open(fn, 'a') as f:
-                    f.write('%d F\n' % movieId)
+                with self._lock:
+                    self._decidedDiscarded.append(movieId)
 
             stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
                          'max_error': maxe_cart, 'rmse_error': rmse_cart, 'S1_cart': S1_cart, 'S2_p_cart': S2_p_cart}
 
             self.stats[movieId] = stats_loc
             self._store()
-        # Mark this movie as finished
-        open(doneFn, 'w').close()
 
     def _checkNewOutput(self):
         """ Check for already selected movies and update the output set. """
-        # Load previously done items (from text file)
-        doneListDiscarded = self._readCertainDoneList(DISCARDED)
-        doneListAccepted = self._readCertainDoneList(ACCEPTED)
-        # Check for newly done items
-        movieListIdAccepted = self._readtMovieId(True)
-        movieListIdDiscarded = self._readtMovieId(False)
+        # The real output Sets are the durable source of truth for what's
+        # already published.
+        doneListAccepted, doneListDiscarded = self._getAllDoneIds()
+        # Snapshot (not drain) the pending worker decisions, so a decision
+        # is retried on the next poll if this one fails before publishing.
+        with self._lock:
+            movieListIdAccepted = list(self._decidedAccepted)
+            movieListIdDiscarded = list(self._decidedDiscarded)
 
         newDoneAccepted = [movieId for movieId in movieListIdAccepted
                            if movieId not in doneListAccepted]
         newDoneDiscarded = [movieId for movieId in movieListIdDiscarded
                             if movieId not in doneListDiscarded]
 
-        firstTimeAccepted = len(doneListAccepted) == 0
-        firstTimeDiscarded = len(doneListDiscarded) == 0
-
-        allDone = len(doneListAccepted) + len(doneListDiscarded) +\
-                  len(newDoneAccepted) + len(newDoneDiscarded)
-
-        # We have finished when there is not more input movies (stream closed)
-        # and the number of processed movies is equal to the number of inputs
-        maxMovieSize = len(set(self.allMovies1).intersection(set(self.allMovies2)))
-        self.finished = (self.isStreamClosed and allDone == maxMovieSize)
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        if not newDoneDiscarded and not newDoneAccepted:
+            # Nothing decided since last check - what is done is exactly
+            # what's already published.
+            self.finished = self._everyMovieSettled(
+                doneListAccepted + doneListDiscarded)
+            return
 
         def readOrCreateOutputs(doneList, newDone, label=''):
             if len(doneList) > 0 or len(newDone) > 0:
                 with self._lock:
-                    movSet = self._loadOutputSet(SetOfMovies, 'movies'+label+'.sqlite')
-                    micSet = self._loadOutputSet(SetOfMicrographs, 'micrographs'+label+'.sqlite')
+                    movSet = self._loadOutputSet(SetOfMovies, 'outputMovies'+label)
+                    micSet = self._loadOutputSet(SetOfMicrographs, 'outputMicrographs'+label)
                     label = ACCEPTED if label == '' else DISCARDED
-                    self.fillOutput(movSet, micSet, newDone, label)
+                    publishedIds = self.fillOutput(movSet, micSet, newDone, label)
                     movSet.setSamplingRate(self.samplingRate)
                     micSet.setSamplingRate(self.samplingRate)
                     micSet.setAcquisition(self.acquisition.clone())
                     movSet.setAcquisition(self.acquisition.clone())
 
-                return movSet, micSet
-            return None, None
+                return movSet, micSet, publishedIds
+            return None, None, []
 
-        movieSet, micSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
-        movieSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded, newDoneDiscarded, DISCARDED)
+        movieSet, micSet, publishedAccepted = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
+        movieSetDiscarded, micSetDiscarded, publishedDiscarded = readOrCreateOutputs(doneListDiscarded, newDoneDiscarded, DISCARDED)
 
-        if not self.finished and not newDoneDiscarded and not newDoneAccepted:
-        # If we are not finished and no new output have been produced
-        # it does not make sense to proceed and updated the outputs
-        # so we exit from the function here
+        # A movie whose micrograph isn't visible yet (fillOutput skipped
+        # it) must not count as done, or this poll could finish
+        # prematurely while that movie is still waiting to be published
+        # on a later poll.
+        self.finished = self._everyMovieSettled(
+            doneListAccepted + publishedAccepted
+            + doneListDiscarded + publishedDiscarded)
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        def updateOutputsAndClose(movieSet, micSet, label=''):
+            if movieSet is None or micSet is None:
+                return False
+
+            micsAttrName = 'outputMicrographs'+label
+            self._updateOutputSet(micsAttrName, micSet, streamMode)
+            self._updateOutputSet('outputMovies'+label, movieSet, streamMode)
+
+            micSet.close()
+            movieSet.close()
+            return True
+
+        acceptedUpdated = updateOutputsAndClose(movieSet, micSet)
+        discardedUpdated = updateOutputsAndClose(movieSetDiscarded, micSetDiscarded, DISCARDED)
+
+        if acceptedUpdated or discardedUpdated:
+            self._refreshOutputRelations()
+
+    def _refreshOutputRelations(self):
+        relationOutputs = [getattr(self, name, None) for name in ('outputMicrographs', 'outputMicrographsDiscarded')]
+        relationOutputs = [output for output in relationOutputs if output is not None]
+
+        if not relationOutputs:
             return
 
-        def updateRelationsAndClose(movieSet, micSet, first, label=''):
-            if os.path.exists(self._getPath('movies'+label+'.sqlite')):
-                micsAttrName = 'outputMicrographs'+label
-                self._updateOutputSet(micsAttrName, micSet, streamMode)
-                self._updateOutputSet('outputMovies'+label, movieSet, streamMode)
+        if self.mapper is not None:
+            self.mapper.deleteRelations(self)
 
-                if first:
-                    # We consider that Movies are 'transformed' into the Micrographs
-                    # This will allow to extend the micrograph associated to a set of
-                    # movies to another set of micrographs generated from a
-                    # different movie alignment
-                    self._defineTransformRelation(self.inputMovies1, micSet)
+        # Movies are considered transformed into the corresponding micrographs.
+        # Rebuilding all relations makes Resume safe if a previous run stopped
+        # after persisting an output but before its relation was created.
+        for micSet in relationOutputs:
+            self._defineTransformRelation(self.inputMovies1, micSet)
 
-                micSet.close()
-                movieSet.close()
-
-        updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
-        updateRelationsAndClose(movieSetDiscarded, micSetDiscarded, firstTimeDiscarded, DISCARDED)
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
+        if self.mapper is not None:
+            self.mapper.commit()
 
     def fillOutput(self, movieSet, micSet, newDone, label):
+        publishedIds = []
+
         if newDone:
-            inputMovieSet = self._loadInputMovieSet(self.movieFn1)
-            inputMicSet = self._loadInputMicrographSet(self.micsFn)
+            inputMovieSet = self._loadInputMovieSet()
+            inputMicSet = self._loadInputMicrographSet()
+            movieIds = set(movieSet.getIdSet()) if movieSet.getSize() else set()
+            micIds = set(micSet.getIdSet()) if micSet.getSize() else set()
 
             for movieId in newDone:
+                # Set.__getitem__(int) returns None (not a raise) for a
+                # missing row, but indexing straight into .clone() would
+                # still crash. The micrograph Set in particular is the
+                # output of a different, independently-paced protocol, so
+                # a decided movieId may not have a visible micrograph row
+                # yet - skip it for now and retry on the next poll rather
+                # than crashing the whole protocol.
+                if movieId not in inputMovieSet or movieId not in inputMicSet:
+                    if not self._stopWaitingFor(movieId):
+                        self.info(
+                            "Movie with id %d is not yet visible in the "
+                            "input movie/micrograph Set(s); deferring it to "
+                            "the next check." % movieId
+                        )
+                        continue
+
+                    # A movie is published with its micrograph or not at
+                    # all; it is still settled, or the run would never end.
+                    self.error(
+                        "Movie with id %d or its micrograph never became "
+                        "visible in the input; it is left out." % movieId
+                    )
+                    self._droppedMovieIds().add(movieId)
+                    continue
+
                 movie = inputMovieSet[movieId].clone()
                 mic = inputMicSet[movieId].clone()
 
@@ -666,63 +833,64 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
                 mic.setEnabled(self._getEnable(movieId))
                 alignment1 = movie.getAlignment()
                 shiftX_1, shiftY_1 = alignment1.getShifts()
-                setAttribute(mic, '_alignment_corr', self.stats[movieId]['shift_corr'])
-                setAttribute(mic, '_alignment_rmse_error', self.stats[movieId]['rmse_error'])
-                setAttribute(mic, '_alignment_max_error', self.stats[movieId]['max_error'])
+                # A movie without its counterpart in the second input was
+                # never compared: it has no comparison values.
+                compared = movieId in self.stats
+                if compared:
+                    setAttribute(mic, '_alignment_corr', self.stats[movieId]['shift_corr'])
+                    setAttribute(mic, '_alignment_rmse_error', self.stats[movieId]['rmse_error'])
+                    setAttribute(mic, '_alignment_max_error', self.stats[movieId]['max_error'])
                 alignment = MovieAlignment(xshifts=shiftX_1, yshifts=shiftY_1)
                 movie.setAlignment(alignment)
 
-                self._writeCertainDoneList(movieId, label)
-
-                if self.trajectoryPlot.get():
+                if compared and self.trajectoryPlot.get():
                     firstFrame, _, _ = self.inputMovies1.get().getFramesRange()
                     self._createAndSaveTrajectoriesPlot(movieId, firstFrame, self.samplingRate)
                     mic.plotCart = Image()
                     mic.plotCart.setFileName(self._getTrajectoriesPlot(movieId))
 
-                movieSet.append(movie)
-                micSet.append(mic)
+                if movieId not in movieIds:
+                    movieSet.append(movie)
+                    movieIds.add(movieId)
+
+                if movieId not in micIds:
+                    micSet.append(mic)
+                    micIds.add(movieId)
+
+                publishedIds.append(movieId)
 
             inputMovieSet.close()
             inputMicSet.close()
 
-    def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
-        """
-        Load the output set if it exists or create a new one.
-        """
-        setFile = self._getPath(baseName)
+        return publishedIds
 
-        if os.path.exists(setFile) and os.path.getsize(setFile) > 0:
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+    def _loadOutputSet(self, SetClass, outputName, fixSampling=True):
+        suffixByOutputName = {'outputMovies': '', 'outputMicrographs': '', 'outputMoviesDiscarded': 'Discarded', 'outputMicrographsDiscarded': 'Discarded'}
+        if outputName not in suffixByOutputName:
+            raise ValueError("Unknown MovieAlignmentConsensus output: %s" % outputName)
 
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffixByOutputName[outputName])
+        if created:
             inputMovies = self.inputMovies1.get()
             outputSet.copyInfo(inputMovies)
-
             if fixSampling:
-                newSampling = inputMovies.getSamplingRate() * self._getBinFactor()
-                outputSet.setSamplingRate(newSampling)
-
+                outputSet.setSamplingRate(inputMovies.getSamplingRate() * self._getBinFactor())
         return outputSet
 
-    def _loadInputMovieSet(self, moviesFn):
-        self.debug("Loading input db: %s" % moviesFn)
-        movieSet = SetOfMovies(filename=moviesFn)
-        movieSet.loadAllProperties()
-        movieSet.close()
-        self.debug("Closed db.")
-        return movieSet
 
-    def _loadInputMicrographSet(self, micsFn):
-        self.debug("Loading input db: %s" % micsFn)
-        micSet = SetOfMicrographs(filename=micsFn)
+
+    def _loadInputMovieSet(self):
+        return self._loadLogicalSet(self.inputMovies1)
+
+    def _loadInputMicrographSet(self):
+        # The reference micrographs are an output of a *different*
+        # protocol (whichever produced inputMovies1), resolved live by
+        # attribute name each time - not a Pointer of our own, and never
+        # a raw filename - so it stays correct even if that protocol's
+        # output Set is re-saved under the compatibility bridge.
+        prot1 = self._getReferenceAlignmentProtocol()
+        micSet = getattr(prot1, self._micsOutputName)
         micSet.loadAllProperties()
-        micSet.close()
-        self.debug("Closed db.")
         return micSet
 
     def _summary(self):
@@ -765,67 +933,51 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
            (self.inputMovies2.get().hasAlignment() == ALIGN_NONE):
             errors.append("The inputs ( _Input Movies 1_ or _Input Movies 2_ must be aligned before")
 
+        errors.extend(self._validateParallelProcessing())
         return errors
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for alignmentCorrelationMovieStep.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
 
     # ------------------------------------ Utils functions ------------------------------------
-    def _isMovieDone(self, id):
-        """ A movie is done if the marker file exists. """
-        return os.path.exists(self._getMovieDone(id))
+    def _getReferenceAlignmentProtocol(self):
+        prot1 = self.inputMovies1.getObjValue()
+        if isinstance(prot1, Protocol):
+            return prot1
 
-    def _getMovieDone(self, id):
-        """ Return the file that is used as a flag of termination. """
-        return self._getExtraPath('DONE', 'movie_%06d.TXT' % id)
+        movieSet = self.inputMovies1.get()
+        parentId = movieSet.getObjParentId() if movieSet is not None else None
+        project = self.getProject()
 
-    def _readDoneList(self):
-        """ Read from a file the id's of the items that have been done. """
-        doneFile = self._getAllDone()
-        doneList = []
-        # Check what items have been previously done
-        if os.path.exists(doneFile):
-            with open(doneFile) as f:
-                doneList += [int(line.strip()) for line in f]
-        return doneList
-
-    def _getAllDone(self):
-        return self._getExtraPath('DONE_all.TXT')
-
-    def _writeDoneList(self, partList):
-        """ Write to a text file the items that have been done. """
-        with open(self._getAllDone(), 'a') as f:
-            for part in partList:
-                f.write('%d\n' % part.getObjId())
-
-    def _getMicsPath(self):
-        prot1 = self.inputMovies1.getObjValue()  # pointer to previous protocol
-
-        if hasattr(prot1, 'outputMicrographs'):
-            path1 = prot1.outputMicrographs.getFileName()
-            if os.path.getsize(path1) > 0:
-                return path1
-        elif hasattr(prot1, 'outputMicrographsDoseWeighted'):
-            path2 = prot1.outputMicrographsDoseWeighted.getFileName()
-            if os.path.getsize(path2) > 0:
-                return path2
-        else:
+        if parentId is None or project is None:
             return None
 
-    def _readCertainDoneList(self, label):
-        """ Read from a text file the id's of the items
-        that have been done. """
-        doneFile = self._getCertainDone(label)
-        doneList = []
-        # Check what items have been previously done
-        if os.path.exists(doneFile):
-            with open(doneFile) as f:
-                doneList += [int(line.strip()) for line in f]
-        return doneList
+        try:
+            return project.getProtocol(parentId)
+        except Exception as error:
+            self.debug("Could not resolve reference movie alignment protocol: %s" % error)
+            return None
 
-    def _writeCertainDoneList(self, movieId, label):
-        """ Write to a text file the items that have been done. """
-        doneFile = self._getCertainDone(label)
-        with open(doneFile, 'a') as f:
-            f.write('%d\n' % movieId)
+    def _resolveMicsOutputName(self):
+        prot1 = self._getReferenceAlignmentProtocol()
+        if prot1 is None:
+            return None
+
+        for outputName in ('outputMicrographs', 'outputMicrographsDoseWeighted'):
+            if getattr(prot1, outputName, None) is not None:
+                return outputName
+
+        return None
 
     def _createAndSaveTrajectoriesPlot(self, movieId, first, pixSize):
         """ Write to a text file the items that have been done. """
@@ -905,41 +1057,17 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies, Protocol):
         """ Write to a text file the items that have been done. """
         return self._getExtraPath('global_trajectories_%d' %movieId+'_plot_cart.png')
 
-    def _getCertainDone(self, label):
-        return self._getExtraPath('DONE_'+label+'.TXT')
-
-    def _getMovieSelecFileAccepted(self):
-        return self._getExtraPath('selection-movie-accepted.txt')
-
-    def _getMovieSelecFileDiscarded(self):
-        return self._getExtraPath('selection-movie-discarded.txt')
-
-    def _readtMovieId(self, accepted):
-        if accepted:
-            fn = self._getMovieSelecFileAccepted()
-        else:
-            fn = self._getMovieSelecFileDiscarded()
-        moviesList = []
-        # Check what items have been previously done
-        if os.path.exists(fn):
-            with open(fn) as f:
-                moviesList += [int(line.strip().split()[0]) for line in f]
-        return moviesList
-
     def _getEnable(self, movieId):
-        fn = self._getMovieSelecFileAccepted()
-        # Check what items have been previously done
-        if os.path.exists(fn):
-            with open(fn) as f:
-                for line in f:
-                    if movieId == int(line.strip().split()[0]):
-                        if line.strip().split()[1] == 'T':
-                            return True
-                        else:
-                            return False
+        # Preserves the pre-existing contract: True when the worker
+        # decided this movie was accepted, None otherwise (callers only
+        # ever query this for a movie already known to be decided one
+        # way or the other).
+        with self._lock:
+            if movieId in self._decidedAccepted:
+                return True
+        return None
 
 def setAttribute(obj, label, value):
     if value is None:
         return
     setattr(obj, label, getScipionObj(value))
-

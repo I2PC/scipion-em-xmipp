@@ -27,12 +27,13 @@
 # *
 # **************************************************************************
 
+import json
 import os
 from datetime import datetime
 
-import pyworkflow.protocol.constants as cons
+from pyworkflow.protocol import ProtStreamingBase
 from pyworkflow.utils import cleanPath
-from pyworkflow.object import Set, Float
+from pyworkflow.object import Set, Float, CsvList
 from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         Range, LEVEL_ADVANCED, FloatParam,
                                         BooleanParam)
@@ -44,9 +45,11 @@ from pwem.protocols import ProtProcessParticles
 
 from pwem import emlib
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 
-class XmippProtScreenParticles(ProtProcessParticles):
+class XmippProtScreenParticles(XmippStreamingBase, ProtStreamingBase,
+                               ProtProcessParticles):
     """Protocol to attach different merit values to every particle metadata for subsequent pruning the set.
 There are different merit values to be calculated:
     - zScore evaluates the similarity of a particles with an average (lower zScore -> higher similarity).
@@ -417,153 +420,363 @@ There are different merit values to be calculated:
                       help='Add features used for the ranking to each one '
                            'of the input particles')
 
-        form.addParallelSection(threads=0, mpi=0)
+        self._defineStreamingParams(form)
 
     def _getDefaultParallel(self):
-        """This protocol doesn't have mpi version"""
-        return (0, 0)
+        """This protocol doesn't have mpi version, but stepsGeneratorStep
+        needs at least 3 threads: one reserved by the executor for its
+        own bookkeeping, one permanently held by the streaming generator,
+        and one free worker slot."""
+        return (3, 0)
 
     # --------------------------- INSERT steps functions ----------------------
-    def _insertAllSteps(self):
+    def _prepareStreamingGenerator(self):
         self._initializeZscores()
-        self.outputSize = 0
         self.inputSize = 0
-        self.check = None
+        self._pendingParticleIds = set()
         self.fnInputMd = self._getExtraPath("input.xmd")
         self.fnInputOldMd = self._getExtraPath("inputOld.xmd")
         self.fnOutputMd = self._getExtraPath("output.xmd")
 
-        self.inputSize, self.streamClosed = self._loadInput()
-        partsSteps = self._insertNewPartsSteps()
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=partsSteps, wait=True)
+        if not self.isContinued():
+            for fileName in (
+                self.fnInputMd,
+                self.fnInputOldMd,
+                self.fnOutputMd,
+            ):
+                cleanPath(fileName)
 
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
+        processedIds = self._getKnownProcessedParticleIds()
+        self.outputSize = len(processedIds)
 
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
+        if self._getPendingScreeningStep() is not None:
+            self.inputSize, self.streamClosed = self._getInputStatus()
+        else:
+            self.inputSize, self.streamClosed = self._loadInput()
+            if not isEmpty(self.fnInputMd):
+                self.newDeps.extend(self._insertNewPartsSteps())
+
+    def stepsGeneratorStep(self) -> None:
+        self.newDeps = []
+        self._prepareStreamingGenerator()
+
+        while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def createOutputStep(self):
         pass
 
     def _insertNewPartsSteps(self):
-        deps = []
-        stepId = self._insertFunctionStep('sortImagesStep', prerequisites=[])
-        deps.append(stepId)
-        return deps
+        batchIds = self._readMetadataIds(self.fnInputMd)
+        return [self._insertFunctionStep('sortImagesStep', batchIds, prerequisites=[])]
 
-    def _stepsCheck(self):
-        # Input particles set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
+    @staticmethod
+    def _getScreeningStepBatchIds(step):
+        argsStr = getattr(step, 'argsStr', None)
+        if hasattr(argsStr, 'get'):
+            argsStr = argsStr.get('[]')
+        try:
+            args = json.loads(argsStr or '[]')
+        except (TypeError, ValueError):
+            return []
+        if not args or not isinstance(args[0], list):
+            return []
+        return [int(particleId) for particleId in args[0]]
+
+    def _getPendingScreeningStep(self):
+        processedIds = self._getKnownProcessedParticleIds()
+        legacyFinished = []
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName != 'sortImagesStep':
+                continue
+            batchIds = self._getScreeningStepBatchIds(step)
+            if batchIds:
+                if not set(batchIds).issubset(processedIds):
+                    return step
+            elif not step.isFinished():
+                return step
+            else:
+                legacyFinished.append(step)
+
+        if legacyFinished:
+            batchIds = set(self._readMetadataIds(self.fnInputMd)).difference(processedIds)
+            if batchIds:
+                return legacyFinished[-1]
+        return None
 
     def _checkNewInput(self):
-        # Check if there are new particles to process from the input set
-        partsFile = self.inputParticles.get().getFileName()
-        mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime:
-            return None
+        if self._getPendingScreeningStep() is not None:
+            return
 
         self.inputSize, self.streamClosed = self._loadInput()
         if not isEmpty(self.fnInputMd):
-            fDeps = self._insertNewPartsSteps()
-            outputStep = self._getFirstJoinStep()
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+            self.newDeps.extend(self._insertNewPartsSteps())
             self.updateSteps()
 
+    def _getInputStatus(self):
+        inPartsSet = self._loadLogicalSet(self.inputParticles)
+
+        try:
+            inputSize = inPartsSet.getSize()
+            streamClosed = inPartsSet.isStreamClosed()
+        finally:
+            inPartsSet.close()
+
+        return inputSize, streamClosed
+
+    def _getRejectedParticleIds(self):
+        rejectedIds = getattr(
+            self,
+            '_rejectedParticleIds',
+            None,
+        )
+        if rejectedIds is None:
+            rejectedIds = CsvList(pType=int)
+            self._rejectedParticleIds = rejectedIds
+
+        return set(rejectedIds)
+
+    def _markRejectedParticleIds(self, particleIds):
+        rejectedIds = getattr(
+            self,
+            '_rejectedParticleIds',
+            None,
+        )
+        if rejectedIds is None:
+            rejectedIds = CsvList(pType=int)
+            self._rejectedParticleIds = rejectedIds
+
+        knownRejectedIds = set(rejectedIds)
+        knownRejectedIds.update(particleIds)
+        rejectedIds.set(
+            sorted(knownRejectedIds)
+        )
+
+        return set(rejectedIds)
+
+    def _getKnownProcessedParticleIds(self):
+        processedIds = self._getKnownPersistedOutputIds(
+            'outputParticles',
+        )
+        processedIds.update(
+            self._getRejectedParticleIds()
+        )
+        return processedIds
+
     def _loadInput(self):
-        self.lastCheck = datetime.now()
-        partsFile = self.inputParticles.get().getFileName()
-        inPartsSet = SetOfParticles(filename=partsFile)
-        inPartsSet.loadAllProperties()
+        inPartsSet = self._loadLogicalSet(self.inputParticles)
+        processedIds = self._getKnownProcessedParticleIds()
 
-        check = None
-        for p in inPartsSet.iterItems(orderBy='creation', direction='DESC'):
-            check = p.getObjCreation()
-            break
-        if self.check is None:
-            writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=ALIGN_NONE, orderBy='creation')
-        else:
-            writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=ALIGN_NONE, orderBy='creation',
-                                where='creation>"' + str(self.check) + '"')
-            writeSetOfParticles(inPartsSet, self.fnInputOldMd,
-                                alignType=ALIGN_NONE, orderBy='creation',
-                                where='creation<"' + str(self.check) + '"')
-        self.check = check
+        try:
+            newIds, self._lastInputId = self._discoverIdsAfter(
+                inPartsSet,
+                getattr(self, '_lastInputId', 0),
+            )
+            producerClosed = inPartsSet.isStreamClosed()
 
-        streamClosed = inPartsSet.isStreamClosed()
-        inputSize = inPartsSet.getSize()
+            newIds, terminalConsistent = (
+                self._reconcileClosedStreamIds(
+                    inPartsSet,
+                    newIds,
+                    processedIds,
+                    producerClosed,
+                )
+            )
 
-        inPartsSet.close()
+            newIds = [
+                particleId
+                for particleId in newIds
+                if particleId not in processedIds
+            ]
+
+            # Set.getItem raises rather than returning None for a row it
+            # cannot find, and _discoverIdsAfter already advanced the id
+            # watermark past these ids regardless of whether they are
+            # actually selectable yet. A momentarily-invisible particle
+            # must be kept pending and retried on a later check - dropping
+            # it here would lose it forever, since the watermark never
+            # revisits an id once passed.
+            pendingParticleIds = getattr(self, '_pendingParticleIds', set())
+            pendingParticleIds.update(newIds)
+
+            visibleIds = []
+            stillPendingIds = set()
+            for particleId in sorted(pendingParticleIds):
+                if particleId in inPartsSet:
+                    visibleIds.append(particleId)
+                else:
+                    stillPendingIds.add(particleId)
+            self._pendingParticleIds = stillPendingIds
+
+            newParticles = (
+                inPartsSet.getItem('id', particleId)
+                for particleId in visibleIds
+            )
+            writeSetOfParticles(
+                newParticles,
+                self.fnInputMd,
+                alignType=ALIGN_NONE,
+            )
+
+            if processedIds:
+                oldIds = [
+                    particleId
+                    for particleId in sorted(processedIds)
+                    if particleId in inPartsSet
+                ]
+                oldParticles = (
+                    inPartsSet.getItem('id', particleId)
+                    for particleId in oldIds
+                )
+                writeSetOfParticles(
+                    oldParticles,
+                    self.fnInputOldMd,
+                    alignType=ALIGN_NONE,
+                )
+            else:
+                cleanPath(self.fnInputOldMd)
+
+            streamClosed = (
+                producerClosed
+                and terminalConsistent
+            )
+            inputSize = inPartsSet.getSize()
+        finally:
+            inPartsSet.close()
 
         return inputSize, streamClosed
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        self.finished = self.streamClosed and \
-                        self.outputSize == self.inputSize
 
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        self.finished = (
+            self.streamClosed
+            and self.outputSize == self.inputSize
+        )
+        streamMode = (
+            Set.STREAM_CLOSED
+            if self.finished
+            else Set.STREAM_OPEN
+        )
 
-        newData = os.path.exists(self.fnOutputMd)
+        pendingStep = self._getPendingScreeningStep()
+        newData = pendingStep is not None and pendingStep.isFinished()
         lastToClose = self.finished and hasattr(self, 'outputParticles')
-        if newData or lastToClose:
 
-            outSet = self._loadOutputSet(SetOfParticles, 'outputParticles.sqlite')
+        if newData or lastToClose:
+            firstTime = not hasattr(self, 'outputParticles')
+            outSet = self._loadOutputSet(SetOfParticles, 'outputParticles')
+            acceptedBatchIds = set()
+            rejectedBatchIds = set()
 
             if newData:
+                batchIds = set(self._getScreeningStepBatchIds(pendingStep) or self._readMetadataIds(self.fnInputMd))
                 partsSet = self._createSetOfParticles()
-                readSetOfParticles(self.fnOutputMd, partsSet)
-                outSet.copyItems(partsSet)
-                for item in partsSet:
-                    self._calculateSummaryValues(item)
-                self._store()
+                readSetOfParticles(
+                    self.fnOutputMd,
+                    partsSet,
+                )
 
-                writeSetOfParticles(outSet.iterItems(orderBy='_xmipp_zScore'),
-                                    self._getPath("images.xmd"),
-                                    alignType=ALIGN_NONE)
+                acceptedBatchIds = set(
+                    partsSet.getIdSet()
+                )
+                rejectedBatchIds = (
+                    batchIds.difference(
+                        acceptedBatchIds
+                    )
+                )
+
+                self._appendNewParticles(
+                    outSet,
+                    partsSet,
+                )
+                self._recalculateSummaryValues(
+                    outSet,
+                )
+                writeSetOfParticles(
+                    outSet.iterItems(
+                        orderBy='_xmipp_zScore',
+                    ),
+                    self._getPath("images.xmd"),
+                    alignType=ALIGN_NONE,
+                )
+
+            self._updateOutputSet(
+                'outputParticles',
+                outSet,
+                streamMode,
+            )
+
+            if firstTime:
+                self._defineTransformRelation(
+                    self.inputParticles,
+                    outSet,
+                )
+
+            if newData:
+                self._markOutputIdsPersisted(
+                    'outputParticles',
+                    acceptedBatchIds,
+                )
+                self._markRejectedParticleIds(
+                    rejectedBatchIds,
+                )
+                self.outputSize = len(
+                    self._getKnownProcessedParticleIds()
+                )
+                self._store()
                 cleanPath(self.fnOutputMd)
 
-            self._updateOutputSet('outputParticles', outSet, streamMode)
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
-
-    def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-            self._store(outputSet)
-            self._defineTransformRelation(self.inputParticles, outputSet)
-
-        outputSet.copyInfo(self.inputParticles.get())
-
+    def _loadOutputSet(self, SetClass, outputName):
+        if outputName != 'outputParticles':
+            raise ValueError("Unknown ScreenParticles output: %s" % outputName)
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, '_output')
+        if created:
+            outputSet.copyInfo(self.inputParticles.get())
         return outputSet
 
+    def _readMetadataIds(self, metadataFile):
+        if not os.path.exists(metadataFile) or isEmpty(metadataFile):
+            return []
+        metadata = emlib.MetaData('Particles@%s' % metadataFile)
+        return [int(metadata.getValue(emlib.MDL_ITEM_ID, objId)) for objId in metadata]
+
+    def _appendNewParticles(self, outputSet, particles):
+        outputIds = set(outputSet.getIdSet()) if outputSet.getSize() else set()
+        for particle in particles:
+            particleId = particle.getObjId()
+            if particleId not in outputIds:
+                outputSet.append(particle)
+                outputIds.add(particleId)
+
+    def _recalculateSummaryValues(self, outputSet):
+        zScores = [particle._xmipp_zScore.get() for particle in outputSet]
+        if zScores:
+            self.minZScore.set(min(zScores))
+            self.maxZScore.set(max(zScores))
+            self.sumZScore.set(sum(zScores))
+
     # --------------------------- STEP functions -----------------------------
-    def sortImagesStep(self):
+    def sortImagesStep(self, batchIds):
         args = "-i Particles@%s -o %s --addToInput " % (self.fnInputMd,
                                                         self.fnOutputMd)
         if os.path.exists(self.fnInputOldMd):
@@ -585,11 +798,11 @@ There are different merit values to be calculated:
         self.runJob("xmipp_image_ssnr", args)
 
         if self.autoParRejectionVar != self.REJ_NONE:
-            print('Rejecting by variance:')
+            self.info('Rejecting by variance:')
             if self.outputSize == 0:
                 varList = []
                 giniList = []
-                print('  - Reading metadata')
+                self.info('  - Reading metadata')
                 mdata = emlib.MetaData(self.fnInputMd)
                 for objId in mdata:
                     varList.append(mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId))
@@ -603,20 +816,30 @@ There are different merit values to be calculated:
                     self.mdLabels = [emlib.MDL_SCORE_BY_VAR, emlib.MDL_SCORE_BY_GINI]
 
                 self.varThreshold.set(histThresholding(valuesList))
-                print('  - Variance threshold: %f' % self.varThreshold)
+                self.info('  - Variance threshold: %f' % self.varThreshold)
 
             rejectByVariance(self.fnInputMd, self.fnOutputMd, self.varThreshold,
                              self.autoParRejectionVar)
 
-        # update the processed particles
-        self.outputSize += getSize(self.fnInputMd)
+        # batchIds is persisted in the step graph so completion can be
+        # reconciled against logical outputs instead of temporary files.
 
     def _initializeZscores(self):
-        # Store the set for later access , ;-(
-        self.minZScore = Float()
-        self.maxZScore = Float()
-        self.sumZScore = Float()
-        self.varThreshold = Float()
+        # Preserve persisted statistics and the variance threshold on Continue.
+        if not self.isContinued():
+            self.minZScore = Float()
+            self.maxZScore = Float()
+            self.sumZScore = Float()
+            self.varThreshold = Float()
+        else:
+            if not hasattr(self, 'minZScore'):
+                self.minZScore = Float()
+            if not hasattr(self, 'maxZScore'):
+                self.maxZScore = Float()
+            if not hasattr(self, 'sumZScore'):
+                self.sumZScore = Float()
+            if not hasattr(self, 'varThreshold'):
+                self.varThreshold = Float()
         self._store()
 
     def _calculateSummaryValues(self, particle):
@@ -684,7 +907,21 @@ There are different merit values to be calculated:
                                     'done because the particles have not the '
                                     'scoreByVariance attribute. Use Xmipp to '
                                     'extract the particles.')
+
+        validateMsgs.extend(self._validateParallelProcessing())
         return validateMsgs
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for screening.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     def _citations(self):
         return ['Vargas2013b']

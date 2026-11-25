@@ -306,27 +306,53 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             writeSetOfParticles(imgSet, imgsFn)
         # Convert input volumes (SetOfClasses3D, SetOfVolumes and Volume)
         volSet = self.inputSet3D.get()
-        for volId, fnVol in self.fnVolDict.items():
-            if isinstance(volSet, Volume):
-                vol = volSet
-            else:
-                volCl = volSet.getItem("id", volId)
-                if isinstance(volCl, Class3D):
-                    vol = volCl.getRepresentative().clone()
-                else:
-                    vol = volCl
-            img = ImageHandler()
-            fnVol = self.fnVolDict[volId]
-            self.info("Registering volume %s" % fnVol)
-            img.convert(vol, fnVol)
+        unresolvedVolIds = []
+        for volId, fnVol in list(self.fnVolDict.items()):
+            if not isinstance(volSet, Volume) and volId not in volSet:
+                self.error('Volume/3D class id %d could not be found in '
+                            'the input set, skipping it' % volId)
+                unresolvedVolIds.append(volId)
+                continue
 
-            # In case input volume does not match 2D references size (If downsample is activated this is not needed)
-            xdimVol = vol.getDim()[0]
-            xdimImg = self._getDimensionsImages()
-            if xdimVol != xdimImg and not self.doDownSample:
-                self.xDim = xdimImg
-                self.runJob("xmipp_image_resize", "-i %s --dim %d"
-                            % (fnVol, self.xDim), numberOfMpi=1)
+            try:
+                if isinstance(volSet, Volume):
+                    vol = volSet
+                else:
+                    volCl = volSet.getItem("id", volId)
+                    if isinstance(volCl, Class3D):
+                        vol = volCl.getRepresentative().clone()
+                    else:
+                        vol = volCl
+                img = ImageHandler()
+                fnVol = self.fnVolDict[volId]
+                self.info("Registering volume %s" % fnVol)
+                img.convert(vol, fnVol)
+
+                # In case input volume does not match 2D references size (If downsample is activated this is not needed)
+                xdimVol = vol.getDim()[0]
+                xdimImg = self._getDimensionsImages()
+                if xdimVol != xdimImg and not self.doDownSample:
+                    self.xDim = xdimImg
+                    self.runJob("xmipp_image_resize", "-i %s --dim %d"
+                                % (fnVol, self.xDim), numberOfMpi=1)
+            except Exception as e:
+                # A single corrupted/unreadable volume must not crash the
+                # whole convertStep (and hence the whole protocol) - skip
+                # just this volume and keep converting the rest.
+                self.error('Volume/3D class id %d failed while being '
+                            'converted (%s); skipping it.' % (volId, e))
+                unresolvedVolIds.append(volId)
+                continue
+
+        for volId in unresolvedVolIds:
+            self.fnVolDict.pop(volId, None)
+            self.anglesDict.pop(volId, None)
+            self.galleryDict.pop(volId, None)
+            self.outputNamesDict.pop(volId, None)
+
+        if not self.fnVolDict:
+            raise Exception("None of the input volumes/3D classes could be "
+                             "resolved from the input set; cannot continue.")
 
     def downSampleStep(self, imgsOrigFn):
         # Calculate new sampling rate
@@ -471,18 +497,35 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         if self.doRanking:
             bestVolId = self.computeRankingVolumes(self._possibleOutputs)
             if self.doExtraction:
-                volCl = self.inputSet3D.get().getItem("id", bestVolId)  # It may be a Volume or a 3D Class
-                outputParticles, outputVol = self._extractElementsFrom3D(volCl)
-                if outputParticles:
-                    particlesName = "particles_bestVol"
-                    self._defineOutputs(**{particlesName: outputParticles})
-                    self._defineSourceRelation(self.inputSet3D, outputParticles)
+                inputSet3D = self.inputSet3D.get()
+                if bestVolId not in inputSet3D:
+                    self.error('Best-ranked volume/3D class id %d could not '
+                                'be found in the input set; skipping '
+                                'extraction' % bestVolId)
+                else:
+                    try:
+                        volCl = inputSet3D.getItem("id", bestVolId)  # It may be a Class3D or a Volume
+                        outputParticles, outputVol = self._extractElementsFrom3D(volCl)
+                    except Exception as e:
+                        # A corrupted/unreadable best-ranked volume must not
+                        # crash the whole createOutputStep - the ranking
+                        # outputs already defined above are still valid,
+                        # just skip this extraction.
+                        self.error('Best-ranked volume/3D class id %d failed '
+                                    'while being extracted (%s); skipping '
+                                    'extraction.' % (bestVolId, e))
+                        outputParticles, outputVol = None, None
 
-                if outputVol:
-                    volName = "bestVolume"
-                    self._defineOutputs(**{volName: outputVol})
-                    self._store(outputVol)
-                    self._defineSourceRelation(self.inputSet3D, outputVol)
+                    if outputParticles:
+                        particlesName = "particles_bestVol"
+                        self._defineOutputs(**{particlesName: outputParticles})
+                        self._defineSourceRelation(self.inputSet3D, outputParticles)
+
+                    if outputVol:
+                        volName = "bestVolume"
+                        self._defineOutputs(**{volName: outputVol})
+                        self._store(outputVol)
+                        self._defineSourceRelation(self.inputSet3D, outputVol)
 
         self.writeOutputDict()  # For visualization purpose
 

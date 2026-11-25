@@ -42,16 +42,18 @@ import pyworkflow.protocol.constants as cons
 from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
 from pyworkflow import BETA, UPDATED, NEW, PROD
+from pyworkflow.protocol import ProtStreamingBase
 
 from pwem import emlib
 import xmipp3.utils as xmutils
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingMoviesMixin
 
 OUTPUT_ESTIMATED_GAINS = 'estimatedGains'
 OUTPUT_ORIENTED_GAINS = 'orientedGain'
 OUTPUT_RESIDUAL_GAINS = 'residualGains'
 OUTPUT_MOVIES = 'outputMovies'
 
-class XmippProtMovieGain(ProtProcessMovies, Protocol):
+class XmippProtMovieGain(XmippStreamingMoviesMixin, ProtStreamingBase, ProtProcessMovies):
     """ Estimate the gain image of a camera, directly analyzing one of its movies.
     It can correct the orientation of an external gain image (by comparing it
     with the estimated). Finally, it estimates the residual gain (the gain of
@@ -349,8 +351,6 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
     _devStatus = UPDATED
     _lastUpdateVersion = VERSION_1_1
     _stepsCheckSecs = 60
-    estimatedDatabase = 'estGains.sqlite'
-    residualDatabase = 'resGains.sqlite'
     _possibleOutputs = {OUTPUT_ESTIMATED_GAINS: SetOfImages,
                         OUTPUT_ORIENTED_GAINS: SetOfImages,
                         OUTPUT_RESIDUAL_GAINS: SetOfImages,
@@ -403,17 +403,44 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
 
         # It should be in parallel (>2) in order to be able of attaching
         #  new movies to the output while estimating residual gain
+        self._defineStreamingParams(form)
+
         form.addParallelSection(threads=4, mpi=1)
 
     # -------------------------- STEPS functions ------------------------------
     def createOutputStep(self):
+        moviesSet = self._loadOutputSet(SetOfMovies, OUTPUT_MOVIES, fixGain=True)
+        self._updateOutputSet(OUTPUT_MOVIES, moviesSet, Set.STREAM_CLOSED)
+
         if self.estimateGain.get():
-            estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
+            estGainsSet = self._loadOutputSet(SetOfImages, OUTPUT_ESTIMATED_GAINS)
             self._updateOutputSet(OUTPUT_ESTIMATED_GAINS, estGainsSet, Set.STREAM_CLOSED)
 
         if self.estimateResidualGain.get():
-            resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
+            resGainsSet = self._loadOutputSet(SetOfImages, OUTPUT_RESIDUAL_GAINS)
             self._updateOutputSet(OUTPUT_RESIDUAL_GAINS, resGainsSet, Set.STREAM_CLOSED)
+
+    def _prepareStreamingGenerator(self):
+        self.insertedDict = {}
+        self.samplingRate = self.inputMovies.get().getSamplingRate()
+        self.streamClosed = False
+        self.finished = False
+        self.convertCIStep = []
+
+        if self._isFunctionStepFinished("_convertInputStep"):
+            return
+
+        convertStepId = self._insertFunctionStep(
+            "_convertInputStep", prerequisites=[])
+        self.convertCIStep.append(convertStepId)
+        self.updateSteps()
+
+    def _finalizeStreamingGenerator(self):
+        if self._isFunctionStepFinished("createOutputStep"):
+            return
+
+        self._insertFunctionStep("createOutputStep", prerequisites=[])
+        self.updateSteps()
 
     def _insertNewMoviesSteps(self, insertedDict, inputMovies):
         """ Insert steps to process new movies (from streaming)
@@ -422,9 +449,10 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
             inputMovies: input movies set to be check
         """
         deps = []
-        if len(insertedDict) == 0 and self.estimateOrientation.get():
+        if (len(insertedDict) == 0 and self.estimateOrientation.get()
+                and not self._isOutputAlreadyPublished(OUTPUT_ORIENTED_GAINS)):
             # Adding a first step to orientate the input gain
-            firstMovie = inputMovies.getFirstItem()
+            firstMovie = self._getFirstLogicalItem(inputMovies)
             movieDict = firstMovie.getObjDict(includeBasic=True)
             orientStepId = self._insertFunctionStep('estimateOrientationStep',
                                                     movieDict,
@@ -432,13 +460,20 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
             # adding orientStep as dependency for all other steps
             self.convertCIStep.append(orientStepId)
 
-        if len(insertedDict) == 0 and self.normalizeGain.get():
+        if (len(insertedDict) == 0 and self.normalizeGain.get()
+                and not self._isFunctionStepFinished('normalizeGainStep')):
             # Adding a step to normalize the gain (only one)
             normStepId = self._insertFunctionStep('normalizeGainStep',
                                                   prerequisites=self.convertCIStep)
             # adding normStep as dependency for all other steps
             self.convertCIStep.append(normStepId)
-        self.estimatedIds, self.estimatedResIds = [], []
+
+        # On Resume, insertedDict resets to {} the same as on a fresh run,
+        # so these must be reconstructed from the real, persisted gain
+        # outputs (evidence) rather than always starting empty.
+        self._restoreEstimatedIds('estimatedIds', OUTPUT_ESTIMATED_GAINS)
+        self._restoreEstimatedIds('estimatedResIds', OUTPUT_RESIDUAL_GAINS)
+
         # For each movie insert the step to process it
         for movie in inputMovies:
             if movie.getObjId() not in insertedDict:
@@ -471,14 +506,14 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
         expGainFn = self.inputMovies.get().getGain()
 
         if not movieId in self.estimatedIds:
-            self.estimatedIds.append(movieId)
+            self.estimatedIds.add(movieId)
             self.estimateGainFun(movie, noSigma=True)
 
         estGain = xmutils.readImage(estGainFn)
         expGain = xmutils.readImage(expGainFn)
         self.match_orientation(expGain, estGain)
 
-        orientedSet = self._loadOutputSet(SetOfImages, 'orientedGain.sqlite')
+        orientedSet = self._loadOutputSet(SetOfImages, OUTPUT_ORIENTED_GAINS)
         orientedSet = self.updateGainsOutput(movie, orientedSet, self.getOrientedGainPath())
         self._updateOutputSet(OUTPUT_ORIENTED_GAINS, orientedSet, Set.STREAM_CLOSED)
 
@@ -499,24 +534,42 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
         movieId = movie.getObjId()
         if not self.doGainProcess(movieId):
             return
+
         inputGain = self.getInputGain()
 
-        if self.estimateGain.get() and not movieId in self.estimatedIds:
-                self.estimatedIds.append(movieId)
-                self.estimateGainFun(movie)
+        try:
+            if self.estimateGain.get() and not movieId in self.estimatedIds:
+                    self.estimatedIds.add(movieId)
+                    self.estimateGainFun(movie)
 
-        if self.estimateResidualGain.get() and not movieId in self.estimatedResIds:
-            self.info('\nEstimating residual gain')
-            self.estimatedResIds.append(movieId)
-            self.estimateGainFun(movie, residual=True)
+            if self.estimateResidualGain.get() and not movieId in self.estimatedResIds:
+                self.info('\nEstimating residual gain')
+                self.estimatedResIds.add(movieId)
+                self.estimateGainFun(movie, residual=True)
+        except Exception as e:
+            # Not raised: the step would fail and take the whole run with
+            # it. The movie is still published, as it came in, without
+            # its estimated gain; Continue estimates it again.
+            self.error("Gain estimation failed for movie %d: %s"
+                       % (movieId, e))
+            self.estimatedIds.discard(movieId)
+            self.estimatedResIds.discard(movieId)
+            pwutils.cleanPath(self.getEstimatedGainPath(movieId),
+                              self.getResidualGainPath(movieId))
+            self._failedMovieIds().add(movieId)
+            return
 
-        # If the gain hasn't been oriented or normalized, we still need orientedGain
+        # If the gain hasn't been oriented or normalized, we still need
+        # orientedGain. Several movies may reach this concurrently
+        # under STEPS_PARALLEL, all writing the same fixed path - guard
+        # with the lock and re-check inside it to avoid a torn write.
         if not os.path.exists(self.getOrientedGainPath()):
-            # No previous gain: orientedGain is the estimated
-            if not inputGain is None:
-                G = emlib.Image()
-                G.read(inputGain)
-                G.write(self.getOrientedGainPath())
+            with self._lock:
+                # No previous gain: orientedGain is the estimated
+                if inputGain is not None and not os.path.exists(self.getOrientedGainPath()):
+                    G = emlib.Image()
+                    G.read(inputGain)
+                    G.write(self.getOrientedGainPath())
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
@@ -544,94 +597,236 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
                                    (movieId, dev, p[0], p[4], max))
         fnMonitorSummary.close()
 
-    def _loadOutputSet(self, SetClass, baseName, fixGain=False):
-        """
-        Load the output set if it exists or create a new one.
-        fixSampling: correct the output sampling rate if binning was used,
-        except for the case when the original movies are kept and shifts
-        refers to that one.
-        """
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
+    def _loadOutputSet(self, SetClass, outputName, fixGain=False):
+        inputSet = self.inputMovies.get()
+        suffix = "" if SetClass is SetOfMovies else outputName
+        outputSet, created = self._loadOrCreateOutputSet(outputName, SetClass, suffix)
 
-            inputMovies = self.inputMovies.get()
-            outputSet.copyInfo(inputMovies)
-
+        if created:
+            outputSet.copyInfo(inputSet)
             if fixGain:
-                outputSet.setGain(self.getFinalGainPath(tifFlipped=True))
+                outputSet.setGain(self.getFinalGainPath())
 
         return outputSet
 
-    def _checkNewInput(self):
-        ProtProcessMovies._checkNewInput(self)
+    def _getResumeRepairCandidateIds(self, finishedIds):
+        finishedIds = set(finishedIds)
+        if not finishedIds:
+            return set()
+
+        persistedMovieIds = self._getPersistedCandidateIds(
+            OUTPUT_MOVIES, finishedIds)
+        repairIds = finishedIds - persistedMovieIds
+
+        gainIds = {movieId for movieId in finishedIds
+                   if self.doGainProcess(movieId)}
+        if not gainIds:
+            return repairIds
+
+        if self.estimateGain.get():
+            persistedEstimatedIds = self._getPersistedCandidateIds(
+                OUTPUT_ESTIMATED_GAINS, gainIds)
+            repairIds.update(gainIds - persistedEstimatedIds)
+
+        if self.estimateResidualGain.get():
+            persistedResidualIds = self._getPersistedCandidateIds(
+                OUTPUT_RESIDUAL_GAINS, gainIds)
+            repairIds.update(gainIds - persistedResidualIds)
+
+        return repairIds
 
     def _checkNewOutput(self):
-        if getattr(self, 'finished', False):
+        if getattr(self, "finished", False):
             return
 
-        # Load previously done items (from text file)
-        doneList = self._readDoneList()
-        # Check for newly done items
-        newDone = [m.clone() for m in self.listOfMovies
-                   if int(m.getObjId()) not in doneList and
-                   self._isMovieDone(m)]
+        finishedIds = self._getFinishedProcessMovieIds()
 
-        allDone = len(doneList) + len(newDone)
-        # We have finished when there is not more input movies
-        # (stream closed) and the number of processed movies is
-        # equal to the number of inputs
-        self.finished = self.streamClosed and \
-                        allDone == len(self.listOfMovies)
-        streamMode = Set.STREAM_CLOSED if self.finished \
-            else Set.STREAM_OPEN
+        if finishedIds:
+            movieIds = self._getPersistedCandidateIds(OUTPUT_MOVIES, finishedIds)
+            gainIds = self._gainMovieIds(finishedIds)
+            estimatedIds = self._getPersistedCandidateIds(OUTPUT_ESTIMATED_GAINS, gainIds) if self.estimateGain.get() else gainIds
+            residualIds = self._getPersistedCandidateIds(OUTPUT_RESIDUAL_GAINS, gainIds) if self.estimateResidualGain.get() else gainIds
+            missingMovieIds = finishedIds - movieIds
+            missingEstimatedIds = gainIds - estimatedIds if self.estimateGain.get() else set()
+            missingResidualIds = gainIds - residualIds if self.estimateResidualGain.get() else set()
+            movieById = getattr(self, "_streamingMoviesById", None)
 
-        if newDone:
-            self._writeDoneList(newDone)
-        elif not self.finished:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
+            if movieById is None:
+                movieById = {movie.getObjId(): movie for movie in self.listOfMovies}
+                self._streamingMoviesById = movieById
+
+            if missingEstimatedIds:
+                estimatedSet = self._loadOutputSet(SetOfImages, OUTPUT_ESTIMATED_GAINS)
+                knownEstimatedIds = self._getOutputIds(estimatedSet)
+                for movieId in sorted(missingEstimatedIds):
+                    estimatedSet = self.updateGainsOutput(movieById[movieId], estimatedSet, self.getEstimatedGainPath(movieId), knownEstimatedIds)
+                self._updateOutputSet(OUTPUT_ESTIMATED_GAINS, estimatedSet, Set.STREAM_OPEN)
+
+            if missingResidualIds:
+                residualSet = self._loadOutputSet(SetOfImages, OUTPUT_RESIDUAL_GAINS)
+                knownResidualIds = self._getOutputIds(residualSet)
+                for movieId in sorted(missingResidualIds):
+                    residualSet = self.updateGainsOutput(movieById[movieId], residualSet, self.getResidualGainPath(movieId), knownResidualIds)
+                self._updateOutputSet(OUTPUT_RESIDUAL_GAINS, residualSet, Set.STREAM_OPEN)
+
+            if missingMovieIds:
+                moviesSet = self._loadOutputSet(SetOfMovies, OUTPUT_MOVIES, fixGain=True)
+                for movieId in sorted(missingMovieIds):
+                    moviesSet.append(movieById[movieId])
+                self._updateOutputSet(OUTPUT_MOVIES, moviesSet, Set.STREAM_OPEN)
+
+            movieIds = self._getPersistedCandidateIds(OUTPUT_MOVIES, finishedIds)
+            estimatedIds = self._getPersistedCandidateIds(OUTPUT_ESTIMATED_GAINS, gainIds) if self.estimateGain.get() else gainIds
+            residualIds = self._getPersistedCandidateIds(OUTPUT_RESIDUAL_GAINS, gainIds) if self.estimateResidualGain.get() else gainIds
+            acknowledged = set(finishedIds).intersection(movieIds)
+            acknowledged = {movieId for movieId in acknowledged if movieId not in gainIds or movieId in estimatedIds}
+            acknowledged = {movieId for movieId in acknowledged if movieId not in gainIds or movieId in residualIds}
+            self._acknowledgeFinishedInsertedIds(acknowledged)
+
+        if not self.streamClosed:
             return
 
-        if any([self.doGainProcess(i.getObjId()) for i in newDone]):
-            # update outputGains if any residualGain is processed in newDone
-            if self.estimateGain.get():
-                estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
-            if self.estimateResidualGain.get():
-                resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
+        pendingIds = getattr(self, "_pendingInsertedIds", None)
+        if pendingIds:
+            return
 
-            for movie in newDone:
-                movieId = movie.getObjId()
-                if not self.doGainProcess(movieId):
-                    continue
-                if self.estimateGain.get():
-                    estGainsSet = self.updateGainsOutput(movie, estGainsSet, self.getEstimatedGainPath(movieId))
-                if self.estimateResidualGain.get():
-                    resGainsSet = self.updateGainsOutput(movie, resGainsSet, self.getResidualGainPath(movieId))
+        movieById = getattr(self, "_streamingMoviesById", None)
+        if movieById is None:
+            movieById = {}
+            self._streamingMoviesById = movieById
 
-            if self.estimateGain.get():
-                self._updateOutputSet(OUTPUT_ESTIMATED_GAINS, estGainsSet, streamMode)
-            if self.estimateResidualGain.get():
-                self._updateOutputSet(OUTPUT_RESIDUAL_GAINS, resGainsSet, streamMode)
+        inputIds = set()
+        for movie in self.listOfMovies:
+            movieId = movie.getObjId()
+            inputIds.add(movieId)
+            movieById[movieId] = movie
 
-        moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite', fixGain=True)
-        for movie in newDone:
-            moviesSet.append(movie)
-        self._updateOutputSet(OUTPUT_MOVIES, moviesSet, streamMode)
+        readyIds = inputIds.intersection(self._getAllFinishedInsertedIds())
+        movieIds = self._getPersistedOutputIds(OUTPUT_MOVIES)
+        gainIds = self._gainMovieIds(readyIds)
+        estimatedIds = self._getPersistedOutputIds(OUTPUT_ESTIMATED_GAINS) if self.estimateGain.get() else gainIds
+        residualIds = self._getPersistedOutputIds(OUTPUT_RESIDUAL_GAINS) if self.estimateResidualGain.get() else gainIds
+        missingMovieIds = readyIds - movieIds
+        missingEstimatedIds = gainIds - estimatedIds if self.estimateGain.get() else set()
+        missingResidualIds = gainIds - residualIds if self.estimateResidualGain.get() else set()
+        outputSets = {}
 
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
+        if missingEstimatedIds:
+            estimatedSet = self._loadOutputSet(SetOfImages, OUTPUT_ESTIMATED_GAINS)
+            estimatedIds = self._getOutputIds(estimatedSet)
+            for movieId in sorted(missingEstimatedIds):
+                if movieId not in estimatedIds:
+                    movie = movieById[movieId]
+                    estimatedSet = self.updateGainsOutput(movie, estimatedSet, self.getEstimatedGainPath(movieId))
+                    estimatedIds.add(movieId)
+            outputSets[OUTPUT_ESTIMATED_GAINS] = estimatedSet
 
-    def updateGainsOutput(self, movie, imgSet, imageFile):
+        if missingResidualIds:
+            residualSet = self._loadOutputSet(SetOfImages, OUTPUT_RESIDUAL_GAINS)
+            residualIds = self._getOutputIds(residualSet)
+            for movieId in sorted(missingResidualIds):
+                if movieId not in residualIds:
+                    movie = movieById[movieId]
+                    residualSet = self.updateGainsOutput(movie, residualSet, self.getResidualGainPath(movieId))
+                    residualIds.add(movieId)
+            outputSets[OUTPUT_RESIDUAL_GAINS] = residualSet
+
+        if missingMovieIds:
+            moviesSet = self._loadOutputSet(SetOfMovies, OUTPUT_MOVIES, fixGain=True)
+            movieIds = self._getOutputIds(moviesSet)
+            for movieId in sorted(missingMovieIds):
+                if movieId not in movieIds:
+                    moviesSet.append(movieById[movieId])
+                    movieIds.add(movieId)
+            outputSets[OUTPUT_MOVIES] = moviesSet
+
+        self.finished = inputIds.issubset(readyIds) and inputIds.issubset(movieIds) and gainIds.issubset(estimatedIds) and gainIds.issubset(residualIds)
+        if not outputSets and not self.finished:
+            return
+
+        for outputName, outputSet in outputSets.items():
+            self._updateOutputSet(outputName, outputSet, Set.STREAM_OPEN)
+
+        if not self.finished:
+            return
+
+        self._failIfEveryGainEstimationFailed(readyIds, estimatedIds,
+                                              residualIds)
+        outputStep = self._getFirstJoinStep()
+        if outputStep and outputStep.isWaiting():
+            outputStep.setStatus(cons.STATUS_NEW)
+
+    def _gainMovieIds(self, movieIds):
+        """The movies whose gain is estimated, less the ones that failed:
+        those are published without it."""
+        failedIds = self._failedMovieIds()
+        return {movieId for movieId in movieIds
+                if self.doGainProcess(movieId) and movieId not in failedIds}
+
+    def _failIfEveryGainEstimationFailed(self, movieIds, estimatedIds,
+                                         residualIds):
+        """A failed estimation leaves its movie without a gain; the run
+        fails only when that happened to every movie estimated."""
+        if not (self.estimateGain.get() or self.estimateResidualGain.get()):
+            return
+
+        estimated = {movieId for movieId in movieIds
+                     if self.doGainProcess(movieId)}
+        published = ((set(estimatedIds) if self.estimateGain.get() else set())
+                     | (set(residualIds) if self.estimateResidualGain.get() else set()))
+
+        if estimated and estimated <= self._failedMovieIds() and not published:
+            raise Exception("Gain estimation failed for every one of the %d "
+                            "movies; see the errors above. Continue "
+                            "estimates them again." % len(estimated))
+
+    def _getResumeRetryIds(self, finishedIds):
+        """Movies an earlier run finished without their estimated gain."""
+        files = []
+
+        if self.estimateGain.get():
+            files.append(self.getEstimatedGainPath)
+        if self.estimateResidualGain.get():
+            files.append(self.getResidualGainPath)
+
+        return {movieId for movieId in finishedIds
+                if self.doGainProcess(movieId)
+                and not all(os.path.exists(path(movieId)) for path in files)}
+
+    def _getAllDoneIds(self):
+        return self._getPersistedOutputIds(OUTPUT_MOVIES)
+
+    def _isOutputAlreadyPublished(self, outputName):
+        return bool(self._getPersistedOutputIds(outputName))
+
+    def _restoreEstimatedIds(self, attrName, outputName):
+        if hasattr(self, attrName):
+            return
+        # A set: these are only ever tested for membership and added to,
+        # and a linear scan here costs O(movies) per movie processed.
+        setattr(
+            self,
+            attrName,
+            set(self._getPersistedOutputIds(outputName)),
+        )
+
+    def updateGainsOutput(self, movie, imgSet, imageFile, knownIds=None):
+        """Append this movie's gain image to the output Set.
+
+        ``knownIds`` lets a caller publishing several movies read the
+        output ids once instead of once per movie, which otherwise makes
+        a single poll cost O(published x publishing).
+        """
         movieId = movie.getObjId()
+
+        if knownIds is None:
+            knownIds = self._getOutputIds(imgSet)
+
+        if movieId in knownIds:
+            return imgSet
+
+        knownIds.add(movieId)
+
         imgOut = Image()
         imgOut.setObjId(movieId)
         imgOut.setSamplingRate(movie.getSamplingRate())
@@ -744,12 +939,22 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
             # Elif, take the estimated gain
             finalGainFn = self.searchEstimatedGainPath()
             if finalGainFn == None:
-                # If no gains have been estimated, estimate one and use that
+                # If no gains have been estimated, estimate one and use that.
+                # Every movie being processed asks for the gain of the SAME
+                # first movie, so under STEPS_PARALLEL several of them reach
+                # this at once: without the lock two of them launch
+                # estimateGainFun on the same output path and the readers
+                # that follow get a half-written gain image. Same guard and
+                # re-check already used for orientedGain above.
                 firstMovie = self.inputMovies.get().getFirstItem()
                 movieId = firstMovie.getObjId()
+
                 if not movieId in self.estimatedIds:
-                    self.estimatedIds.append(movieId)
-                    self.estimateGainFun(firstMovie)
+                    with self._lock:
+                        if not movieId in self.estimatedIds:
+                            self.estimatedIds.add(movieId)
+                            self.estimateGainFun(firstMovie)
+
                 finalGainFn = self.getEstimatedGainPath(movieId)
 
         ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
@@ -779,16 +984,18 @@ class XmippProtMovieGain(ProtProcessMovies, Protocol):
     def _validate(self):
         errors = []
         if self.estimateOrientation.get() and not self.getInputGain():
-            errors.append("Experimental gain needed to estimate its proper "
-                         "orientation.")
+            errors.append("Experimental gain needed to estimate its proper orientation.")
         if self.normalizeGain.get() and not self.getInputGain():
             errors.append("Experimental gain needed to normalize it.")
         if errors:
-            errors.append("An experimental gain can be associated with a "
-                          "setOfMovies during its importing protocol. "
-                          "Otherwise, no gain reorientation nor "
-                          "gain normalization can be performed.")
+            errors.append("An experimental gain can be associated with a setOfMovies during its importing protocol. Otherwise, no gain reorientation nor gain normalization can be performed.")
+        errors.extend(self._validateParallelProcessing())
         return errors
+
+    def _validateParallelProcessing(self):
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by the executor for its own bookkeeping and another is permanently held by the streaming generator.']
+        return []
 
     def _summary(self):
         fnSummary = self._getPath("summary.txt")

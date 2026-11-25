@@ -24,6 +24,7 @@
 # *  e-mail address 'coss@cnb.csic.es'
 # *
 # **************************************************************************
+import json
 import os
 import enum
 from math import sqrt
@@ -31,11 +32,13 @@ import numpy as np
 
 from pyworkflow.object import Set, String, Pointer
 import pyworkflow.protocol.params as params
+from pyworkflow.protocol import ProtStreamingBase
 from pwem.protocols import ProtParticlePicking
 from pyworkflow.protocol.constants import *
 from pwem.objects import SetOfCoordinates, Coordinate
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 from pyworkflow import UPDATED, PROD
+from xmipp3.protocols.protocol_streaming_base import XmippStreamingBase
 
 
 PICK_MODE_LARGER = 0
@@ -278,7 +281,8 @@ class ProtPickingConsensusOutput(enum.Enum):
     consensusCoordinates = SetOfCoordinates
 
 
-class XmippProtConsensusPicking(ProtParticlePicking):
+class XmippProtConsensusPicking(XmippStreamingBase, ProtStreamingBase,
+                                ProtParticlePicking):
     """
     Protocol to estimate the agreement between different particle picking
     algorithms. The protocol takes several Sets of Coordinates calculated
@@ -306,7 +310,6 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
     def __init__(self, **args):
         ProtParticlePicking.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_SERIAL
 
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -333,34 +336,52 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                            'must be either (=) strictly speaking equals to '
                            'the consensus number or (>=) at least equals.')
 
-        # FIXME: It's not using more than one since
-        #         self.stepsExecutionMode = STEPS_SERIAL
-        # form.addParallelSection(threads=4, mpi=0)
+        self._defineStreamingParams(form)
+
+        form.addParallelSection(threads=3, mpi=0)
 
 #--------------------------- INSERT steps functions ---------------------------
-    def _insertAllSteps(self):
+    def _prepareStreamingGenerator(self):
         self.checkedMics = set()   # those mics ready to be processed (micId)
         self.processedMics = set() # those mics already processed (micId)
-        self.sampligRates = []
-        coorSteps = self.insertNewCoorsSteps([])
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=coorSteps, wait=True)
+        # Computed once, up front, single-threaded: calculateConsensusStep
+        # runs concurrently now that this protocol is no longer
+        # STEPS_SERIAL, so this can no longer be lazily populated inside
+        # the worker step (that would race multiple threads appending to
+        # the same list).
+        self.sampligRates = self._computeSamplingRates()
+
+    def _computeSamplingRates(self):
+        rates = []
+        for coordinates in self.inputCoordinates:
+            micrograph = coordinates.get().getMicrographs()
+            rates.append(micrograph.getSamplingRate())
+        return rates
+
+    def stepsGeneratorStep(self) -> None:
+        self._prepareStreamingGenerator()
+        self.newDeps = []
+
+        while not getattr(self, 'finished', False):
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the
+            # run hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if getattr(self, 'finished', False):
+                break
+
+            self._streamingSleepOnWait()
+
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=self.newDeps, needsGPU=False)
 
     def createOutputStep(self):
         pass
-
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all mics
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
 
     def insertNewCoorsSteps(self, mics):
         deps = []
@@ -372,18 +393,10 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             deps.append(stepId)
         return deps
 
-    def _stepsCheck(self):
-        self._checkNewInput()
-        self._checkNewOutput()
-
     def _checkNewInput(self):
-        # If continue from an stopped run, don't repeat what is done
+        # Restore committed and pending consensus results on Continue.
         if not self.checkedMics:
-            for fn in getFiles(self._getExtraPath()):
-                fn = removeBaseExt(fn)
-                if fn.startswith(self.FN_PREFIX):
-                    self.checkedMics.update([self.getMicId(fn)])
-                    self.processedMics.update([self.getMicId(fn)])
+            self._restoreProcessedMics()
 
         streamClosed = []
         readyMics = None
@@ -391,16 +404,11 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         for coordSet in self.inputCoordinates:
             currentPickMics, isSetClosed = getReadyMics(coordSet.get())
             streamClosed.append(isSetClosed)
-            if not readyMics:  # first time
-                readyMics = currentPickMics
+            if readyMics is None:  # first time, even when the first set is empty
+                readyMics = set(currentPickMics)
             else:  # available mics are those ready for all pickers
                 readyMics.intersection_update(currentPickMics)
             allMics = allMics.union(currentPickMics)
-
-        mainPickMics = getReadyMics(self.inputCoordinates[0].get())[0]
-        secondaryPickMics = getReadyMics(self.inputCoordinates[1].get())[0]
-        if mainPickMics != secondaryPickMics:
-            allMics = mainPickMics.intersection(secondaryPickMics)
 
         self.streamClosed = all(streamClosed)
         if self.streamClosed:
@@ -411,80 +419,179 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                 newMicIds = readyMics.difference(self.checkedMics)
 
         if newMicIds:
-            self.checkedMics.update(newMicIds)
-
+            # getMainInput().getMicrographs() resolves a Pointer whose
+            # cached value is not automatically refreshed - reload its
+            # properties so newly-committed micrographs become visible
+            # before checking membership.
             inMics = self.getMainInput().getMicrographs()
-            newMics = [inMics[micId].clone() for micId in newMicIds]
+            inMics.loadAllProperties()
 
-            fDeps = self.insertNewCoorsSteps(newMics)
-            outputStep = self._getFirstJoinStep()
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-            self.updateSteps()
+            newMics = []
+            visibleMicIds = set()
+            for micId in newMicIds:
+                if micId not in inMics:
+                    self.warning(
+                        "Micrograph with id %d is not yet visible in "
+                        "the input micrographs Set; deferring it to a "
+                        "later check." % micId
+                    )
+                    continue
+                newMics.append(inMics[micId].clone())
+                visibleMicIds.add(micId)
+
+            # Only mark ids actually resolved as checked - an id skipped
+            # above must be retried on the next check (it stays in
+            # readyMics/allMics, so it will reappear in newMicIds).
+            self.checkedMics.update(visibleMicIds)
+
+            if newMics:
+                fDeps = self.insertNewCoorsSteps(newMics)
+                self.newDeps.extend(fDeps)
+                self.updateSteps()
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        self.finished = self.streamClosed and self.checkedMics == self.processedMics
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        workDone = self.streamClosed and self.checkedMics == self.processedMics
+        deferredMicIds = set()
 
-        newFiles = getFiles(self._getTmpPath())
-        if newFiles or self.finished:  # when finished to close the output set
-            outSet = self._loadOutputSet(SetOfCoordinates, 'coordinates.sqlite')
+        newFiles = [fn for fn in getFiles(self._getTmpPath()) if self._isConsensusResultFile(fn)]
+        if newFiles or workDone:  # when finished to close the output set
+            outSet = self._loadOutputSet(SetOfCoordinates, self.outputName)
+            outputMicIds = self._getOutputMicIds(outSet)
+
+            micrographs = None
+            processedFiles = []
 
             for fnTmp in newFiles:
-                coords = np.loadtxt(fnTmp)
-                moveFile(fnTmp, self._getExtraPath())
-                if coords.size == 2:  # special case with only one coordinate
-                    coords = [coords]
-                for coord in coords:
-                    newCoord = Coordinate()
-                    micrographs = self.getMainInput().getMicrographs()
-                    newCoord.setMicrograph(micrographs[self.getMicId(fnTmp)])
-                    newCoord.setPosition(coord[0], coord[1])
-                    outSet.append(newCoord)
+                micId = self.getMicId(fnTmp)
+                if micId not in outputMicIds and os.path.getsize(fnTmp):
+                    if micrographs is None:
+                        # See the comment in _checkNewInput: this
+                        # Pointer's cached value is not automatically
+                        # refreshed.
+                        micrographs = self.getMainInput().getMicrographs()
+                        micrographs.loadAllProperties()
 
-            firstTime = not self.hasAttribute(self.outputName)
+                    if micId not in micrographs:
+                        self.warning(
+                            "Micrograph with id %d is not yet visible "
+                            "in the input micrographs Set; deferring "
+                            "its consensus result to a later check."
+                            % micId
+                        )
+                        deferredMicIds.add(micId)
+                        continue
+
+                    coords = np.loadtxt(fnTmp)
+                    if coords.size == 2:  # special case with only one coordinate
+                        coords = [coords]
+                    mic = micrographs[micId]
+                    for coord in coords:
+                        newCoord = Coordinate()
+                        newCoord.setMicrograph(mic)
+                        newCoord.setPosition(coord[0], coord[1])
+                        outSet.append(newCoord)
+                    outputMicIds.add(micId)
+
+                processedFiles.append(fnTmp)
+
+            # Finished only if every worker step is done AND nothing was
+            # deferred this round - otherwise this method would latch
+            # finished=True (see the early return above) while a
+            # consensus result is still waiting to be published.
+            self.finished = workDone and not deferredMicIds
+            streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
             self._updateOutputSet(self.outputName, outSet, streamMode)
-            if firstTime:
-                self.defineRelations(outSet)
-            outSet.close()
+            self._refreshOutputRelations(outSet)
 
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
+            # Move result markers only after output and relations are
+            # persisted, and only for files actually processed - a
+            # deferred micrograph's marker stays in _tmp so it is picked
+            # up again on the next check.
+            for fnTmp in processedFiles:
+                moveFile(fnTmp, self._getExtraPath())
+
+            outSet.close()
+        else:
+            self.finished = workDone
+
+    def _restoreProcessedMics(self):
+        """ Rebuild checkedMics/processedMics from the persisted step graph
+        on Continue - the durable source of truth for "has this mic's
+        consensus step actually finished", not a directory scan. The tmp/
+        and extra/ consensus-result .txt files remain the data payload
+        handoff between calculateConsensusStep and _checkNewOutput (an
+        empty consensus result is still a real, needed file), but they are
+        no longer used to answer "is this mic done". """
+        for step in self._iterKnownStreamingSteps():
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+            if funcName != 'calculateConsensusStep':
+                continue
+            if not step.isFinished():
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+            if not args:
+                continue
+
+            micId = args[0]
+            self.checkedMics.add(micId)
+            self.processedMics.add(micId)
+
+    @classmethod
+    def _isConsensusResultFile(cls, fn):
+        baseName = os.path.basename(fn)
+        return baseName.startswith(cls.FN_PREFIX) and baseName.endswith('.txt')
+
+    @staticmethod
+    def _getOutputMicIds(outputSet):
+        if not outputSet.getSize():
+            return set()
+        return {row['_micId'] for row in outputSet.aggregate(['MAX'], '_micId', ['_micId'])}
+
+    def _refreshOutputRelations(self, outputSet):
+        if self.mapper is not None:
+            self.mapper.deleteRelations(self)
+        self.defineRelations(outputSet)
+        if self.mapper is not None:
+            self.mapper.commit()
 
     def defineRelations(self, outputSet):
         for inCorrds in self.inputCoordinates:
             self._defineTransformRelation(inCorrds, outputSet)
 
-    def _loadOutputSet(self, SetClass, baseName):
-        setFile = self._getPath(baseName)
-        if os.path.exists(setFile):
-            outputSet = SetClass(filename=setFile)
-            outputSet.loadAllProperties()
-            outputSet.enableAppend()
-        else:
-            outputSet = SetClass(filename=setFile)
-            outputSet.setStreamState(outputSet.STREAM_OPEN)
-            outputSet.setBoxSize(self.getMainInput().getBoxSize())
+    def _loadOutputSet(self, SetClass, outputName):
+        if outputName != self.outputName:
+            raise ValueError("Unknown ParticlePickConsensus output: %s" % outputName)
 
         inMicsPointer = self.getMainInput().getMicrographs(asPointer=True)
-        outputSet.setMicrographs(inMicsPointer)
+        outputSet, created = self._loadOrCreateOutputSet(
+            outputName,
+            SetClass,
+            factoryArgs=(inMicsPointer,),
+        )
+        if created:
+            outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
+        outputSet.setMicrographs(inMicsPointer)
         return outputSet
+
+
 
     def calculateConsensusStep(self, micId, micName):
 
-        print("Consensus calculation for micrograph %d: '%s'"
-              % (micId, micName))
-
-        # Take the sampling rates just once
-        if not self.sampligRates:
-            for coordinates in self.inputCoordinates:
-                micrograph = coordinates.get().getMicrographs()
-                self.sampligRates.append(micrograph.getSamplingRate())
+        self.info("Consensus calculation for micrograph %d: '%s'"
+                  % (micId, micName))
 
         # Get all coordinates for this micrograph
         coords = []
@@ -497,9 +604,13 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
         consensusWorker(coords, self.consensus.get(), self.consensusRadius.get(),
                         self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, micId)),
-                        self._getExtraPath('jaccard.txt'), self.mode.get())
+                        self._getExtraPath('jaccard.txt'), self.mode.get(),
+                        lock=self._lock)
 
-        self.processedMics.update([micId])
+        # calculateConsensusStep can now run concurrently across worker
+        # threads (no longer STEPS_SERIAL) - guard the shared set.
+        with self._lock:
+            self.processedMics.update([micId])
 
     def _validate(self):
 
@@ -516,7 +627,20 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                 if obj is None:
                     errors.append('%s is empty.' % obj)
 
+        errors.extend(self._validateParallelProcessing())
         return errors
+
+    def _validateParallelProcessing(self):
+        # pyworkflow's executor always reserves one thread out of
+        # numberOfThreads for its own bookkeeping, and one more of the
+        # remaining slots is permanently held by the streaming generator
+        # step for the whole run - at least 3 threads are needed to leave
+        # a worker slot free for the consensus calculation.
+        if self.numberOfThreads.get() < 3:
+            return ['Please assign at least 3 threads: one is reserved by '
+                    'the executor for its own bookkeeping and another is '
+                    'permanently held by the streaming generator.']
+        return []
 
     def _summary(self):
         message = []
@@ -535,11 +659,18 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
     @classmethod
     def getMicId(self, fn):
-        return int(removeBaseExt(fn).lstrip(self.FN_PREFIX))
+        baseName = removeBaseExt(os.path.basename(fn))
+        return int(baseName[len(self.FN_PREFIX):])
+
+
+def _writeConsensusResult(posFn, consensusCoords):
+    tmpFn = posFn + '.tmp'
+    np.savetxt(tmpFn, consensusCoords)
+    os.replace(tmpFn, posFn)
 
 
 def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
-                    mode=PICK_MODE_LARGER):
+                    mode=PICK_MODE_LARGER, lock=None):
     """ Worker for calculate the consensus of N picking algorithms of
           M_n coordinates each one.
 
@@ -548,6 +679,9 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
         consensusRadius: Tolerance to see two coordinates as the same (in pixels)
         posFn: Where to write the consensus coordinates
         jaccFN: Where to write the Jaccard index per micrograph
+        lock: optional threading.Lock-like object guarding the shared
+            jaccFn append - required when this worker can run concurrently
+            across several steps (see calculateConsensusStep).
     """
     if len(coords) == 1:  # self consensus (remove duplicates)
         N0 = 0
@@ -569,6 +703,7 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
             and inAllMicrographs):
         print("Returning from worker: doing AND consensus and, at least, one "
               "picker is empty for this micrograph (%s)." % posFn)
+        _writeConsensusResult(posFn, np.empty((0, 2)))
         return
 
     # Add all the first coordinates to 'allCoords' and 'votes' lists
@@ -612,24 +747,37 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
         if jaccFn:
             jaccardIdx = float(len(consensusCoords)) / (
                     float(len(allCoords)) / Ninputs)
-            # COSS: Possible problem with concurrent writes
-            with open(jaccFn, "a") as fhJaccard:
-                fhJaccard.write("%s \t %f\n" % (posFn, jaccardIdx))
+            # This protocol now runs calculateConsensusStep concurrently
+            # across worker threads, so the shared jaccFn append must be
+            # serialized through the caller-provided lock.
+            if lock is not None:
+                with lock:
+                    with open(jaccFn, "a") as fhJaccard:
+                        fhJaccard.write("%s \t %f\n" % (posFn, jaccardIdx))
+            else:
+                with open(jaccFn, "a") as fhJaccard:
+                    fhJaccard.write("%s \t %f\n" % (posFn, jaccardIdx))
     except Exception as exc:
         print("Some error occurred during Jaccard index calculation or "
               "writing it's file. Maybe a concurrence issue:\n%s" % exc)
-    # Write the consensus file only if there
-    # are some coordinates (size > 0)
-    if consensusCoords.size:
-        np.savetxt(posFn, consensusCoords)
+    # Always write a result marker, including empty consensus results.
+    _writeConsensusResult(posFn, consensusCoords)
 
 
 def getReadyMics(coordSet):
-    coorSet = SetOfCoordinates(filename=coordSet.getFileName())
-    coorSet._xmippMd = String()
-    coorSet.loadAllProperties()
-    setClosed = coorSet.isStreamClosed()
-    coorSet.close()
-    currentPickMics = {micAgg["_micId"] for micAgg in
-                       coordSet.aggregate(["MAX"], "_micId", ["_micId"])}
+    """ Backend-agnostic replacement for the old filename-based
+    SetOfCoordinates(filename=coordSet.getFileName()) reconstruction -
+    works directly off the already-resolved logical coordSet. """
+    if not hasattr(coordSet, '_xmippMd'):
+        # Mirrors pwem's own defensive patch for this xmipp-specific
+        # attribute, needed before loadAllProperties() on some
+        # SetOfCoordinates instances.
+        coordSet._xmippMd = String()
+    coordSet.loadAllProperties()
+    try:
+        setClosed = coordSet.isStreamClosed()
+        currentPickMics = set(coordSet.getUniqueValues('_micId'))
+    finally:
+        coordSet.close()
+
     return currentPickMics, setClosed

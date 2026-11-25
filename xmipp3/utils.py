@@ -41,6 +41,26 @@ def validateXmippGpuBins():
     pass
 
 
+def loadOutputSetForAppend(protocol, SetClass, baseName, outputName=None):
+    """Reuse the logical output Set the protocol already knows about;
+    otherwise always create a fresh one. Deliberately never falls back
+    to os.path.exists()-based reopening of a raw on-disk path: under a
+    backend that does not keep the Set in a file, that path may not even be the
+    authoritative backend, so the protocol's own registered attribute is
+    the only backend-agnostic source of truth for whether this output
+    already exists."""
+    outputSet = getattr(protocol, outputName, None) if outputName else None
+
+    if outputSet is not None:
+        outputSet.enableAppend()
+        return outputSet, False
+
+    setFile = protocol._getPath(baseName)
+    outputSet = SetClass(filename=setFile)
+    outputSet.setStreamState(outputSet.STREAM_OPEN)
+    return outputSet, True
+
+
 BAD_IMPORT_TENSORFLOW_KERAS_MSG = '''
 Error, tensorflow/keras is probably not installed. Install it with:\n  ./scipion installb deepLearningToolkit
 If gpu version of tensorflow desired, install cuda 8.0 or cuda 9.0
