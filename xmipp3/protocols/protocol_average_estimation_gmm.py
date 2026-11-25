@@ -403,13 +403,13 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         )
 
     def _getInputParticlesPath(self):
-        return self._getExtraPath("inputParticles.xmd")
+        return self._getTmpPath("inputParticles.xmd")
 
     def _getPreprocessedParticlesPath(self):
-        return self._getExtraPath("preprocessed.mrcs")
+        return self._getTmpPath("preprocessed.mrcs")
 
     def _getPreprocessedMetadataPath(self):
-        return self._getExtraPath("preprocessed.xmd")
+        return self._getTmpPath("preprocessed.xmd")
 
     def _getLowWeightAveragesPath(self):
         return self._getExtraPath("lowWeightAverages.mrcs")
