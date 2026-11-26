@@ -572,7 +572,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             str(correctedAveragePath),
             "--out-original-avgs",
             str(originalAveragePath),
-            f"--device {device}",
+            "--device",
+            device,
             "--overwrite",  # allow retries to replace any average stacks written by a previous attempt
         ]
 
