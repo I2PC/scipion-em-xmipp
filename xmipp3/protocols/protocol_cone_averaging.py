@@ -396,8 +396,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         args = [
             "--input-xmd",
             self._getParticleMdPath(),
-            "--base-xmd",
-            self._getInputMdPath(),
             "--out-star",
             self._getAveragingOutputStarPath(),
             "--device",
@@ -425,60 +423,84 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
         self.runJob("xmipp_gmm_average_estimation", join(args), env=env, numberOfMpi=1)
 
-    def createOutputStep(self):
-        outputMd = md.MetaData(self._getAveragingOutputStarPath())
+    def _readWinningMemberships(
+        self, weightColumns: list[str]
+    ) -> tuple[dict[int, tuple[int, tuple[float, ...]]], list[int]]:
+        """Read the winning weight record per particle and all fitted cone IDs."""
+        path = self._getAveragingOutputStarPath()
+        metadata = md.MetaData(path)
+        groupColumn = self._getGroupByColumn()
+        groupLabel = md.str2Label(groupColumn)
+        weightLabels = [md.str2Label(column) for column in weightColumns]
+        for name, label in zip(
+            ["itemId", groupColumn, *weightColumns],
+            [md.MDL_ITEM_ID, groupLabel, *weightLabels],
+        ):
+            if label < 0 or not metadata.containsLabel(label):
+                raise RuntimeError(f"Missing column {name} in cone averaging output {path}.")
 
-        weightColumns = self._getEstimatorWeightColumns()
+        primaryColumn = (
+            GMM_WEIGHT_COL if GMM_WEIGHT_COL in weightColumns else ROBUST_WEIGHT_COL
+        )
+        primaryIndex = weightColumns.index(primaryColumn)
 
-        weightsById: dict[int, dict[str, float]] = {}
-        groupById: dict[int, int] = {}
-        for row in md.iterRows(outputMd):
+        seenMemberships = set()
+        fittedGroups = set()
+        winnersById: dict[int, tuple[int, tuple[float, ...]]] = {}
+        for row in md.iterRows(metadata):
             itemId = row.getValue(md.MDL_ITEM_ID)
-
-            if itemId in weightsById:
+            group = int(row.getValue(groupLabel))
+            membership = (itemId, group)
+            if membership in seenMemberships:
                 raise RuntimeError(
-                    f"Duplicated itemId={itemId} in GMM output metadata."
+                    f"Duplicated pair itemId={itemId}, {groupColumn}={group} "
+                    f"in cone averaging output {path}."
                 )
+            seenMemberships.add(membership)
+            fittedGroups.add(group)
 
-            weightsById[itemId] = {col: row.getValue(col) for col in weightColumns}
+            # Xmipp reads custom STAR labels as strings.
+            weights = tuple(float(row.getValue(label)) for label in weightLabels)
+            winner = winnersById.get(itemId)
+            if winner is not None:
+                winnerGroup, winnerWeights = winner
+                if (weights[primaryIndex], -group) <= (
+                    winnerWeights[primaryIndex], -winnerGroup
+                ):
+                    continue
+            winnersById[itemId] = (group, weights)
 
-            group = int(row.getValue(self._getGroupByColumn()))
-            groupById[itemId] = group
+        return winnersById, sorted(fittedGroups)
 
-        outputParticles = self._createSetOfParticles()
-        outputParticles.copyInfo(self.inputParticles.get())
+    def createOutputStep(self):
+        weightColumns = self._getEstimatorWeightColumns()
+        winnersById, fittedGroups = self._readWinningMemberships(weightColumns)
+
         inputParticles = self.inputParticles.get()
+        outputParticles = self._createSetOfParticles()
+        outputParticles.copyInfo(inputParticles)
 
         for particle in inputParticles:
             itemId = particle.getObjId()
 
             try:
-                weightsdict = weightsById[itemId]
+                group, weights = winnersById[itemId]
             except KeyError as exc:
                 raise RuntimeError(
-                    f"No GMM weights found for particle with itemId={itemId}."
+                    f"No averaging weights found for particle with itemId={itemId}."
                 ) from exc
 
             outputParticle = particle.clone()
 
-            for col in weightColumns:
-                outputParticle.__setattr__(
-                    WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsdict[col])
-                )
+            for col, weight in zip(weightColumns, weights):
+                setattr(outputParticle, WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weight))
 
-            outputParticle.setClassId(groupById[itemId])
-
+            outputParticle.setClassId(group)
             outputParticles.append(outputParticle)
 
-        preparedMd = md.MetaData(self._getParticleMdPath())
-        processedGroups = sorted(
-            {
-                int(row.getValue(self._getGroupByColumn()))
-                for row in md.iterRows(preparedMd)
-            }
-        )
+        # The estimator writes a slice for every fitted cone, even without a winner.
         classIndex = {
-            group: index for index, group in enumerate(processedGroups, start=1)
+            group: index for index, group in enumerate(fittedGroups, start=1)
         }
 
         standardClasses = self._createOutputClasses(
@@ -494,6 +516,10 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             averagesPath=self._getCorrectedConeAveragesPath(),
             suffix="_robust",
         )
+
+        outputParticles.write()
+        robustClasses.write()
+        standardClasses.write()
 
         self._defineOutputs(outputParticles=outputParticles)
         self._defineSourceRelation(self.inputParticles, outputParticles)
