@@ -27,15 +27,14 @@ from __future__ import annotations
 
 from enum import IntEnum
 from math import isfinite
-from pathlib import Path
 from shlex import join
 
 import pwem.emlib.metadata as md
-from pwem.objects import SetOfClasses2D
+from pwem.constants import ALIGN_2D
+from pwem.objects import Class2D, SetOfClasses2D
 from pwem.protocols import ProtClassify2D
 from pyworkflow import VERSION_3_0
 from pyworkflow.constants import BETA
-from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (
     BooleanParam,
@@ -47,17 +46,9 @@ from pyworkflow.protocol.params import (
 )
 
 from xmipp3.base import XmippProtocol
-from xmipp3.convert import writeSetOfParticles
+from xmipp3.convert import rowToAlignment, writeSetOfParticles
 
-from .protocol_average_estimation_gmm import (
-    GMM_WEIGHT_COL,
-    ROBUST_WEIGHT_COL,
-    STD_ROBUST_WEIGHT_COL,
-    WEIGHT_COLUMN_TO_ATTRIBUTE,
-    EstimatorType,
-    add_estimator_section,
-    build_estimator_args,
-)
+_CONE_GEOMETRY_LABELS = (md.MDL_ANGLE_PSI, md.MDL_SHIFT_X, md.MDL_SHIFT_Y, md.MDL_FLIP)
 
 
 class GroupingModes(IntEnum):
@@ -70,8 +61,11 @@ class GroupingModes(IntEnum):
         return self.name.lower()
 
 
-class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
-    _label = "cone_averaging"
+class XmippProtConeGrouping(ProtClassify2D, XmippProtocol):
+    """Group projection-aligned particles by viewing direction into 2D classes."""
+
+    _label = "cone grouping"
+    _possibleOutputs = {"outputClasses": SetOfClasses2D}
     _lastUpdateVersion = VERSION_3_0
     _conda_env = "xmipp_pyTorch"
     _devStatus = BETA
@@ -85,14 +79,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             pointerClass="SetOfParticles",
             label="Input Particles",
             help="Set of particles to be read",
-        )
-        form.addParam(
-            "correctCtf",
-            BooleanParam,
-            default=True,
-            # expertLevel=LEVEL_ADVANCED,
-            label="Correct CTF?",
-            help="If you set to *Yes*, the CTF of the experimental particles will be corrected",
         )
         form.addParam(
             "symmetryGroup",
@@ -109,10 +95,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             IntParam,
             label="Number of groups",
             help=(
-                "The particles will be split into groups according to their "
-                "orientations, grouping together those with similar viewing "
-                "directions. This parameter determines the number of such groups "
-                "that will be created."
+                "Number of reference viewing directions to generate. "
+                "Only groups with assigned particles are published as classes."
             ),
             default=100,
         )
@@ -128,15 +112,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 "'threshold' means a particle gets assigned to every group where "
                 "the angular distance between its own viewing direction and the "
                 "group's center is less than or equal to a given threshold, chosen "
-                "with the 'Angular threshold' parameter. "
-                "This means that one particle can appear in several different groups, "
-                "which has the advantage of generally increasing the number of "
-                "particles per group, thus making the estimation and weight assignment "
-                "more reliable. "
-                "On the other hand, it requires a decision: what to do when a particle "
-                "receives different weights in two (or more) different groups. "
-                "We take the conservative approach and preserve the maximum weight in "
-                "that case."
+                "with the 'Angular threshold' parameter. A particle can appear "
+                "in multiple classes, each with its own 2D alignment."
             ),
             label="Grouping Mode",
         )
@@ -147,8 +124,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             help=(
                 "In threshold mode, each particle is grouped to every reference viewing direction "
                 "whose angular distance to the particle's viewing direction is smaller than or equal "
-                "to this threshold."
-                "This should be an angular value between 0 and 90 degrees"
+                "to this threshold. "
+                "The threshold ranges from 0 to 90 degrees. "
                 "The protocol fails if any particle has no reference within this radius."
             ),
             condition=f"groupingMode == {GroupingModes.THRESHOLD.value}",
@@ -169,25 +146,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             label="Deduplicate references?",
             expertLevel=LEVEL_ADVANCED,
         )
-        form.addParam(
-            "saveLowHighWeightAverages",
-            BooleanParam,
-            default=False,
-            help="For each class, save two extra averages: the average of a certain proportion of the particles with the lowest weights and the same proportion with the highest weights.",
-            label="Save averages of particles with lowest/highest weights?",
-            expertLevel=LEVEL_ADVANCED,
-        )
-        add_estimator_section(form)
 
         form.addSection(label="Compute")
-        form.addParam(
-            "useGpu",
-            BooleanParam,
-            default=True,
-            label="Use GPU?",
-            help="If you set to *Yes*, the estimation process will try to use the GPU "
-            "for hardware acceleration. This might speed up the process if CUDA is available.",
-        )
         form.addParam(
             "groupingBatchSize",
             IntParam,
@@ -200,8 +160,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             expertLevel=LEVEL_ADVANCED,
         )
 
-        form.addParallelSection(threads=0, mpi=4)
-
     def _validate(self):
         errors = super()._validate()
         particles = self.inputParticles.get()
@@ -210,10 +168,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 errors.append("Input particles must contain at least one particle.")
             if not particles.hasAlignmentProj():
                 errors.append("Input particles must have projection alignment.")
-            if self.correctCtf.get() and not particles.hasCTF():
-                errors.append(
-                    "Supply particles with CTF estimates or disable CTF correction."
-                )
 
         for value, label in (
             (self.numberOfGroups.get(), "Number of groups"),
@@ -235,8 +189,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
     def _insertAllSteps(self):
         self._insertFunctionStep("convertInputStep")
         self._insertFunctionStep("groupIntoConesStep")
-        self._insertFunctionStep("prepareParticlesStep")
-        self._insertFunctionStep("coneAveragingStep")
         self._insertFunctionStep("createOutputStep")
 
     # --------------------------- UTILS functions -----------------------------
@@ -252,44 +204,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
     def _getGroupingReferenceMetadataPath(self):
         return self._getExtraPath("coneReferences.star")
 
-    def _getAveragingOutputStarPath(self):
-        return self._getTmpPath("particlesWithWeights.star")
-
-    def _getParticleStackPath(self):
-        return self._getTmpPath("preparedParticles.mrcs")
-
-    def _getCorrectedConeAveragesPath(self):
-        return self._getExtraPath("correctedConeAverages.mrcs")
-
-    def _getRawConeAveragesPath(self):
-        return self._getExtraPath("rawConeAverages.mrcs")
-
-    def _getParticleMdPath(self):
-        return self._getTmpPath("preparedParticles.xmd")
-
-    def _getCtfCorrectedStackPath(self):
-        return self._getTmpPath("ctfCorrectedParticles.mrcs")
-
-    def _getCtfCorrectedMdPath(self):
-        return self._getTmpPath("ctfCorrectedParticles.xmd")
-
-    def _getLowWeightAveragesPath(self):
-        return self._getExtraPath("lowWeightAverages.mrcs")
-
-    def _getHighWeightAveragesPath(self):
-        return self._getExtraPath("highWeightAverages.mrcs")
-
-    def _getEstimatorType(self):
-        return EstimatorType(self.estimatorType.get())
-
     def _getGroupingMode(self):
         return GroupingModes(self.groupingMode.get())
-
-    def _getEstimatorWeightColumns(self):
-        base_weight_columns = [ROBUST_WEIGHT_COL, STD_ROBUST_WEIGHT_COL]
-        if self.gmmReweighting.get():
-            return base_weight_columns + [GMM_WEIGHT_COL]
-        return base_weight_columns
 
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
@@ -336,239 +252,69 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
         self.runJob("xmipp_cone_grouping", join(groupingArgs), env=env, numberOfMpi=1)
 
-    def prepareParticlesStep(self):
-        """
-        Create the CTF-corrected, cone-aligned stack used by the GMM.
-
-        The grouping script writes a temporary 2D geometry (psi, shifts and
-        flip) into the grouped metadata. If requested, CTF correction is
-        performed first in the original image coordinates. The geometric
-        transform is then applied physically to the images, so the GMM does not
-        need to read any alignment parameters.
-        """
-        geometryInput = self._getGroupingOutputStarPath()
-
-        if self.correctCtf.get():
-            particles = self.inputParticles.get()
-            ctfArgs = [
-                "-i",
-                geometryInput,
-                "-o",
-                self._getCtfCorrectedStackPath(),
-                "--save_metadata_stack",
-                self._getCtfCorrectedMdPath(),
-                "--keep_input_columns",
-                "--sampling_rate",
-                str(particles.getSamplingRate()),
-            ]
-
-            if particles.isPhaseFlipped():
-                ctfArgs.append("--phase_flipped")
-
-            self.runJob(
-                "xmipp_ctf_correct_wiener2d",
-                join(ctfArgs),
-                numberOfMpi=self.numberOfMpi.get(),
-            )
-            geometryInput = self._getCtfCorrectedMdPath()
-
-        geometryArgs = [
-            "-i",
-            geometryInput,
-            "-o",
-            self._getParticleStackPath(),
-            "--save_metadata_stack",
-            self._getParticleMdPath(),
-            "--keep_input_columns",
-            "--apply_transform",
-        ]
-
-        self.runJob(
-            "xmipp_transform_geometry",
-            join(geometryArgs),
-            numberOfMpi=self.numberOfMpi.get(),
-        )
-
-    def coneAveragingStep(self):
-        env = self.getCondaEnv()
-        device = "cuda" if self.useGpu.get() else "cpu"
-
-        args = [
-            "--input-xmd",
-            self._getParticleMdPath(),
-            "--out-star",
-            self._getAveragingOutputStarPath(),
-            "--device",
-            device,
-            "--group-by-column",
-            self._getGroupByColumn(),
-            "--out-corrected-avgs",
-            self._getCorrectedConeAveragesPath(),
-            "--out-original-avgs",
-            self._getRawConeAveragesPath(),
-            "--overwrite",
-        ]
-
-        if self.saveLowHighWeightAverages.get():
-            args.extend(
-                [
-                    "--out-low-weight-avgs",
-                    self._getLowWeightAveragesPath(),
-                    "--out-high-weight-avgs",
-                    self._getHighWeightAveragesPath(),
-                ]
-            )
-
-        args.extend(build_estimator_args(self))
-
-        self.runJob("xmipp_gmm_average_estimation", join(args), env=env, numberOfMpi=1)
-
-    def _readWinningMemberships(
-        self, weightColumns: list[str]
-    ) -> tuple[dict[int, tuple[int, tuple[float, ...]]], list[int]]:
-        """Read the winning weight record per particle and all fitted cone IDs."""
-        path = self._getAveragingOutputStarPath()
-        metadata = md.MetaData(path)
-        groupColumn = self._getGroupByColumn()
-        groupLabel = md.str2Label(groupColumn)
-        weightLabels = [md.str2Label(column) for column in weightColumns]
-        for name, label in zip(
-            ["itemId", groupColumn, *weightColumns],
-            [md.MDL_ITEM_ID, groupLabel, *weightLabels],
-        ):
-            if label < 0 or not metadata.containsLabel(label):
-                raise RuntimeError(f"Missing column {name} in cone averaging output {path}.")
-
-        primaryColumn = (
-            GMM_WEIGHT_COL if GMM_WEIGHT_COL in weightColumns else ROBUST_WEIGHT_COL
-        )
-        primaryIndex = weightColumns.index(primaryColumn)
-
-        seenMemberships = set()
-        fittedGroups = set()
-        winnersById: dict[int, tuple[int, tuple[float, ...]]] = {}
-        for row in md.iterRows(metadata):
-            itemId = row.getValue(md.MDL_ITEM_ID)
-            group = int(row.getValue(groupLabel))
-            membership = (itemId, group)
-            if membership in seenMemberships:
-                raise RuntimeError(
-                    f"Duplicated pair itemId={itemId}, {groupColumn}={group} "
-                    f"in cone averaging output {path}."
-                )
-            seenMemberships.add(membership)
-            fittedGroups.add(group)
-
-            # Xmipp reads custom STAR labels as strings.
-            weights = tuple(float(row.getValue(label)) for label in weightLabels)
-            winner = winnersById.get(itemId)
-            if winner is not None:
-                winnerGroup, winnerWeights = winner
-                if (weights[primaryIndex], -group) <= (
-                    winnerWeights[primaryIndex], -winnerGroup
-                ):
-                    continue
-            winnersById[itemId] = (group, weights)
-
-        return winnersById, sorted(fittedGroups)
-
     def createOutputStep(self):
-        weightColumns = self._getEstimatorWeightColumns()
-        winnersById, fittedGroups = self._readWinningMemberships(weightColumns)
-
+        coneGeometryByParticle = self._readMemberships()
         inputParticles = self.inputParticles.get()
-        outputParticles = self._createSetOfParticles()
-        outputParticles.copyInfo(inputParticles)
+        outputClasses = self._createSetOfClasses2D(self.inputParticles)
+        classesByGroup = {}
+        geometryRow = md.Row()
 
         for particle in inputParticles:
-            itemId = particle.getObjId()
+            coneGeometryInfo = coneGeometryByParticle.pop(particle.getObjId(), {})
+            for groupId, geometry in coneGeometryInfo.items():
+                if groupId not in classesByGroup:
+                    cone = Class2D(objId=groupId)
+                    cone.copyInfo(inputParticles)
+                    cone.setAlignment2D()
+                    cone.setRepresentative(None)
+                    outputClasses.append(cone)
+                    classesByGroup[groupId] = cone
 
-            try:
-                group, weights = winnersById[itemId]
-            except KeyError as exc:
+                member = particle.clone()
+                member.setClassId(groupId)
+                for label, value in zip(_CONE_GEOMETRY_LABELS, geometry):
+                    geometryRow.setValue(label, value)
+                member.setTransform(rowToAlignment(geometryRow, ALIGN_2D))
+                classesByGroup[groupId].append(member)
+
+        if coneGeometryByParticle:
+            itemId = next(iter(coneGeometryByParticle))
+            outputClasses.close()
+            raise RuntimeError(
+                f"Cone grouping output refers to unknown itemId={itemId}."
+            )
+
+        for cone in classesByGroup.values():
+            outputClasses.update(cone)
+        outputClasses.write()
+        self._defineOutputs(outputClasses=outputClasses)
+        self._defineSourceRelation(self.inputParticles, outputClasses)
+
+    def _readMemberships(self):
+        """Index cone-specific 2D geometry by particle and group ID."""
+        path = self._getGroupingOutputStarPath()
+        groupingMetadata = md.MetaData(path)
+        groupColumn = self._getGroupByColumn()
+        groupLabel = md.str2Label(groupColumn)
+        for label in (md.MDL_ITEM_ID, groupLabel, *_CONE_GEOMETRY_LABELS):
+            if label < 0 or not groupingMetadata.containsLabel(label):
+                column = groupColumn if label == groupLabel else md.label2Str(label)
                 raise RuntimeError(
-                    f"No averaging weights found for particle with itemId={itemId}."
-                ) from exc
+                    f"Missing column {column} in cone grouping output {path}."
+                )
 
-            outputParticle = particle.clone()
+        coneGeometryByParticle = {}
+        for row in md.iterRows(groupingMetadata):
+            itemId = row.getValue(md.MDL_ITEM_ID)
+            groupId = int(row.getValue(groupLabel))
+            memberships = coneGeometryByParticle.setdefault(itemId, {})
+            if groupId in memberships:
+                raise RuntimeError(
+                    f"Duplicate membership itemId={itemId}, {groupColumn}={groupId} "
+                    f"in cone grouping output {path}."
+                )
+            memberships[groupId] = tuple(
+                row.getValue(label) for label in _CONE_GEOMETRY_LABELS
+            )
 
-            for col, weight in zip(weightColumns, weights):
-                setattr(outputParticle, WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weight))
-
-            outputParticle.setClassId(group)
-            outputParticles.append(outputParticle)
-
-        # The estimator writes a slice for every fitted cone, even without a winner.
-        classIndex = {
-            group: index for index, group in enumerate(fittedGroups, start=1)
-        }
-
-        standardClasses = self._createOutputClasses(
-            particles=outputParticles,
-            classIndex=classIndex,
-            averagesPath=self._getRawConeAveragesPath(),
-            suffix="_standard",
-        )
-
-        robustClasses = self._createOutputClasses(
-            particles=outputParticles,
-            classIndex=classIndex,
-            averagesPath=self._getCorrectedConeAveragesPath(),
-            suffix="_robust",
-        )
-
-        outputParticles.write()
-        robustClasses.write()
-        standardClasses.write()
-
-        self._defineOutputs(outputParticles=outputParticles)
-        self._defineSourceRelation(self.inputParticles, outputParticles)
-
-        self._defineOutputs(outputClasses_robust=robustClasses)
-        self._defineSourceRelation(outputParticles, robustClasses)
-
-        self._defineOutputs(outputClasses_standard=standardClasses)
-        self._defineSourceRelation(outputParticles, standardClasses)
-
-    def _createOutputClasses(
-        self,
-        particles,
-        classIndex: dict[int, int],
-        averagesPath: str | Path,
-        suffix: str,
-    ) -> SetOfClasses2D:
-        """
-        Create a set of 2D classes using a stack of class averages as representatives.
-
-        Parameters
-        ----------
-        particles : SetOfParticles
-            Particles to classify according to their stored class identifiers.
-        classIndex : dict of int to int
-            Mapping from class identifiers to 1-based image indices in the
-            average stack.
-        averagesPath : str or pathlib.Path
-            Path to the stack containing the class representative images.
-        suffix : str
-            Suffix used to identify the generated Scipion output set.
-
-        Returns
-        -------
-        SetOfClasses2D
-            Set of 2D classes with the requested averages as representatives.
-        """
-        outputClasses = self._createSetOfClasses2D(particles, suffix)
-
-        samplingRate = particles.getSamplingRate()
-        averagesPath = str(Path(averagesPath))
-
-        def updateClass(classItem):
-            classId = classItem.getObjId()
-
-            representative = classItem.getRepresentative()
-            representative.setLocation(classIndex[classId], averagesPath)
-            representative.setSamplingRate(samplingRate)
-
-        outputClasses.classifyItems(updateClassCallback=updateClass)
-
-        return outputClasses
+        return coneGeometryByParticle
