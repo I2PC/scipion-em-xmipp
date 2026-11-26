@@ -23,32 +23,32 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
-from pathlib import Path
-from shlex import join, quote
-from typing import Union, Dict, List
+from __future__ import annotations
+
 from enum import IntEnum
+from pathlib import Path
+from shlex import quote
 
-
-from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_2D
 from pwem.objects import SetOfClasses2D
-
-
+from pwem.protocols import ProtClassify2D
 from pyworkflow import VERSION_3_0
+from pyworkflow.constants import BETA
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (
-    PointerParam,
-    IntParam,
+    GPU_LIST,
+    USE_GPU,
     BooleanParam,
     EnumParam,
     FloatParam,
+    IntParam,
+    PointerParam,
+    StringParam,
 )
-from pyworkflow.constants import BETA
+
 from xmipp3.base import XmippProtocol
-
-
 from xmipp3.convert import particleToRow
 
 
@@ -57,7 +57,6 @@ class EstimatorType(IntEnum):
     FOURIER_IRLS = 1
     FOURIER_MASKED = 2
     ADMM = 3
-    NOISE_CORRECTED_COSINE = 4
 
     @property
     def label(self) -> str:
@@ -65,10 +64,12 @@ class EstimatorType(IntEnum):
         return self.name.lower()
 
 
+# Column names assigned by xmipp_robust_estimation_gmm
 ROBUST_WEIGHT_COL = "wRobust"
 STD_ROBUST_WEIGHT_COL = "wRobustStd"
 GMM_WEIGHT_COL = "wRobustGmm"
 
+# Map every xmipp column to the name this protocol should assign to it
 WEIGHT_COLUMN_TO_ATTRIBUTE = {
     ROBUST_WEIGHT_COL: "_xmippRobustWeight",
     STD_ROBUST_WEIGHT_COL: "_xmippRobustWeightStandardized",
@@ -77,13 +78,16 @@ WEIGHT_COLUMN_TO_ATTRIBUTE = {
 
 
 def add_estimator_section(form):
+    """
+    Add all parameters related to estimator selection and configuration to the protocol form.
+    """
     form.addSection(label="Estimator")
     form.addParam(
         "estimatorType",
         EnumParam,
         default=EstimatorType.IRLS.value,
         choices=[e.label for e in EstimatorType],
-        help=("Type of robust estimator to use to compute the new class averages."),
+        help="Type of robust estimator to use to compute the new class averages.",
         label="Estimator type",
     )
     form.addParam(
@@ -92,24 +96,17 @@ def add_estimator_section(form):
         default=True,
         help=(
             "Apply GMM reweighting to the results of the estimator. "
-            "For noise-corrected cosine, use its native GMM weighting; "
-            "disable this option for direct cosine weights. "
             "GMM reweighting makes the estimator more aggressive in "
             "rejecting possibly misaligned or corrupted particles. This means "
             "it can slightly improve performance on more contaminated datasets."
         ),
         label="GMM Reweighting",
     )
-    estimator_condition: Dict[EstimatorType, str] = {
-        estimator_type: f"bool(estimatorType == {estimator_type.value})"
-        for estimator_type in EstimatorType
-    }
-    gmm_condition = "bool(gmmReweighting)"
 
     form.addParam(
         "estimatorIterations",
         IntParam,
-        condition="not(" + gmm_condition + ")",
+        condition="not gmmReweighting",
         default=30,
         help="Number of estimator iterations",
         label="Estimator iterations",
@@ -117,16 +114,17 @@ def add_estimator_section(form):
     form.addParam(
         "lowpassCutoff",
         FloatParam,
-        condition=estimator_condition[EstimatorType.FOURIER_MASKED],
+        condition=f"estimatorType == {EstimatorType.FOURIER_MASKED.value}",
         default=0.25,
         help="Normalized frequency cutoff for the estimator's low pass mask",
         label="Lowpass Cutoff",
     )
 
+    # GMM parameters
     form.addParam(
         "internalEstimatorIterations",
         IntParam,
-        condition=f"{gmm_condition} and estimatorType != {EstimatorType.NOISE_CORRECTED_COSINE.value}",
+        condition="gmmReweighting",
         default=1,
         help="Number of iterations for the internal estimator",
         label="Internal iterations",
@@ -134,19 +132,19 @@ def add_estimator_section(form):
     form.addParam(
         "gmmIterations",
         IntParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=10,
         help="Number of GMM iterations",
         label="GMM iterations",
     )
+    # Degeneracy conditions
     form.addParam(
         "checkDegenerateGmm",
         BooleanParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=True,
         help=(
-            "If using a GMM-type estimator, this option makes sure the GMM model "
-            "is checked for degeneracy at each iteration in each class. "
+            "Check the GMM model for degeneracy during fitting. "
             "The model is considered degenerate if the two GMM components are too "
             "close together, or if the component associated with good particles "
             "has too little weight."
@@ -157,7 +155,7 @@ def add_estimator_section(form):
     form.addParam(
         "gmmMinSep",
         FloatParam,
-        condition=gmm_condition,
+        condition="gmmReweighting and checkDegenerateGmm",
         default=0.05,
         help="Minimum relative separation between GMM components.",
         label="Minimum GMM separation",
@@ -166,16 +164,17 @@ def add_estimator_section(form):
     form.addParam(
         "gmmMinWeight",
         FloatParam,
-        condition=gmm_condition,
+        condition="gmmReweighting and checkDegenerateGmm",
         default=0.6,
         help="Minimum weight for the good component of the GMM.",
         label="Minimum GMM good weight",
         expertLevel=LEVEL_ADVANCED,
     )
+    # Initialization parameters
     form.addParam(
         "gmmInitialBadWeight",
         FloatParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=0.05,
         help="Initial weight for the GMM component with a lower mean weight",
         expertLevel=LEVEL_ADVANCED,
@@ -184,7 +183,7 @@ def add_estimator_section(form):
     form.addParam(
         "gmmInitialBadQuantile",
         FloatParam,
-        condition=gmm_condition,
+        condition="gmmReweighting",
         default=0.05,
         help=(
             "Quantile used to calculate the mean for the GMM component with a "
@@ -194,178 +193,6 @@ def add_estimator_section(form):
         expertLevel=LEVEL_ADVANCED,
         label="Initial bad component mean",
     )
-
-    noise_condition = estimator_condition[EstimatorType.NOISE_CORRECTED_COSINE]
-    form.addParam(
-        "estimateNoiseVariance",
-        BooleanParam,
-        condition=noise_condition,
-        default=True,
-        label="Estimate noise variance?",
-        help="Estimate input pixel noise variance with checkerboard MAD inside the mask. "
-        "CTF correction and alignment interpolation can make the white-noise model approximate.",
-    )
-    form.addParam(
-        "noiseVariance",
-        FloatParam,
-        condition=f"{noise_condition} and not estimateNoiseVariance",
-        default=1.0,
-        label="Input noise variance",
-        help="Known per-pixel variance in the supplied image units, before score preprocessing. "
-        "This is a variance, not a standard deviation.",
-    )
-    form.addParam(
-        "poolNoiseVariance",
-        BooleanParam,
-        condition=f"{noise_condition} and estimateNoiseVariance",
-        default=False,
-        label="Pool noise estimates?",
-        help="Use the median automatic variance for every image. Enable only for common noise variance.",
-        expertLevel=LEVEL_ADVANCED,
-    )
-    for name, default, label, help_text in [
-        (
-            "noiseFilterSigma",
-            0.0,
-            "Score smoothing width (pixels)",
-            "Gaussian Fourier smoothing for scores only. Zero disables smoothing; averages use original images.",
-        ),
-        (
-            "noiseMinFrequency",
-            0.0,
-            "Minimum score frequency",
-            "Radial frequency in cycles/pixel. Zero disables the lower cutoff.",
-        ),
-        (
-            "noiseMaxFrequency",
-            0.0,
-            "Maximum score frequency",
-            "Radial frequency in cycles/pixel. Zero disables the upper cutoff. 0.25 is half axial Nyquist.",
-        ),
-        (
-            "noiseMinSignalFraction",
-            0.05,
-            "Minimum resolved signal fraction",
-            "Require corrected signal energy above this fraction of expected noise energy. "
-            "Unresolved images receive cosine zero.",
-        ),
-    ]:
-        form.addParam(
-            name,
-            FloatParam,
-            condition=noise_condition,
-            default=default,
-            label=label,
-            help=help_text,
-            expertLevel=LEVEL_ADVANCED,
-        )
-    form.addParam(
-        "clipNoiseCosine",
-        BooleanParam,
-        condition=noise_condition,
-        default=False,
-        label="Clip corrected cosine?",
-        expertLevel=LEVEL_ADVANCED,
-        help="Clip scores to [-1,1]. Disabled by default to avoid point masses in the GMM. "
-        "Direct weights always clip to [0,1].",
-    )
-    form.addParam(
-        "noiseWeightPower",
-        FloatParam,
-        condition=f"{noise_condition} and not gmmReweighting",
-        default=1.0,
-        label="Cosine weight power",
-        expertLevel=LEVEL_ADVANCED,
-        help="Positive exponent applied to direct cosine weights; larger values increase contrast.",
-    )
-
-
-def build_estimator_args(protocol):
-    """Build shared flags before the subcommand, then estimator-specific flags.
-
-    Native noise-corrected GMM owns its outer loop: it must not be wrapped in
-    --gmm, and gmmIterations controls --estimator-max-iter in that mode.
-    """
-    estimator = protocol._getEstimatorType()
-    native = estimator == EstimatorType.NOISE_CORRECTED_COSINE
-    use_gmm = protocol.gmmReweighting.get()
-    args = []
-    if use_gmm:
-        if native:
-            args += ["--estimator-max-iter", str(protocol.gmmIterations.get())]
-        else:
-            args += [
-                "--gmm",
-                "--estimator-max-iter",
-                str(protocol.internalEstimatorIterations.get()),
-                "--gmm-external-max-iter",
-                str(protocol.gmmIterations.get()),
-            ]
-        args += [
-            "--gmm-initial-bad-weight",
-            str(protocol.gmmInitialBadWeight.get()),
-            "--gmm-initial-bad-quantile",
-            str(protocol.gmmInitialBadQuantile.get()),
-        ]
-        if protocol.checkDegenerateGmm.get():
-            args += [
-                "--gmm-check-degenerate",
-                "--gmm-min-component-sep",
-                str(protocol.gmmMinSep.get()),
-                "--gmm-min-good-weight",
-                str(protocol.gmmMinWeight.get()),
-            ]
-        else:
-            args += ["--no-gmm-check-degenerate"]
-        if protocol.saveGmmFits.get():
-            args += ["--out-gmm-diagnostics", protocol._getGmmDiagnosticsPath()]
-    else:
-        args += [
-            "--no-gmm",
-            "--estimator-max-iter",
-            str(protocol.estimatorIterations.get()),
-        ]
-
-    if native:
-        args += [
-            estimator.label,
-            "--weighting",
-            "gmm" if use_gmm else "cosine",
-            "--filter-sigma",
-            str(protocol.noiseFilterSigma.get()),
-            "--min-frequency",
-            str(protocol.noiseMinFrequency.get()),
-            "--min-signal-fraction",
-            str(protocol.noiseMinSignalFraction.get()),
-            "--clip-cosine" if protocol.clipNoiseCosine.get() else "--no-clip-cosine",
-        ]
-        maximum = protocol.noiseMaxFrequency.get()
-        if maximum != 0:
-            args += ["--max-frequency", str(maximum)]
-        if protocol.estimateNoiseVariance.get():
-            args += [
-                (
-                    "--pool-noise"
-                    if protocol.poolNoiseVariance.get()
-                    else "--no-pool-noise"
-                )
-            ]
-        else:
-            args += ["--noise-variance", str(protocol.noiseVariance.get())]
-        if not use_gmm:
-            args += ["--weight-power", str(protocol.noiseWeightPower.get())]
-    elif estimator == EstimatorType.FOURIER_MASKED:
-        args += [
-            "fourier_irls",
-            "--weight-approach",
-            "per-image",
-            "--lowpass-mask",
-            "--lowpass-mask-cutoff",
-            str(protocol.lowpassCutoff.get()),
-        ]
-    else:
-        args += [estimator.label]
-    return join(args)
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -382,6 +209,26 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
+        form.addHidden(
+            USE_GPU,
+            BooleanParam,
+            default=True,
+            label="Use GPU for execution",
+            help="Select *Yes* to run the averaging estimator on a GPU or *No* to run it on the CPU.",
+        )
+        form.addHidden(
+            GPU_LIST,
+            StringParam,
+            default="0",
+            expertLevel=LEVEL_ADVANCED,
+            label="Choose GPU IDs",
+            help=(
+                "GPU IDs available for local execution. The estimator uses the "
+                "first visible GPU. For queued jobs, GPU allocation is handled "
+                "by the scheduler."
+            ),
+        )
+
         form.addSection(label="Input")
         form.addParam(
             "inputClasses",
@@ -407,14 +254,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             "will be applied to all classes",
             expertLevel=LEVEL_ADVANCED,
         )
-        form.addParam(
-            "saveGmmFits",
-            BooleanParam,
-            default=False,
-            help="Save extra files with information about GMM fits.",
-            label="Save GMM fits?",
-            expertLevel=LEVEL_ADVANCED,
-        )
+
+        # Saving parameters
         form.addParam(
             "saveLowHighWeightAverages",
             BooleanParam,
@@ -423,27 +264,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             label="Save averages of particles with lowest/highest weights?",
             expertLevel=LEVEL_ADVANCED,
         )
-        form.addParam(
-            "saveAverageDifferences",
-            BooleanParam,
-            default=False,
-            help="For each class, save the difference between the regular average and the robust average.",
-            label="Save average differences?",
-            expertLevel=LEVEL_ADVANCED,
-        )
 
         add_estimator_section(form)
-
-        form.addSection(label="Compute")
-        form.addParam(
-            "useGpu",
-            BooleanParam,
-            default=True,
-            label="Use GPU?",
-            help="If you set to *Yes*, the estimation process will try to use the GPU "
-            "for hardware acceleration. This might speed up the process if CUDA is available.",
-        )
-
         form.addParallelSection(threads=0, mpi=4)
 
     # --------------------------- INSERT steps functions -----------------------
@@ -454,7 +276,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         self._insertFunctionStep("createOutputStep")
 
     # --------------------------- UTILS functions -----------------------------
-    def _getSelectedClassIds(self) -> List[int]:
+    def _getSelectedClassIds(self) -> list[int]:
         """Return the class identifiers selected for processing."""
         available_ids = sorted(int(cls.getObjId()) for cls in self.inputClasses.get())
 
@@ -465,7 +287,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
         if requested_id not in available_ids:
             raise ValueError(
-                "Requested class ID is unavailable " "in the input classes object."
+                "Requested class ID is unavailable in the input classes object."
             )
 
         return [requested_id]
@@ -473,8 +295,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _buildMetadataStack(
         self,
         classes2D: SetOfClasses2D,
-        classIds: List[int],
-        outputMdPath: Union[str, Path],
+        classIds: list[int],
+        outputMdPath: str | Path,
     ):
         """
         Write particles from selected 2D classes to a single Xmipp metadata file.
@@ -514,20 +336,16 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
                 row.addToMd(particlesMd)
 
-        outputMdPath = str(Path(outputMdPath))
-        particlesMd.write(outputMdPath)
+        particlesMd.write(str(outputMdPath))
 
-    def _prepareParticleStack(
+    def _correctCtf(
         self,
-        inputMetadataPath: Union[str, Path],
-        outputParticlesPath: Union[str, Path],
-        outputMetadataPath: Union[str, Path],
+        inputMetadataPath: str | Path,
+        outputParticlesPath: str | Path,
+        outputMetadataPath: str | Path,
     ):
         """
-        If CTF correction is enabled, the images are corrected with
-        ``xmipp_ctf_correct_wiener2d``. Otherwise, they are copied to a standalone
-        stack with ``xmipp_image_convert``. In both cases, an accompanying metadata
-        file referencing the newly generated stack is written.
+        Apply Wiener CTF correction and write metadata for the corrected stack.
 
         Parameters
         ----------
@@ -543,34 +361,28 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         This method does not apply the class alignment. Alignment is handled
         separately by ``_applyAlignment``.
         """
-        inputMetadataPath = str(Path(inputMetadataPath))
-        outputParticlesPath = str(Path(outputParticlesPath))
-        outputMetadataPath = str(Path(outputMetadataPath))
+        inputClasses = self.inputClasses.get()
+        args = [
+            f"-i {quote(str(inputMetadataPath))}",
+            f"-o {quote(str(outputParticlesPath))}",
+            f"--save_metadata_stack {quote(str(outputMetadataPath))}",
+            "--keep_input_columns",
+            f"--sampling_rate {inputClasses.getSamplingRate()}",
+        ]
+        if inputClasses.getImages().isPhaseFlipped():
+            args.append("--phase_flipped")
 
-        args = (
-            f"-i {inputMetadataPath} "
-            f"-o {outputParticlesPath} "
-            f"--save_metadata_stack {outputMetadataPath} "
-            f"--keep_input_columns "
+        self.runJob(
+            "xmipp_ctf_correct_wiener2d",
+            " ".join(args),
+            numberOfMpi=self.numberOfMpi.get(),
         )
-
-        if self.correctCtf.get():
-            args += f"--sampling_rate {self.inputClasses.get().getSamplingRate()}"
-
-            if self.inputClasses.get().getImages().isPhaseFlipped():
-                args += "--phase_flipped "
-
-            self.runJob(
-                "xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()
-            )
-        else:
-            self.runJob("xmipp_image_convert", args, numberOfMpi=1)
 
     def _applyAlignment(
         self,
-        inputMetadataPath: Union[str, Path],
-        outputParticlesPath: Union[str, Path],
-        outputMetadataPath: Union[str, Path],
+        inputMetadataPath: str | Path,
+        outputParticlesPath: str | Path,
+        outputMetadataPath: str | Path,
     ):
         """
         Apply the 2D transforms stored in a particle metadata file.
@@ -588,32 +400,27 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputMetadataPath : str or pathlib.Path
             Path of the metadata file referencing the aligned images.
         """
-        inputMetadataPath = str(Path(inputMetadataPath))
-        outputParticlesPath = str(Path(outputParticlesPath))
-        outputMetadataPath = str(Path(outputMetadataPath))
-
-        args = (
-            f"-i {inputMetadataPath} "
-            f"-o {outputParticlesPath} "
-            f"--save_metadata_stack {outputMetadataPath} "
-            f"--keep_input_columns "
-            f"--apply_transform"
-        )
+        args = [
+            f"-i {quote(str(inputMetadataPath))}",
+            f"-o {quote(str(outputParticlesPath))}",
+            f"--save_metadata_stack {quote(str(outputMetadataPath))}",
+            "--keep_input_columns",
+            "--apply_transform",
+        ]
         self.runJob(
-            "xmipp_transform_geometry", args, numberOfMpi=self.numberOfMpi.get()
+            "xmipp_transform_geometry",
+            " ".join(args),
+            numberOfMpi=self.numberOfMpi.get(),
         )
 
     def _getInputParticlesPath(self):
-        return self._getExtraPath("inputParticles.xmd")
+        return self._getTmpPath("inputParticles.xmd")
 
     def _getPreprocessedParticlesPath(self):
-        return self._getExtraPath("preprocessed.mrcs")
+        return self._getTmpPath("preprocessed.mrcs")
 
     def _getPreprocessedMetadataPath(self):
-        return self._getExtraPath("preprocessed.xmd")
-
-    def _getGmmDiagnosticsPath(self):
-        return self._getExtraPath("gmmDiagnostics")
+        return self._getTmpPath("preprocessed.xmd")
 
     def _getLowWeightAveragesPath(self):
         return self._getExtraPath("lowWeightAverages.mrcs")
@@ -621,8 +428,14 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getHighWeightAveragesPath(self):
         return self._getExtraPath("highWeightAverages.mrcs")
 
-    def _getAverageDifferencesPath(self):
-        return self._getExtraPath("averageDifferences.mrcs")
+    def _getOutputStarPath(self):
+        return self._getTmpPath("particles.star")
+
+    def _getCorrectedAveragesPath(self):
+        return self._getExtraPath("corrected_avgs.mrcs")
+
+    def _getOriginalAveragesPath(self):
+        return self._getExtraPath("original_avgs.mrcs")
 
     def _getEstimatorType(self) -> EstimatorType:
         return EstimatorType(self.estimatorType.get())
@@ -657,18 +470,20 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         The particles are optionally CTF-corrected, collected into a single
         image stack, and transformed according to their stored 2D alignments.
         """
-        particlesMdPath = self._getInputParticlesPath()
+        alignmentInputPath = self._getInputParticlesPath()
 
-        # Correct CTF (if requested), align particles and extract particle stack
-        self._prepareParticleStack(
-            inputMetadataPath=particlesMdPath,
-            outputMetadataPath=self._getTmpPath("corrected.xmd"),
-            outputParticlesPath=self._getTmpPath("corrected.mrcs"),
-        )
+        if self.correctCtf.get():
+            correctedMetadataPath = self._getTmpPath("corrected.xmd")
+            self._correctCtf(
+                inputMetadataPath=alignmentInputPath,
+                outputMetadataPath=correctedMetadataPath,
+                outputParticlesPath=self._getTmpPath("corrected.mrcs"),
+            )
+            alignmentInputPath = correctedMetadataPath
 
         # Apply alignment to all images in the extracted stack
         self._applyAlignment(
-            inputMetadataPath=self._getTmpPath("corrected.xmd"),
+            inputMetadataPath=alignmentInputPath,
             outputMetadataPath=self._getPreprocessedMetadataPath(),
             outputParticlesPath=self._getPreprocessedParticlesPath(),
         )
@@ -682,56 +497,120 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         average stacks.
         """
         env = self.getCondaEnv()
-        device = "cuda" if self.useGpu.get() else "cpu"
+        use_gpu = self.usesGpu()
+        device = "cuda" if use_gpu else "cpu"
+        if use_gpu and not self.useQueue():
+            env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, self.getGpuList()))
 
         # Prepare output paths for the star file with weights and averages
-        outputStarPath = self._getExtraPath("particles.star")
-        correctedAveragePath = self._getExtraPath("corrected_avgs.mrcs")
-        originalAveragePath = self._getExtraPath("original_avgs.mrcs")
+        outputStarPath = self._getOutputStarPath()
+        correctedAveragePath = self._getCorrectedAveragesPath()
+        originalAveragePath = self._getOriginalAveragesPath()
 
-        # Run the GMM average estimation script for all classes
-        args = (
-            f"--input-xmd {quote(str(self._getPreprocessedMetadataPath()))} "
-            f"--base-xmd {quote(str(self._getInputParticlesPath()))} "
-            f"--out-star {quote(str(outputStarPath))} "
-            f"--out-corrected-avgs {quote(str(correctedAveragePath))} "
-            f"--out-original-avgs {quote(str(originalAveragePath))} "
-            f"--device {device} "
-        )
+        args = [
+            f"--input-xmd {quote(self._getPreprocessedMetadataPath())}",
+            f"--base-xmd {quote(self._getInputParticlesPath())}",
+            f"--out-star {quote(outputStarPath)}",
+            f"--out-corrected-avgs {quote(correctedAveragePath)}",
+            f"--out-original-avgs {quote(originalAveragePath)}",
+            f"--device {device}",
+            "--overwrite",  # allow retries to replace any average stacks written by a previous attempt
+        ]
 
         if self.saveLowHighWeightAverages.get():
-            args += f"--out-low-weight-avgs {self._getLowWeightAveragesPath()} "
-            args += f"--out-high-weight-avgs {self._getHighWeightAveragesPath()} "
+            args.extend(
+                [
+                    f"--out-low-weight-avgs {quote(self._getLowWeightAveragesPath())}",
+                    f"--out-high-weight-avgs {quote(self._getHighWeightAveragesPath())}",
+                ]
+            )
 
-        if self.saveAverageDifferences.get():
-            args += f"--out-difference-avgs {self._getAverageDifferencesPath()} "
+        if self.gmmReweighting.get():
+            args.extend(
+                [
+                    "--gmm",
+                    f"--estimator-max-iter {self.internalEstimatorIterations.get()}",
+                    f"--gmm-external-max-iter {self.gmmIterations.get()}",
+                    f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()}",
+                    f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()}",
+                ]
+            )
 
-        args += build_estimator_args(self)
+            if self.checkDegenerateGmm.get():
+                args.extend(
+                    [
+                        "--gmm-check-degenerate",
+                        f"--gmm-min-component-sep {self.gmmMinSep.get()}",
+                        f"--gmm-min-good-weight {self.gmmMinWeight.get()}",
+                    ]
+                )
+            else:
+                args.append("--no-gmm-check-degenerate")
 
-        self.runJob("xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1)
+        else:
+            args.extend(
+                [
+                    "--no-gmm",
+                    f"--estimator-max-iter {self.estimatorIterations.get()}",
+                ]
+            )
+
+        estimatorType = self._getEstimatorType()
+        if estimatorType == EstimatorType.FOURIER_MASKED:
+            args.extend(
+                [
+                    "fourier_irls",
+                    "--weight-approach per-image",
+                    "--lowpass-mask",
+                    f"--lowpass-mask-cutoff {self.lowpassCutoff.get()}",
+                ]
+            )
+        else:
+            args.append(estimatorType.label)
+
+        self.runJob(
+            "xmipp_gmm_average_estimation", " ".join(args), env=env, numberOfMpi=1
+        )
+
+    def _readOutputWeights(self, weightColumns):
+        """
+        Read aligned weight columns from STAR and index them by particle ID.
+        Returns a dictionary keyed by item ID whose values are tuples with the weight column
+        values for each particle. The tuples follow the same order as ``weightColumns``.
+        """
+        outputParticlesMd = md.MetaData(self._getOutputStarPath())
+        columnNames = ["itemId", *weightColumns]
+        labels = [md.MDL_ITEM_ID, *(md.str2Label(col) for col in weightColumns)]
+        for name, label in zip(columnNames, labels):
+            if label < 0 or not outputParticlesMd.containsLabel(label):
+                raise RuntimeError(
+                    f"Missing column {name} in robust averaging output metadata."
+                )
+
+        columns = [outputParticlesMd.getColumnValues(label) for label in labels]
+        weightsById = {}
+        for itemId, weights in zip(columns[0], zip(*columns[1:])):
+            if itemId in weightsById:
+                raise RuntimeError(
+                    f"Duplicated itemId={itemId} in robust averaging output metadata."
+                )
+            weightsById[itemId] = weights
+        return weightsById
 
     def createOutputStep(self):
         """
         Create the particle and class outputs of the protocol.
 
-        Particle robust weights and class assignments are restored from the
-        estimator metadata. Two sets of 2D classes are created using the robust
-        and conventional class averages as representatives.
+        Apply the estimator's particle weights and build two sets of 2D
+        classes using the robust and conventional averages as representatives.
         """
-        outputParticlesMd = md.MetaData(self._getExtraPath("particles.star"))
-
         weightColumns = self._getEstimatorWeightColumns()
+        weightsById = self._readOutputWeights(weightColumns)
+        weightAttributes = [WEIGHT_COLUMN_TO_ATTRIBUTE[col] for col in weightColumns]
 
-        weightsById: Dict[int, Dict[str, float]] = {}
-        for row in md.iterRows(outputParticlesMd):
-            itemId = row.getValue(md.MDL_ITEM_ID)
-
-            if itemId in weightsById:
-                raise RuntimeError(
-                    f"Duplicated itemId={itemId} in robust averaging output metadata."
-                )
-
-            weightsById[itemId] = {col: row.getValue(col) for col in weightColumns}
+        # The estimation script writes averages following sorted class IDs
+        classIds = self._getSelectedClassIds()
+        classIndex = {classId: index for index, classId in enumerate(classIds, start=1)}
 
         outputParticles = self._createSetOfParticles()
         inputClasses = self.inputClasses.get()
@@ -740,11 +619,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         for cl in inputClasses:
             classId = cl.getObjId()
 
+            # Skip classes that were not requested by the user
+            if classId not in classIndex:
+                continue
+
             for particle in cl:
                 itemId = particle.getObjId()
 
                 try:
-                    weightsDict = weightsById[itemId]
+                    weights = weightsById[itemId]
                 except KeyError as exc:
                     raise RuntimeError(
                         f"Weights were not found for particle with itemId={itemId}."
@@ -753,22 +636,16 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 outputParticle = particle.clone()
                 outputParticle.setClassId(classId)
 
-                for col in weightColumns:
-                    outputParticle.__setattr__(
-                        WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsDict[col])
-                    )
+                for attribute, weight in zip(weightAttributes, weights):
+                    setattr(outputParticle, attribute, Float(weight))
 
                 outputParticles.append(outputParticle)
-
-        # The estimation script writes averages following sorted class IDs.
-        classIds = self._getSelectedClassIds()
-        classIndex = {classId: index for index, classId in enumerate(classIds, start=1)}
 
         # Create classes with robust averages as representatives
         robustClasses = self._createOutputClasses(
             particles=outputParticles,
             classIndex=classIndex,
-            averagesPath=self._getExtraPath("corrected_avgs.mrcs"),
+            averagesPath=self._getCorrectedAveragesPath(),
             suffix="_robust",
         )
 
@@ -776,7 +653,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         standardClasses = self._createOutputClasses(
             particles=outputParticles,
             classIndex=classIndex,
-            averagesPath=self._getExtraPath("original_avgs.mrcs"),
+            averagesPath=self._getOriginalAveragesPath(),
             suffix="_standard",
         )
 
@@ -793,8 +670,8 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _createOutputClasses(
         self,
         particles,
-        classIndex: Dict[int, int],
-        averagesPath: Union[str, Path],
+        classIndex: dict[int, int],
+        averagesPath: str | Path,
         suffix: str,
     ) -> SetOfClasses2D:
         """
@@ -820,7 +697,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         outputClasses = self._createSetOfClasses2D(particles, suffix)
 
         samplingRate = particles.getSamplingRate()
-        averagesPath = str(Path(averagesPath))
+        averagesPath = str(averagesPath)
 
         def updateClass(classItem):
             classId = classItem.getObjId()
@@ -829,6 +706,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             representative.setLocation(classIndex[classId], averagesPath)
             representative.setSamplingRate(samplingRate)
 
-        outputClasses.classifyItems(updateClassCallback=updateClass)
+        outputClasses.classifyItems(updateClassCallback=updateClass, doClone=False)
 
         return outputClasses

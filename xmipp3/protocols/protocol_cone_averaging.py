@@ -25,7 +25,7 @@
 # ******************************************************************************
 
 from pathlib import Path
-from shlex import quote
+from shlex import join, quote
 from typing import Dict, Union
 from enum import IntEnum
 
@@ -56,7 +56,6 @@ from .protocol_average_estimation_gmm import (
     WEIGHT_COLUMN_TO_ATTRIBUTE,
     EstimatorType,
     add_estimator_section,
-    build_estimator_args,
 )
 
 
@@ -167,14 +166,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             expertLevel=LEVEL_ADVANCED,
         )
         form.addParam(
-            "saveGmmFits",
-            BooleanParam,
-            default=False,
-            help="Save extra files with information about GMM fits.",
-            label="Save GMM fits?",
-            expertLevel=LEVEL_ADVANCED,
-        )
-        form.addParam(
             "saveLowHighWeightAverages",
             BooleanParam,
             default=False,
@@ -182,15 +173,6 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             label="Save averages of particles with lowest/highest weights?",
             expertLevel=LEVEL_ADVANCED,
         )
-        form.addParam(
-            "saveAverageDifferences",
-            BooleanParam,
-            default=False,
-            help="For each class, save the difference between the regular average and the robust average.",
-            label="Save average differences?",
-            expertLevel=LEVEL_ADVANCED,
-        )
-
         add_estimator_section(form)
 
         form.addSection(label="Compute")
@@ -258,17 +240,11 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
     def _getCtfCorrectedMdPath(self):
         return self._getTmpPath("ctfCorrectedParticles.xmd")
 
-    def _getGmmDiagnosticsPath(self):
-        return self._getExtraPath("gmmDiagnostics")
-
     def _getLowWeightAveragesPath(self):
         return self._getExtraPath("lowWeightAverages.mrcs")
 
     def _getHighWeightAveragesPath(self):
         return self._getExtraPath("highWeightAverages.mrcs")
-
-    def _getAverageDifferencesPath(self):
-        return self._getExtraPath("averageDifferences.mrcs")
 
     def _getEstimatorType(self):
         return EstimatorType(self.estimatorType.get())
@@ -364,28 +340,64 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         env = self.getCondaEnv()
         device = "cuda" if self.useGpu.get() else "cpu"
 
-        args = (
-            f"--input-xmd {quote(str(self._getParticleMdPath()))} "
-            f"--base-xmd {quote(str(self._getInputMdPath()))} "
-            f"--out-star {quote(str(self._getAveragingOutputStarPath()))} "
-            f"--device {device} "
-            f"--group-by-column {quote(str(self._getGroupByColumn()))} "
-            f"--out-corrected-avgs {quote(str(self._getCorrectedConeAveragesPath()))} "
-            f"--out-original-avgs {quote(str(self._getRawConeAveragesPath()))} "
-        )
+        args = [
+            "--input-xmd", self._getParticleMdPath(),
+            "--base-xmd", self._getInputMdPath(),
+            "--out-star", self._getAveragingOutputStarPath(),
+            "--device", device,
+            "--group-by-column", self._getGroupByColumn(),
+            "--out-corrected-avgs", self._getCorrectedConeAveragesPath(),
+            "--out-original-avgs", self._getRawConeAveragesPath(),
+            "--overwrite",
+        ]
 
         if self.saveLowHighWeightAverages.get():
-            args += (
-                f"--out-low-weight-avgs {quote(str(self._getLowWeightAveragesPath()))} "
+            args.extend(
+                [
+                    "--out-low-weight-avgs", self._getLowWeightAveragesPath(),
+                    "--out-high-weight-avgs", self._getHighWeightAveragesPath(),
+                ]
             )
-            args += f"--out-high-weight-avgs {quote(str(self._getHighWeightAveragesPath()))} "
 
-        if self.saveAverageDifferences.get():
-            args += f"--out-difference-avgs {quote(str(self._getAverageDifferencesPath()))} "
+        if self.gmmReweighting.get():
+            args.extend(
+                [
+                    "--gmm",
+                    "--estimator-max-iter", str(self.internalEstimatorIterations.get()),
+                    "--gmm-external-max-iter", str(self.gmmIterations.get()),
+                    "--gmm-initial-bad-weight", str(self.gmmInitialBadWeight.get()),
+                    "--gmm-initial-bad-quantile", str(self.gmmInitialBadQuantile.get()),
+                ]
+            )
+            if self.checkDegenerateGmm.get():
+                args.extend(
+                    [
+                        "--gmm-check-degenerate",
+                        "--gmm-min-component-sep", str(self.gmmMinSep.get()),
+                        "--gmm-min-good-weight", str(self.gmmMinWeight.get()),
+                    ]
+                )
+            else:
+                args.append("--no-gmm-check-degenerate")
+        else:
+            args.extend(
+                ["--no-gmm", "--estimator-max-iter", str(self.estimatorIterations.get())]
+            )
 
-        args += build_estimator_args(self)
+        estimator = self._getEstimatorType()
+        if estimator == EstimatorType.FOURIER_MASKED:
+            args.extend(
+                [
+                    "fourier_irls",
+                    "--weight-approach", "per-image",
+                    "--lowpass-mask",
+                    "--lowpass-mask-cutoff", str(self.lowpassCutoff.get()),
+                ]
+            )
+        else:
+            args.append(estimator.label)
 
-        self.runJob("xmipp_gmm_average_estimation", args, env=env, numberOfMpi=1)
+        self.runJob("xmipp_gmm_average_estimation", join(args), env=env, numberOfMpi=1)
 
     def createOutputStep(self):
         outputMd = md.MetaData(self._getAveragingOutputStarPath())
