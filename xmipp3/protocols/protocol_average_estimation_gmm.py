@@ -428,6 +428,15 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     def _getHighWeightAveragesPath(self):
         return self._getExtraPath("highWeightAverages.mrcs")
 
+    def _getOutputStarPath(self):
+        return self._getTmpPath("particles.star")
+
+    def _getCorrectedAveragesPath(self):
+        return self._getExtraPath("corrected_avgs.mrcs")
+
+    def _getOriginalAveragesPath(self):
+        return self._getExtraPath("original_avgs.mrcs")
+
     def _getEstimatorType(self) -> EstimatorType:
         return EstimatorType(self.estimatorType.get())
 
@@ -494,9 +503,9 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, self.getGpuList()))
 
         # Prepare output paths for the star file with weights and averages
-        outputStarPath = self._getExtraPath("particles.star")
-        correctedAveragePath = self._getExtraPath("corrected_avgs.mrcs")
-        originalAveragePath = self._getExtraPath("original_avgs.mrcs")
+        outputStarPath = self._getOutputStarPath()
+        correctedAveragePath = self._getCorrectedAveragesPath()
+        originalAveragePath = self._getOriginalAveragesPath()
 
         args = [
             f"--input-xmd {quote(self._getPreprocessedMetadataPath())}",
@@ -565,11 +574,11 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
     def _readOutputWeights(self, weightColumns):
         """
-        Read aligned weight columns from STAR and index them by particle ID. 
+        Read aligned weight columns from STAR and index them by particle ID.
         Returns a dictionary keyed by item ID whose values are tuples with the weight column
         values for each particle. The tuples follow the same order as ``weightColumns``.
         """
-        outputParticlesMd = md.MetaData(self._getExtraPath("particles.star"))
+        outputParticlesMd = md.MetaData(self._getOutputStarPath())
         columnNames = ["itemId", *weightColumns]
         labels = [md.MDL_ITEM_ID, *(md.str2Label(col) for col in weightColumns)]
         for name, label in zip(columnNames, labels):
@@ -636,7 +645,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         robustClasses = self._createOutputClasses(
             particles=outputParticles,
             classIndex=classIndex,
-            averagesPath=self._getExtraPath("corrected_avgs.mrcs"),
+            averagesPath=self._getCorrectedAveragesPath(),
             suffix="_robust",
         )
 
@@ -644,7 +653,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         standardClasses = self._createOutputClasses(
             particles=outputParticles,
             classIndex=classIndex,
-            averagesPath=self._getExtraPath("original_avgs.mrcs"),
+            averagesPath=self._getOriginalAveragesPath(),
             suffix="_standard",
         )
 
