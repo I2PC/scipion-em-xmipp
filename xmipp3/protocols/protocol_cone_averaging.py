@@ -100,8 +100,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             default="c1",
             label="Symmetry group",
             help=(
-                "Symmetry group of the volume. Only 'cn' with n >= 1, "
-                "and 'dn' with n >= 2 are currently supported."
+                "Symmetry group of the volume. Supported groups are "
+                "Cn and Dn (n >= 1), T, O, I, and I1–I4."
             ),
         )
         form.addParam(
