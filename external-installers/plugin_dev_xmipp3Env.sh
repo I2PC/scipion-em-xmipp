@@ -5,6 +5,7 @@
 #------------------------------------------------
 # - This script must be located in the Scipion root directory, alongside the
 #   scipion3 executable.
+# - Add XMIPP3_INSTALL_CONDA_DEPENDENCIES=ON at scipion.conf
 # - Make the script executable before running it:
 #       chmod +x plugin_dev_xmipp3Env.sh
 # - Run it using:
@@ -26,6 +27,7 @@ trap 'status=$?; echo "ERROR: Installation failed at line $LINENO (exit code: $s
 BUNDLE_DIR="xmipp-TestEnv"
 XMIPP_BRANCH="${XMIPP_BRANCH:-main}" #-main or omad_xmipp3_env
 SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-main}" # -main or $XMIPP_BRANCH
+
 ENV_NAME="xmipp3"
 PYTHON_VERSION="3.11"
 XMIPP3_ENV_VERSION="xmipp3-installer>=2.2.0,<3"
@@ -95,7 +97,7 @@ echo "Activated Conda environment: $ENV_NAME"
 # Install xmipp3-installer
 
 echo "- Installing xmipp3-installer..."
-pip install  "$XMIPP3_ENV_VERSION"
+pip install --only-binary :all: "$XMIPP3_ENV_VERSION"
 # Temporary solution until 2.2.0 is released
 #if [ ! -d "xmipp3-installer" ]; then
 #    git clone https://github.com/I2PC/xmipp3-installer.git

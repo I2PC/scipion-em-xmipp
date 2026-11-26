@@ -25,6 +25,8 @@ trap 'echo "ERROR: Script failed at line $LINENO: $BASH_COMMAND" >&2; exit 1' ER
 BUNDLE_DIR="xmipp-TestEnv"
 XMIPP_BRANCH="${XMIPP_BRANCH:-main}" #-main or -omad_xmipp3_env or ...
 SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-main}" # -main or -$XMIPP_BRANCH ...
+XMIPP3_ENV_VERSION="xmipp3-installer"
+
 #------------------------------------------------
 echo "=========================================="
 echo "Xmipp installation configuration"
@@ -71,6 +73,9 @@ fi
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 echo "Conda initialized from: $CONDA_BASE"
 
+echo "- Installing xmipp3-installer..."
+scipion3_cmd pip install --only-binary :all: "$XMIPP3_ENV_VERSION"
+
 echo "- Cloning and install Xmipp bundle"
 
 if [ -d "$BUNDLE_DIR" ]; then
@@ -78,6 +83,7 @@ echo "ERROR: Directory '$BUNDLE_DIR' already exists."
 echo "Please remove or rename it before running this script."
 exit 1
 fi
+
 echo "Cloning Xmipp bundle..."
 git clone --branch "$XMIPP_BRANCH" https://github.com/I2PC/xmipp3 "$BUNDLE_DIR"
 cd "$BUNDLE_DIR"
