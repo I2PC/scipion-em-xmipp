@@ -23,37 +23,36 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
+from __future__ import annotations
 
+from enum import IntEnum
 from math import isfinite
 from pathlib import Path
 from shlex import join
-from typing import Dict, Union
-from enum import IntEnum
 
-from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 from pwem.objects import SetOfClasses2D
-
+from pwem.protocols import ProtClassify2D
 from pyworkflow import VERSION_3_0
+from pyworkflow.constants import BETA
 from pyworkflow.object import Float
 from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (
-    PointerParam,
-    IntParam,
-    FloatParam,
     BooleanParam,
-    StringParam,
     EnumParam,
+    FloatParam,
+    IntParam,
+    PointerParam,
+    StringParam,
 )
-from pyworkflow.constants import BETA
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import writeSetOfParticles
 
 from .protocol_average_estimation_gmm import (
+    GMM_WEIGHT_COL,
     ROBUST_WEIGHT_COL,
     STD_ROBUST_WEIGHT_COL,
-    GMM_WEIGHT_COL,
     WEIGHT_COLUMN_TO_ATTRIBUTE,
     EstimatorType,
     add_estimator_section,
@@ -148,7 +147,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             help=(
                 "In threshold mode, each particle is grouped to every reference viewing direction "
                 "whose angular distance to the particle's viewing direction is smaller than or equal "
-                "to this threshold." 
+                "to this threshold."
                 "This should be an angular value between 0 and 90 degrees"
                 "The protocol fails if any particle has no reference within this radius."
             ),
@@ -431,8 +430,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
         weightColumns = self._getEstimatorWeightColumns()
 
-        weightsById: Dict[int, Dict[str, float]] = {}
-        groupById: Dict[int, int] = {}
+        weightsById: dict[int, dict[str, float]] = {}
+        groupById: dict[int, int] = {}
         for row in md.iterRows(outputMd):
             itemId = row.getValue(md.MDL_ITEM_ID)
 
@@ -454,7 +453,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
             itemId = particle.getObjId()
 
             try:
-                weightsDict = weightsById[itemId]
+                weightsdict = weightsById[itemId]
             except KeyError as exc:
                 raise RuntimeError(
                     f"No GMM weights found for particle with itemId={itemId}."
@@ -464,7 +463,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
             for col in weightColumns:
                 outputParticle.__setattr__(
-                    WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsDict[col])
+                    WEIGHT_COLUMN_TO_ATTRIBUTE[col], Float(weightsdict[col])
                 )
 
             outputParticle.setClassId(groupById[itemId])
@@ -508,8 +507,8 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
     def _createOutputClasses(
         self,
         particles,
-        classIndex: Dict[int, int],
-        averagesPath: Union[str, Path],
+        classIndex: dict[int, int],
+        averagesPath: str | Path,
         suffix: str,
     ) -> SetOfClasses2D:
         """
