@@ -31,7 +31,7 @@ from shlex import join
 
 import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_2D
-from pwem.objects import SetOfClasses2D
+from pwem.objects import Class2D, Particle, SetOfClasses2D
 from pwem.protocols import ProtClassify2D
 from pyworkflow import VERSION_3_0
 from pyworkflow.constants import BETA
@@ -564,8 +564,6 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         args = [
             "--input-xmd",
             str(self._getPreprocessedMetadataPath()),
-            "--base-xmd",
-            str(self._getInputParticlesPath()),
             "--out-star",
             str(outputStarPath),
             "--out-corrected-avgs",
@@ -592,14 +590,14 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         self.runJob("xmipp_gmm_average_estimation", join(args), env=env, numberOfMpi=1)
 
     def _readOutputWeights(self, weightColumns):
-        """
-        Read aligned weight columns from STAR and index them by particle ID.
-        Returns a dictionary keyed by item ID whose values are tuples with the weight column
-        values for each particle. The tuples follow the same order as ``weightColumns``.
-        """
+        """Return weights keyed by (item ID, class ID) and sorted fitted class IDs."""
         outputParticlesMd = md.MetaData(self._getOutputStarPath())
-        columnNames = ["itemId", *weightColumns]
-        labels = [md.MDL_ITEM_ID, *(md.str2Label(col) for col in weightColumns)]
+        columnNames = ["itemId", "ref", *weightColumns]
+        labels = [
+            md.MDL_ITEM_ID,
+            md.MDL_REF,
+            *(md.str2Label(col) for col in weightColumns),
+        ]
         for name, label in zip(columnNames, labels):
             if label < 0 or not outputParticlesMd.containsLabel(label):
                 raise RuntimeError(
@@ -607,124 +605,97 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
                 )
 
         columns = [outputParticlesMd.getColumnValues(label) for label in labels]
+
         weightsById = {}
-        for itemId, weights in zip(columns[0], zip(*columns[1:])):
-            if itemId in weightsById:
+        fittedClassIds = set()
+        for ids, weights in zip(zip(*columns[:2]), zip(*columns[2:])):
+            if ids in weightsById:
                 raise RuntimeError(
-                    f"Duplicated itemId={itemId} in robust averaging output metadata."
+                    f"Duplicated pair itemId={ids[0]}, classId={ids[1]} in "
+                    "robust averaging output metadata."
                 )
-            weightsById[itemId] = weights
-        return weightsById
+            weightsById[ids] = weights
+            fittedClassIds.add(ids[1])
+
+        return weightsById, sorted(fittedClassIds)
 
     def createOutputStep(self):
-        """
-        Create the particle and class outputs of the protocol.
-
-        Apply the estimator's particle weights and build two sets of 2D
-        classes using the robust and conventional averages as representatives.
-        """
+        """Create weighted 2D classes with robust and conventional representatives."""
         weightColumns = self._getEstimatorWeightColumns()
-        weightsById = self._readOutputWeights(weightColumns)
+        weightsById, fittedClassIds = self._readOutputWeights(weightColumns)
         weightAttributes = [WEIGHT_COLUMN_TO_ATTRIBUTE[col] for col in weightColumns]
 
         # The estimation script writes averages following sorted class IDs
-        classIds = self._getSelectedClassIds()
-        classIndex = {classId: index for index, classId in enumerate(classIds, start=1)}
+        selectedIds = set(self._getSelectedClassIds())
+        classIndex = {
+            classId: index for index, classId in enumerate(fittedClassIds, start=1)
+        }
 
-        outputParticles = self._createSetOfParticles()
         inputClasses = self.inputClasses.get()
-        outputParticles.copyInfo(inputClasses.getImages())
+        imagesPointer = inputClasses.getImagesPointer()
+        robustClasses = self._createSetOfClasses2D(imagesPointer, suffix="_robust")
+        standardClasses = self._createSetOfClasses2D(imagesPointer, suffix="_standard")
 
-        for cl in inputClasses:
-            classId = cl.getObjId()
-
-            # Skip classes that were not requested by the user
-            if classId not in classIndex:
+        for inputClass in inputClasses:
+            classId = inputClass.getObjId()
+            if classId not in selectedIds or inputClass.getSize() == 0:
                 continue
+            if classId not in classIndex:
+                raise RuntimeError(
+                    f"No fitted particles were found for classId={classId}."
+                )
 
-            for particle in cl:
+            stackIndex = classIndex[classId]
+            robustClass = self._addOutputClass(
+                robustClasses, inputClass, stackIndex, self._getCorrectedAveragesPath()
+            )
+            standardClass = self._addOutputClass(
+                standardClasses, inputClass, stackIndex, self._getOriginalAveragesPath()
+            )
+
+            for particle in inputClass:
                 itemId = particle.getObjId()
-
                 try:
-                    weights = weightsById[itemId]
+                    weights = weightsById[(itemId, classId)]
                 except KeyError as exc:
                     raise RuntimeError(
-                        f"Weights were not found for particle with itemId={itemId}."
+                        f"Weights were not found for itemId={itemId}, classId={classId}."
                     ) from exc
 
-                outputParticle = particle.clone()
-                outputParticle.setClassId(classId)
-
+                weighted = particle.clone()
+                weighted.setClassId(classId)
                 for attribute, weight in zip(weightAttributes, weights):
-                    setattr(outputParticle, attribute, Float(weight))
+                    setattr(weighted, attribute, Float(weight))
 
-                outputParticles.append(outputParticle)
+                robustClass.append(weighted)
+                standardClass.append(weighted.clone())
 
-        # Create classes with robust averages as representatives
-        robustClasses = self._createOutputClasses(
-            particles=outputParticles,
-            classIndex=classIndex,
-            averagesPath=self._getCorrectedAveragesPath(),
-            suffix="_robust",
+            robustClasses.update(robustClass)
+            standardClasses.update(standardClass)
+
+        robustClasses.write()
+        standardClasses.write()
+
+        self._defineOutputs(
+            outputClasses_robust=robustClasses, outputClasses_standard=standardClasses
         )
+        self._defineSourceRelation(self.inputClasses, robustClasses)
+        self._defineSourceRelation(self.inputClasses, standardClasses)
 
-        # Create classes with ordinary averages as representatives
-        standardClasses = self._createOutputClasses(
-            particles=outputParticles,
-            classIndex=classIndex,
-            averagesPath=self._getOriginalAveragesPath(),
-            suffix="_standard",
-        )
-
-        # Define protocol outputs
-        self._defineOutputs(outputParticles=outputParticles)
-        self._defineSourceRelation(self.inputClasses, outputParticles)
-
-        self._defineOutputs(outputClasses_robust=robustClasses)
-        self._defineSourceRelation(outputParticles, robustClasses)
-
-        self._defineOutputs(outputClasses_standard=standardClasses)
-        self._defineSourceRelation(outputParticles, standardClasses)
-
-    def _createOutputClasses(
+    def _addOutputClass(
         self,
-        particles,
-        classIndex: dict[int, int],
+        outputClasses: SetOfClasses2D,
+        inputClass: Class2D,
+        stackIndex: int,
         averagesPath: str | Path,
-        suffix: str,
-    ) -> SetOfClasses2D:
-        """
-        Create a set of 2D classes using a stack of class averages as representatives.
+    ) -> Class2D:
+        outputClass = Class2D(objId=inputClass.getObjId())
+        outputClass.copyInfo(inputClass)
 
-        Parameters
-        ----------
-        particles : SetOfParticles
-            Particles to classify according to their stored class identifiers.
-        classIndex : dict of int to int
-            Mapping from class identifiers to 1-based image indices in the
-            average stack.
-        averagesPath : str or pathlib.Path
-            Path to the stack containing the class representative images.
-        suffix : str
-            Suffix used to identify the generated Scipion output set.
+        representative = Particle()
+        representative.setLocation(stackIndex, str(averagesPath))
+        representative.setSamplingRate(inputClass.getSamplingRate())
+        outputClass.setRepresentative(representative)
 
-        Returns
-        -------
-        SetOfClasses2D
-            Set of 2D classes with the requested averages as representatives.
-        """
-        outputClasses = self._createSetOfClasses2D(particles, suffix)
-
-        samplingRate = particles.getSamplingRate()
-        averagesPath = str(averagesPath)
-
-        def updateClass(classItem):
-            classId = classItem.getObjId()
-
-            representative = classItem.getRepresentative()
-            representative.setLocation(classIndex[classId], averagesPath)
-            representative.setSamplingRate(samplingRate)
-
-        outputClasses.classifyItems(updateClassCallback=updateClass, doClone=False)
-
-        return outputClasses
+        outputClasses.append(outputClass)
+        return outputClass

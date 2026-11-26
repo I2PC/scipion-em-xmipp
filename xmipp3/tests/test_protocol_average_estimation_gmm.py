@@ -6,7 +6,14 @@ from unittest.mock import patch
 
 import mrcfile
 import numpy as np
-from pwem.objects import CTFModel, Particle, SetOfClasses2D, SetOfParticles, Transform
+from pwem.objects import (
+    CTFModel,
+    Class2D,
+    Particle,
+    SetOfClasses2D,
+    SetOfParticles,
+    Transform,
+)
 
 from xmipp3.protocols.protocol_average_estimation_gmm import (
     XmippProtAverageEstimationGmm,
@@ -14,7 +21,7 @@ from xmipp3.protocols.protocol_average_estimation_gmm import (
 
 
 class TestAverageEstimationGmm(TestCase):
-    def test_outputs_keep_original_particle_location_ctf_and_alignment(self):
+    def test_outputs_keep_original_particle_metadata_for_each_membership(self):
         with TemporaryDirectory() as tmpdir, ExitStack() as cleanup:
             root = Path(tmpdir)
             protocol = XmippProtAverageEstimationGmm(gmmReweighting=False)
@@ -27,11 +34,12 @@ class TestAverageEstimationGmm(TestCase):
             matrix = np.array(
                 [[0, -1, 0, 2.5], [1, 0, 0, -1.25], [0, 0, 1, 0], [0, 0, 0, 1]],
             )
+            matrices = {2: matrix, 9: matrix.copy()}
+            matrices[9][0, 3] = -2.0
+            weights = {2: (0.8, 0.5), 9: (0.3, -0.75)}
             defocus = (15000.0, 13500.0, 23.0)
             phase_shift = 0.25
             particle = Particle(objId=42, location=location)
-            particle.setClassId(9)
-            particle.setTransform(Transform(matrix=matrix.copy()))
             ctf = CTFModel()
             ctf.setStandardDefocus(*defocus)
             ctf.setPhaseShift(phase_shift)
@@ -48,7 +56,16 @@ class TestAverageEstimationGmm(TestCase):
             classes = SetOfClasses2D(filename=str(root / "input_classes.sqlite"))
             cleanup.callback(classes.close)
             classes.setImages(particles)
-            classes.classifyItems()
+            for class_id in (2, 5, 9):
+                input_class = Class2D(objId=class_id)
+                input_class.copyInfo(particles)
+                classes.append(input_class)
+                if class_id in matrices:
+                    member = particle.clone()
+                    member.setClassId(class_id)
+                    member.setTransform(Transform(matrix=matrices[class_id].copy()))
+                    input_class.append(member)
+                    classes.update(input_class)
             classes.write()
             protocol.inputClasses.set(classes)
 
@@ -56,34 +73,51 @@ class TestAverageEstimationGmm(TestCase):
             # It points to the temporary stack and has a zero residual transform.
             Path(protocol._getPreprocessedMetadataPath()).write_text(
                 "data_\n\nloop_\n_itemId\n_ref\n_image\n_anglePsi\n_shiftX\n_shiftY\n"
-                f"42 9 1@{protocol._getPreprocessedParticlesPath()} 0 0 0\n"
+                f"42 2 1@{protocol._getPreprocessedParticlesPath()} 0 0 0\n"
+                f"42 9 2@{protocol._getPreprocessedParticlesPath()} 0 0 0\n"
             )
             Path(protocol._getOutputStarPath()).write_text(
-                "data_\n\nloop_\n_itemId\n_ref\n_wRobust\n_wRobustStd\n42 9 0.8 0\n"
+                "data_\n\nloop_\n_itemId\n_ref\n_wRobust\n_wRobustStd\n"
+                "42 9 0.3 -0.75\n42 2 0.8 0.5\n"
             )
 
             with patch.object(protocol, "_defineSourceRelation"):
                 protocol.createOutputStep()
 
-            for output_name in (
-                "outputClasses_robust",
-                "outputClasses_standard",
-                "outputParticles",
+            for output_name, averages_path in (
+                ("outputClasses_robust", protocol._getCorrectedAveragesPath()),
+                ("outputClasses_standard", protocol._getOriginalAveragesPath()),
             ):
                 with self.subTest(output=output_name):
                     output = getattr(protocol, output_name)
-                    output.write()
                     output.close()
-                    reopened = type(output)(filename=output.getFileName())
+                    reopened = SetOfClasses2D(filename=output.getFileName())
                     cleanup.callback(reopened.close)
                     reopened.loadAllProperties()
-                    if isinstance(reopened, SetOfClasses2D):
-                        result = reopened[9][42]
-                    else:
-                        result = reopened[42]
-                    self.assertEqual(result.getLocation(), location)
-                    np.testing.assert_array_equal(
-                        result.getTransform().getMatrix(), matrix
-                    )
-                    self.assertEqual(result.getCTF().getDefocus(), defocus)
-                    self.assertEqual(result.getCTF().getPhaseShift(), phase_shift)
+                    self.assertEqual(reopened.getIdSet(), {2, 9})
+                    for stack_index, class_id in enumerate((2, 9), start=1):
+                        with self.subTest(class_id=class_id):
+                            output_class = reopened[class_id]
+                            self.assertEqual(output_class.getSize(), 1)
+                            self.assertEqual(output_class.getIdSet(), {42})
+                            self.assertEqual(
+                                output_class.getRepresentative().getLocation(),
+                                (stack_index, averages_path),
+                            )
+                            result = output_class[42]
+                            self.assertEqual(result.getClassId(), class_id)
+                            self.assertEqual(result.getLocation(), location)
+                            np.testing.assert_array_equal(
+                                result.getTransform().getMatrix(), matrices[class_id]
+                            )
+                            result_ctf = result.getCTF()
+                            self.assertEqual(result_ctf.getDefocus(), defocus)
+                            self.assertEqual(result_ctf.getPhaseShift(), phase_shift)
+                            robust, standardized = weights[class_id]
+                            self.assertAlmostEqual(
+                                result._xmippRobustWeight.get(), robust
+                            )
+                            self.assertAlmostEqual(
+                                result._xmippRobustWeightStandardized.get(),
+                                standardized,
+                            )
