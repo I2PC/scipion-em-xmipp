@@ -1,5 +1,5 @@
 
-name: Build plugin
+name: Build plugin with xmipp3 env
 
 on:
   pull_request:
