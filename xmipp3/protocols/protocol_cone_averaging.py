@@ -24,8 +24,9 @@
 # *
 # ******************************************************************************
 
+from math import isfinite
 from pathlib import Path
-from shlex import join, quote
+from shlex import join
 from typing import Dict, Union
 from enum import IntEnum
 
@@ -56,6 +57,7 @@ from .protocol_average_estimation_gmm import (
     WEIGHT_COLUMN_TO_ATTRIBUTE,
     EstimatorType,
     add_estimator_section,
+    build_estimator_args,
 )
 
 
@@ -142,9 +144,12 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         form.addParam(
             "angularThresholdDeg",
             FloatParam,
-            default=5.0,
+            default=10.0,
             help=(
-                "Inclusive angular radius in degrees, between 0 and 90. "
+                "In threshold mode, each particle is grouped to every reference viewing direction "
+                "whose angular distance to the particle's viewing direction is smaller than or equal "
+                "to this threshold." 
+                "This should be an angular value between 0 and 90 degrees"
                 "The protocol fails if any particle has no reference within this radius."
             ),
             condition=f"groupingMode == {GroupingModes.THRESHOLD.value}",
@@ -197,6 +202,35 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         )
 
         form.addParallelSection(threads=0, mpi=4)
+
+    def _validate(self):
+        errors = super()._validate()
+        particles = self.inputParticles.get()
+        if particles is not None:
+            if particles.isEmpty():
+                errors.append("Input particles must contain at least one particle.")
+            if not particles.hasAlignmentProj():
+                errors.append("Input particles must have projection alignment.")
+            if self.correctCtf.get() and not particles.hasCTF():
+                errors.append(
+                    "Supply particles with CTF estimates or disable CTF correction."
+                )
+
+        for value, label in (
+            (self.numberOfGroups.get(), "Number of groups"),
+            (self.groupingBatchSize.get(), "Grouping batch size"),
+        ):
+            if value is None or value <= 0:
+                errors.append(f"{label} must be a positive integer.")
+
+        if self.groupingMode.get() == GroupingModes.THRESHOLD.value:
+            radius = self.angularThresholdDeg.get()
+            if not isfinite(radius) or not 0 <= radius <= 90:
+                errors.append(
+                    "Angular threshold must be finite and between 0 and 90 degrees."
+                )
+
+        return errors
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -267,28 +301,41 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
 
     def groupIntoConesStep(self):
         env = self.getCondaEnv()
-
-        groupingArgs = (
-            f"--input-xmd {quote(str(self._getInputMdPath()))} "
-            f"--out-star {quote(str(self._getGroupingOutputStarPath()))} "
-            f"--out-group-column {quote(str(self._getGroupByColumn()))} "
-            f"--n-groups {self.numberOfGroups.get()} "
-            f"--grouping-batch-size {self.groupingBatchSize.get()} "
-            f"--symmetry-group {quote(self.symmetryGroup.get())} "
-            f"--out-reference-md "
-            f"{quote(str(self._getGroupingReferenceMetadataPath()))} "
-        )
-
         groupingMode = self._getGroupingMode()
-        groupingArgs += f"--grouping-mode {groupingMode.label} "
+
+        groupingArgs = [
+            "--input-xmd",
+            self._getInputMdPath(),
+            "--out-star",
+            self._getGroupingOutputStarPath(),
+            "--out-group-column",
+            self._getGroupByColumn(),
+            "--n-groups",
+            str(self.numberOfGroups.get()),
+            "--grouping-batch-size",
+            str(self.groupingBatchSize.get()),
+            "--symmetry-group",
+            self.symmetryGroup.get(),
+            "--out-reference-md",
+            self._getGroupingReferenceMetadataPath(),
+            "--grouping-mode",
+            groupingMode.label,
+        ]
+
         if groupingMode == GroupingModes.THRESHOLD:
-            groupingArgs += f"--angular-radius-deg {self.angularThresholdDeg.get()} "
-            groupingArgs += f"--unassigned-policy error "
+            groupingArgs.extend(
+                [
+                    "--angular-radius-deg",
+                    str(self.angularThresholdDeg.get()),
+                    "--unassigned-policy",
+                    "error",
+                ]
+            )
 
         if self.deduplicateReferences.get():
-            groupingArgs += "--deduplicate-references "
+            groupingArgs.append("--deduplicate-references")
 
-        self.runJob("xmipp_cone_grouping", groupingArgs, env=env, numberOfMpi=1)
+        self.runJob("xmipp_cone_grouping", join(groupingArgs), env=env, numberOfMpi=1)
 
     def prepareParticlesStep(self):
         """
@@ -303,36 +350,43 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         geometryInput = self._getGroupingOutputStarPath()
 
         if self.correctCtf.get():
-            samplingRate = self.inputParticles.get().getSamplingRate()
-            ctfArgs = (
-                f"-i {quote(str(geometryInput))} "
-                f"-o {quote(str(self._getCtfCorrectedStackPath()))} "
-                f"--save_metadata_stack {quote(str(self._getCtfCorrectedMdPath()))} "
-                f"--keep_input_columns "
-                f"--sampling_rate {samplingRate} "
-            )
+            particles = self.inputParticles.get()
+            ctfArgs = [
+                "-i",
+                geometryInput,
+                "-o",
+                self._getCtfCorrectedStackPath(),
+                "--save_metadata_stack",
+                self._getCtfCorrectedMdPath(),
+                "--keep_input_columns",
+                "--sampling_rate",
+                str(particles.getSamplingRate()),
+            ]
 
-            if self.inputParticles.get().isPhaseFlipped():
-                ctfArgs += "--phase_flipped "
+            if particles.isPhaseFlipped():
+                ctfArgs.append("--phase_flipped")
 
             self.runJob(
                 "xmipp_ctf_correct_wiener2d",
-                ctfArgs,
+                join(ctfArgs),
                 numberOfMpi=self.numberOfMpi.get(),
             )
             geometryInput = self._getCtfCorrectedMdPath()
 
-        geometryArgs = (
-            f"-i {quote(str(geometryInput))} "
-            f"-o {quote(str(self._getParticleStackPath()))} "
-            f"--save_metadata_stack {quote(str(self._getParticleMdPath()))} "
-            f"--keep_input_columns "
-            f"--apply_transform "
-        )
+        geometryArgs = [
+            "-i",
+            geometryInput,
+            "-o",
+            self._getParticleStackPath(),
+            "--save_metadata_stack",
+            self._getParticleMdPath(),
+            "--keep_input_columns",
+            "--apply_transform",
+        ]
 
         self.runJob(
             "xmipp_transform_geometry",
-            geometryArgs,
+            join(geometryArgs),
             numberOfMpi=self.numberOfMpi.get(),
         )
 
@@ -341,61 +395,34 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
         device = "cuda" if self.useGpu.get() else "cpu"
 
         args = [
-            "--input-xmd", self._getParticleMdPath(),
-            "--base-xmd", self._getInputMdPath(),
-            "--out-star", self._getAveragingOutputStarPath(),
-            "--device", device,
-            "--group-by-column", self._getGroupByColumn(),
-            "--out-corrected-avgs", self._getCorrectedConeAveragesPath(),
-            "--out-original-avgs", self._getRawConeAveragesPath(),
+            "--input-xmd",
+            self._getParticleMdPath(),
+            "--base-xmd",
+            self._getInputMdPath(),
+            "--out-star",
+            self._getAveragingOutputStarPath(),
+            "--device",
+            device,
+            "--group-by-column",
+            self._getGroupByColumn(),
+            "--out-corrected-avgs",
+            self._getCorrectedConeAveragesPath(),
+            "--out-original-avgs",
+            self._getRawConeAveragesPath(),
             "--overwrite",
         ]
 
         if self.saveLowHighWeightAverages.get():
             args.extend(
                 [
-                    "--out-low-weight-avgs", self._getLowWeightAveragesPath(),
-                    "--out-high-weight-avgs", self._getHighWeightAveragesPath(),
+                    "--out-low-weight-avgs",
+                    self._getLowWeightAveragesPath(),
+                    "--out-high-weight-avgs",
+                    self._getHighWeightAveragesPath(),
                 ]
             )
 
-        if self.gmmReweighting.get():
-            args.extend(
-                [
-                    "--gmm",
-                    "--estimator-max-iter", str(self.internalEstimatorIterations.get()),
-                    "--gmm-external-max-iter", str(self.gmmIterations.get()),
-                    "--gmm-initial-bad-weight", str(self.gmmInitialBadWeight.get()),
-                    "--gmm-initial-bad-quantile", str(self.gmmInitialBadQuantile.get()),
-                ]
-            )
-            if self.checkDegenerateGmm.get():
-                args.extend(
-                    [
-                        "--gmm-check-degenerate",
-                        "--gmm-min-component-sep", str(self.gmmMinSep.get()),
-                        "--gmm-min-good-weight", str(self.gmmMinWeight.get()),
-                    ]
-                )
-            else:
-                args.append("--no-gmm-check-degenerate")
-        else:
-            args.extend(
-                ["--no-gmm", "--estimator-max-iter", str(self.estimatorIterations.get())]
-            )
-
-        estimator = self._getEstimatorType()
-        if estimator == EstimatorType.FOURIER_MASKED:
-            args.extend(
-                [
-                    "fourier_irls",
-                    "--weight-approach", "per-image",
-                    "--lowpass-mask",
-                    "--lowpass-mask-cutoff", str(self.lowpassCutoff.get()),
-                ]
-            )
-        else:
-            args.append(estimator.label)
+        args.extend(build_estimator_args(self))
 
         self.runJob("xmipp_gmm_average_estimation", join(args), env=env, numberOfMpi=1)
 
@@ -430,7 +457,7 @@ class XmippProtConeAveraging(ProtClassify2D, XmippProtocol):
                 weightsDict = weightsById[itemId]
             except KeyError as exc:
                 raise RuntimeError(
-                    f"No GMM weights found for particle " f"with itemId={itemId}."
+                    f"No GMM weights found for particle with itemId={itemId}."
                 ) from exc
 
             outputParticle = particle.clone()
