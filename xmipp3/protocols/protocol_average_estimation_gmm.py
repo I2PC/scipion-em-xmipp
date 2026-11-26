@@ -31,7 +31,7 @@ from shlex import join
 
 import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_2D
-from pwem.objects import Class2D, Particle, SetOfClasses2D
+from pwem.objects import Class2D, Particle, SetOfClasses2D, SetOfParticles
 from pwem.protocols import ProtClassify2D
 from pyworkflow import VERSION_3_0
 from pyworkflow.constants import BETA
@@ -254,6 +254,11 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
     """
 
     _label = "estimation_gmm"
+    _possibleOutputs = {
+        "outputClasses_robust": SetOfClasses2D,
+        "outputClasses_standard": SetOfClasses2D,
+        "outputParticles": SetOfParticles,
+    }
     _lastUpdateVersion = VERSION_3_0
     _conda_env = "xmipp_pyTorch"
     _devStatus = BETA
@@ -624,6 +629,10 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         weightColumns = self._getEstimatorWeightColumns()
         weightsById, fittedClassIds = self._readOutputWeights(weightColumns)
         weightAttributes = [WEIGHT_COLUMN_TO_ATTRIBUTE[col] for col in weightColumns]
+        primaryColumn = (
+            GMM_WEIGHT_COL if GMM_WEIGHT_COL in weightColumns else ROBUST_WEIGHT_COL
+        )
+        primaryIndex = weightColumns.index(primaryColumn)
 
         # The estimation script writes averages following sorted class IDs
         selectedIds = set(self._getSelectedClassIds())
@@ -635,6 +644,7 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         imagesPointer = inputClasses.getImagesPointer()
         robustClasses = self._createSetOfClasses2D(imagesPointer, suffix="_robust")
         standardClasses = self._createSetOfClasses2D(imagesPointer, suffix="_standard")
+        winnersById = {}
 
         for inputClass in inputClasses:
             classId = inputClass.getObjId()
@@ -655,32 +665,69 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
 
             for particle in inputClass:
                 itemId = particle.getObjId()
-                try:
-                    weights = weightsById[(itemId, classId)]
-                except KeyError as exc:
-                    raise RuntimeError(
-                        f"Weights were not found for itemId={itemId}, classId={classId}."
-                    ) from exc
-
-                weighted = particle.clone()
-                weighted.setClassId(classId)
-                for attribute, weight in zip(weightAttributes, weights):
-                    setattr(weighted, attribute, Float(weight))
+                weighted, weights = self._getParticleWithWeight(
+                    weightsById, weightAttributes, classId, particle
+                )
 
                 robustClass.append(weighted)
                 standardClass.append(weighted.clone())
 
+                winner = winnersById.get(itemId)
+                if winner is None:
+                    winnersById[itemId] = weighted
+                else:
+                    winnerClassId = winner.getClassId()
+                    winnerWeight = weightsById[itemId, winnerClassId][primaryIndex]
+
+                    # Save this class assignment if it has better weight than the previous winner
+                    # Favor lower classIds
+                    if (weights[primaryIndex], -classId) > (
+                        winnerWeight,
+                        -winnerClassId,
+                    ):
+                        winnersById[itemId] = weighted
             robustClasses.update(robustClass)
             standardClasses.update(standardClass)
 
+        outputParticles = self._createSetOfParticles()
+        outputParticles.copyInfo(inputClasses.getImages())
+        outputParticles.setAlignment2D()
+        for winner in winnersById.values():
+            outputParticles.append(winner)
+
         robustClasses.write()
         standardClasses.write()
+        outputParticles.write()
 
         self._defineOutputs(
-            outputClasses_robust=robustClasses, outputClasses_standard=standardClasses
+            outputClasses_robust=robustClasses,
+            outputClasses_standard=standardClasses,
+            outputParticles=outputParticles,
         )
         self._defineSourceRelation(self.inputClasses, robustClasses)
         self._defineSourceRelation(self.inputClasses, standardClasses)
+        self._defineSourceRelation(self.inputClasses, outputParticles)
+
+    def _getParticleWithWeight(
+        self,
+        weightsById: dict[tuple[int, int], tuple[float, ...]],
+        weightAttributes: list[str],
+        classId: int,
+        particle: Particle,
+    ) -> tuple[Particle, tuple[float, ...]]:
+        itemId = particle.getObjId()
+        try:
+            weights = weightsById[(itemId, classId)]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"Weights were not found for itemId={itemId}, classId={classId}."
+            ) from exc
+
+        weighted = particle.clone()
+        weighted.setClassId(classId)
+        for attribute, weight in zip(weightAttributes, weights):
+            setattr(weighted, attribute, Float(weight))
+        return weighted, weights
 
     def _addOutputClass(
         self,

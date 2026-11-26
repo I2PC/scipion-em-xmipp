@@ -29,6 +29,7 @@ from unittest.mock import patch
 
 import mrcfile
 import numpy as np
+from pwem.constants import ALIGN_2D
 from pwem.objects import (
     Class2D,
     CTFModel,
@@ -71,7 +72,6 @@ class TestAverageEstimationGmm(TestCase):
             particles = SetOfParticles(filename=str(root / "input_particles.sqlite"))
             cleanup.callback(particles.close)
             particles.setSamplingRate(1.5)
-            particles.setAlignment2D()
             particles.setHasCTF(True)
             particles.append(particle)
             particles.write()
@@ -82,6 +82,7 @@ class TestAverageEstimationGmm(TestCase):
             for class_id in (2, 5, 9):
                 input_class = Class2D(objId=class_id)
                 input_class.copyInfo(particles)
+                input_class.setAlignment2D()
                 classes.append(input_class)
                 if class_id in matrices:
                     member = particle.clone()
@@ -144,3 +145,19 @@ class TestAverageEstimationGmm(TestCase):
                                 result._xmippRobustWeightStandardized.get(),
                                 standardized,
                             )
+
+            protocol.outputParticles.close()
+            flat = SetOfParticles(filename=protocol.outputParticles.getFileName())
+            cleanup.callback(flat.close)
+            flat.loadAllProperties()
+            self.assertEqual(flat.getAlignment(), ALIGN_2D)
+            self.assertEqual(flat.getIdSet(), {42})
+            winner = flat[42]
+            self.assertEqual(winner.getClassId(), 2)
+            self.assertEqual(winner.getLocation(), location)
+            np.testing.assert_array_equal(winner.getTransform().getMatrix(), matrices[2])
+            self.assertEqual(winner.getCTF().getDefocus(), defocus)
+            self.assertEqual(winner.getCTF().getPhaseShift(), phase_shift)
+            robust, standardized = weights[2]
+            self.assertAlmostEqual(winner._xmippRobustWeight.get(), robust)
+            self.assertAlmostEqual(winner._xmippRobustWeightStandardized.get(), standardized)
