@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from enum import IntEnum
 from pathlib import Path
-from shlex import quote
+from shlex import join
 
 import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_2D
@@ -193,6 +193,57 @@ def add_estimator_section(form):
         expertLevel=LEVEL_ADVANCED,
         label="Initial bad component mean",
     )
+
+
+def build_estimator_args(protocol) -> list[str]:
+    """Return shared CLI tokens for the configured estimator."""
+    if protocol.gmmReweighting.get():
+        args = [
+            "--gmm",
+            "--estimator-max-iter",
+            str(protocol.internalEstimatorIterations.get()),
+            "--gmm-external-max-iter",
+            str(protocol.gmmIterations.get()),
+            "--gmm-initial-bad-weight",
+            str(protocol.gmmInitialBadWeight.get()),
+            "--gmm-initial-bad-quantile",
+            str(protocol.gmmInitialBadQuantile.get()),
+        ]
+        if protocol.checkDegenerateGmm.get():
+            args.extend(
+                [
+                    "--gmm-check-degenerate",
+                    "--gmm-min-component-sep",
+                    str(protocol.gmmMinSep.get()),
+                    "--gmm-min-good-weight",
+                    str(protocol.gmmMinWeight.get()),
+                ]
+            )
+        else:
+            args.append("--no-gmm-check-degenerate")
+    else:
+        args = [
+            "--no-gmm",
+            "--estimator-max-iter",
+            str(protocol.estimatorIterations.get()),
+        ]
+
+    estimator = protocol._getEstimatorType()
+    if estimator == EstimatorType.FOURIER_MASKED:
+        args.extend(
+            [
+                "fourier_irls",
+                "--weight-approach",
+                "per-image",
+                "--lowpass-mask",
+                "--lowpass-mask-cutoff",
+                str(protocol.lowpassCutoff.get()),
+            ]
+        )
+    else:
+        args.append(estimator.label)
+
+    return args
 
 
 class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
@@ -363,19 +414,21 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         """
         inputClasses = self.inputClasses.get()
         args = [
-            f"-i {quote(str(inputMetadataPath))}",
-            f"-o {quote(str(outputParticlesPath))}",
-            f"--save_metadata_stack {quote(str(outputMetadataPath))}",
+            "-i",
+            str(inputMetadataPath),
+            "-o",
+            str(outputParticlesPath),
+            "--save_metadata_stack",
+            str(outputMetadataPath),
             "--keep_input_columns",
-            f"--sampling_rate {inputClasses.getSamplingRate()}",
+            "--sampling_rate",
+            str(inputClasses.getSamplingRate()),
         ]
         if inputClasses.getImages().isPhaseFlipped():
             args.append("--phase_flipped")
 
         self.runJob(
-            "xmipp_ctf_correct_wiener2d",
-            " ".join(args),
-            numberOfMpi=self.numberOfMpi.get(),
+            "xmipp_ctf_correct_wiener2d", join(args), numberOfMpi=self.numberOfMpi.get()
         )
 
     def _applyAlignment(
@@ -401,16 +454,17 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
             Path of the metadata file referencing the aligned images.
         """
         args = [
-            f"-i {quote(str(inputMetadataPath))}",
-            f"-o {quote(str(outputParticlesPath))}",
-            f"--save_metadata_stack {quote(str(outputMetadataPath))}",
+            "-i",
+            str(inputMetadataPath),
+            "-o",
+            str(outputParticlesPath),
+            "--save_metadata_stack",
+            str(outputMetadataPath),
             "--keep_input_columns",
             "--apply_transform",
         ]
         self.runJob(
-            "xmipp_transform_geometry",
-            " ".join(args),
-            numberOfMpi=self.numberOfMpi.get(),
+            "xmipp_transform_geometry", join(args), numberOfMpi=self.numberOfMpi.get()
         )
 
     def _getInputParticlesPath(self):
@@ -508,11 +562,16 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         originalAveragePath = self._getOriginalAveragesPath()
 
         args = [
-            f"--input-xmd {quote(self._getPreprocessedMetadataPath())}",
-            f"--base-xmd {quote(self._getInputParticlesPath())}",
-            f"--out-star {quote(outputStarPath)}",
-            f"--out-corrected-avgs {quote(correctedAveragePath)}",
-            f"--out-original-avgs {quote(originalAveragePath)}",
+            "--input-xmd",
+            str(self._getPreprocessedMetadataPath()),
+            "--base-xmd",
+            str(self._getInputParticlesPath()),
+            "--out-star",
+            str(outputStarPath),
+            "--out-corrected-avgs",
+            str(correctedAveragePath),
+            "--out-original-avgs",
+            str(originalAveragePath),
             f"--device {device}",
             "--overwrite",  # allow retries to replace any average stacks written by a previous attempt
         ]
@@ -520,57 +579,16 @@ class XmippProtAverageEstimationGmm(ProtClassify2D, XmippProtocol):
         if self.saveLowHighWeightAverages.get():
             args.extend(
                 [
-                    f"--out-low-weight-avgs {quote(self._getLowWeightAveragesPath())}",
-                    f"--out-high-weight-avgs {quote(self._getHighWeightAveragesPath())}",
+                    "--out-low-weight-avgs",
+                    str(self._getLowWeightAveragesPath()),
+                    "--out-high-weight-avgs",
+                    str(self._getHighWeightAveragesPath()),
                 ]
             )
 
-        if self.gmmReweighting.get():
-            args.extend(
-                [
-                    "--gmm",
-                    f"--estimator-max-iter {self.internalEstimatorIterations.get()}",
-                    f"--gmm-external-max-iter {self.gmmIterations.get()}",
-                    f"--gmm-initial-bad-weight {self.gmmInitialBadWeight.get()}",
-                    f"--gmm-initial-bad-quantile {self.gmmInitialBadQuantile.get()}",
-                ]
-            )
+        args.extend(build_estimator_args(self))
 
-            if self.checkDegenerateGmm.get():
-                args.extend(
-                    [
-                        "--gmm-check-degenerate",
-                        f"--gmm-min-component-sep {self.gmmMinSep.get()}",
-                        f"--gmm-min-good-weight {self.gmmMinWeight.get()}",
-                    ]
-                )
-            else:
-                args.append("--no-gmm-check-degenerate")
-
-        else:
-            args.extend(
-                [
-                    "--no-gmm",
-                    f"--estimator-max-iter {self.estimatorIterations.get()}",
-                ]
-            )
-
-        estimatorType = self._getEstimatorType()
-        if estimatorType == EstimatorType.FOURIER_MASKED:
-            args.extend(
-                [
-                    "fourier_irls",
-                    "--weight-approach per-image",
-                    "--lowpass-mask",
-                    f"--lowpass-mask-cutoff {self.lowpassCutoff.get()}",
-                ]
-            )
-        else:
-            args.append(estimatorType.label)
-
-        self.runJob(
-            "xmipp_gmm_average_estimation", " ".join(args), env=env, numberOfMpi=1
-        )
+        self.runJob("xmipp_gmm_average_estimation", join(args), env=env, numberOfMpi=1)
 
     def _readOutputWeights(self, weightColumns):
         """
