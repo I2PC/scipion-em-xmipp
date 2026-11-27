@@ -35,8 +35,7 @@ import pwem
 from .constants import XMIPP_DLTK_NAME
 
 try:  # If binding is not already done, this will fail.
-    from xmipp3.base import *
-    #from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
+    from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
     from xmippViz import *    #  it is not available before installing the binaries
 except Exception as exc:  # TODO: catch exception by type and ensure it is caused by CondaEnvManager
     error = exc
