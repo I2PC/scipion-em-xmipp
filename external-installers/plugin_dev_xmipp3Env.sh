@@ -118,7 +118,7 @@ cd "$BUNDLE_DIR"
 echo "Running Xmipp installer with scipion variables..."
 (
     set -a
-    eval "$("$SCIPION3_CMD" printenv | grep -E '^(XMIPP|SCIPION|LD_LIBRARY_PATH|PYTHONPATH|PYTHONUSERBASE)=')"
+    eval "$("$SCIPION3_CMD" printenv | { grep -E '^XMIPP3_[A-Z0-9_]*=' || true; })"
     set +a
     ./xmipp
 )
