@@ -8,3 +8,4 @@ PyWavelets
 xmipp3-installer>=2.1.0,<3.0.0
 numpy==1.*
 pyxmipp3
+six>=1.16.0
