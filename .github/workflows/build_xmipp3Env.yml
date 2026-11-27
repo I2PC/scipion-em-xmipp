@@ -7,6 +7,8 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-24.04
 
     steps:
@@ -32,7 +34,7 @@ jobs:
     - name: Install Scipion
       working-directory: ${{ github.workspace }}/../
       run: |
-        pip install --only-binary :all: --user "scipion-installer>=3.0.0"
+        pip install --only-binary :all: --user "scipion-installer==3.0.0"
         python -m scipioninstaller -conda -noAsk scipion
 
     - name: Create Xmipp Conda environment
