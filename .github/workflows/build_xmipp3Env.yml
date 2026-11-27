@@ -55,7 +55,7 @@ jobs:
       env:
         XMIPP3_INSTALL_CONDA_DEPENDENCIES: "ON"
       run: |
-        git clone --branch main \
+        git clone --branch omad_xmipp3_env \
           https://github.com/I2PC/xmipp3.git xmipp-TestEnv
         cd xmipp-TestEnv
         
