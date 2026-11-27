@@ -146,8 +146,6 @@ class XmippProtConeGrouping(ProtClassify2D, XmippProtocol):
             label="Deduplicate references?",
             expertLevel=LEVEL_ADVANCED,
         )
-
-        form.addSection(label="Compute")
         form.addParam(
             "groupingBatchSize",
             IntParam,
