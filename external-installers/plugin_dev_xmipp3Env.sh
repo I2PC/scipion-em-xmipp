@@ -116,7 +116,15 @@ echo "Cloning Xmipp bundle..."
 git clone --branch "$XMIPP_BRANCH" https://github.com/I2PC/xmipp3 "$BUNDLE_DIR"
 cd "$BUNDLE_DIR"
 echo "Running Xmipp installer..."
-./xmipp
+(
+    export SCIPION_HOME="$SCRIPT_DIR"
+    export SCIPION_TESTS_CMD="scipion3 tests"
+    export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}${SCRIPT_DIR}/software/lib"
+    export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${SCRIPT_DIR}/software/bindings"
+    export PYTHONUSERBASE="${SCRIPT_DIR}/software/python-packages"
+
+    ./xmipp
+)
 
 # Clone Scipion Xmipp plugin
 
