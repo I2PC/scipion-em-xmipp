@@ -2,6 +2,8 @@
 # *
 # * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
 # *              David Maluenda Niubo (dmaluenda@cnb.csic.es) [2]
+# *              Oier Lauzirika Zarrabeitia (oierlauzi@bizkaia.eu)
+# *              Alberto García (alberto.garcia@cnb.csic.es)
 # *
 # * [1] SciLifeLab, Stockholm University
 # * [2] Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
@@ -35,8 +37,9 @@ import pyworkflow.utils as pwutils
 from scipion.install.funcs import CondaCommandDef
 from .base import *
 from .version import *
-from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN, XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL
-
+from .constants import (XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME, XMIPP_CUDA_BIN,
+        XMIPP_CUDA_LIB, XMIPP_GIT_URL, XMIPP3_INSTALLER_URL,
+        XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)
 
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _currentDepVersion = '1.0'
@@ -50,7 +53,9 @@ _logo = version._logo
 _currentDepVersion = version._currentDepVersion
 __version__ = version.__version__
 _xmipp3_installerV = "v2.0.4"
-
+xmipp3_env_name = 'xmipp3'
+xmipp3_python_version = '3.11'
+xmipp3_installer_version =  "xmipp3-installer>=2.2.0,<3"
 
 class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
@@ -80,6 +85,7 @@ class Plugin(pwem.Plugin):
         cls._defineEmVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
         cls._defineVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
         cls._defineVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
+        cls._defineVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -87,8 +93,9 @@ class Plugin(pwem.Plugin):
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
 
-        cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
-        environ.addLibrary(cudaLib)
+        if not cls.__check_INSTALL_CONDA_DEPENDENCIES():
+            cudaLib = cls.getVar(XMIPP_CUDA_LIB, pwem.Config.CUDA_LIB)
+            environ.addLibrary(cudaLib)
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
@@ -98,8 +105,7 @@ class Plugin(pwem.Plugin):
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')
-                             }, position=pos)
+            'PYTHONPATH': getXmippPath('pylib')}, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
 
         # Add path to python lib folder
@@ -120,13 +126,10 @@ class Plugin(pwem.Plugin):
         """
         env = pwutils.Environ(os.environ)
         env.set('PATH', os.environ.get('MATLAB_BINDIR', ''), pwutils.Environ.BEGIN)
-        env.set('LD_LIBRARY_PATH', os.environ.get('MATLAB_LIBDIR', ''),
-                pwutils.Environ.BEGIN)
+        env.set('LD_LIBRARY_PATH', os.environ.get('MATLAB_LIBDIR', ''), pwutils.Environ.BEGIN)
         for toolpath in toolPaths:
             env.set('MATLABPATH', toolpath, pwutils.Environ.BEGIN)
-        env.set('MATLABPATH', os.path.join(os.environ[XMIPP_HOME],
-                                           'libraries', 'bindings', 'matlab'),
-                pwutils.Environ.BEGIN)
+        env.set('MATLABPATH', os.path.join(os.environ[XMIPP_HOME],'libraries', 'bindings', 'matlab'), pwutils.Environ.BEGIN)
         return env
 
     @classmethod
@@ -137,38 +140,20 @@ class Plugin(pwem.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
+        print(f'{XMIPP3_INSTALL_CONDA_DEPENDENCIES}: {cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE)}')
 
         # Determine if we are on a development 
         bundleDir = cls.__getBundleDirectory()
         develMode = bundleDir is not None
-        
-        COMPILE_TARGETS = [
-            'dist/bin/xmipp_image_header', 
-            'dist/xmipp.bashrc'
-        ]
-        
-        # When changing dependencies, increment 
-        CONDA_DEPENDENCIES = [
-	    "'cmake>=3.18,<4'", #cmake-4 is not compatible with Relion compilation
-            "hdf5>=1.18",
-            "sqlite>=3",
-            "fftw>=3",
-            "make",
-            "zlib",
-            "openjdk",
-            "'libtiff<=4.5.1'",
-            "libjpeg-turbo",
-        ]
+        COMPILE_TARGETS = ['dist/bin/xmipp_image_header',  'dist/xmipp.bashrc']
 
-        CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
-        CONDA_ICU_PACKAGE = 'icu=72'
-
-        if Config.isCondaInstallation():
+        if Config.isCondaInstallation() and not cls.__check_INSTALL_CONDA_DEPENDENCIES():
+            CONDA_LIBSTDCXX_PACKAGE = "libstdcxx-ng "
+            CONDA_ICU_PACKAGE = 'icu=72'
             condaEnvPath = os.environ['CONDA_PREFIX']
             scipionEnv=os.path.basename(condaEnvPath)  # TODO: use pyworkflow method when released: Config.getEnvName()
 
             commands = CondaCommandDef(scipionEnv, cls.getCondaActivationCmd())
-            #commands.condaInstall('-c conda-forge --yes '  + ' '.join(CONDA_DEPENDENCIES))
             commands.condaInstall('-c conda-forge --yes '  + CONDA_LIBSTDCXX_PACKAGE + CONDA_ICU_PACKAGE)
             commands.touch("deps_installed.txt")
             env.addPackage(
@@ -179,44 +164,41 @@ class Plugin(pwem.Plugin):
                 default=True
             )
 
-        CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
         varsToEnv = {}
-        if CUDA_BIN:
-            varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(CUDA_BIN, 'nvcc')
-
-        if develMode:
-            xmippSrc = 'xmippDev'
-            installCommands = [
-		        (f'cd {pwem.Config.EM_ROOT} && rm -rf {xmippSrc} && '
-		         f'git clone {XMIPP_GIT_URL} {xmippSrc} && '
-		         f'cd {xmippSrc} && '
-		         f'./xmipp all', COMPILE_TARGETS)
-	        ]
-
-            env.addPackage(
-	            'xmippDev',
-	            tar='void.tgz',
-	            commands=installCommands,
-	            neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
-	            updateCuda=True,
-	            default=False,
-                vars=varsToEnv
-	        )
+        cmd_create_xmipp3 = ''
+        if cls.__check_INSTALL_CONDA_DEPENDENCIES():
+            varsToEnv[XMIPP3_INSTALL_CONDA_DEPENDENCIES] = 'ON' #Pass the variable through conda
+            cmd_compile_xmipp = f'conda run --no-capture-output -n {xmipp3_env_name} ./xmipp all '
+            cmd_xmipp3_installer = f'conda run -n {xmipp3_env_name} pip install "{xmipp3_installer_version}" &&'
+            neededProgs = ['git', 'conda']
+            if cls.__create_xmipp3_environment():
+                cmd_create_xmipp3 = f'conda create -y -n {xmipp3_env_name} python={xmipp3_python_version} &&'
         else:
+            CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
+            cmd_compile_xmipp = './xmipp all'
+            cmd_xmipp3_installer = '' #Installed on Scipion env because requirements.txt
+            neededProgs = ['git', 'gcc', 'g++', 'cmake', 'make']
+            if CUDA_BIN:
+                varsToEnv['XMIPP3_CMAKE_CUDA_COMPILER'] = os.path.join(CUDA_BIN, 'nvcc')
+
+        if not develMode: # PRODUCTION
             xmippSrc = f'xmipp3-{version._binVersion}'
             installCommands = [
                 (f'cd .. && rm -rf {xmippSrc} && '
                  f'git clone {XMIPP_GIT_URL} -b {version._binVersion} {xmippSrc} && '
                  f'cd {xmippSrc} && '
-                 f'./xmipp', COMPILE_TARGETS)
+                 f'{cmd_create_xmipp3} '
+                 f'{cmd_xmipp3_installer} '
+                 f'{cmd_compile_xmipp} ',
+                 COMPILE_TARGETS)
             ]
             env.addPackage(
 	                'xmipp3', version=version._binVersion,
 	                tar='void.tgz',
 	                commands=installCommands,
-	                neededProgs=['git', 'gcc', 'g++', 'cmake', 'make'],
+	                neededProgs=neededProgs,
 	                updateCuda=True,
-	                default=not develMode,
+	                default=True,
                     vars=varsToEnv
 	            )
 
@@ -234,6 +216,27 @@ class Plugin(pwem.Plugin):
                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
         print(f'pluginDir: {pluginDir}\n, bundleDir: {bundleDir}\n, isBundle: {isBundle}')
         return bundleDir if isBundle else None
+
+    @classmethod
+    def __check_INSTALL_CONDA_DEPENDENCIES(cls):
+        return cls.getVar(XMIPP3_INSTALL_CONDA_DEPENDENCIES, INSTALL_CONDA_DEPENDENCIES_DEFAULT_VALUE).upper() == "ON"
+
+    @classmethod
+    def __create_xmipp3_environment(cls):
+        result = subprocess.run(
+            ["conda", "env", "list", "--json"],
+            capture_output=True,
+            text=True,
+            check=True)
+
+        envs = json.loads(result.stdout)["envs"]
+
+        if any(env.rstrip("/").endswith(f"/{xmipp3_env_name}") for env in envs):
+            print("Conda environment xmipp3 already exists. Skipping creation.")
+            return False
+
+        return True
+
 
 def getNvidiaDriverVersion(plugin):
     """Attempt to retrieve the NVIDIA driver version using different methods.
