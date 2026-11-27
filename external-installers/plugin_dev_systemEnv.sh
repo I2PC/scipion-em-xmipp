@@ -55,24 +55,6 @@ scipion3_cmd() {
     "$SCIPION3_CMD" "$@"
 }
 
-echo "- Initializing Conda..."
-
-CONDA_BASE=$(bash -ic 'conda info --base' 2>/dev/null)
-
-if [ -z "$CONDA_BASE" ] || [ ! -f "$CONDA_BASE/etc/profile.d/conda.sh" ]; then
-	echo ""
-	echo "ERROR: Could not find a valid Conda installation."
-	echo "Please make sure that Conda (Anaconda, Miniconda or Miniforge) is installed and initialized in your shell."
-	echo "If Conda is already installed, initialize it by running:"
-	echo "    conda init bash"
-	echo "Then close and reopen your terminal and run this script again."
-	echo ""
-	exit 1
-fi
-
-source "$CONDA_BASE/etc/profile.d/conda.sh"
-echo "Conda initialized from: $CONDA_BASE"
-
 echo "- Installing xmipp3-installer..."
 scipion3_cmd pip install --only-binary :all: "$XMIPP3_ENV_VERSION"
 
