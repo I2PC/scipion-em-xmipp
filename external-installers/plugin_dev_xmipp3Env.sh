@@ -117,7 +117,9 @@ git clone --branch "$XMIPP_BRANCH" https://github.com/I2PC/xmipp3 "$BUNDLE_DIR"
 cd "$BUNDLE_DIR"
 echo "Running Xmipp installer with scipion variables..."
 (
-    eval "$("$SCIPION3_CMD" printenv | grep -E '^(XMIPP|SCIPION|LD_LIBRARY_PATH|PYTHONPATH|PYTHONUSERBASE)=' )"
+    set -a
+    eval "$("$SCIPION3_CMD" printenv | grep -E '^(XMIPP|SCIPION|LD_LIBRARY_PATH|PYTHONPATH|PYTHONUSERBASE)=')"
+    set +a
     ./xmipp
 )
 
