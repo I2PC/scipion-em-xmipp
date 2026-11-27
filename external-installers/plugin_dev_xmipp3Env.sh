@@ -31,14 +31,15 @@ SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-main}" # -main or $XMIPP_BRA
 ENV_NAME="xmipp3"
 PYTHON_VERSION="3.11"
 XMIPP3_ENV_VERSION="xmipp3-installer>=2.2.0,<3"
+SEPARATOR="=========================================="
 #------------------------------------------------
-echo "=========================================="
+echo "$SEPARATOR"
 echo "Xmipp installation configuration"
-echo "=========================================="
+echo "$SEPARATOR"
 printf "BUNDLE_DIR:              %s\n" "$BUNDLE_DIR"
 printf "XMIPP_BRANCH:            %s\n" "$XMIPP_BRANCH"
 printf "SCIPION_EM_XMIPP_BRANCH: %s\n" "$SCIPION_EM_XMIPP_BRANCH"
-echo "=========================================="
+echo "$SEPARATOR"
 #------------------------------------------------
 
 
@@ -48,7 +49,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCIPION3_CMD="${SCRIPT_DIR}/scipion3"
 
 if [[ ! -x "$SCIPION3_CMD" ]]; then
-    echo "ERROR: Scipion executable not found or not executable: $SCIPION3_CMD"
+    echo "ERROR: Scipion executable not found or not executable: $SCIPION3_CMD" >&2
     exit 1
 fi
 
@@ -65,14 +66,16 @@ echo "- Initializing Conda..."
 
 CONDA_BASE=$(bash -ic 'conda info --base' 2>/dev/null)
 
-if [ -z "$CONDA_BASE" ] || [ ! -f "$CONDA_BASE/etc/profile.d/conda.sh" ]; then
-	echo ""
-	echo "ERROR: Could not find a valid Conda installation."
-	echo "Please make sure that Conda (Anaconda, Miniconda or Miniforge) is installed and initialized in your shell."
-	echo "If Conda is already installed, initialize it by running:"
-	echo "    conda init bash"
-	echo "Then close and reopen your terminal and run this script again."
-	echo ""
+if [[ -z "$CONDA_BASE" || ! -f "$CONDA_BASE/etc/profile.d/conda.sh" ]]; then
+	{
+		echo ""
+		echo "ERROR: Could not find a valid Conda installation."
+		echo "Please make sure that Conda (Anaconda, Miniconda or Miniforge) is installed and initialized in your shell."
+		echo "If Conda is already installed, initialize it by running:"
+		echo "    conda init bash"
+		echo "Then close and reopen your terminal and run this script again."
+		echo ""
+	} >&2
 	exit 1
 fi
 
@@ -98,19 +101,14 @@ echo "Activated Conda environment: $ENV_NAME"
 
 echo "- Installing xmipp3-installer..."
 pip install --only-binary :all: "$XMIPP3_ENV_VERSION"
-# Temporary solution until 2.2.0 is released
-#if [ ! -d "xmipp3-installer" ]; then
-#    git clone https://github.com/I2PC/xmipp3-installer.git
-#fi
-#pip install -e ./xmipp3-installer
 
 
 echo "- Cloning and install Xmipp bundle"
 
-if [ -d "$BUNDLE_DIR" ]; then
-echo "ERROR: Directory '$BUNDLE_DIR' already exists."
-echo "Please remove or rename it before running this script."
-exit 1
+if [[ -d "$BUNDLE_DIR" ]]; then
+    echo "ERROR: Directory '$BUNDLE_DIR' already exists." >&2
+    echo "Please remove or rename it before running this script." >&2
+    exit 1
 fi
 echo "Cloning Xmipp bundle..."
 git clone --branch "$XMIPP_BRANCH" https://github.com/I2PC/xmipp3 "$BUNDLE_DIR"
@@ -132,6 +130,6 @@ git clone --branch "$SCIPION_EM_XMIPP_BRANCH" \
 echo "Installing scipion-em-xmipp in development mode..."
 scipion3_cmd installp -p scipion-em-xmipp/ --devel
 
-echo "=========================================="
+echo "$SEPARATOR"
 echo "Xmipp installation completed successfully"
-echo "=========================================="
+echo "$SEPARATOR"

@@ -26,15 +26,16 @@ BUNDLE_DIR="xmipp-TestEnv"
 XMIPP_BRANCH="${XMIPP_BRANCH:-main}" #-main or -omad_xmipp3_env or ...
 SCIPION_EM_XMIPP_BRANCH="${SCIPION_EM_XMIPP_BRANCH:-main}" # -main or -$XMIPP_BRANCH ...
 XMIPP3_ENV_VERSION="xmipp3-installer"
+SEPARATOR="=========================================="
 
 #------------------------------------------------
-echo "=========================================="
+echo "$SEPARATOR"
 echo "Xmipp installation configuration"
-echo "=========================================="
+echo "$SEPARATOR"
 printf "BUNDLE_DIR:              %s\n" "$BUNDLE_DIR"
 printf "XMIPP_BRANCH:            %s\n" "$XMIPP_BRANCH"
 printf "SCIPION_EM_XMIPP_BRANCH: %s\n" "$SCIPION_EM_XMIPP_BRANCH"
-echo "=========================================="
+echo "$SEPARATOR"
 #------------------------------------------------
 
 
@@ -44,7 +45,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCIPION3_CMD="${SCRIPT_DIR}/scipion3"
 
 if [[ ! -x "$SCIPION3_CMD" ]]; then
-    echo "ERROR: Scipion executable not found or not executable: $SCIPION3_CMD"
+    echo "ERROR: Scipion executable not found or not executable: $SCIPION3_CMD" >&2
     exit 1
 fi
 
@@ -60,10 +61,10 @@ scipion3_cmd pip install --only-binary :all: "$XMIPP3_ENV_VERSION"
 
 echo "- Cloning and install Xmipp bundle"
 
-if [ -d "$BUNDLE_DIR" ]; then
-echo "ERROR: Directory '$BUNDLE_DIR' already exists."
-echo "Please remove or rename it before running this script."
-exit 1
+if [[ -d "$BUNDLE_DIR" ]]; then
+    echo "ERROR: Directory '$BUNDLE_DIR' already exists." >&2
+    echo "Please remove or rename it before running this script." >&2
+    exit 1
 fi
 
 echo "Cloning Xmipp bundle..."
@@ -81,6 +82,6 @@ git clone --branch "$SCIPION_EM_XMIPP_BRANCH" \
 echo "Installing scipion-em-xmipp in development mode..."
 scipion3_cmd installp -p scipion-em-xmipp/ --devel
 
-echo "=========================================="
+echo "$SEPARATOR"
 echo "Xmipp installation completed successfully"
-echo "=========================================="
+echo "$SEPARATOR"

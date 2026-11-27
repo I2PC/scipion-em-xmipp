@@ -175,7 +175,7 @@ class Plugin(pwem.Plugin):
                 cmd_create_xmipp3 = f'conda create -y -n {xmipp3_env_name} python={xmipp3_python_version} &&'
         else:
             CUDA_BIN = cls.getVar(XMIPP_CUDA_BIN, pwem.Config.CUDA_BIN)
-            cmd_compile_xmipp = f'./xmipp all'
+            cmd_compile_xmipp = './xmipp all'
             cmd_xmipp3_installer = '' #Installed on Scipion env because requirements.txt
             neededProgs = ['git', 'gcc', 'g++', 'cmake', 'make']
             if CUDA_BIN:
